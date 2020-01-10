@@ -271,19 +271,6 @@ int main(int argc, const char* argv[]) {
     generator.generateDynCallThunks();
   }
 
-  // Legalize the wasm.
-  {
-    BYN_TRACE("legalizing types\n");
-    PassRunner passRunner(&wasm);
-    passRunner.setOptions(options.passOptions);
-    passRunner.setDebug(options.debug);
-    passRunner.setDebugInfo(debugInfo);
-    passRunner.add(ABI::getLegalizationPass(
-      legalizeJavaScriptFFI ? ABI::LegalizationLevel::Full
-                            : ABI::LegalizationLevel::Minimal));
-    passRunner.run();
-  }
-
   BYN_TRACE("generated metadata\n");
   // Substantial changes to the wasm are done, enough to create the metadata.
   std::string metadata =

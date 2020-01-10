@@ -191,8 +191,16 @@ private:
 
   bool isDynCall(Name name) { return name.startsWith("dynCall_"); }
 
+  bool isOriginal(Name name) { return name.startsWith("orig$"); }
+
   // Check if an export should be legalized.
   bool shouldBeLegalized(Export* ex, Function* func) {
+#if 0
+    // If this export is an original version, do not modify it.
+    if (isOriginal(ex->name)) {
+      return false;
+    }
+#endif
     if (full) {
       return true;
     }
