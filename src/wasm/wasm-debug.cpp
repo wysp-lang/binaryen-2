@@ -343,22 +343,22 @@ struct LocationUpdater {
 
   LocationUpdater(Module& wasm, const BinaryLocations& newLocations)
     : wasm(wasm), newLocations(newLocations) {
-    auto mapOldToNew = [&](BinaryLocations::Span oldSpan, BinaryLocations::Span newSpan) {
-      auto mapOldToNewInner = [&](uint32_t oldAddr, uint32_t newAddr) {
-        if (oldAddr != 0) {
-          // The same mapping may appear more than once: the end of an
-          // expression at the end of a function is identical to the end of
-          // the function, for example. Verify they map to the same place.
+    auto mapOldAddrToNew = [&](uint32_t oldAddr, uint32_t newAddr) {
+      if (oldAddr != 0) {
+        // The same mapping may appear more than once: the end of an
+        // expression at the end of a function is identical to the end of
+        // the function, for example. Verify they map to the same place.
 #ifndef NDEBUG
-          if (oldToNew.count(oldAddr)) {
-            assert(oldToNew[oldAddr] == newAddr);
-          }
-#endif
-          oldToNew[oldAddr] = newAddr;
+        if (oldToNew.count(oldAddr)) {
+          assert(oldToNew[oldAddr] == newAddr);
         }
-      };
-      mapOldToNewInner(oldSpan.first, newSpan.first);
-      mapOldToNewInner(oldSpan.second, newSpan.second);
+#endif
+        oldToNew[oldAddr] = newAddr;
+      }
+    };
+    auto mapOldSpanToNew = [&](BinaryLocations::Span oldSpan, BinaryLocations::Span newSpan) {
+      mapOldAddrToNew(oldSpan.first, newSpan.first);
+      mapOldAddrToNew(oldSpan.second, newSpan.second);
     };
     // Expressions.
     for (auto pair : wasm.binaryLocations.expressions) {
@@ -369,7 +369,7 @@ struct LocationUpdater {
       if (iter != newLocations.expressions.end()) {
         newSpan = iter->second;
       }
-      mapOldToNew(oldSpan, newSpan);
+      mapOldAddrToNew(oldSpan.first, newSpan.first);
     }
     // Functions.
     for (auto& pair : wasm.binaryLocations.functions) {
@@ -379,7 +379,7 @@ struct LocationUpdater {
       auto iter = newLocations.functions.find(func);
       if (iter != newLocations.functions.end()) {
         auto newSpan = iter->second;
-        mapOldToNew(oldSpan, newSpan);
+        mapOldSpanToNew(oldSpan, newSpan);
       }
     }
   }
