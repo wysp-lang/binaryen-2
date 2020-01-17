@@ -1681,11 +1681,11 @@ void WasmBinaryBuilder::processExpressions() {
     }
     expressionStack.push_back(curr);
     if (curr->type == Type::unreachable) {
-      // once we see something unreachable, we don't want to add anything else
+      // Once we see something unreachable, we don't want to add anything else
       // to the stack, as it could be stacky code that is non-representable in
-      // our AST. but we do need to skip it
-      // if there is nothing else here, just stop. otherwise, go into
-      // unreachable mode. peek to see what to do
+      // our AST. but we do need to skip it.
+      // If there is nothing else here, just stop. Otherwise, go into
+      // unreachable mode. peek to see what to do.
       if (pos == endOfFunction) {
         throwError("Reached function end without seeing End opcode");
       }
@@ -2410,6 +2410,10 @@ void WasmBinaryBuilder::visitBlock(Block* curr) {
                      breakTargetNames.end() /* hasBreak */);
     breakStack.pop_back();
     breakTargetNames.erase(curr->name);
+    if (DWARF && currFunction) {
+      currFunction->extraExpressionLocations[curr][BinaryLocations::End] =
+        pos - 1 - codeSectionLocation;
+    }
   }
 }
 
@@ -2458,10 +2462,18 @@ void WasmBinaryBuilder::visitIf(If* curr) {
   curr->ifTrue = getBlockOrSingleton(curr->type);
   if (lastSeparator == BinaryConsts::Else) {
     curr->ifFalse = getBlockOrSingleton(curr->type);
+    if (DWARF && currFunction) {
+      currFunction->extraExpressionLocations[curr][BinaryLocations::Else] =
+        pos - 1 - codeSectionLocation;
+    }
   }
   curr->finalize(curr->type);
   if (lastSeparator != BinaryConsts::End) {
     throwError("if should end with End");
+  }
+  if (DWARF && currFunction) {
+    currFunction->extraExpressionLocations[curr][BinaryLocations::End] =
+      pos - 1 - codeSectionLocation;
   }
 }
 
@@ -4481,10 +4493,18 @@ void WasmBinaryBuilder::visitTry(Try* curr) {
   if (lastSeparator != BinaryConsts::Catch) {
     throwError("No catch instruction within a try scope");
   }
+  if (DWARF && currFunction) {
+    currFunction->extraExpressionLocations[curr][BinaryLocations::Catch] =
+      pos - 1 - codeSectionLocation;
+  }
   curr->catchBody = getBlockOrSingleton(curr->type, 1);
   curr->finalize(curr->type);
   if (lastSeparator != BinaryConsts::End) {
     throwError("try should end with end");
+  }
+  if (DWARF && currFunction) {
+    currFunction->extraExpressionLocations[curr][BinaryLocations::End] =
+      pos - 1 - codeSectionLocation;
   }
 }
 
