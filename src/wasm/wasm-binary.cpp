@@ -1711,7 +1711,6 @@ void WasmBinaryBuilder::processExpressions() {
           peek == BinaryConsts::Catch) {
         BYN_TRACE("== processExpressions finished with unreachable"
                   << std::endl);
-        readNextDebugLocation();
         lastSeparator = BinaryConsts::ASTNodes(peek);
         // Read the byte we peeked at. No new expression should be created here.
         Expression* dummy = nullptr;
@@ -2122,51 +2121,19 @@ BinaryConsts::ASTNodes WasmBinaryBuilder::readExpression(Expression*& curr) {
   }
   size_t startPos = pos;
   uint8_t code = getInt8();
-  // Control flow structure parsing: these have not just the normal binary
-  // data for an instruction, but also some bytes later on like "end" or "else".
-  // We must be aware of the connection between those things, for debug info.
-  auto startControlFlow = [&]() {
-    if (DWARF && currFunction) {
-std::cerr << "push " << getExpressionName(curr) << " " << curr << '\n';
-      controlFlowStack.push_back(curr);
-    }
-  };
-  auto continueControlFlow = [&](BinaryLocations::ExtraId id) {
-    // Set curr to null, indicating there is no new instruction here for
-    // later processing to handle.
-    curr = nullptr;
-    if (DWARF && currFunction) {
-      if (controlFlowStack.empty()) {
-        // We reached the end of the function, which is also marked with an
-        // "end", like a control flow structure.
-        assert(id == BinaryLocations::End);
-        return;
-      }
-std::cerr << "later " << id << '\n';
-      assert(!controlFlowStack.empty());
-      auto currControlFlow = controlFlowStack.back();
-      currFunction->extraExpressionLocations[currControlFlow][id] =
-        startPos - codeSectionLocation;
-      if (id == BinaryLocations::End) {
-std::cerr << "pop  " << getExpressionName(currControlFlow) << " " << currControlFlow << '\n';
-        controlFlowStack.pop_back();
-      }
-    }
-  };
-
   BYN_TRACE("readExpression seeing " << (int)code << std::endl);
   switch (code) {
     case BinaryConsts::Block:
       visitBlock((curr = allocator.alloc<Block>())->cast<Block>());
-      startControlFlow();
+      startControlFlow(curr);
       break;
     case BinaryConsts::If:
       visitIf((curr = allocator.alloc<If>())->cast<If>());
-      startControlFlow();
+      startControlFlow(curr);
       break;
     case BinaryConsts::Loop:
       visitLoop((curr = allocator.alloc<Loop>())->cast<Loop>());
-      startControlFlow();
+      startControlFlow(curr);
       break;
     case BinaryConsts::Br:
     case BinaryConsts::BrIf:
@@ -2228,12 +2195,15 @@ std::cerr << "pop  " << getExpressionName(currControlFlow) << " " << currControl
       visitDrop((curr = allocator.alloc<Drop>())->cast<Drop>());
       break;
     case BinaryConsts::End:
+      curr = nullptr;
       continueControlFlow(BinaryLocations::End);
       break;
     case BinaryConsts::Else:
+      curr = nullptr;
       continueControlFlow(BinaryLocations::Else);
       break;
     case BinaryConsts::Catch:
+      curr = nullptr;
       continueControlFlow(BinaryLocations::Catch);
       break;
     case BinaryConsts::RefNull:
@@ -2247,7 +2217,7 @@ std::cerr << "pop  " << getExpressionName(currControlFlow) << " " << currControl
       break;
     case BinaryConsts::Try:
       visitTry((curr = allocator.alloc<Try>())->cast<Try>());
-      startControlFlow();
+      startControlFlow(curr);
       break;
     case BinaryConsts::Throw:
       visitThrow((curr = allocator.alloc<Throw>())->cast<Throw>());
@@ -2378,6 +2348,36 @@ std::cerr << "pop  " << getExpressionName(currControlFlow) << " " << currControl
   return BinaryConsts::ASTNodes(code);
 }
 
+// Control flow structure parsing: these have not just the normal binary
+// data for an instruction, but also some bytes later on like "end" or "else".
+// We must be aware of the connection between those things, for debug info.
+void WasmBinaryBuilder::startControlFlow(Expression* curr) {
+  if (DWARF && currFunction) {
+std::cerr << "push " << getExpressionName(curr) << " " << curr << '\n';
+    controlFlowStack.push_back(curr);
+  }
+}
+
+void WasmBinaryBuilder::continueControlFlow(BinaryLocations::ExtraId id) {
+  if (DWARF && currFunction) {
+    if (controlFlowStack.empty()) {
+      // We reached the end of the function, which is also marked with an
+      // "end", like a control flow structure.
+      assert(id == BinaryLocations::End);
+      return;
+    }
+std::cerr << "later " << id << '\n';
+    assert(!controlFlowStack.empty());
+    auto currControlFlow = controlFlowStack.back();
+    currFunction->extraExpressionLocations[currControlFlow][id] =
+      pos - codeSectionLocation;
+    if (id == BinaryLocations::End) {
+std::cerr << "pop  " << getExpressionName(currControlFlow) << " " << currControlFlow << '\n';
+      controlFlowStack.pop_back();
+    }
+  }
+}
+
 void WasmBinaryBuilder::pushBlockElements(Block* curr,
                                           size_t start,
                                           size_t end) {
@@ -2435,7 +2435,9 @@ void WasmBinaryBuilder::visitBlock(Block* curr) {
       // a recursion
       readNextDebugLocation();
       curr = allocator.alloc<Block>();
+      startControlFlow(curr);
       pos++;
+
       if (debugLocation.size()) {
         currFunction->debugLocations[curr] = *debugLocation.begin();
       }

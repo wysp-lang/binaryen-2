@@ -1185,7 +1185,18 @@ public:
   std::unordered_set<Name> breakTargetNames;
 
   std::vector<Expression*> expressionStack;
+
+  // Control flow structure parsing: these have not just the normal binary
+  // data for an instruction, but also some bytes later on like "end" or "else".
+  // We must be aware of the connection between those things, for debug info.
   std::vector<Expression*> controlFlowStack;
+
+  // Called when we parse the beginning of a control flow structure.
+  void startControlFlow(Expression* curr);
+
+  // Called when we parse a later part of a control flow structure, like "end"
+  // or "else".
+  void continueControlFlow(BinaryLocations::ExtraId id);
 
   // set when we know code is unreachable in the sense of the wasm spec: we are
   // in a block and after an unreachable element. this helps parse stacky wasm
