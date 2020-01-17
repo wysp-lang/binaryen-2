@@ -726,6 +726,12 @@ void WasmBinaryWriter::writeDebugLocationEnd(Expression* curr, Function* func) {
   }
 }
 
+void WasmBinaryWriter::writeExtraDebugLocation(Expression* curr, Function* func, Index index) {
+  if (func && !func->expressionLocations.empty()) {
+    binaryLocations.extraExpressions[curr][index] = o.size();
+  }
+}
+
 void WasmBinaryWriter::writeInlineString(const char* name) {
   int32_t size = strlen(name);
   o << U32LEB(size);

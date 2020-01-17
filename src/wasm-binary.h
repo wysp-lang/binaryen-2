@@ -1015,6 +1015,7 @@ public:
   void writeDebugLocation(const Function::DebugLocation& loc);
   void writeDebugLocation(Expression* curr, Function* func);
   void writeDebugLocationEnd(Expression* curr, Function* func);
+  void writeExtraDebugLocation(Expression* curr, Function* func, Index index);
 
   // helpers
   void writeInlineString(const char* name);

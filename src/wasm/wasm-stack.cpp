@@ -1633,9 +1633,12 @@ void BinaryInstWriter::visitPop(Pop* curr) {
   // Turns into nothing in the binary format
 }
 
-void BinaryInstWriter::emitScopeEnd() {
+void BinaryInstWriter::emitScopeEnd(Expression* curr) {
   assert(!breakStack.empty());
   breakStack.pop_back();
+  if (func && !sourceMap) {
+    parent.writeDebugLocationEnd(curr, func, 0); // ZERO??!!
+  }
   o << int8_t(BinaryConsts::End);
 }
 

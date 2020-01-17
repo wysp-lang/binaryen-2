@@ -1173,7 +1173,23 @@ struct BinaryLocations {
   struct Span {
     BinaryLocation start, end;
   };
+
+  // Track the range of addresses an expressions appears at. This is the
+  // contiguous range that all instructions have - control flow instructions
+  // have additional opcodes later (like an end for a block or loop), see
+  // just after this.
   std::unordered_map<Expression*, Span> expressions;
+
+  // Track the extra offsets that some instructions, in particular control
+  // flow, have, like 'end' for loop and block. We keep these in a separate map
+  // because they are rare and we optimize for the storage space for the common
+  // type of instruction which just needs a Span.
+  // We implement this as a simple struct with two elements (as two extra
+  // elements is the maximum currently needed; due to 'catch' and 'end' for
+  // try-catch). The second value may be 0, indicating it is not used.
+  using Extra = std::array<BinaryLocation, 2>;
+  std::unordered_map<Expression*, Extra> extraExpressions;
+
   std::unordered_map<Function*, Span> functions;
 };
 
@@ -1232,6 +1248,7 @@ public:
 
   // General debugging info support: track instructions and the function itself.
   std::unordered_map<Expression*, BinaryLocations::Span> expressionLocations;
+  std::unordered_map<Expression*, BinaryLocations::Extra> extraExpressionLocations;
   BinaryLocations::Span funcLocation;
 
   size_t getNumParams();

@@ -146,8 +146,10 @@ public:
 
   void emitIfElse();
   void emitCatch();
-  void emitScopeEnd();    // emit an end at the end of a block/loop/if/try
-  void emitFunctionEnd(); // emit an end at the end of a function
+  // emit an end at the end of a block/loop/if/try
+  void emitScopeEnd(Expression* curr);
+  // emit an end at the end of a function
+  void emitFunctionEnd();
   void emitUnreachable();
   void mapLocalsAndEmitHeader();
 
@@ -815,7 +817,7 @@ public:
   }
   void emitIfElse(If* curr) { writer.emitIfElse(); }
   void emitCatch(Try* curr) { writer.emitCatch(); }
-  void emitScopeEnd(Expression* curr) { writer.emitScopeEnd(); }
+  void emitScopeEnd(Expression* curr) { writer.emitScopeEnd(curr); }
   void emitFunctionEnd() {
     if (func->epilogLocation.size()) {
       parent.writeDebugLocation(*func->epilogLocation.begin());
