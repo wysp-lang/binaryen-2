@@ -1187,7 +1187,15 @@ struct BinaryLocations {
   // We implement this as a simple struct with two elements (as two extra
   // elements is the maximum currently needed; due to 'catch' and 'end' for
   // try-catch). The second value may be 0, indicating it is not used.
-  using ExtraLocations = std::array<BinaryLocation, 2>;
+  struct ExtraLocations : public std::array<BinaryLocation, 2> {
+    ExtraLocations() {
+      // Ensure zero-initialization.
+      for (auto& item : *this) {
+        item = 0;
+      }
+    }
+  };
+
   enum ExtraId {
     // All control flow structures have an end, so use index 0 for that.
     End = 0,

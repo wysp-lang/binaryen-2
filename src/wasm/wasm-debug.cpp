@@ -403,8 +403,11 @@ private:
 
   void add(Expression* expr, const BinaryLocations::ExtraLocations& extra) {
     for (Index i = 0; i < extra.size(); i++) {
-      assert(extraMap.count(extra[i]) == 0);
-      extraMap[extra[i]] = ExtraInfo{expr, BinaryLocations::ExtraId(i)};
+      std::cout << "add axtra " << i << " : " << extra[0] << " , " << extra[1] << '\n';
+      if (extra[i] != 0) {
+        assert(extraMap.count(extra[i]) == 0);
+        extraMap[extra[i]] = ExtraInfo{expr, BinaryLocations::ExtraId(i)};
+      }
     }
   }
 };
