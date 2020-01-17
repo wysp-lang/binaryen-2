@@ -403,7 +403,6 @@ private:
 
   void add(Expression* expr, const BinaryLocations::ExtraLocations& extra) {
     for (Index i = 0; i < extra.size(); i++) {
-      std::cout << "add axtra " << i << " : " << extra[0] << " , " << extra[1] << '\n';
       if (extra[i] != 0) {
         assert(extraMap.count(extra[i]) == 0);
         extraMap[extra[i]] = ExtraInfo{expr, BinaryLocations::ExtraId(i)};
@@ -480,6 +479,10 @@ struct LocationUpdater {
     return 0;
   }
 
+  bool hasOldExprAddr(BinaryLocation oldAddr) const {
+    return oldExprAddrMap.getStart(oldAddr);
+  }
+
   BinaryLocation getNewExprEndAddr(BinaryLocation oldAddr) const {
     if (auto* expr = oldExprAddrMap.getEnd(oldAddr)) {
       auto iter = newLocations.expressions.find(expr);
@@ -507,6 +510,10 @@ struct LocationUpdater {
     return 0;
   }
 
+  bool hasOldFuncAddr(BinaryLocation oldAddr) const {
+    return oldFuncAddrMap.get(oldAddr);
+  }
+
   BinaryLocation getNewExtraAddr(BinaryLocation oldAddr) const {
     auto info = oldExprAddrMap.getExtra(oldAddr);
     if (info.expr) {
@@ -516,6 +523,10 @@ struct LocationUpdater {
       }
     }
     return 0;
+  }
+
+  bool hasOldExtraAddr(BinaryLocation oldAddr) const {
+    return oldExprAddrMap.getExtra(oldAddr).expr;
   }
 };
 
@@ -547,11 +558,12 @@ static void updateDebugLines(llvm::DWARFYAML::Data& data,
         // An expression may not exist for this line table item, if we optimized
         // it away.
         BinaryLocation oldAddr = state.addr;
-        BinaryLocation newAddr = locationUpdater.getNewExprAddr(oldAddr);
-        if (!newAddr) {
+        BinaryLocation newAddr = 0;
+        if (locationUpdater.hasOldExprAddr(oldAddr)) {
+          newAddr = locationUpdater.getNewExprAddr(oldAddr);
+        } else if (locationUpdater.hasOldFuncAddr(oldAddr)) {
           newAddr = locationUpdater.getNewFuncAddr(oldAddr);
-        }
-        if (!newAddr) {
+        } else if (locationUpdater.hasOldExtraAddr(oldAddr)) {
           newAddr = locationUpdater.getNewExtraAddr(oldAddr);
         }
         if (newAddr) {
