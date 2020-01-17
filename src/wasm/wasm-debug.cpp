@@ -359,15 +359,6 @@ struct AddrExprMap {
     }
   }
 
-  // Construct the map from new binaryLocations just written
-  AddrExprMap(const BinaryLocations& newLocations) {
-    for (auto pair : newLocations.expressions) {
-      add(pair.first, pair.second);
-    }
-    for (auto pair : newLocations.extraExpressions) {
-      add(pair.first, pair.second);
-    }
-  }
 
   Expression* getStart(BinaryLocation addr) const {
     auto iter = startMap.find(addr);
@@ -404,6 +395,7 @@ private:
   void add(Expression* expr, const BinaryLocations::ExtraLocations& extra) {
     for (Index i = 0; i < extra.size(); i++) {
       if (extra[i] != 0) {
+std::cerr << "note an extra " << i << " : 0x" << std::hex << extra[i] << " (0x" << expr << ")" << std::dec << '\n';
         assert(extraMap.count(extra[i]) == 0);
         extraMap[extra[i]] = ExtraInfo{expr, BinaryLocations::ExtraId(i)};
       }
@@ -515,10 +507,12 @@ struct LocationUpdater {
   }
 
   BinaryLocation getNewExtraAddr(BinaryLocation oldAddr) const {
+std::cerr << "  chak extra 0x" << std::hex << oldAddr << std::dec << '\n';
     auto info = oldExprAddrMap.getExtra(oldAddr);
     if (info.expr) {
       auto iter = newLocations.extraExpressions.find(info.expr);
       if (iter != newLocations.extraExpressions.end()) {
+std::cerr << "  => got 0x" << std::hex << iter->second[info.id] << std::dec << " using id " << info.id << '\n';
         return iter->second[info.id];
       }
     }
@@ -559,15 +553,22 @@ static void updateDebugLines(llvm::DWARFYAML::Data& data,
         // it away.
         BinaryLocation oldAddr = state.addr;
         BinaryLocation newAddr = 0;
+std::cerr << "old: 0x" << std::hex << oldAddr << std::dec << '\n';
         if (locationUpdater.hasOldExprAddr(oldAddr)) {
           newAddr = locationUpdater.getNewExprAddr(oldAddr);
+std::cerr << "  new from expr: 0x" << std::hex << newAddr << std::dec << '\n';
         } else if (locationUpdater.hasOldFuncAddr(oldAddr)) {
           newAddr = locationUpdater.getNewFuncAddr(oldAddr);
+std::cerr << "  new from func: 0x" << std::hex << newAddr << std::dec << '\n';
+#if 1
         } else if (locationUpdater.hasOldExtraAddr(oldAddr)) {
           newAddr = locationUpdater.getNewExtraAddr(oldAddr);
+std::cerr << "  new from extra: 0x" << std::hex << newAddr << std::dec << '\n';
+#endif
         }
         if (newAddr) {
           newAddrs.push_back(newAddr);
+          assert(newAddrInfo.count(newAddr) == 0);
           newAddrInfo.emplace(newAddr, state);
           auto& updatedState = newAddrInfo.at(newAddr);
           // The only difference is the address TODO other stuff?

@@ -167,6 +167,11 @@ void WasmBinaryWriter::finishSection(int32_t start) {
       pair.second.start -= totalAdjustment;
       pair.second.end -= totalAdjustment;
     }
+    for (auto& pair : binaryLocations.extraExpressions) {
+      for (auto& item : pair.second) {
+        item -= totalAdjustment;
+      }
+    }
   }
 }
 
@@ -343,6 +348,12 @@ void WasmBinaryWriter::writeFunctions() {
         auto& span = binaryLocations.expressions[curr];
         span.start -= adjustmentForLEBShrinking;
         span.end -= adjustmentForLEBShrinking;
+        auto iter = binaryLocations.extraExpressions.find(curr);
+        if (iter != binaryLocations.extraExpressions.end()) {
+          for (auto& item : iter->second) {
+            item -= adjustmentForLEBShrinking;
+          }
+        }
       }
     }
     if (!binaryLocationTrackedExpressionsForFunc.empty()) {
@@ -728,6 +739,7 @@ void WasmBinaryWriter::writeDebugLocationEnd(Expression* curr, Function* func) {
 
 void WasmBinaryWriter::writeExtraDebugLocation(Expression* curr, Function* func, BinaryLocations::ExtraId id) {
   if (func && !func->expressionLocations.empty()) {
+std::cerr << "write an extra to the new binary " << id << std::hex << " 0x" << curr << " at 0x" << o.size() << '\n';
     binaryLocations.extraExpressions[curr][id] = o.size();
   }
 }
