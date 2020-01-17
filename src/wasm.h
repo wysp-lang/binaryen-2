@@ -1188,6 +1188,13 @@ struct BinaryLocations {
   // elements is the maximum currently needed; due to 'catch' and 'end' for
   // try-catch). The second value may be 0, indicating it is not used.
   using Extra = std::array<BinaryLocation, 2>;
+  enum ExtraId {
+    // All control flow structures have an end, so use index 0 for that.
+    End = 0,
+    // Use index 1 for all other current things.
+    Else = 1,
+    Catch = 1
+  };
   std::unordered_map<Expression*, Extra> extraExpressions;
 
   std::unordered_map<Function*, Span> functions;

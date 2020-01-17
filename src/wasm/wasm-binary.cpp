@@ -726,9 +726,9 @@ void WasmBinaryWriter::writeDebugLocationEnd(Expression* curr, Function* func) {
   }
 }
 
-void WasmBinaryWriter::writeExtraDebugLocation(Expression* curr, Function* func, Index index) {
+void WasmBinaryWriter::writeExtraDebugLocation(Expression* curr, Function* func, BinaryLocations::ExtraId id) {
   if (func && !func->expressionLocations.empty()) {
-    binaryLocations.extraExpressions[curr][index] = o.size();
+    binaryLocations.extraExpressions[curr][id] = o.size();
   }
 }
 
