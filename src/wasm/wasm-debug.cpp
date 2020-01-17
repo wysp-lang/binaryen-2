@@ -565,7 +565,7 @@ std::cerr << "  new from func: 0x" << std::hex << newAddr << std::dec << '\n';
           newAddr = locationUpdater.getNewExtraAddr(oldAddr);
 std::cerr << "  new from extra: 0x" << std::hex << newAddr << std::dec << '\n';
 #endif
-        }
+        } else abort();
         if (newAddr) {
           newAddrs.push_back(newAddr);
           assert(newAddrInfo.count(newAddr) == 0);

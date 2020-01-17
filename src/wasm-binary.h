@@ -1185,6 +1185,7 @@ public:
   std::unordered_set<Name> breakTargetNames;
 
   std::vector<Expression*> expressionStack;
+  std::vector<Expression*> controlFlowStack;
 
   // set when we know code is unreachable in the sense of the wasm spec: we are
   // in a block and after an unreachable element. this helps parse stacky wasm

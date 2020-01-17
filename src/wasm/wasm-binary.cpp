@@ -1429,6 +1429,7 @@ void WasmBinaryBuilder::readFunctions() {
       assert(breakTargetNames.size() == 0);
       assert(breakStack.empty());
       assert(expressionStack.empty());
+      assert(controlFlowStack.empty());
       assert(depth == 0);
       func->body = getBlockOrSingleton(func->sig.results);
       assert(depth == 0);
@@ -1437,6 +1438,7 @@ void WasmBinaryBuilder::readFunctions() {
       if (!expressionStack.empty()) {
         throwError("stack not empty on function exit");
       }
+      assert(controlFlowStack.empty());
       if (pos != endOfFunction) {
         throwError("binary offset at function exit not at expected location");
       }
@@ -1711,7 +1713,10 @@ void WasmBinaryBuilder::processExpressions() {
                   << std::endl);
         readNextDebugLocation();
         lastSeparator = BinaryConsts::ASTNodes(peek);
-        pos++;
+        // Read the byte we peeked at. No new expression should be created here.
+        Expression* dummy = nullptr;
+        readExpression(dummy);
+        assert(dummy == nullptr);
         return;
       } else {
         skipUnreachableCode();
@@ -2117,16 +2122,51 @@ BinaryConsts::ASTNodes WasmBinaryBuilder::readExpression(Expression*& curr) {
   }
   size_t startPos = pos;
   uint8_t code = getInt8();
+  // Control flow structure parsing: these have not just the normal binary
+  // data for an instruction, but also some bytes later on like "end" or "else".
+  // We must be aware of the connection between those things, for debug info.
+  auto startControlFlow = [&]() {
+    if (DWARF && currFunction) {
+std::cerr << "push " << getExpressionName(curr) << " " << curr << '\n';
+      controlFlowStack.push_back(curr);
+    }
+  };
+  auto continueControlFlow = [&](BinaryLocations::ExtraId id) {
+    // Set curr to null, indicating there is no new instruction here for
+    // later processing to handle.
+    curr = nullptr;
+    if (DWARF && currFunction) {
+      if (controlFlowStack.empty()) {
+        // We reached the end of the function, which is also marked with an
+        // "end", like a control flow structure.
+        assert(id == BinaryLocations::End);
+        return;
+      }
+std::cerr << "later " << id << '\n';
+      assert(!controlFlowStack.empty());
+      auto currControlFlow = controlFlowStack.back();
+      currFunction->extraExpressionLocations[currControlFlow][id] =
+        startPos - codeSectionLocation;
+      if (id == BinaryLocations::End) {
+std::cerr << "pop  " << getExpressionName(currControlFlow) << " " << currControlFlow << '\n';
+        controlFlowStack.pop_back();
+      }
+    }
+  };
+
   BYN_TRACE("readExpression seeing " << (int)code << std::endl);
   switch (code) {
     case BinaryConsts::Block:
       visitBlock((curr = allocator.alloc<Block>())->cast<Block>());
+      startControlFlow();
       break;
     case BinaryConsts::If:
       visitIf((curr = allocator.alloc<If>())->cast<If>());
+      startControlFlow();
       break;
     case BinaryConsts::Loop:
       visitLoop((curr = allocator.alloc<Loop>())->cast<Loop>());
+      startControlFlow();
       break;
     case BinaryConsts::Br:
     case BinaryConsts::BrIf:
@@ -2188,9 +2228,13 @@ BinaryConsts::ASTNodes WasmBinaryBuilder::readExpression(Expression*& curr) {
       visitDrop((curr = allocator.alloc<Drop>())->cast<Drop>());
       break;
     case BinaryConsts::End:
+      continueControlFlow(BinaryLocations::End);
+      break;
     case BinaryConsts::Else:
+      continueControlFlow(BinaryLocations::Else);
+      break;
     case BinaryConsts::Catch:
-      curr = nullptr;
+      continueControlFlow(BinaryLocations::Catch);
       break;
     case BinaryConsts::RefNull:
       visitRefNull((curr = allocator.alloc<RefNull>())->cast<RefNull>());
@@ -2203,6 +2247,7 @@ BinaryConsts::ASTNodes WasmBinaryBuilder::readExpression(Expression*& curr) {
       break;
     case BinaryConsts::Try:
       visitTry((curr = allocator.alloc<Try>())->cast<Try>());
+      startControlFlow();
       break;
     case BinaryConsts::Throw:
       visitThrow((curr = allocator.alloc<Throw>())->cast<Throw>());
@@ -2422,10 +2467,6 @@ void WasmBinaryBuilder::visitBlock(Block* curr) {
                      breakTargetNames.end() /* hasBreak */);
     breakStack.pop_back();
     breakTargetNames.erase(curr->name);
-    if (DWARF && currFunction) {
-      currFunction->extraExpressionLocations[curr][BinaryLocations::End] =
-        pos - 1 - codeSectionLocation;
-    }
   }
 }
 
@@ -2474,18 +2515,10 @@ void WasmBinaryBuilder::visitIf(If* curr) {
   curr->ifTrue = getBlockOrSingleton(curr->type);
   if (lastSeparator == BinaryConsts::Else) {
     curr->ifFalse = getBlockOrSingleton(curr->type);
-    if (DWARF && currFunction) {
-      currFunction->extraExpressionLocations[curr][BinaryLocations::Else] =
-        pos - 1 - codeSectionLocation;
-    }
   }
   curr->finalize(curr->type);
   if (lastSeparator != BinaryConsts::End) {
     throwError("if should end with End");
-  }
-  if (DWARF && currFunction) {
-    currFunction->extraExpressionLocations[curr][BinaryLocations::End] =
-      pos - 1 - codeSectionLocation;
   }
 }
 
@@ -4505,18 +4538,10 @@ void WasmBinaryBuilder::visitTry(Try* curr) {
   if (lastSeparator != BinaryConsts::Catch) {
     throwError("No catch instruction within a try scope");
   }
-  if (DWARF && currFunction) {
-    currFunction->extraExpressionLocations[curr][BinaryLocations::Catch] =
-      pos - 1 - codeSectionLocation;
-  }
   curr->catchBody = getBlockOrSingleton(curr->type, 1);
   curr->finalize(curr->type);
   if (lastSeparator != BinaryConsts::End) {
     throwError("try should end with end");
-  }
-  if (DWARF && currFunction) {
-    currFunction->extraExpressionLocations[curr][BinaryLocations::End] =
-      pos - 1 - codeSectionLocation;
   }
 }
 
