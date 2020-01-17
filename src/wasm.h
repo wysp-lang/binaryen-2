@@ -1160,7 +1160,8 @@ struct Importable {
 
 class Function;
 
-// Represents an offset into a wasm binary file. This is used for debug info.
+// Represents an offset into a wasm binary file or section. This is used for
+// debug info for example.
 // For now, assume this is 32 bits as that's the size limit of wasm files
 // anyhow.
 using BinaryLocation = uint32_t;
