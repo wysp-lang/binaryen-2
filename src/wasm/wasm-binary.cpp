@@ -1711,7 +1711,6 @@ void WasmBinaryBuilder::processExpressions() {
           peek == BinaryConsts::Catch) {
         BYN_TRACE("== processExpressions finished with unreachable"
                   << std::endl);
-        readNextDebugLocation();
         lastSeparator = BinaryConsts::ASTNodes(peek);
         // Read the byte we peeked at. No new expression should be created here.
         Expression* dummy = nullptr;
@@ -2433,12 +2432,9 @@ void WasmBinaryBuilder::visitBlock(Block* curr) {
     stack.push_back(curr);
     if (more() && input[pos] == BinaryConsts::Block) {
       // a recursion
-      readNextDebugLocation();
-      curr = allocator.alloc<Block>();
-      pos++;
-      if (debugLocation.size()) {
-        currFunction->debugLocations[curr] = *debugLocation.begin();
-      }
+      Expression* dummy = nullptr;
+      readExpression(dummy);
+      curr = dummy->cast<Block>();
       continue;
     } else {
       // end of recursion
