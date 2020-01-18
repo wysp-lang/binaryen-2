@@ -1208,11 +1208,11 @@ struct BinaryLocations {
   // DWARF debug info can refer to multiple interesting positions in a function.
   struct FunctionLocations {
     // The very start of the function, where the binary has a size LEB.
-    BinaryLocation start;
+    BinaryLocation start = 0;
     // The area where we declare locals, which is right after the size LEB.
-    BinaryLocation declarations;
+    BinaryLocation declarations = 0;
     // The end, which is one past the final "end" instruction byte.
-    BinaryLocation end;
+    BinaryLocation end = 0;
   };
 
   std::unordered_map<Function*, FunctionLocations> functions;

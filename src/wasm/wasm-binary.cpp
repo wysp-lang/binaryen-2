@@ -165,6 +165,7 @@ void WasmBinaryWriter::finishSection(int32_t start) {
     }
     for (auto& pair : binaryLocations.functions) {
       pair.second.start -= totalAdjustment;
+      pair.second.declarations -= totalAdjustment;
       pair.second.end -= totalAdjustment;
     }
     for (auto& pair : binaryLocations.extraExpressions) {
@@ -304,7 +305,7 @@ void WasmBinaryWriter::writeFunctions() {
     return;
   }
   BYN_TRACE("== writeFunctions\n");
-  auto start = startSection(BinaryConsts::Section::Code);
+  auto sectionStart = startSection(BinaryConsts::Section::Code);
   o << U32LEB(importInfo->getNumDefinedFunctions());
   ModuleUtils::iterDefinedFunctions(*wasm, [&](Function* func) {
     assert(binaryLocationTrackedExpressionsForFunc.empty());
@@ -358,7 +359,8 @@ void WasmBinaryWriter::writeFunctions() {
     }
     if (!binaryLocationTrackedExpressionsForFunc.empty()) {
       binaryLocations.functions[func] =
-        BinaryLocations::FunctionLocations{BinaryLocation(sizePos),
+        BinaryLocations::FunctionLocations{
+                              BinaryLocation(sizePos),
                               BinaryLocation(start - adjustmentForLEBShrinking),
                               BinaryLocation(o.size())};
     }
@@ -366,7 +368,7 @@ void WasmBinaryWriter::writeFunctions() {
       func->name, sizePos + sizeFieldSize, size);
     binaryLocationTrackedExpressionsForFunc.clear();
   });
-  finishSection(start);
+  finishSection(sectionStart);
 }
 
 void WasmBinaryWriter::writeGlobals() {
