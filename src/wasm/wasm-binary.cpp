@@ -358,7 +358,8 @@ void WasmBinaryWriter::writeFunctions() {
     }
     if (!binaryLocationTrackedExpressionsForFunc.empty()) {
       binaryLocations.functions[func] =
-        BinaryLocations::Span{BinaryLocation(start - adjustmentForLEBShrinking),
+        BinaryLocations::FunctionLocations{BinaryLocation(sizePos),
+                              BinaryLocation(start - adjustmentForLEBShrinking),
                               BinaryLocation(o.size())};
     }
     tableOfContents.functionBodies.emplace_back(
@@ -1390,6 +1391,7 @@ void WasmBinaryBuilder::readFunctions() {
   }
   for (size_t i = 0; i < total; i++) {
     BYN_TRACE("read one at " << pos << std::endl);
+    auto sizePos = pos;
     size_t size = getU32LEB();
     if (size == 0) {
       throwError("empty function size");
@@ -1403,8 +1405,9 @@ void WasmBinaryBuilder::readFunctions() {
 
     if (DWARF) {
       func->funcLocation =
-        BinaryLocations::Span{BinaryLocation(pos - codeSectionLocation),
-                              BinaryLocation(pos - codeSectionLocation + size)};
+        BinaryLocations::FunctionLocations{BinaryLocation(sizePos - codeSectionLocation),
+                                           BinaryLocation(pos - codeSectionLocation),
+                                           BinaryLocation(pos - codeSectionLocation + size)};
     }
 
     readNextDebugLocation();

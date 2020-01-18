@@ -402,33 +402,43 @@ private:
   }
 };
 
-// Represents a mapping of addresses to expressions. Note that we use a single
-// map for the start and end addresses, since there is no chance of a function's
-// start overlapping with another's end (there is the size LEB in the middle).
+// Represents a mapping of addresses to expressions. As with expressions, we
+// track both start and end; here, however, "start" means the "start" and
+// "declarations" fields in FunctionLocations, and "end" means the two locations
+// of one past the end, and one before it which is the "end" opcode that is
+// emitted.
 struct FuncAddrMap {
-  std::unordered_map<BinaryLocation, Function*> map;
+  std::unordered_map<BinaryLocation, Function*> startMap, endMap;
 
   // Construct the map from the binaryLocations loaded from the wasm.
   FuncAddrMap(const Module& wasm) {
     for (auto& func : wasm.functions) {
-      map[func->funcLocation.start] = func.get();
-      map[func->funcLocation.end] = func.get();
+std::cout << "note 0x" << std::hex << func->funcLocation.start << '\n';
+std::cout << "     0x" << std::hex << func->funcLocation.declarations << '\n';
+std::cout << "     0x" << std::hex << (func->funcLocation.end - 1) << '\n';
+std::cout << "     0x" << std::hex << func->funcLocation.end << '\n';
+
+      startMap[func->funcLocation.start] = func.get();
+      startMap[func->funcLocation.declarations] = func.get();
+      endMap[func->funcLocation.end - 1] = func.get();
+      endMap[func->funcLocation.end] = func.get();
     }
   }
 
-  Function* get(BinaryLocation addr) const {
-    auto iter = map.find(addr);
-    if (iter != map.end()) {
+  Function* getStart(BinaryLocation addr) const {
+    auto iter = startMap.find(addr);
+    if (iter != startMap.end()) {
       return iter->second;
     }
     return nullptr;
   }
 
-  void dump() const {
-    std::cout << "  (size: " << map.size() << ")\n";
-    for (auto pair : map) {
-      std::cout << "  " << pair.first << " => " << pair.second->name << '\n';
+  Function* getEnd(BinaryLocation addr) const {
+    auto iter = endMap.find(addr);
+    if (iter != endMap.end()) {
+      return iter->second;
     }
+    return nullptr;
   }
 };
 
@@ -484,25 +494,64 @@ struct LocationUpdater {
     return 0;
   }
 
-  BinaryLocation getNewFuncAddr(BinaryLocation oldAddr) const {
-    if (auto* func = oldFuncAddrMap.get(oldAddr)) {
+  BinaryLocation getNewFuncStartAddr(BinaryLocation oldAddr) const {
+std::cout << "get 0x" << std::hex << oldAddr << " (abs: " << (0x98 + oldAddr) << '\n';
+    if (auto* func = oldFuncAddrMap.getStart(oldAddr)) {
       // The function might have been optimized away, check.
       auto iter = newLocations.functions.find(func);
       if (iter != newLocations.functions.end()) {
-        auto oldSpan = func->funcLocation;
-        auto newSpan = iter->second;
-        if (oldAddr == oldSpan.start) {
-          return newSpan.start;
-        } else if (oldAddr == oldSpan.end) {
-          return newSpan.end;
+        auto oldLocations = func->funcLocation;
+        auto newLocations = iter->second;
+        if (oldAddr == oldLocations.start) {
+          return newLocations.start;
+        } else if (oldAddr == oldLocations.declarations) {
+          return newLocations.declarations;
+        } else {
+          WASM_UNREACHABLE("invalid func start");
         }
       }
     }
     return 0;
   }
 
-  bool hasOldFuncAddr(BinaryLocation oldAddr) const {
-    return oldFuncAddrMap.get(oldAddr);
+  bool hasOldFuncStartAddr(BinaryLocation oldAddr) const {
+std::cout << "chak 0x" << std::hex << oldAddr << '\n';
+    return oldFuncAddrMap.getStart(oldAddr);
+  }
+
+  BinaryLocation getNewFuncEndAddr(BinaryLocation oldAddr) const {
+std::cout << "get 0x" << std::hex << oldAddr << " (abs: " << (0x98 + oldAddr) << '\n';
+    if (auto* func = oldFuncAddrMap.getEnd(oldAddr)) {
+      // The function might have been optimized away, check.
+      auto iter = newLocations.functions.find(func);
+      if (iter != newLocations.functions.end()) {
+        auto oldLocations = func->funcLocation;
+        auto newLocations = iter->second;
+        if (oldAddr == oldLocations.end) {
+          return newLocations.end;
+        } else if (oldAddr == oldLocations.end - 1) {
+          return newLocations.end - 1;
+        } else {
+          WASM_UNREACHABLE("invalid func end");
+        }
+      }
+    }
+    return 0;
+  }
+
+  // Check for either the end opcode, or one past the end.
+  bool hasOldFuncEndAddr(BinaryLocation oldAddr) const {
+std::cout << "chak 0x" << std::hex << oldAddr << '\n';
+    return oldFuncAddrMap.getEnd(oldAddr);
+  }
+
+  // Check specifically for the end opcode.
+  bool hasOldFuncEndOpcodeAddr(BinaryLocation oldAddr) const {
+std::cout << "chak 0x" << std::hex << oldAddr << '\n';
+    if (auto* func = oldFuncAddrMap.getEnd(oldAddr)) {
+      return oldAddr == func->funcLocation.end - 1;
+    }
+    return false;
   }
 
   BinaryLocation getNewExtraAddr(BinaryLocation oldAddr) const {
@@ -552,11 +601,15 @@ static void updateDebugLines(llvm::DWARFYAML::Data& data,
         BinaryLocation newAddr = 0;
         if (locationUpdater.hasOldExprAddr(oldAddr)) {
           newAddr = locationUpdater.getNewExprAddr(oldAddr);
-        } else if (locationUpdater.hasOldFuncAddr(oldAddr)) {
-          newAddr = locationUpdater.getNewFuncAddr(oldAddr);
+        } else if (locationUpdater.hasOldFuncStartAddr(oldAddr)) {
+std::cout << "1debug line\n";
+          newAddr = locationUpdater.getNewFuncStartAddr(oldAddr);
+        } else if (locationUpdater.hasOldFuncEndOpcodeAddr(oldAddr)) {
+std::cout << "2debug line\n";
+          newAddr = locationUpdater.getNewFuncEndAddr(oldAddr);
         } else if (locationUpdater.hasOldExtraAddr(oldAddr)) {
           newAddr = locationUpdater.getNewExtraAddr(oldAddr);
-        }
+        } else Fatal() << std::hex << "0x" << oldAddr;
         // TODO: last 'end' of a function
         if (newAddr) {
           newAddrs.push_back(newAddr);
@@ -631,7 +684,8 @@ static void updateDIE(const llvm::DWARFDebugInfoEntry& DIE,
         newValue = locationUpdater.getNewExprAddr(oldValue);
       } else if (tag == llvm::dwarf::DW_TAG_compile_unit ||
                  tag == llvm::dwarf::DW_TAG_subprogram) {
-        newValue = locationUpdater.getNewFuncAddr(oldValue);
+std::cout << "low\n";
+        newValue = locationUpdater.getNewFuncStartAddr(oldValue);
       } else {
         Fatal() << "unknown tag with low_pc "
                 << llvm::dwarf::TagString(tag).str();
@@ -664,7 +718,8 @@ static void updateDIE(const llvm::DWARFDebugInfoEntry& DIE,
         newValue = locationUpdater.getNewExprEndAddr(oldValue);
       } else if (tag == llvm::dwarf::DW_TAG_compile_unit ||
                  tag == llvm::dwarf::DW_TAG_subprogram) {
-        newValue = locationUpdater.getNewFuncAddr(oldValue);
+std::cout << "high\n";
+        newValue = locationUpdater.getNewFuncEndAddr(oldValue);
       } else {
         Fatal() << "unknown tag with low_pc "
                 << llvm::dwarf::TagString(tag).str();
