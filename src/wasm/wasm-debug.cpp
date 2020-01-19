@@ -342,6 +342,7 @@ private:
 struct AddrExprMap {
   std::unordered_map<BinaryLocation, Expression*> startMap;
   std::unordered_map<BinaryLocation, Expression*> endMap;
+  std::unordered_map<BinaryLocation, BinaryLocation> startToEnd;
 
   // Some instructions have extra binary locations, like the else and end in
   // and if. Track those separately, including their expression and their id
@@ -364,7 +365,6 @@ struct AddrExprMap {
       }
     }
   }
-
 
   Expression* getStart(BinaryLocation addr) const {
     auto iter = startMap.find(addr);
@@ -396,6 +396,7 @@ private:
     startMap[span.start] = expr;
     assert(endMap.count(span.end) == 0);
     endMap[span.end] = expr;
+    startToEnd[span.start] = span.end;
   }
 
   void add(Expression* expr, const BinaryLocations::ExtraLocations& extra) {
@@ -493,6 +494,10 @@ struct LocationUpdater {
       }
     }
     return 0;
+  }
+
+  bool hasOldExprEndAddr(BinaryLocation oldAddr) const {
+    return oldExprAddrMap.getEnd(oldAddr);
   }
 
   BinaryLocation getNewFuncStartAddr(BinaryLocation oldAddr) const {
@@ -609,7 +614,6 @@ static void updateDebugLines(llvm::DWARFYAML::Data& data,
         } else if (locationUpdater.hasOldExtraAddr(oldAddr)) {
           newAddr = locationUpdater.getNewExtraAddr(oldAddr);
         }
-        // TODO: last 'end' of a function
         if (newAddr) {
           newAddrs.push_back(newAddr);
           assert(newAddrInfo.count(newAddr) == 0);
@@ -755,6 +759,95 @@ static void updateCompileUnits(const BinaryenDWARFInfo& info,
     });
 }
 
+static void updateRanges(llvm::DWARFYAML::Data& yaml,
+                         const LocationUpdater& locationUpdater) {
+  // In each range section, try to update the start and end. If we no longer
+  // have something to map them too, we must skip that part.
+  size_t skip = 0;
+  for (size_t i = 0; i < yaml.Ranges.size(); i++) {
+    auto& range = yaml.Ranges[i];
+    BinaryLocation oldStart = range.Start,
+                   oldEnd = range.End,
+                   newStart = 0,
+                   newEnd = 0;
+    // If this was not an end marker, try to find what it should be updated to.
+    if (oldStart != 0 || oldEnd != 0) {
+      if (locationUpdater.hasOldExprAddr(oldStart)) {
+        newStart = locationUpdater.getNewExprAddr(oldStart);
+      } else if (locationUpdater.hasOldFuncStartAddr(oldStart)) {
+        newStart = locationUpdater.getNewFuncStartAddr(oldStart);
+      }
+      if (locationUpdater.hasOldExprEndAddr(oldEnd)) {
+        newEnd = locationUpdater.getNewExprEndAddr(oldEnd);
+      } else if (locationUpdater.hasOldFuncEndAddr(oldEnd)) {
+        newEnd = locationUpdater.getNewFuncEndAddr(oldEnd);
+      }
+      if (newStart != 0 & newEnd != 0) {
+        // The range start and end markers have been preserved. However,
+        // instructions in the middle may have moved around, making the range no
+        // longer contiguous.
+        // TODO: Split the range in such cases? Merge ranges in other cases?
+        // Note on notation: 'old', 'new' refer to locations in the old and new
+        // binary, while 'last' and 'next' refer to the last and next part of
+        // TODO: What should we check for a range that is an entire function?
+        //       How would inlining work?
+        // the range as we traverse it.
+        BinaryLocation oldAddr = oldStart;
+        BinaryLocation newAddr = newStart;
+        while (true) {
+          // TODO: handle extras
+          // We can assume that this position is already validated (note
+          // how we've already validated the start and end of the entire range),
+          // and validate the next part of the range.
+          auto* lastExpr = locationUpdater.oldExprAddrMap.getStart(oldAddr);
+          assert(lastExpr);
+          // Find the next part of the range.
+          oldAddr = locationUpdater.oldExprAddrMap.startToEnd.at(oldAddr);
+          if (oldAddr == oldEnd) {
+            break;
+          }
+          // Find the expression for that next part.
+          auto* nextExpr = locationUpdater.oldExprAddrMap.getStart(oldAddr);
+          assert(nextExpr);
+          // Find where the last expression ends in the new binary.
+          auto lastExprNewSpan = locationUpdater.newLocations.expressions.at(lastExpr);
+          auto nextExprNewSpan = locationUpdater.newLocations.expressions.at(nextExpr);
+          if (lastExprNewSpan.end != nextExprNewSpan.start) {
+            // Uh oh, unlike in the old binary where nextExpr was right after
+            // lastExpr, things do not line up in the new binary.
+            // TODO: Perhaps be willing to skip some new things as long as we
+            //       find our way later? That would handle adding an unreachable
+            //       at the end of a block, which we do sometimes when not
+            //       optimizing.
+            newStart = newEnd = 0;
+            break;
+          }
+          newAddr = lastExprNewSpan.end;
+        }
+      }
+      if (newStart == 0 || newEnd == 0) {
+        // This part of the range no longer has a mapping, so we must skip it.
+        skip++;
+        continue;
+      }
+    } else {
+      // This was not a valid range in the old binary. It was either two 0's
+      // (an end marker) or an invalid value that should be ignored. Either way,
+      // write an end marker and finish the current section of ranges, filling
+      // it out to the original size (TODO: we could update range section
+      // indexes and pack things).
+      while (skip) {
+        auto& writtenRange = yaml.Ranges[i - skip];
+        writtenRange.Start = writtenRange.End = 0;
+        skip--;
+      }
+    }
+    auto& writtenRange = yaml.Ranges[i - skip];
+    writtenRange.Start = newStart;
+    writtenRange.End = newEnd;
+  }
+}
+
 void writeDWARFSections(Module& wasm, const BinaryLocations& newLocations) {
   BinaryenDWARFInfo info(wasm);
 
@@ -769,6 +862,8 @@ void writeDWARFSections(Module& wasm, const BinaryLocations& newLocations) {
   updateDebugLines(data, locationUpdater);
 
   updateCompileUnits(info, data, locationUpdater);
+
+  updateRanges(data, locationUpdater);
 
   // TODO: Actually update, and remove sections we don't know how to update yet?
 
