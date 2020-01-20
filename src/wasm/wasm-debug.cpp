@@ -296,6 +296,7 @@ struct LineState {
     if (prologueEnd != old.prologueEnd) {
       assert(prologueEnd);
       newOpcodes.push_back(makeItem(llvm::dwarf::DW_LNS_set_prologue_end));
+      prologueEnd = false;
     }
     if (epilogueBegin != old.epilogueBegin) {
       Fatal() << "eb";
@@ -621,6 +622,8 @@ static void updateDebugLines(llvm::DWARFYAML::Data& data,
           auto& updatedState = newAddrInfo.at(newAddr);
           // The only difference is the address TODO other stuff?
           updatedState.addr = newAddr;
+          // Reset relevant state.
+          state.prologueEnd = false;
         }
         if (opcode.Opcode == 0 &&
             opcode.SubOpcode == llvm::dwarf::DW_LNE_end_sequence) {
@@ -863,7 +866,7 @@ void writeDWARFSections(Module& wasm, const BinaryLocations& newLocations) {
 
   updateCompileUnits(info, data, locationUpdater);
 
-  updateRanges(data, locationUpdater);
+  if (0) updateRanges(data, locationUpdater);
 
   // TODO: Actually update, and remove sections we don't know how to update yet?
 
