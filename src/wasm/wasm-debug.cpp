@@ -616,8 +616,12 @@ static void updateDebugLines(llvm::DWARFYAML::Data& data,
           newAddr = locationUpdater.getNewExtraAddr(oldAddr);
         }
         if (newAddr) {
+          // LLVM sometimes emits the same address more than once. We should
+          // probably investigate that.
+          if (newAddrInfo.count(newAddr)) {
+            continue;
+          }
           newAddrs.push_back(newAddr);
-          assert(newAddrInfo.count(newAddr) == 0);
           newAddrInfo.emplace(newAddr, state);
           auto& updatedState = newAddrInfo.at(newAddr);
           // The only difference is the address TODO other stuff?
