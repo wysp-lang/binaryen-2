@@ -617,6 +617,7 @@ static void updateDebugLines(llvm::DWARFYAML::Data& data,
         }
         if (newAddr) {
           newAddrs.push_back(newAddr);
+std::cout << std::hex << "0x" << oldAddr << " => 0x" << newAddr << '\n' << std::dec;
           assert(newAddrInfo.count(newAddr) == 0);
           newAddrInfo.emplace(newAddr, state);
           auto& updatedState = newAddrInfo.at(newAddr);
@@ -785,7 +786,7 @@ static void updateRanges(llvm::DWARFYAML::Data& yaml,
       } else if (locationUpdater.hasOldFuncEndAddr(oldEnd)) {
         newEnd = locationUpdater.getNewFuncEndAddr(oldEnd);
       }
-      if (newStart != 0 & newEnd != 0) {
+      if (newStart != 0 && newEnd != 0) {
         // The range start and end markers have been preserved. However,
         // instructions in the middle may have moved around, making the range no
         // longer contiguous.
@@ -796,7 +797,7 @@ static void updateRanges(llvm::DWARFYAML::Data& yaml,
         //       How would inlining work?
         // the range as we traverse it.
         BinaryLocation oldAddr = oldStart;
-        BinaryLocation newAddr = newStart;
+        // BinaryLocation newAddr = newStart;
         while (true) {
           // TODO: handle extras
           // We can assume that this position is already validated (note
@@ -825,7 +826,7 @@ static void updateRanges(llvm::DWARFYAML::Data& yaml,
             newStart = newEnd = 0;
             break;
           }
-          newAddr = lastExprNewSpan.end;
+          //newAddr = lastExprNewSpan.end;
         }
       }
       if (newStart == 0 || newEnd == 0) {
