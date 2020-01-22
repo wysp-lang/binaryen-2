@@ -590,7 +590,7 @@ static void updateDebugLines(llvm::DWARFYAML::Data& data,
         omittingRange = false;
       }
       if (state.update(opcode, table)) {
-        if (state.addr == 0) {
+        if (!state.needToEmit()) {
           omittingRange = true;
         }
         if (omittingRange) {
