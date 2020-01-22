@@ -617,7 +617,6 @@ static void updateDebugLines(llvm::DWARFYAML::Data& data,
         }
         if (newAddr) {
           newAddrs.push_back(newAddr);
-std::cout << std::hex << "0x" << oldAddr << " => 0x" << newAddr << '\n' << std::dec;
           assert(newAddrInfo.count(newAddr) == 0);
           newAddrInfo.emplace(newAddr, state);
           auto& updatedState = newAddrInfo.at(newAddr);
