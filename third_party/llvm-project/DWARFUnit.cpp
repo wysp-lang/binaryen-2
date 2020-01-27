@@ -371,7 +371,9 @@ outs() << "extractDIEsToVector from " << DIEOffset << '\n';
 if (getenv("ZAKAI")) {
 auto* abbr = DIE.getAbbreviationDeclarationPtr();
 outs() << "  at  " << DIE.getOffset() << " (" << (abbr ? abbr->getCode() : 0) << ")" << '\n';
-//  outs() << dwarf::TagString(DIE.getTag()).str()   << '\n';
+if (DIE.getOffset() == 2500) {
+  outs() << dwarf::TagString(DIE.getTag()).str()   << '\n';
+}
 }
     if (IsCUDie) {
       if (AppendCUDie)

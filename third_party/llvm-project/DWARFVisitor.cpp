@@ -45,11 +45,13 @@ static unsigned getRefSize(const DWARFYAML::Unit &Unit) {
 
 template <typename T> void DWARFYAML::VisitorImpl<T>::traverseDebugInfo() {
   for (auto &Unit : DebugInfo.CompileUnits) {
+outs() << "start compile unit\n";
     onStartCompileUnit(Unit);
     if (Unit.Entries.empty()) { // XXX BINARYEN
       continue;
     }
     auto FirstAbbrevCode = Unit.Entries[0].AbbrCode;
+outs() << "start compile unit, frist abrcode" << FirstAbbrevCode << " and this CU has " << DebugInfo.AbbrevDecls.size() << " such decls\n";
 
     for (auto &Entry : Unit.Entries) {
       onStartDIE(Unit, Entry);

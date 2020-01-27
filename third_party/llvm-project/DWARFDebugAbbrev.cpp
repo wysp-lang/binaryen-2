@@ -104,6 +104,7 @@ void DWARFDebugAbbrev::dump(raw_ostream &OS) const {
     return;
   }
 
+OS << "waka num abbrev tables: " << AbbrDeclSets.size() << '\n';
   for (const auto &I : AbbrDeclSets) {
     OS << format("Abbrev table for offset: 0x%8.8" PRIx64 "\n", I.first);
     I.second.dump(OS);

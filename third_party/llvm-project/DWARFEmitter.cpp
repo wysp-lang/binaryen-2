@@ -197,7 +197,8 @@ outs() << "emitting to binary\n";
   void onEndCompileUnit(const DWARFYAML::Unit &CU) {
     size_t EndPos = OS.tell();
     if (EndPos - StartPos != CU.Length.getLength()) {
-      llvm_unreachable("compile unit size was incorrect");
+      outs() << "fatal " << (EndPos - StartPos) << " : " << CU.Length.getLength() << '\n';
+//      llvm_unreachable("compile unit size was incorrect");
     }
   }
 
@@ -205,6 +206,9 @@ outs() << "emitting to binary\n";
                   const DWARFYAML::Entry &DIE) override {
 if (getenv("ZAKAI")) {
 outs() << "  at  " << OS.tell() << " (" << DIE.AbbrCode << ")" << '\n';
+//if (OS.tell() == 2500) {
+//  outs() << dwarf::TagString(DIE.AbbrCode).str()   << '\n';
+//}
 }
     encodeULEB128(DIE.AbbrCode, OS);
   }
