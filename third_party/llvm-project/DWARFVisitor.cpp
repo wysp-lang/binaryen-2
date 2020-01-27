@@ -142,6 +142,7 @@ template <typename T> void DWARFYAML::VisitorImpl<T>::traverseDebugInfo() {
             break;
           case dwarf::DW_FORM_sdata:
             onValue((int64_t)FormVal->Value, true);
+outs() << "visitor waka " << (int64_t)FormVal->Value << '\n';
             break;
           case dwarf::DW_FORM_udata:
           case dwarf::DW_FORM_ref_udata:

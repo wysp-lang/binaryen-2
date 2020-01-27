@@ -357,6 +357,7 @@ void DWARFUnit::extractDIEsToVector(
   // Set the offset to that of the first DIE and calculate the start of the
   // next compilation unit header.
   uint64_t DIEOffset = getOffset() + getHeaderSize();
+outs() << "extractDIEsToVector from " << DIEOffset << '\n';
   uint64_t NextCUOffset = getNextUnitOffset();
   DWARFDebugInfoEntry DIE;
   DWARFDataExtractor DebugInfoData = getDebugInfoExtractor();
@@ -365,6 +366,11 @@ void DWARFUnit::extractDIEsToVector(
 
   while (DIE.extractFast(*this, &DIEOffset, DebugInfoData, NextCUOffset,
                          Depth)) {
+auto* abbr = DIE.getAbbreviationDeclarationPtr();
+outs() << "  at  " << DIE.getOffset() << " (" << (abbr ? abbr->getCode() : 0) << ")" << '\n';
+if (DIE.getOffset() == 1892) {
+  outs() << dwarf::TagString(DIE.getTag()).str()   << '\n';
+}
     if (IsCUDie) {
       if (AppendCUDie)
         Dies.push_back(DIE);
