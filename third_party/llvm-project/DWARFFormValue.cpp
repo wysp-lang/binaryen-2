@@ -177,7 +177,7 @@ bool DWARFFormValue::skipValue(dwarf::Form Form, DataExtractor DebugInfoData,
 
     // signed or unsigned LEB 128 values.
     case DW_FORM_sdata:
-outs() << "skipping waka " <<  DebugInfoData.getSLEB128(OffsetPtr) << "\n";
+      DebugInfoData.getSLEB128(OffsetPtr);
       return true;
 
     case DW_FORM_udata:

@@ -174,7 +174,9 @@ class DumpVisitor : public DWARFYAML::ConstVisitor {
 
 protected:
   void onStartCompileUnit(const DWARFYAML::Unit &CU) override {
+if (getenv("ZAKAI")) {
 outs() << "emitting to binary\n";
+}
 
     writeInitialLength(CU.Length, OS, DebugInfo.IsLittleEndian);
     StartPos = OS.tell(); // XXX BINARYEN
@@ -201,25 +203,8 @@ outs() << "emitting to binary\n";
 
   void onStartDIE(const DWARFYAML::Unit &CU,
                   const DWARFYAML::Entry &DIE) override {
+if (getenv("ZAKAI")) {
 outs() << "  at  " << OS.tell() << " (" << DIE.AbbrCode << ")" << '\n';
-if (OS.tell() == 1892) {
-  for (auto& x : DIE.Values) {
-    outs() << "    -- " << x.Value << '\n';
-    outs() << "     - " << x.CStr.str() << '\n';
-    outs() << "     - " << x.BlockData.size()  << '\n';
-  }
-
-struct FormValue {
-  llvm::yaml::Hex64 Value;
-  StringRef CStr;
-  std::vector<llvm::yaml::Hex8> BlockData;
-};
-
-struct Entry {
-  llvm::yaml::Hex32 AbbrCode;
-  std::vector<FormValue> Values;
-};
-
 }
     encodeULEB128(DIE.AbbrCode, OS);
   }
@@ -245,7 +230,6 @@ struct Entry {
 
   void onValue(const int64_t S, const bool LEB = false) override {
     if (LEB) {
-outs() << "SLEB waka " << S << '\n';
       encodeSLEB128(S, OS);
    } else
       writeInteger(S, OS, DebugInfo.IsLittleEndian);
