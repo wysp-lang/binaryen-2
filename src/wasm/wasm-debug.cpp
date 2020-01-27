@@ -895,6 +895,7 @@ void writeDWARFSections(Module& wasm, const BinaryLocations& newLocations) {
     Fatal() << "Failed to parse DWARF to YAML";
   }
 
+#if 0
   LocationUpdater locationUpdater(wasm, newLocations);
 
   updateDebugLines(data, locationUpdater);
@@ -904,6 +905,7 @@ void writeDWARFSections(Module& wasm, const BinaryLocations& newLocations) {
   updateRanges(data, locationUpdater);
 
   updateLoc(data, locationUpdater);
+#endif
 
   // Convert to binary sections.
   auto newSections =

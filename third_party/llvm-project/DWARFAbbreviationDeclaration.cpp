@@ -40,15 +40,18 @@ bool
 DWARFAbbreviationDeclaration::extract(DataExtractor Data,
                                       uint64_t* OffsetPtr) {
   clear();
+outs() << "DWARFAbbreviationDeclaration::extract!\n";
   const uint64_t Offset = *OffsetPtr;
   Code = Data.getULEB128(OffsetPtr);
   if (Code == 0) {
+outs() << "DWARFAbbreviationDeclaration::extract NoCode!\n";
     return false;
   }
   CodeByteSize = *OffsetPtr - Offset;
   Tag = static_cast<llvm::dwarf::Tag>(Data.getULEB128(OffsetPtr));
   if (Tag == DW_TAG_null) {
     clear();
+outs() << "DWARFAbbreviationDeclaration::extract NoTag!\n";
     return false;
   }
   uint8_t ChildrenByte = Data.getU8(OffsetPtr);
