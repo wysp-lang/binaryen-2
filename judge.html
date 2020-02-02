@@ -1,22 +1,36 @@
+<title>wasm-judge</title>
 <body>
 
+Enter a WebAssembly file to judge:
+<br>
 <input type="file"
-       id="the_input" name="the_input"
+       id="the_input"
        accept="application/wasm" oninput="processInput()">
+<hr>
+<textarea id="the_output" rows=3 cols=100></textarea>
 
 <script>
+var theInput = document.getElementById('the_input');
+theInput.value = '';
+
+var theOutput = document.getElementById('the_output');
+theOutput.value = '';
+
+var worker = new Worker('judge.worker.js');
+
 function sendJob(wasm) {
-  var worker = new Worker('judge.worker.js');
+  theOutput.value = 'Optimizing...';
   var oldSize = wasm.length;
   worker.onmessage = (message) => {
     var newSize = message.data.size;
     var missedOpportunity = 1 - newSize / oldSize;
     if (missedOpportunity > 0.01) {
-      document.write('Should have ran wasm-opt, could have saved ' +
-        Number(100 * missedOpportunity).toFixed(2) + '%.');
+      text = 'Should have ran wasm-opt, could have saved ' +
+        Number(100 * missedOpportunity).toFixed(2) + '%.';
     } else {
-      document.write('Looks good!');
+      text = 'Looks good!';
     }
+    theOutput.value = text;
   };
   worker.postMessage({
     wasm: wasm
@@ -24,8 +38,7 @@ function sendJob(wasm) {
 }
 
 function processInput(message) {
-  var input = document.getElementById('the_input');
-  var file = input.files[0];
+  var file = theInput.files[0];
   const objectURL = window.URL.createObjectURL(file);
   fetch(objectURL)
     .then(response => response.arrayBuffer())
