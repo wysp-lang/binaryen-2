@@ -3,29 +3,26 @@
 
 <h1>Constructive Criticism for WebAssembly Binaries</h1>
 
-<table>
-<tr>
-<td>
-  Enter a WebAssembly file to examine:
-  <br>
-  <input type="file"
-         id="file_input"
-         accept="application/wasm" oninput="processFile(fileInput.files[0])">
-</td>
-<td width=100></td>
-<td>
-  Or enter a URL (will fail without CORS):
-  <br>
-  <input type="text"
-         id="url_input" onkeypress="return onURLKeypress(event)">
-  <input type="submit" value="Read URL" onclick="processURL(urlInput.value)">
-</td>
-</tr>
-</table>
-
+Provide a WebAssembly file:
+<input type="file"
+       id="file_input"
+       style="color: transparent"
+       accept="application/wasm"
+       oninput="processFile(fileInput.files[0])">
 <br>
+Or enter a URL (will fail without CORS; for a test, try "opt.wasm" or "unopt.wasm"):
+<input type="text"
+       id="url_input"
+       onkeypress="return onURLKeypress(event)">
+<input type="submit" value="Read URL" onclick="processURL(urlInput.value)">
+
+<br><br>
 
 <div id="the_output" style="border: 0.1em solid black; background-color: #eee"></div>
+
+<br><br>
+
+<small>(This runs <a href="https://github.com/WebAssembly/binaryen/#wasm-opt">Binaryen's wasm-opt</a>. TODO: CSS, use multiple cores for speed)</small>
 
 <script>
 var fileInput = document.getElementById('file_input');
