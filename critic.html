@@ -68,7 +68,7 @@ function reportResults(name, results) {
 }
 
 function sendJob(name, wasm) {
-  output('Processing "' + name + '...');
+  output('Processing "' + name + '"...');
   worker.onmessage = (message) => {
     output('... "' + name + '" complete.');
     reportResults('-O', message.data);
@@ -97,6 +97,10 @@ function processURL(url) {
       sendJob('-O', data);
     });
 }
+
+onerror = () => {
+  output('A problem happened :( Check the dev console.');
+};
 </script>
 
 </body>
