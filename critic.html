@@ -1,0 +1,71 @@
+<title>wasm-critic</title>
+<body>
+
+<h1>Constructive Criticism for WebAssembly Binaries</h1>
+
+Enter a WebAssembly file to examine:
+<br>
+<input type="file"
+       id="the_input"
+       accept="application/wasm" oninput="processInput()">
+<hr>
+<textarea id="the_output" rows=10 cols=100></textarea>
+
+<script>
+var theInput = document.getElementById('the_input');
+theInput.value = '';
+
+var theOutput = document.getElementById('the_output');
+theOutput.value = '';
+
+function output(text) {
+  if (theOutput.value) theOutput.value += '\n';
+  theOutput.value += text;
+}
+
+var worker = new Worker('critic.worker.js');
+
+function reportResults(name, results) {
+  var oldSize = results.oldSize;
+  var optSize = results.optSize;
+  var convergeSize = results.convergeSize;
+  if (convergeSize < optSize) {
+    name += ' --converge';
+    optSize = convergeSize;
+  }
+  var missedOpportunity = 1 - optSize / oldSize;
+  var text = 'wasm-opt ' + name;
+  if (missedOpportunity > 0.01) {
+    text += ' could have saved ' +
+      Number(100 * missedOpportunity).toFixed(2) + '%.';
+  } else {
+    text += ' would not have helped, the binary looks good already.';
+  }
+  output(text);
+}
+
+function sendJob(name, wasm) {
+  output('Processing "' + name + '...');
+  worker.onmessage = (message) => {
+    output('... "' + name + '" complete.');
+    reportResults('-O', message.data);
+  };
+  worker.postMessage({
+    wasm: wasm
+  });
+}
+
+function processInput(message) {
+  var file = theInput.files[0];
+  const objectURL = window.URL.createObjectURL(file);
+  fetch(objectURL)
+    .then(response => response.arrayBuffer())
+    .then(buffer => {
+      var data = new Uint8Array(buffer);
+      sendJob('-O', data);
+      window.URL.revokeObjectURL(objectURL);
+    });
+}
+</script>
+
+</body>

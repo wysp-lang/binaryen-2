@@ -5,7 +5,9 @@ var data;
 
 function processData() {
   if (!ready || !data) return;
-  var results = {};
+  var results = {
+    oldSize: data.wasm.length
+  };
   var module = new binaryen.readBinary(data.wasm);
   module.optimize();
   results.optSize = module.emitBinary().length;
