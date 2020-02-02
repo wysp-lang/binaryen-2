@@ -7,12 +7,13 @@
 <script>
 function sendJob(wasm) {
   var worker = new Worker('judge.worker.js');
-  console.log('sent:', wasm.length);
   var oldSize = wasm.length;
   worker.onmessage = (message) => {
     var newSize = message.data.size;
-    if (newSize < oldSize) {
-      document.write('Should have ran wasm-opt...');
+    var missedOpportunity = 1 - newSize / oldSize;
+    if (missedOpportunity > 0.01) {
+      document.write('Should have ran wasm-opt, could have saved ' +
+        Number(100 * missedOpportunity).toFixed(2) + '%.');
     } else {
       document.write('Looks good!');
     }
