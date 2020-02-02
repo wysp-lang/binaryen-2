@@ -18,19 +18,25 @@ theOutput.value = '';
 
 var worker = new Worker('judge.worker.js');
 
+function reportSize(name, oldSize, newSize) {
+  var missedOpportunity = 1 - newSize / oldSize;
+  var text = 'wasm-opt ' + name;
+  if (missedOpportunity > 0.01) {
+    text += ' could have saved ' +
+      Number(100 * missedOpportunity).toFixed(2) + '%.';
+  } else {
+    text += ' would not have helped, it looks good already.';
+  }
+  theOutput.value += '\n' + text;
+}
+
 function sendJob(wasm) {
   theOutput.value = 'Optimizing...';
   var oldSize = wasm.length;
   worker.onmessage = (message) => {
-    var newSize = message.data.size;
-    var missedOpportunity = 1 - newSize / oldSize;
-    if (missedOpportunity > 0.01) {
-      text = 'Should have ran wasm-opt, could have saved ' +
-        Number(100 * missedOpportunity).toFixed(2) + '%.';
-    } else {
-      text = 'Looks good!';
-    }
-    theOutput.value = text;
+    var results = message.data;
+    reportSize('-O', oldSize, results.optSize);
+    reportSize('-O --converge', oldSize, results.convergeSize);
   };
   worker.postMessage({
     wasm: wasm

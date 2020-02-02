@@ -5,13 +5,16 @@ var data;
 
 function processData() {
   if (!ready || !data) return;
+  var results = {};
   var module = new binaryen.readBinary(data.wasm);
   module.optimize();
-  var binary = module.emitBinary();
+  results.optSize = module.emitBinary().length;
+  // Approximate --converge with a double optimize, as it tends to exponentially
+  // decrease in benefit anyhow.
+  module.optimize();
+  results.convergeSize = module.emitBinary().length;
   module.dispose();
-  postMessage({
-    size: binary.length
-  });
+  postMessage(results);
 }
   
 binaryen.ready.then(() => {
