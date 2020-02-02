@@ -17,15 +17,15 @@
   Or enter a URL (will fail without CORS):
   <br>
   <input type="text"
-         id="url_input">
+         id="url_input" onkeypress="return onURLKeypress(event)">
   <input type="submit" value="Read URL" onclick="processURL(urlInput.value)">
 </td>
 </tr>
 </table>
 
-<hr>
+<br>
 
-<textarea id="the_output" rows=10 cols=100></textarea>
+<div id="the_output" style="border: 0.1em solid black; background-color: #eee"></div>
 
 <script>
 var fileInput = document.getElementById('file_input');
@@ -35,11 +35,22 @@ var urlInput = document.getElementById('url_input');
 urlInput.value = '';
 
 var theOutput = document.getElementById('the_output');
-theOutput.value = '';
 
-function output(text) {
-  if (theOutput.value) theOutput.value += '\n';
-  theOutput.value += text;
+function onURLKeypress(event) {
+  if (event.keyCode == 13) {
+    processURL(urlInput.value);
+    return false;
+  }
+  return true;
+}
+
+function output(child) {
+  theOutput.appendChild(
+    typeof child === 'string' ? document.createTextNode(child) : child
+  );
+  theOutput.appendChild(
+    document.createElement('div')
+  );
 }
 
 var worker = new Worker('critic.worker.js');
@@ -53,8 +64,9 @@ function reportResults(name, results) {
     optSize = convergeSize;
   }
   var missedOpportunity = 100 * (1 - optSize / oldSize);
+  var canHelp = missedOpportunity > 0.01;
   var text = 'wasm-opt ' + name;
-  if (missedOpportunity > 0.01) {
+  if (canHelp) {
     text += ' could have saved ' +
       Number(missedOpportunity).toFixed(2) + '%';
     for (var i = 0; i < Math.log2(missedOpportunity) - 1; i++) {
@@ -65,12 +77,19 @@ function reportResults(name, results) {
     text += ' would not have helped, the binary looks good already.';
   }
   output(text);
+  if (canHelp) {
+    // Emit a download link for the new binary.
+    const link = document.createElement('a');
+    link.href = window.URL.createObjectURL(new Blob([results.newBinary])); // leak!
+    link.appendChild(document.createTextNode('download'));
+    link.download = 'optimized.wasm';
+    output(link);
+  }
+  output(document.createElement('br'));
 }
 
 function sendJob(name, wasm) {
-  output('Processing "' + name + '"...');
   worker.onmessage = (message) => {
-    output('... "' + name + '" complete.');
     reportResults('-O', message.data);
   };
   worker.postMessage({
@@ -79,6 +98,7 @@ function sendJob(name, wasm) {
 }
 
 function processFile(file) {
+  output('Processing file: ' + file.name);
   const objectURL = window.URL.createObjectURL(file);
   fetch(objectURL)
     .then(response => response.arrayBuffer())
@@ -90,6 +110,7 @@ function processFile(file) {
 }
 
 function processURL(url) {
+  output('Processing URL: ' + url);
   fetch(url)
     .then(response => response.arrayBuffer())
     .then(buffer => {

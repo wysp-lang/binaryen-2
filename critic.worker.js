@@ -14,7 +14,8 @@ function processData() {
   // Approximate --converge with a double optimize, as it tends to exponentially
   // decrease in benefit anyhow.
   module.optimize();
-  results.convergeSize = module.emitBinary().length;
+  results.newBinary = module.emitBinary();
+  results.convergeSize = results.newBinary.length;
   module.dispose();
   postMessage(results);
 }
