@@ -1,7 +1,7 @@
-<title>wasm-critic</title>
+<title>wasm-shrink</title>
 <body>
 
-<h1>Constructive Criticism for WebAssembly Binaries</h1>
+<h1>wasm-shrink: Constructive Criticism for WebAssembly Binaries</h1>
 
 Provide a WebAssembly file:
 <input type="file"
@@ -22,7 +22,7 @@ Or enter a URL (will fail without CORS; for a test, try "opt.wasm" or "unopt.was
 
 <br><br>
 
-<small>(This runs <a href="https://github.com/WebAssembly/binaryen/#wasm-opt">Binaryen's wasm-opt</a>. TODO: CSS, use multiple cores for speed)</small>
+<small>(This runs <a href="https://github.com/WebAssembly/binaryen/#wasm-opt">Binaryen's wasm-opt</a> on this page; there is no server component. TODO: CSS, use multiple cores for speed)</small>
 
 <script>
 var fileInput = document.getElementById('file_input');
@@ -50,7 +50,7 @@ function output(child) {
   );
 }
 
-var worker = new Worker('critic.worker.js');
+var worker = new Worker('shrink.worker.js');
 
 function reportResults(name, results) {
   var oldSize = results.oldSize;
