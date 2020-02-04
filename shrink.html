@@ -1,28 +1,93 @@
 <title>wasm-shrink</title>
+<head>
+  <!-- the style is borrowed from Massive, https://github.com/kripken/Massive -->
+  <link href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700" rel="stylesheet" type="text/css">
+  <link href="style/main.css" rel="stylesheet">
+</head>
+
 <body>
+  <header class="header">
+    <div class="wrap flex">
+      <a href="" class="logo flex flex-1">
+        <big class="massive flex vcentre">wasm-shrink</big>
+      </a>
+      <nav class="flex">
+        <a href="#faq" class="flex vcentre">FAQ</a>
+        <a href="https://github.com/WebAssembly/binaryen/" class="flex vcentre">Source Code</a>
+      </nav>
+    </div>
+  </header>
 
-<h1>wasm-shrink: Constructive Criticism for WebAssembly Binaries</h1>
+  <masthead id="intro" class="masthead-intro">
+    <div class="wrap wrap-juicy wrap-dark">
+      <big class="slogan">Constructive Criticism for <a href="https://webassembly.org/">WebAssembly</a> Binaries</big>
+    </div>
+  </masthead>
 
-Provide a WebAssembly file:
-<input type="file"
-       id="file_input"
-       style="color: transparent"
-       accept="application/wasm"
-       oninput="processFile(fileInput.files[0])">
-<br>
-Or enter a URL (will fail without CORS; for a test, try "opt.wasm" or "unopt.wasm"):
-<input type="text"
-       id="url_input"
-       onkeypress="return onURLKeypress(event)">
-<input type="submit" value="Read URL" onclick="processURL(urlInput.value)">
+  <section id="benchmarks" class="benchmarks">
+    <div class="wrap wrap-juicy wrap-light wrap-centre">
+      <b>Pick a WebAssembly file</b>:
+      <input type="file" class="btn btn-cta btn-run"
+             id="file_input"
+             style="color: transparent"
+             accept="application/wasm"
+             oninput="processFile(fileInput.files[0])">
+      <br><br>
+      <b>Or enter a URL of a WebAssembly file</b> (will fail without CORS; for a test, try "opt.wasm" or "unopt.wasm"):
+      <input type="text" class="btn btn-cta btn-"
+             id="url_input"
+             onkeypress="return onURLKeypress(event)">
+    </div>
+  </section>
 
-<br><br>
+  <section id="benchmarks" class="benchmarks">
+    <div class="wrap wrap-juicy wrap-light wrap-centre">
+      <h3>Output</h3>
+      <br><hr><br>
+      <code id="the_output"></code>
+      <hr><br>
+    </div>
+  </section>
 
-<div id="the_output" style="border: 0.1em solid black; background-color: #eee"></div>
+  <br>
+  <br>
 
-<br><br>
+  <section id="faq" class="faq">
+    <div class="wrap wrap-juicy prose">
+      <h2>FAQ</h2>
+      <h3 class="section-heading"><a aria-hidden="true" class="section-anchor">What does this do?</a></h3>
+      <div class="answer">
+        <p>
+          When given a WebAssembly file, this site will try to shrink it down to a smaller size. It
+          will report whether it succeeded, and if so, will let you download that optimized binary.
+        </p>
+      </div>
+      <h3 class="section-heading"><a aria-hidden="true" class="section-anchor">How does this work?</a></h3>
+      <div class="answer">
+        <p>
+          This runs <a href="https://github.com/WebAssembly/binaryen/#wasm-opt">Binaryen's wasm-opt</a>
+          tool. wasm-opt has many optimizations that can improve WebAssembly files' size and speed.
+        </p>
+        <p>
+          Note that there is no server component! Everything here runs on the client, right here on the page.
+        </p>
+      </div>
+      <h3 class="section-heading"><a aria-hidden="true" class="section-anchor">Are there any known issues?</a></h3>
+      <div class="answer">
+        <p>
+          This currently uses only a single core. On large wasm files that may be slow, in which case, please
+          use wasm-opt <a href="https://docs.google.com/presentation/d/1EOpX47PszpuYOtkFc5XzDiWEPelH1e-LARsOZ4Ax-0w/edit?ts=5e38b7e2#slide=id.g6e4f40de0f_0_38">locally</a>,
+          which can scale to use as many cores as you have.
+        </p>
+      </div>
+    </div>
+  </section>
 
-<small>(This runs <a href="https://github.com/WebAssembly/binaryen/#wasm-opt">Binaryen's wasm-opt</a> on this page; there is no server component. TODO: CSS, use multiple cores for speed - large files may be slow for now)</small>
+  <footer id="footer" class="footer">
+    <div class="wrap wrap-juicy">
+      <p>v0.0.1</p>
+    </div>
+  </footer>
 
 <script>
 var fileInput = document.getElementById('file_input');
@@ -80,6 +145,7 @@ function reportResults(name, results) {
     link.href = window.URL.createObjectURL(new Blob([results.newBinary])); // leak!
     link.appendChild(document.createTextNode('download'));
     link.download = 'optimized.wasm';
+    link.className = 'btn btn-paste';
     output(link);
   }
   output(document.createElement('br'));
