@@ -76,9 +76,20 @@
       <h3 class="section-heading"><a aria-hidden="true" class="section-anchor">Are there any known issues?</a></h3>
       <div class="answer">
         <p>
-          This currently uses only a single core. On large wasm files that may be slow, in which case, please
-          use wasm-opt <a href="https://docs.google.com/presentation/d/1EOpX47PszpuYOtkFc5XzDiWEPelH1e-LARsOZ4Ax-0w/edit?ts=5e38b7e2#slide=id.g6e4f40de0f_0_38">locally</a>,
-          which can scale to use as many cores as you have.
+          This may be slower than running wasm-opt
+          <a href="https://docs.google.com/presentation/d/1EOpX47PszpuYOtkFc5XzDiWEPelH1e-LARsOZ4Ax-0w/edit?ts=5e38b7e2#slide=id.g6e4f40de0f_0_38">locally</a>
+          for a few reasons:
+          <ul>
+            <li>
+              This currently uses only a single core (binaryen will normally
+              automatically parallelize to use as many cores as you have, for
+              an almost linear speedup).
+            </li>
+            <li>
+              WebAssembly doesn't have native exceptions support yet.
+            </li>
+          </ul>
+          On large wasm files you may prefer to run locally for speed.
         </p>
       </div>
     </div>
