@@ -220,11 +220,11 @@ private:
   // Precompute an expression, returning a flow, which may be a constant
   // (that we can replace the expression with if replaceExpression is set).
   Flow precomputeExpression(Expression* curr, bool replaceExpression = true) {
-    try {
-      return PrecomputingExpressionRunner(
-               getModule(), getValues, replaceExpression)
-        .visit(curr);
-    } catch (PrecomputingExpressionRunner::NonconstantException&) {
+    PrecomputingExpressionRunner runner(getModule(), getValues, replaceExpression);
+    int result = setjmp(runner.jmpBuf);
+    if (result == 0) {
+      return runner.visit(curr);
+    } else {
       return Flow(NONCONSTANT_FLOW);
     }
   }

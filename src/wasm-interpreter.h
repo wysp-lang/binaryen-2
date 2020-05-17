@@ -25,6 +25,7 @@
 
 #include <cmath>
 #include <limits.h>
+#include <setjmp.h>
 #include <sstream>
 
 #include "ir/module-utils.h"
@@ -1337,6 +1338,10 @@ protected:
   std::unordered_map<Name, Literals> globalValues;
 
 public:
+  // A setjmp buffer to exit all the way out when we reach something we can't
+  // compute.
+  jmp_buf jmpBuf;
+
   struct NonconstantException {
   }; // TODO: use a flow with a special name, as this is likely very slow
 
@@ -1532,10 +1537,12 @@ public:
     return Flow(NONCONSTANT_FLOW);
   }
 
-  void trap(const char* why) override { throw NonconstantException(); }
+  void trap(const char* why) override {
+    longjmp(jmpBuf, 1);
+  }
 
   virtual void throwException(Literal exn) override {
-    throw NonconstantException();
+    trap("throwException");
   }
 };
 
