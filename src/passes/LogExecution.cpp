@@ -43,7 +43,7 @@ struct LogExecution : public WalkerPass<PostWalker<LogExecution>> {
   void visitBlock(Block* curr) {
     if (curr->name.is()) {
       // We can be branched out of, so instrument the exit
-      replaceCurrent(addPostLogging(curr))
+      replaceCurrent(addPostLogging(curr));
     }
   }
 
@@ -82,17 +82,16 @@ struct LogExecution : public WalkerPass<PostWalker<LogExecution>> {
 
 private:
   Expression* addPreLogging(Expression* curr) {
-    Builder builder(*getModule());
-    return builder.makeSequence(makeLogCall(), curr);
+    return Builder(*getModule()).makeSequence(makeLogCall(), curr);
   }
 
   Expression* addPostLogging(Expression* curr) {
-    Builder builder(*getModule());
-    return builder.makeSequence(curr, makeLogCall());
+    return Builder(*getModule()).makeSequence(curr, makeLogCall());
   }
 
   Expression* makeLogCall() {
     static Index id = 0;
+    Builder builder(*getModule());
     return
       builder.makeCall(
         LOGGER, {
