@@ -62,11 +62,8 @@ struct LogExecution : public WalkerPass<PostWalker<LogExecution>> {
     auto temp = Builder::addVar(getFunction(), curr->value->type);
     auto* value = curr->value;
     curr->value = builder.makeLocalGet(temp, curr->value->type);
-    replaceCurrent(builder.makeBlock({
-      builder.makeLocalSet(temp, value),
-      makeLogCall(),
-      curr
-    }));
+    replaceCurrent(builder.makeBlock(
+      {builder.makeLocalSet(temp, value), makeLogCall(), curr}));
   }
 
   void visitFunction(Function* curr) {
@@ -102,11 +99,9 @@ private:
     }
     // Add a local to return the value properly.
     auto temp = Builder::addVar(getFunction(), curr->type);
-    return builder.makeBlock({
-      builder.makeLocalSet(temp, curr),
-      makeLogCall(),
-      builder.makeLocalGet(temp, curr->type)
-    });
+    return builder.makeBlock({builder.makeLocalSet(temp, curr),
+                              makeLogCall(),
+                              builder.makeLocalGet(temp, curr->type)});
   }
 
   Expression* makeLogCall() {
