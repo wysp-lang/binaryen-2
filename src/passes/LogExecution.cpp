@@ -16,9 +16,9 @@
 
 //
 // Instruments the build with code to log execution at each function
-// entry, loop header, and return. This can be useful in debugging, to log out
-// a trace, and diff it to another (running in another browser, to
-// check for bugs, for example).
+// entry, loop header, return, and other interesting control flow locations.
+// This can be useful in debugging, to log out a trace, and diff it to another
+// (running in another browser, to check for bugs, for example).
 //
 // The logging is performed by calling an ffi with an id for each
 // call site. You need to provide that import on the JS side.
@@ -40,9 +40,23 @@ namespace wasm {
 Name LOGGER("log_execution");
 
 struct LogExecution : public WalkerPass<PostWalker<LogExecution>> {
-  void visitLoop(Loop* curr) { curr->body = makeLogCall(curr->body); }
+  void visitBlock(Block* curr) {
+    if (curr->name.is()) {
+      // We can be branched out of, so instrument the exit
+      replaceCurrent(addPostLogging(curr))
+    }
+  }
 
-  void visitReturn(Return* curr) { replaceCurrent(makeLogCall(curr)); }
+  void visitIf(If* curr) {
+    curr->ifTrue = addPreLogging(curr->ifTrue);
+    if (curr->ifFalse) {
+      curr->ifFalse = addPreLogging(curr->ifFalse);
+    }
+  }
+
+  void visitLoop(Loop* curr) { curr->body = addPreLogging(curr->body); }
+
+  void visitReturn(Return* curr) { replaceCurrent(addPreLogging(curr)); }
 
   void visitFunction(Function* curr) {
     if (curr->imported()) {
@@ -50,10 +64,10 @@ struct LogExecution : public WalkerPass<PostWalker<LogExecution>> {
     }
     if (auto* block = curr->body->dynCast<Block>()) {
       if (!block->list.empty()) {
-        block->list.back() = makeLogCall(block->list.back());
+        block->list.back() = addPreLogging(block->list.back());
       }
     }
-    curr->body = makeLogCall(curr->body);
+    curr->body = addPreLogging(curr->body);
   }
 
   void visitModule(Module* curr) {
@@ -67,13 +81,22 @@ struct LogExecution : public WalkerPass<PostWalker<LogExecution>> {
   }
 
 private:
-  Expression* makeLogCall(Expression* curr) {
-    static Index id = 0;
+  Expression* addPreLogging(Expression* curr) {
     Builder builder(*getModule());
-    return builder.makeSequence(
+    return builder.makeSequence(makeLogCall(), curr);
+  }
+
+  Expression* addPostLogging(Expression* curr) {
+    Builder builder(*getModule());
+    return builder.makeSequence(curr, makeLogCall());
+  }
+
+  Expression* makeLogCall() {
+    static Index id = 0;
+    return
       builder.makeCall(
-        LOGGER, {builder.makeConst(Literal(int32_t(id++)))}, Type::none),
-      curr);
+        LOGGER, {
+         builder.makeConst(Literal(int32_t(id++)))}, Type::none);
   }
 };
 
