@@ -590,6 +590,9 @@ class LogExecution(TestCaseHandler):
         logging_opts = fix_output(run_d8('logging_opts.wasm'))
         compare(logging, logging_opts, 'logging/logging-opts')
 
+    def can_run_on_feature_opts(self, feature_opts):
+        return all([x in feature_opts for x in ['--disable-exception-handling', '--disable-simd', '--disable-tail-call', '--disable-reference-types', '--disable-multivalue']])
+
 
 # The global list of all test case handlers
 testcase_handlers = [
