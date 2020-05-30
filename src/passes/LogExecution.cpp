@@ -23,10 +23,6 @@
 // The logging is performed by calling an ffi with an id for each
 // call site. You need to provide that import on the JS side.
 //
-// This pass is more effective on flat IR (--flatten) since when it
-// instruments say a return, there will be no code run in the return's
-// value.
-//
 
 #include "asm_v_wasm.h"
 #include "asmjs/shared-constants.h"
@@ -56,13 +52,27 @@ struct LogExecution : public WalkerPass<PostWalker<LogExecution>> {
 
   void visitLoop(Loop* curr) { curr->body = addPreLogging(curr->body); }
 
-  void visitReturn(Return* curr) { replaceCurrent(addPreLogging(curr)); }
+  void visitReturn(Return* curr) {
+    if (!curr->value) {
+      replaceCurrent(addPreLogging(curr));
+    }
+    // Add a local so we can log right before the return.
+    Builder builder(*getModule());
+    auto temp = Builder::addVar(getFunction(), curr->type);
+    auto* value = curr->value;
+    curr->value = builder.makeLocalGet(temp, curr->value);
+    return builder.makeBlock({
+      builder.makeLocalSet(temp, curr->value),
+      makeLogCall(),
+      curr
+    });
+  }
 
   void visitFunction(Function* curr) {
     if (curr->imported()) {
       return;
     }
-    curr->body = addPreLogging(curr->body);
+    curr->body = addPostLogging(addPreLogging(curr->body));
   }
 
   void visitModule(Module* curr) {
@@ -81,7 +91,21 @@ private:
   }
 
   Expression* addPostLogging(Expression* curr) {
-    return Builder(*getModule()).makeSequence(curr, makeLogCall());
+    if (curr->type == unreachable) {
+      // We'll never get to anything after it anyhow.
+      return curr;
+    }
+    Builder builder(*getModule());
+    if (curr->type == none) {
+      return builder.makeSequence(curr, makeLogCall());
+    }
+    // Add a local to return the value properly.
+    auto temp = Builder::addVar(getFunction(), curr->type);
+    return builder.makeBlock({
+      builder.makeLocalSet(temp, curr),
+      makeLogCall(),
+      builder.makeLocalGet(temp, curr->type)
+    });
   }
 
   Expression* makeLogCall() {

@@ -39,10 +39,27 @@
       (br $x)
     )
     (block $y
-      (br $y)
+      (unreachable)
     )
     (block $z
       (br_if $z (i32.const 1))
+    )
+    (drop
+      (block $w
+        (br $w (i32.const 2))
+      )
+    )
+    (drop
+      (block $v
+        (br_if $v (i32.const 3) (i32.const 4))
+        (i32.const 5)
+      )
+    )
+    (drop
+      (block $u
+        (br_if $u (i32.const 5) (i32.const 6))
+        (unreachable)
+      )
     )
   )
   (func $ifs
@@ -65,6 +82,21 @@
         (drop (i32.const 12))
       )
     )
+  )
+  (func $returns
+    (if (i32.const 1)
+      (return)
+    )
+    (return)
+  )
+  (func $return-values (result f32)
+    (if (i32.const 1)
+      (return (i32.const 2))
+    )
+    (if (i32.const 3)
+      (return (i32.const 4))
+    )
+    (return (i32.const 5))
   )
 )
 
