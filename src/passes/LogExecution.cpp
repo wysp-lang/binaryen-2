@@ -53,19 +53,20 @@ struct LogExecution : public WalkerPass<PostWalker<LogExecution>> {
   void visitLoop(Loop* curr) { curr->body = addPreLogging(curr->body); }
 
   void visitReturn(Return* curr) {
-    if (!curr->value) {
+    if (!curr->value || curr->value->type == Type::unreachable) {
       replaceCurrent(addPreLogging(curr));
+      return;
     }
     // Add a local so we can log right before the return.
     Builder builder(*getModule());
-    auto temp = Builder::addVar(getFunction(), curr->type);
+    auto temp = Builder::addVar(getFunction(), curr->value->type);
     auto* value = curr->value;
-    curr->value = builder.makeLocalGet(temp, curr->value);
-    return builder.makeBlock({
-      builder.makeLocalSet(temp, curr->value),
+    curr->value = builder.makeLocalGet(temp, curr->value->type);
+    replaceCurrent(builder.makeBlock({
+      builder.makeLocalSet(temp, value),
       makeLogCall(),
       curr
-    });
+    }));
   }
 
   void visitFunction(Function* curr) {
@@ -91,12 +92,12 @@ private:
   }
 
   Expression* addPostLogging(Expression* curr) {
-    if (curr->type == unreachable) {
+    if (curr->type == Type::unreachable) {
       // We'll never get to anything after it anyhow.
       return curr;
     }
     Builder builder(*getModule());
-    if (curr->type == none) {
+    if (curr->type == Type::none) {
       return builder.makeSequence(curr, makeLogCall());
     }
     // Add a local to return the value properly.
