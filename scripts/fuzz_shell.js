@@ -168,6 +168,7 @@ var imports = {
   'env': {
     'setTempRet0': function(x) { tempRet0 = x },
     'getTempRet0': function() { return tempRet0 },
+    'log_execution': function(x) { console.log('log-execution', x) },
   },
 };
 

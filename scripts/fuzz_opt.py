@@ -266,6 +266,7 @@ def run_bynterp(wasm, args):
 
 
 def run_d8(wasm):
+    # TODO use this in more places
     return run_vm([shared.V8] + shared.V8_OPTS + [in_binaryen('scripts', 'fuzz_shell.js'), '--', wasm])
 
 
@@ -567,13 +568,37 @@ class Asyncify(TestCaseHandler):
         return all([x in feature_opts for x in ['--disable-exception-handling', '--disable-simd', '--disable-tail-call', '--disable-reference-types', '--disable-multivalue']])
 
 
+class LogExecution(TestCaseHandler):
+    frequency = 1 # FIXME
+
+    def handle_pair(self, input, before_wasm, after_wasm, opts):
+        # we must legalize in order to run in JS
+        run([in_bin('wasm-opt'), before_wasm, '--legalize-js-interface', '-o', 'normal.wasm'] + FEATURE_OPTS)
+        run([in_bin('wasm-opt'), before_wasm, '--legalize-js-interface', '-o', 'logging.wasm', '--log-execution'] + FEATURE_OPTS)
+        normal = fix_output(run_d8('normal.wasm'))
+        logging = fix_output(run_d8('logging.wasm'))
+        # when ignoring the logging, nothing should have changed
+        filtered = [line for line in logging.splitlines() if 'log-execution' not in line]
+        filtered = '\n'.join(filtered)
+        compare(normal, filtered, 'normal/logging')
+        # if there was any output - any code we could run - we should have seen
+        # logging
+        if len(normal) > 0:
+          assert len(filtered) < len(logging)
+        # optimizing the logging file should not change the logging
+        run([in_bin('wasm-opt'), 'logging.wasm', '-o', 'logging_opts.wasm'] + FEATURE_OPTS + opts)
+        logging_opts = fix_output(run_d8('logging_opts.wasm'))
+        compare(logging, logging_opts, 'logging/logging-opts')
+
+
 # The global list of all test case handlers
 testcase_handlers = [
-    FuzzExec(),
-    CompareVMs(),
-    CheckDeterminism(),
-    Wasm2JS(),
-    Asyncify(),
+    #FuzzExec(),
+    #CompareVMs(),
+    #CheckDeterminism(),
+    #Wasm2JS(),
+    #Asyncify(),
+    LogExecution(),
 ]
 
 
