@@ -92,10 +92,8 @@ private:
   Expression* makeLogCall() {
     static Index id = 0;
     Builder builder(*getModule());
-    return
-      builder.makeCall(
-        LOGGER, {
-         builder.makeConst(Literal(int32_t(id++)))}, Type::none);
+    return builder.makeCall(
+      LOGGER, {builder.makeConst(Literal(int32_t(id++)))}, Type::none);
   }
 };
 
