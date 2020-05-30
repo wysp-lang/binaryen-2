@@ -42,7 +42,7 @@ Name LOGGER("log_execution");
 struct LogExecution : public WalkerPass<PostWalker<LogExecution>> {
   void visitBlock(Block* curr) {
     if (curr->name.is()) {
-      // We can be branched out of, so instrument the exit
+      // We can be branched out of, so instrument the exit.
       replaceCurrent(addPostLogging(curr));
     }
   }
@@ -61,11 +61,6 @@ struct LogExecution : public WalkerPass<PostWalker<LogExecution>> {
   void visitFunction(Function* curr) {
     if (curr->imported()) {
       return;
-    }
-    if (auto* block = curr->body->dynCast<Block>()) {
-      if (!block->list.empty()) {
-        block->list.back() = addPreLogging(block->list.back());
-      }
     }
     curr->body = addPreLogging(curr->body);
   }
