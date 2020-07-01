@@ -112,7 +112,8 @@ struct IDAE : public Pass {
           // handle that. We report the import module and base, the index of the
           // parameter, and the value.
           auto* func = module->getFunction(pair.first);
-          std::cout << "[IDAE: remove (" << func->module << "," << func->base << "," << i << "," << results[i] << ")]\n";
+          std::cout << "[IDAE: remove (" << func->module << "," << func->base
+                    << "," << i << "," << results[i] << ")]\n";
         }
       }
     }
