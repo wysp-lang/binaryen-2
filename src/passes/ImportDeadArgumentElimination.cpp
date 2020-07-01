@@ -25,8 +25,8 @@
 // second argument at all. The proper value for the second argument is logged
 // out so that the outside can handle it.
 //
-// TODO: handle arguments not at the end, that is, if foo(x, y) has a constant
-//       for x but not y, we will call foo(y).
+// We also handle arguments not at the end, that is, if foo(x, y) has a constant
+// for x but not y, we will call foo(y).
 //
 
 #include <unordered_map>
@@ -42,7 +42,7 @@ namespace wasm {
 namespace {
 
 // Indicates an invalid value, something we cannot optimize.
-static Literal invalidValue(none);
+static Literal InvalidValue(Type::none);
 
 struct IDAE : public Pass {
   void run(PassRunner* runner, Module* module) override {
@@ -53,18 +53,17 @@ struct IDAE : public Pass {
     ModuleUtils::ParallelFunctionAnalysis<Info> scan(*module, [module](Function* func, Info& info) {
       if (func->imported()) return;
       FindAll<Call> calls(func->body);
-      for (auto* call : calls) {
+      for (auto* call : calls.list) {
         if (module->getFunction(call->target)->imported()) {
           info.importCalls.push_back(call);
         }
       }
     });
     // Next, find import arguments that are constant, for which we track the
-    // values going to each called import.
-    // A map of parameter index => literal constant value. If we have seen more
-    // than one value, the value becomes invalidValue and no optimization is
-    // possible there.
-    using CalledImportInfo = std::vector<Literal> constantValues;
+    // values going to each called import, using a value for each parameter,
+    // which indicates the single constant value seen, or if we've seen more
+    // than one, InvalidValue, indicating we can't optimize there.
+    using CalledImportInfo = std::vector<Literal>;
     std::unordered_map<Name, CalledImportInfo> calledImportInfoMap;
     for (auto& pair : scan.map) {
       for (auto* call : pair.second.importCalls) {
@@ -73,26 +72,41 @@ struct IDAE : public Pass {
         if (called->sig.params.size() == 0) continue;
         auto& info = calledImportInfoMap[call->target];
         bool first = false;
+        auto num = call->operands.size();
         if (info.empty()) {
           // This is the first time we see this imported function.
           first = true;
-          info.resize(call->operands.size());
+          info.resize(num);
         }
-        for (auto* operand : call->operands) {
-          if (!operand->isConst()) {
+        for (Index i = 0; i < num; i++) {
+          auto* operand = call->operands[i];
+          if (!operand->is<Const>()) {
             // A nonconstant value means we must give up on optimizing this.
-            info[index] = invalidValue;
+            info[i] = InvalidValue;
             continue;
           }
           // Otherwise, if there is an existing value it must match.
           auto literal = operand->cast<Const>()->value;
           if (first) {
-            info[index] = literal;
-          } else if (literal != info[index]) {
-            it->second = invalidValue;
+            info[i] = literal;
+          } else if (literal != info[i]) {
+            info[i] = InvalidValue;
           }
         }
       }
+    }
+    // We now know which arguments are removeable.
+    // Note that this does not attempt to handle the case of an import that is
+    // never called - other optimization passes would remove such an import
+    // anyhow.
+    for (auto& pair : calledImportInfoMap) {
+      auto& results = pair.second;
+      auto num = results.size();
+      for (Index i = 0; i < num; i++) {
+        if (results[i] != InvalidValue) {
+          std::cout << "IDAE: remove " << pair.first << " : " << i << '\n';
+        }
+      } 
     }
   }
 };
@@ -102,9 +116,7 @@ struct IDAE : public Pass {
 Pass* createIDAEPass() { return new IDAE(); }
 
 Pass* createIDAEOptimizingPass() {
-  auto* ret = new IDAE();
-  ret->optimize = true;
-  return ret;
+  return new IDAE();
 }
 
 } // namespace wasm
