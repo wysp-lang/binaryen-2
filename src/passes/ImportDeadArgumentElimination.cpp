@@ -29,8 +29,7 @@
 // for x but not y, we will call foo(y).
 //
 
-#include <unordered_map>
-#include <unordered_set>
+#include <map>
 
 #include "ir/module-utils.h"
 #include "pass.h"
@@ -64,7 +63,7 @@ struct IDAE : public Pass {
     // which indicates the single constant value seen, or if we've seen more
     // than one, InvalidValue, indicating we can't optimize there.
     using CalledImportInfo = std::vector<Literal>;
-    std::unordered_map<Name, CalledImportInfo> calledImportInfoMap;
+    std::map<Name, CalledImportInfo> calledImportInfoMap;
     for (auto& pair : scan.map) {
       for (auto* call : pair.second.importCalls) {
         auto* called = module->getFunction(call->target);
@@ -104,7 +103,7 @@ struct IDAE : public Pass {
       auto num = results.size();
       for (Index i = 0; i < num; i++) {
         if (results[i] != InvalidValue) {
-          std::cout << "IDAE: remove " << pair.first << " : " << i << '\n';
+          std::cout << "[IDAE: remove (" << pair.first << "," << i << ")]\n";
         }
       } 
     }

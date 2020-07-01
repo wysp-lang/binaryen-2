@@ -1,10 +1,12 @@
-IDAE: remove foo4 : 1
-IDAE: remove foo3 : 0
-IDAE: remove foo6 : 0
-IDAE: remove foo6 : 1
+[IDAE: remove (foo3,0)]
+[IDAE: remove (foo4,1)]
+[IDAE: remove (foo6,0)]
+[IDAE: remove (foo6,1)]
+[IDAE: remove (foo9,1)]
+[IDAE: remove (fooa,0)]
 (module
- (type $none_=>_none (func))
  (type $i32_f64_=>_none (func (param i32 f64)))
+ (type $none_=>_none (func))
  (type $i32_=>_none (func (param i32)))
  (import "module" "empty" (func $empty))
  (import "module" "ignored" (func $ignored (param i32)))
@@ -16,6 +18,8 @@ IDAE: remove foo6 : 1
  (import "module" "foo6" (func $foo6 (param i32 f64)))
  (import "module" "foo7" (func $foo7 (param i32 f64)))
  (import "module" "foo8" (func $foo8 (param i32 f64)))
+ (import "module" "foo9" (func $foo9 (param i32 f64)))
+ (import "module" "fooa" (func $fooa (param i32 f64)))
  (func $bad-in-same-func
   (call $foo1
    (i32.const 1)
@@ -82,6 +86,24 @@ IDAE: remove foo6 : 1
    (unreachable)
   )
   (call $foo8
+   (i32.const 1)
+   (f64.const 1)
+  )
+ )
+ (func $non-const-partial
+  (call $foo9
+   (i32.const 1)
+   (f64.const 1)
+  )
+  (call $foo9
+   (unreachable)
+   (f64.const 1)
+  )
+  (call $fooa
+   (i32.const 1)
+   (unreachable)
+  )
+  (call $fooa
    (i32.const 1)
    (f64.const 1)
   )
