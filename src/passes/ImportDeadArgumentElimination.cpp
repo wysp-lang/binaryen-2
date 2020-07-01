@@ -100,15 +100,19 @@ struct IDAE : public Pass {
       }
     }
     // We now know which arguments are removeable.
-    // Note that this does not attempt to handle the case of an import that is
-    // never called - other optimization passes would remove such an import
-    // anyhow.
     for (auto& pair : calledImportInfoMap) {
       auto& results = pair.second;
+      // Note that this does not attempt to handle the case of an import that is
+      // never called, as the results here will be empty. (Other optimization
+      // passes would remove such an import anyhow.)
       auto num = results.size();
       for (Index i = 0; i < num; i++) {
         if (results[i] != InvalidValue) {
-          std::cout << "[IDAE: remove (" << pair.first << "," << i << ")]\n";
+          // Report the argument is not needed, so that the other side can
+          // handle that. We report the import module and base, the index of the
+          // parameter, and the value.
+          auto* func = module->getFunction(pair.first);
+          std::cout << "[IDAE: remove (" << func->module << "," << func->base << "," << i << "," << results[i] << ")]\n";
         }
       }
     }

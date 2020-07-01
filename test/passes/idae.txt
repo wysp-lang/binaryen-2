@@ -1,9 +1,9 @@
-[IDAE: remove (foo3,0)]
-[IDAE: remove (foo4,1)]
-[IDAE: remove (foo6,0)]
-[IDAE: remove (foo6,1)]
-[IDAE: remove (foo9,1)]
-[IDAE: remove (fooa,0)]
+[IDAE: remove (module,foo3,0,1)]
+[IDAE: remove (module,foo4,1,1)]
+[IDAE: remove (module,foo6,0,2)]
+[IDAE: remove (module,foo6,1,3)]
+[IDAE: remove (module,foo9,1,1)]
+[IDAE: remove (module,fooa,0,1)]
 (module
  (type $i32_f64_=>_none (func (param i32 f64)))
  (type $none_=>_none (func))
