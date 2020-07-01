@@ -49,15 +49,18 @@ struct IDAE : public Pass {
     struct Info {
       std::vector<Call*> importCalls;
     };
-    ModuleUtils::ParallelFunctionAnalysis<Info> scan(*module, [module](Function* func, Info& info) {
-      if (func->imported()) return;
-      FindAll<Call> calls(func->body);
-      for (auto* call : calls.list) {
-        if (module->getFunction(call->target)->imported()) {
-          info.importCalls.push_back(call);
+    ModuleUtils::ParallelFunctionAnalysis<Info> scan(
+      *module, [module](Function* func, Info& info) {
+        if (func->imported()) {
+          return;
         }
-      }
-    });
+        FindAll<Call> calls(func->body);
+        for (auto* call : calls.list) {
+          if (module->getFunction(call->target)->imported()) {
+            info.importCalls.push_back(call);
+          }
+        }
+      });
     // Next, find import arguments that are constant, for which we track the
     // values going to each called import, using a value for each parameter,
     // which indicates the single constant value seen, or if we've seen more
@@ -68,7 +71,9 @@ struct IDAE : public Pass {
       for (auto* call : pair.second.importCalls) {
         auto* called = module->getFunction(call->target);
         assert(called->imported());
-        if (called->sig.params.size() == 0) continue;
+        if (called->sig.params.size() == 0) {
+          continue;
+        }
         auto& info = calledImportInfoMap[call->target];
         bool first = false;
         auto num = call->operands.size();
@@ -105,7 +110,7 @@ struct IDAE : public Pass {
         if (results[i] != InvalidValue) {
           std::cout << "[IDAE: remove (" << pair.first << "," << i << ")]\n";
         }
-      } 
+      }
     }
   }
 };
@@ -114,8 +119,6 @@ struct IDAE : public Pass {
 
 Pass* createIDAEPass() { return new IDAE(); }
 
-Pass* createIDAEOptimizingPass() {
-  return new IDAE();
-}
+Pass* createIDAEOptimizingPass() { return new IDAE(); }
 
 } // namespace wasm
