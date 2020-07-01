@@ -27,6 +27,7 @@ set(passes_SOURCES
   Flatten.cpp
   FuncCastEmulation.cpp
   I64ToI32Lowering.cpp
+  ImportDeadArgumentElimination.cpp
   Inlining.cpp
   InstrumentLocals.cpp
   InstrumentMemory.cpp
