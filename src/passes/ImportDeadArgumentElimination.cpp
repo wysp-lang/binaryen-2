@@ -113,6 +113,10 @@ struct IDAE : public Pass {
       // passes would remove such an import anyhow.)
       auto& params = info.params;
       auto num = params.size();
+      // We may remove more than one parameter from the same function, so track
+      // how much we have already shrunk. We start from 0, so later offsets need
+      // to be aware of removed earlier ones.
+      Index removed = 0;
       for (Index i = 0; i < num; i++) {
         if (params[i] != InvalidValue) {
           // Report the argument is not needed, so that the other side can
@@ -123,9 +127,14 @@ struct IDAE : public Pass {
                     << called->base << "," << i << "," << params[i] << ")]\n";
           // Remove the argument from the imported function's signature and from
           // all calls to it.
-          // auto vector = called->sig.params.expand();
-          // vector.erase(vector.begin() + i);
-          // called->sig.params = vector;
+          auto vector = called->sig.params.expand();
+          Index adjustedIndex = i - removed;
+          vector.erase(vector.begin() + adjustedIndex);
+          called->sig.params = Type(vector);
+          for (auto* call : info.calls) {
+            call->operands.erase(call->operands.begin() + adjustedIndex);
+          }
+          removed++;
         }
       }
     }
