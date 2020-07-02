@@ -61,11 +61,15 @@ struct IDAE : public Pass {
           }
         }
       });
-    // Next, find import arguments that are constant, for which we track the
-    // values going to each called import, using a value for each parameter,
-    // which indicates the single constant value seen, or if we've seen more
-    // than one, InvalidValue, indicating we can't optimize there.
-    using CalledImportInfo = std::vector<Literal>;
+    // Next, find import arguments that are constant.
+    struct CalledImportInfo {
+      // Track the values going to each param, using a value for each one, which
+      // indicates the single constant value seen, or if we've seen more than
+      // one, InvalidValue, indicating we can't optimize there.
+      std::vector<Literal> params;
+      // All the calls to this import.
+      std::vector<Call*> calls;
+    };
     std::map<Name, CalledImportInfo> calledImportInfoMap;
     for (auto& pair : scan.map) {
       for (auto* call : pair.second.importCalls) {
@@ -75,45 +79,53 @@ struct IDAE : public Pass {
           continue;
         }
         auto& info = calledImportInfoMap[call->target];
+        info.calls.push_back(call);
         bool first = false;
         auto num = call->operands.size();
-        if (info.empty()) {
+        auto& params = info.params;
+        if (params.empty()) {
           // This is the first time we see this imported function.
           first = true;
-          info.resize(num);
+          params.resize(num);
         }
         for (Index i = 0; i < num; i++) {
           auto* operand = call->operands[i];
           if (!operand->is<Const>()) {
             // A nonconstant value means we must give up on optimizing this.
-            info[i] = InvalidValue;
+            params[i] = InvalidValue;
             continue;
           }
           // Otherwise, if there is an existing value it must match.
           auto literal = operand->cast<Const>()->value;
           if (first) {
-            info[i] = literal;
-          } else if (literal != info[i]) {
-            info[i] = InvalidValue;
+            params[i] = literal;
+          } else if (literal != params[i]) {
+            params[i] = InvalidValue;
           }
         }
       }
     }
     // We now know which arguments are removeable.
     for (auto& pair : calledImportInfoMap) {
-      auto& results = pair.second;
+      auto& info = pair.second;
       // Note that this does not attempt to handle the case of an import that is
-      // never called, as the results here will be empty. (Other optimization
+      // never called, as the params here will be empty. (Other optimization
       // passes would remove such an import anyhow.)
-      auto num = results.size();
+      auto& params = info.params;
+      auto num = params.size();
       for (Index i = 0; i < num; i++) {
-        if (results[i] != InvalidValue) {
+        if (params[i] != InvalidValue) {
           // Report the argument is not needed, so that the other side can
           // handle that. We report the import module and base, the index of the
           // parameter, and the value.
-          auto* func = module->getFunction(pair.first);
-          std::cout << "[IDAE: remove (" << func->module << "," << func->base
-                    << "," << i << "," << results[i] << ")]\n";
+          auto* called = module->getFunction(pair.first);
+          std::cout << "[IDAE: remove (" << called->module << "," << called->base
+                    << "," << i << "," << params[i] << ")]\n";
+          // Remove the argument from the imported function's signature and from
+          // all calls to it.
+          //auto vector = called->sig.params.expand();
+          //vector.erase(vector.begin() + i);
+          //called->sig.params = vector;
         }
       }
     }
