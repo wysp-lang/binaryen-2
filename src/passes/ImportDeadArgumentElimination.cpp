@@ -123,6 +123,7 @@ struct IDAE : public Pass {
           // handle that. We report the import module and base, the index of the
           // parameter, and the value.
           auto* called = module->getFunction(pair.first);
+          // TODO: escaping?
           std::cout << "[IDAE: remove (" << called->module << ","
                     << called->base << "," << i << "," << params[i] << ")]\n";
           // Remove the argument from the imported function's signature and from
