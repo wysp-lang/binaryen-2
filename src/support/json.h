@@ -335,7 +335,7 @@ struct Value {
     return curr;
   }
 
-  std::ostream& stringify(std::ostream& os, int indent=0) {
+  std::ostream& stringify(std::ostream& os, int indent = 0) {
     auto indentify = [&]() {
       for (int i = 0; i < indent; i++) {
         os << "  ";
