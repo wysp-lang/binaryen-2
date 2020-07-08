@@ -335,7 +335,79 @@ struct Value {
     return curr;
   }
 
-  void stringify(std::ostream& os, bool pretty = false);
+  void stringify(std::ostream& os, int indent=0) {
+    auto indentify = [&]() {
+      for (int i_ = 0; i_ < indent; i_++) {
+        os << "  ";
+      }
+    };
+    switch (type) {
+      case String: {
+        if (str.str) {
+          os << '"' << str.str << '"';
+        } else {
+          os << "\"(null)\"";
+        }
+        break;
+      }
+      case Number: {
+        // doubles can have 17 digits of precision
+        os << std::setprecision(17) << num;
+        break;
+      }
+      case Array: {
+        if (arr->size() == 0) {
+          os << "[]";
+          break;
+        }
+        os << '[';
+        os << std::endl;
+        indent++;
+        for (size_t i = 0; i < arr->size(); i++) {
+          if (i > 0) {
+            os << "," << std::endl;
+          }
+          indentify();
+          (*arr)[i]->stringify(os, indent);
+        }
+        os << std::endl;
+        indent--;
+        indentify();
+        os << ']';
+        break;
+      }
+      case Null: {
+        os << "null";
+        break;
+      }
+      case Bool: {
+        os << (boo ? "true" : "false");
+        break;
+      }
+      case Object: {
+        os << '{';
+        os << std::endl;
+        indent++;
+        bool first = true;
+        for (auto i : *obj) {
+          if (first) {
+            first = false;
+          } else {
+            os << ", ";
+            os << std::endl;
+          }
+          indentify();
+          os << '"' << i.first.c_str() << "\": ";
+          i.second->stringify(os, indent);
+        }
+        os << std::endl;
+        indent--;
+        indentify();
+        os << '}';
+        break;
+      }
+    }
+  }
 
   // String operations
 
@@ -400,6 +472,10 @@ struct Value {
   bool has(IString x) {
     assert(isObject());
     return obj->count(x) > 0;
+  }
+
+  Ref operator&() {
+    return Ref(this);
   }
 };
 

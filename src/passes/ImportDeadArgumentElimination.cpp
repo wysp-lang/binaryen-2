@@ -30,9 +30,11 @@
 //
 
 #include <map>
+#include <sstream>
 
 #include "ir/module-utils.h"
 #include "pass.h"
+#include "support/json.h"
 #include "wasm-builder.h"
 #include "wasm.h"
 
@@ -106,6 +108,8 @@ struct IDAE : public Pass {
       }
     }
     // We now know which arguments are removeable.
+    json::Value output;
+    output.setArray();
     for (auto& pair : calledImportInfoMap) {
       auto& info = pair.second;
       // Note that this does not attempt to handle the case of an import that is
@@ -123,9 +127,15 @@ struct IDAE : public Pass {
           // handle that. We report the import module and base, the index of the
           // parameter, and the value.
           auto* called = module->getFunction(pair.first);
-          // TODO: escaping?
-          std::cout << "[IDAE: remove (" << called->module << ","
-                    << called->base << "," << i << "," << params[i] << ")]\n";
+          json::Value entry;
+          entry.setArray(4);
+          entry[0] = &json::Value(called->module.str);
+          entry[1] = &json::Value(called->base.str);
+          entry[2] = &json::Value(i);
+          std::stringstream ss;
+          ss << params[i];
+          entry[3] = &json::Value(ss.str().c_str());
+          output.push_back(&entry);
           // Remove the argument from the imported function's signature and from
           // all calls to it.
           auto vector = called->sig.params.expand();
@@ -139,6 +149,7 @@ struct IDAE : public Pass {
         }
       }
     }
+    output.stringify(std::cout, /* pretty= */ true);
   }
 };
 
