@@ -112,7 +112,7 @@ struct Value {
   Value& setString(const char* s) {
     free();
     type = String;
-    str.set(s);
+    str.set(s, /* reuse= */ false);
     return *this;
   }
   Value& setString(const IString& s) {
@@ -134,11 +134,11 @@ struct Value {
     *arr = a;
     return *this;
   }
-  Value& setArray(size_t size_hint = 0) {
+  Value& setArray(size_t size = 0) {
     free();
     type = Array;
     arr = new ArrayStorage;
-    arr->reserve(size_hint);
+    arr->resize(size);
     return *this;
   }
   Value& setNull() {
@@ -335,9 +335,9 @@ struct Value {
     return curr;
   }
 
-  void stringify(std::ostream& os, int indent=0) {
+  std::ostream& stringify(std::ostream& os, int indent=0) {
     auto indentify = [&]() {
-      for (int i_ = 0; i_ < indent; i_++) {
+      for (int i = 0; i < indent; i++) {
         os << "  ";
       }
     };
@@ -407,6 +407,7 @@ struct Value {
         break;
       }
     }
+    return os;
   }
 
   // String operations
@@ -472,10 +473,6 @@ struct Value {
   bool has(IString x) {
     assert(isObject());
     return obj->count(x) > 0;
-  }
-
-  Ref operator&() {
-    return Ref(this);
   }
 };
 
