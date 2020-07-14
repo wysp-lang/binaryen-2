@@ -125,16 +125,19 @@ struct IDAE : public Pass {
         if (params[i] != InvalidValue) {
           // Report the argument is not needed, so that the other side can
           // handle that. We report the import module and base, the index of the
-          // parameter, and the value.
+          // parameter, the value, and the total number of parameters in the
+          // function (that number may be different in JS, which can use the
+          // arguments object, so send that information to there).
           auto* called = module->getFunction(pair.first);
           auto entry = json::Ref(new json::Value);
-          entry->setArray(4);
+          entry->setArray(5);
           entry[0] = new json::Value(called->module.str);
           entry[1] = new json::Value(called->base.str);
           entry[2] = new json::Value(i);
           std::stringstream ss;
           ss << params[i];
           entry[3] = new json::Value(ss.str().c_str());
+          entry[4] = new json::Value(num);
           output.push_back(entry);
           // Remove the argument from the imported function's signature and from
           // all calls to it.
