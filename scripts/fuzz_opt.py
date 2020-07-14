@@ -277,8 +277,12 @@ def run_bynterp(wasm, args):
         del os.environ['BINARYEN_MAX_INTERPRETER_DEPTH']
 
 
-def run_d8(wasm):
-    return run_vm([shared.V8] + shared.V8_OPTS + [in_binaryen('scripts', 'fuzz_shell.js'), '--', wasm])
+def run_d8_js(js, args=[]):
+    return run_vm([shared.V8] + shared.V8_OPTS + [js] + (['--'] if args else []) + args)
+
+
+def run_d8_wasm(wasm):
+    return run_d8_js(in_binaryen('scripts', 'fuzz_shell.js'), [wasm])
 
 
 class TestCaseHandler:
@@ -402,6 +406,9 @@ class CompareVMs(TestCaseHandler):
                 run([in_bin('wasm-opt'), wasm, '--emit-wasm2c-wrapper=main.c'] + FEATURE_OPTS)
                 run(['wasm2c', wasm, '-o', 'wasm.c'])
                 compile_cmd = ['emcc', 'main.c', 'wasm.c', os.path.join(self.wasm2c_dir, 'wasm-rt-impl.c'), '-I' + self.wasm2c_dir, '-lm']
+                # disable the signal handler: emcc looks like unix, but wasm has
+                # no signals
+                compile_cmd += ['-DWASM_RT_MEMCHECK_SIGNAL_HANDLER=0']
                 if random.random() < 0.5:
                     compile_cmd += ['-O' + str(random.randint(1, 3))]
                 elif random.random() < 0.5:
@@ -414,7 +421,7 @@ class CompareVMs(TestCaseHandler):
                 # large and it isn't what we are focused on testing here
                 with no_pass_debug():
                     run(compile_cmd)
-                return run_vm(['d8', 'a.out.js'])
+                return run_d8_js('a.out.js')
 
             def can_run(self, wasm):
                 # prefer not to run if the wasm is very large, as it can OOM
@@ -534,8 +541,8 @@ class Asyncify(TestCaseHandler):
         run([in_bin('wasm-opt'), after_wasm, '--legalize-js-interface', '-o', 'async.' + after_wasm] + FEATURE_OPTS)
         before_wasm = 'async.' + before_wasm
         after_wasm = 'async.' + after_wasm
-        before = fix_output(run_d8(before_wasm))
-        after = fix_output(run_d8(after_wasm))
+        before = fix_output(run_d8_wasm(before_wasm))
+        after = fix_output(run_d8_wasm(after_wasm))
 
         try:
             compare(before, after, 'Asyncify (before/after)')
@@ -557,7 +564,7 @@ class Asyncify(TestCaseHandler):
                     cmd += ['--shrink-level=%d' % random.randint(1, 2)]
             cmd += FEATURE_OPTS
             run(cmd)
-            out = run_d8('async.t.wasm')
+            out = run_d8_wasm('async.t.wasm')
             # ignore the output from the new asyncify API calls - the ones with asserts will trap, too
             for ignore in ['[fuzz-exec] calling asyncify_start_unwind\nexception!\n',
                            '[fuzz-exec] calling asyncify_start_unwind\n',
