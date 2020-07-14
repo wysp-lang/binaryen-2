@@ -29,6 +29,8 @@
 // for x but not y, we will call foo(y).
 //
 
+// TODO: just on integers, to be sfae?
+
 #include <map>
 #include <sstream>
 
