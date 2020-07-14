@@ -31,6 +31,8 @@
 
 // TODO: just on integers, to be sfae?
 
+// TODO: cannot change the type of a function in the table, or exported!
+
 #include <map>
 #include <sstream>
 
