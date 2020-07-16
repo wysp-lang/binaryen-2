@@ -94,6 +94,20 @@ inline Index getOrAppend(Table& table, Name name, Module& wasm) {
   return append(table, name, wasm);
 }
 
+inline bool isInTable(Table& table, Function* func) {
+  auto funcName = func->name;
+  if (table.exists) {
+    for (auto& segment : table.segments) {
+      for (auto name : segment.data) {
+        if (name == funcName) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 } // namespace TableUtils
 
 } // namespace wasm

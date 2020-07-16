@@ -31,12 +31,11 @@
 
 // TODO: just on integers, to be sfae?
 
-// TODO: cannot change the type of a function in the table, or exported!
-
 #include <map>
 #include <sstream>
 
 #include "ir/module-utils.h"
+#include "ir/table-utils.h"
 #include "pass.h"
 #include "support/json.h"
 #include "wasm-builder.h"
@@ -115,6 +114,17 @@ struct IDAE : public Pass {
     json::Value output;
     output.setArray();
     for (auto& pair : calledImportInfoMap) {
+      auto* called = module->getFunction(pair.first);
+      if (ModuleUtils::isExported(*module, called) ||
+          TableUtils::isInTable(module->table, called)) {
+        // We can only change the function's type if it is directly called, and
+        // nothing else. Direct calls let us update those calls, and ensure
+        // no-one else may be affected by this change. If the function is
+        // exported, we can't see other callers, and if it's called in the
+        // table, we can't know which indirect calls to update (which may also
+        // be outside, if the table is imported/exported).
+        continue;
+      }
       auto& info = pair.second;
       // Note that this does not attempt to handle the case of an import that is
       // never called, as the params here will be empty. (Other optimization
@@ -132,7 +142,6 @@ struct IDAE : public Pass {
           // parameter, the value, and the total number of parameters in the
           // function (that number may be different in JS, which can use the
           // arguments object, so send that information to there).
-          auto* called = module->getFunction(pair.first);
           auto entry = json::Ref(new json::Value);
           entry->setArray(5);
           entry[0] = new json::Value(called->module.str);

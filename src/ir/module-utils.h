@@ -154,6 +154,16 @@ inline void renameFunction(Module& wasm, Name oldName, Name newName) {
   renameFunctions(wasm, map);
 }
 
+inline bool isExported(Module& wasm, Function* func) {
+  auto funcName = func->name;
+  for (auto& exp : wasm.exports) {
+    if (exp->kind == ExternalKind::Function && exp->value == funcName) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Convenient iteration over imported/non-imported module elements
 
 template<typename T> inline void iterImportedMemories(Module& wasm, T visitor) {
