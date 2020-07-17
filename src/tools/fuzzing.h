@@ -666,8 +666,7 @@ private:
     if (oneIn(2)) {
       return;
     }
-    struct Modder
-      : public PostWalker<Modder> {
+    struct Modder : public PostWalker<Modder> {
       Module& wasm;
       TranslateToFuzzReader& parent;
 
@@ -688,7 +687,6 @@ private:
     Modder modder(wasm, *this);
     modder.walk(func->body);
   }
-
 
   void randomMutation(Function* func) {
     // Don't always do this.
