@@ -678,7 +678,6 @@ private:
           // Create repeated unary operations, as things like EqZ^2 are
           // interesting.
           if (curr->type == curr->value->type) {
-            throw "waka";
             curr->value = parent.builder.makeUnary(curr->op, curr->value);
           }
         }
