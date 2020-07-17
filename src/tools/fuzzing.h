@@ -208,9 +208,10 @@ public:
     finalizeTable();
   }
 
-private:
   Module& wasm;
   Builder builder;
+
+private:
   std::vector<char> bytes; // the input bytes
   size_t pos;              // the position in the input
   // whether we already cycled through all the input (if so, we should try to
@@ -541,11 +542,14 @@ private:
     // may end up breaking them. TODO: do them after the fact, like with the
     // hang limit checks.
     if (allowOOB) {
+      // "Intelligent" mutation is non-random and tries to create code patterns
+      // that may trip up the optimizer. Do this first so that these may be
+      // further modified.
+      intelligentMutation(func);
       // Recombinations create duplicate code patterns.
       recombine(func);
-      // Mutations add random small changes, which can subtly break duplicate
-      // code patterns.
-      mutate(func);
+      // Random mutations can subtly break duplicate code patterns.
+      randomMutation(func);
       // TODO: liveness operations on gets, with some prob alter a get to one
       // with more possible sets.
       // Recombination, mutation, etc. can break validation; fix things up
@@ -655,7 +659,38 @@ private:
     modder.walk(func->body);
   }
 
-  void mutate(Function* func) {
+  // Try to emit "risky" patterns that can trip up the optimizer. Specifically,
+  // can emit patterns similar to what the optimizer looks for.
+  void intelligentMutation(Function* func) {
+    // Don't always do this.
+    if (oneIn(2)) {
+      return;
+    }
+    struct Modder
+      : public PostWalker<Modder> {
+      Module& wasm;
+      TranslateToFuzzReader& parent;
+
+      Modder(Module& wasm, TranslateToFuzzReader& parent)
+        : wasm(wasm), parent(parent) {}
+
+      void visitUnary(Unary* curr) {
+        if (parent.oneIn(10)) {
+          // Create repeated unary operations, as things like EqZ^2 are
+          // interesting.
+          if (curr->type == curr->value->type) {
+            throw "waka";
+            curr->value = parent.builder.makeUnary(curr->op, curr->value);
+          }
+        }
+      }
+    };
+    Modder modder(wasm, *this);
+    modder.walk(func->body);
+  }
+
+
+  void randomMutation(Function* func) {
     // Don't always do this.
     if (oneIn(2)) {
       return;
