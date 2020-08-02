@@ -700,15 +700,37 @@ struct I64ToI32Lowering : public WalkerPass<PostWalker<I64ToI32Lowering>> {
     TempVar lowBits = getTemp();
     TempVar highResult = getTemp();
 
-    UnaryOp convertHigh;
+    UnaryOp convertLow, convertHigh;
+    BinaryOp add, mul;
+    Literal max;
     switch (curr->op) {
       case ConvertSInt64ToFloat32:
+        convertLow = ConvertUInt32ToFloat32;
+        convertHigh = ConvertSInt32ToFloat32;
+        add = AddFloat32;
+        mul = MulFloat32;
+        max = Literal((float)UINT_MAX + 1);
+        break;
       case ConvertSInt64ToFloat64:
+        convertLow = ConvertUInt32ToFloat64;
         convertHigh = ConvertSInt32ToFloat64;
+        add = AddFloat64;
+        mul = MulFloat64;
+        max = Literal((double)UINT_MAX + 1);
         break;
       case ConvertUInt64ToFloat32:
+        convertLow = ConvertUInt32ToFloat32;
+        convertHigh = ConvertUInt32ToFloat32;
+        add = AddFloat32;
+        mul = MulFloat32;
+        max = Literal((float)UINT_MAX + 1);
+        break;
       case ConvertUInt64ToFloat64:
+        convertLow = ConvertUInt32ToFloat64;
         convertHigh = ConvertUInt32ToFloat64;
+        add = AddFloat64;
+        mul = MulFloat64;
+        max = Literal((double)UINT_MAX + 1);
         break;
       default:
         abort();
@@ -718,24 +740,14 @@ struct I64ToI32Lowering : public WalkerPass<PostWalker<I64ToI32Lowering>> {
       builder->makeLocalSet(lowBits, curr->value),
       builder->makeLocalSet(highResult, builder->makeConst(int32_t(0))),
       builder->makeBinary(
-        AddFloat64,
-        builder->makeUnary(ConvertUInt32ToFloat64,
+        add,
+        builder->makeUnary(convertLow,
                            builder->makeLocalGet(lowBits, Type::i32)),
         builder->makeBinary(
-          MulFloat64,
-          builder->makeConst((double)UINT_MAX + 1),
+          mul,
+          builder->makeConst(max),
           builder->makeUnary(convertHigh,
                              builder->makeLocalGet(highBits, Type::i32)))));
-
-    switch (curr->op) {
-      case ConvertSInt64ToFloat32:
-      case ConvertUInt64ToFloat32: {
-        result = builder->makeUnary(DemoteFloat64, result);
-        break;
-      }
-      default:
-        break;
-    }
 
     replaceCurrent(result);
   }
