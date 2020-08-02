@@ -249,7 +249,7 @@ function asmFunc(global, env, buffer) {
   $0$hi = $0$hi | 0;
   var i64toi32_i32$0 = 0;
   i64toi32_i32$0 = $0$hi;
-  return Math_fround(Math_fround(+($0 >>> 0) + 4294967296.0 * +(i64toi32_i32$0 | 0)));
+  return Math_fround(Math_fround(Math_fround($0 >>> 0) + Math_fround(Math_fround(4294967296.0) * Math_fround(i64toi32_i32$0 | 0))));
  }
  
  function $44($0, $0$hi) {
@@ -265,7 +265,7 @@ function asmFunc(global, env, buffer) {
   $0$hi = $0$hi | 0;
   var i64toi32_i32$0 = 0;
   i64toi32_i32$0 = $0$hi;
-  return Math_fround(Math_fround(+($0 >>> 0) + 4294967296.0 * +(i64toi32_i32$0 >>> 0)));
+  return Math_fround(Math_fround(Math_fround($0 >>> 0) + Math_fround(Math_fround(4294967296.0) * Math_fround(i64toi32_i32$0 >>> 0))));
  }
  
  function $46($0, $0$hi) {

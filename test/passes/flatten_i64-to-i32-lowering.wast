@@ -63,4 +63,26 @@
   (global.set $f (i64.const 0x1122334455667788))
  )
 )
+(module
+ (func "convert-f32-u" (result f32)
+  (f32.convert_i64_u
+   (i64.const 18446743523953737727)
+  )
+ )
+ (func "convert-f64-u" (result f64)
+  (f64.convert_i64_u
+   (i64.const 18446743523953737727)
+  )
+ )
+ (func "convert-f32-s" (result f32)
+  (f32.convert_i64_s
+   (i64.const 18446743523953737727)
+  )
+ )
+ (func "convert-f64-s" (result f64)
+  (f64.convert_i64_s
+   (i64.const 18446743523953737727)
+  )
+ )
+)
 
