@@ -2691,6 +2691,12 @@ void Wasm2JSGlue::emitSpecialSupport() {
   function wasm2js_i64_to_f32_s(low, high) {
     // See I64ToI32Lowering: use BigInt if present, as it avoids (minor)
     // precision issues.
+    if (typeof BigInt === 'function') {
+      return Math.fround(Number(
+               BigInt(low >>> 0) +
+               (BigInt(high | 0) << BigInt(32))
+             ));
+    }
     return Math.fround(
              +(low >>> 0) +
              +(+(high | 0) * 4294967296.0)
@@ -2702,6 +2708,12 @@ void Wasm2JSGlue::emitSpecialSupport() {
   function wasm2js_i64_to_f32_u(low, high) {
     // See I64ToI32Lowering: use BigInt if present, as it avoids (minor)
     // precision issues.
+    if (typeof BigInt === 'function') {
+      return Math.fround(Number(
+               BigInt(low >>> 0) +
+               (BigInt(high >>> 0) << BigInt(32))
+             ));
+    }
     return Math.fround(
              +(low >>> 0) +
              +(+(high >>> 0) * 4294967296.0)
