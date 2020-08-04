@@ -124,6 +124,8 @@ cashew::IString DATA_DROP("wasm2js_data_drop");
 cashew::IString ATOMIC_WAIT_I32("wasm2js_atomic_wait_i32");
 cashew::IString ATOMIC_RMW_I64("wasm2js_atomic_rmw_i64");
 cashew::IString GET_STASHED_BITS("wasm2js_get_stashed_bits");
+cashew::IString I64_TO_F32_S("wasm2js_i64_to_f32_s");
+cashew::IString I64_TO_F32_U("wasm2js_i64_to_f32_u");
 
 } // namespace wasm2js
 } // namespace ABI

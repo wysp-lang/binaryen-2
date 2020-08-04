@@ -2686,6 +2686,28 @@ void Wasm2JSGlue::emitSpecialSupport() {
     return stashedBits;
   }
       )";
+    } else if (import->base == ABI::wasm2js::I64_TO_F32_S) {
+      out << R"(
+  function wasm2js_i64_to_f32_s(low, high) {
+    // See I64ToI32Lowering: use BigInt if present, as it avoids (minor)
+    // precision issues.
+    return Math.fround(
+             +(low >>> 0) +
+             +(+(high | 0) * 4294967296.0)
+           );
+  }
+      )";
+    } else if (import->base == ABI::wasm2js::I64_TO_F32_U) {
+      out << R"(
+  function wasm2js_i64_to_f32_u(low, high) {
+    // See I64ToI32Lowering: use BigInt if present, as it avoids (minor)
+    // precision issues.
+    return Math.fround(
+             +(low >>> 0) +
+             +(+(high >>> 0) * 4294967296.0)
+           );
+  }
+      )";
     }
   });
 

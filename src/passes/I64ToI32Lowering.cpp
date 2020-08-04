@@ -23,7 +23,6 @@
 
 #include "abi/js.h"
 #include "asmjs/shared-constants.h"
-#include "emscripten-optimizer/istring.h"
 #include "ir/flat.h"
 #include "ir/iteration.h"
 #include "ir/memory-utils.h"
@@ -684,6 +683,31 @@ struct I64ToI32Lowering : public WalkerPass<PostWalker<I64ToI32Lowering>> {
   }
 
   void lowerConvertIntToFloat(Unary* curr) {
+    if (curr->type == Type::f32) {
+      // i64 -> f32 operations are tricky, as i64 -> f32 should be done with the
+      // proper precision and rounding for f32, and using f64s or intermediate
+      // operations can give slightly inaccurate results in some cases. A more
+      // precise approach would use compiled floatdisf/floatundisf from
+      // compiler-rt, but that is much larger and slower. Note that we're in the
+      // interesting situation of having f32 and f64 operations and only missing
+      // i64 ones, so we have a different problem to solve than compiler-rt, and
+      // maybe there is a better solution we haven't found yet.
+      // For now, emit calls to a special function which will use BigInt support
+      // if present, or fall back to the slightly-incorrectly-rounded version.
+      // In practice Emscripten has done the latter for  many years and there
+      // have been no bug reports on it...
+      Name target;
+      if (curr->op == ConvertSInt64ToFloat32) {
+        target = ABI::wasm2js::I64_TO_F32_S;
+      } else if (curr->op == ConvertUInt64ToFloat32) {
+        target = ABI::wasm2js::I64_TO_F32_U;
+      } else {
+        WASM_UNREACHABLE("unknown i64->f32 op");
+      }
+      replaceCurrent(builder->makeCall(target, {curr->value, builder->makeLocalGet(fetchOutParam(curr->value), Type::i32)}, Type::f32));
+      return;
+    }
+
     // Here the same strategy as `emcc` is taken which takes the two halves of
     // the 64-bit integer and creates a mathematical expression using float
     // arithmetic to reassemble the final floating point value.
