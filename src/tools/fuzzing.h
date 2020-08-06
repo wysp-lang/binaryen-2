@@ -1578,7 +1578,8 @@ private:
       return value;
     };
 
-    switch (upTo(4)) {
+    int num = upTo(6);
+    switch (num) {
       case 0: {
         // totally random, entire range
         switch (type.getSingle()) {
@@ -1739,6 +1740,59 @@ private:
           case Type::unreachable:
             WASM_UNREACHABLE("unexpected type");
         }
+        return tweak(value);
+      }
+      case 4:
+      case 5: {
+        // Converted values: If we need an i32, we can generate a random set of
+        // bits for an f32, then convert that to an i32. This defines a quite
+        // different distribution over the i32s compared to getting a random i32
+        // with uniform probability.
+        bool signed_ = num == 4;
+        Literal value;
+        switch (type.getSingle()) {
+          case Type::i32:
+            value = Literal(getFloat());
+            if (signed_) {
+              value = value.truncSatToSI32();
+            } else {
+              value = value.truncSatToUI32();
+            }
+            break;
+          case Type::i64:
+            value = Literal(getFloat());
+            if (signed_) {
+              value = value.truncSatToSI64();
+            } else {
+              value = value.truncSatToUI64();
+            }
+            break;
+          case Type::f32:
+            value = Literal(get64());
+            if (signed_) {
+              value = value.convertSIToF32();
+            } else {
+              value = value.convertUIToF32();
+            }
+            break;
+          case Type::f64:
+            value = Literal(get64());
+            if (signed_) {
+              value = value.convertSIToF64();
+            } else {
+              value = value.convertUIToF64();
+            }
+            break;
+          case Type::v128:
+          case Type::funcref:
+          case Type::externref:
+          case Type::nullref:
+          case Type::exnref:
+          case Type::none:
+          case Type::unreachable:
+            WASM_UNREACHABLE("unexpected type");
+        }
+std::cout << "weird num " << type << " : " << value << '\n';
         return tweak(value);
       }
     }
