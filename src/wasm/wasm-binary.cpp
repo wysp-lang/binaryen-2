@@ -1233,6 +1233,9 @@ void WasmBinaryBuilder::readMemory() {
                      wasm.memory.max,
                      wasm.memory.shared,
                      Memory::kUnlimitedSize);
+  if (wasm.memory.shared) {
+    wasm.features.setAtomics(true);
+  }
 }
 
 void WasmBinaryBuilder::readSignatures() {
@@ -1978,6 +1981,9 @@ void WasmBinaryBuilder::readDataSegments() {
                  std::to_string(flags));
     }
     curr.isPassive = flags & BinaryConsts::IsPassive;
+    if (curr.isPassive) {
+      wasm.features.setBulkMemory(true);
+    }
     if (flags & BinaryConsts::HasMemIndex) {
       auto memIndex = getU32LEB();
       if (memIndex != 0) {
@@ -2053,6 +2059,9 @@ void WasmBinaryBuilder::readEvents() {
     }
     wasm.addEvent(Builder::makeEvent(
       "event$" + std::to_string(i), attribute, signatures[typeIndex]));
+  }
+  if (numEvents > 0) {
+    wasm.features.setExceptionHandling(true);
   }
 }
 
@@ -2253,6 +2262,7 @@ BinaryConsts::ASTNodes WasmBinaryBuilder::readExpression(Expression*& curr) {
       call->isReturn = true;
       curr = call;
       visitCall(call);
+      wasm.features.setTailCall(true);
       break;
     }
     case BinaryConsts::RetCallIndirect: {
@@ -2260,6 +2270,7 @@ BinaryConsts::ASTNodes WasmBinaryBuilder::readExpression(Expression*& curr) {
       call->isReturn = true;
       curr = call;
       visitCallIndirect(call);
+      wasm.features.setTailCall(true);
       break;
     }
     case BinaryConsts::LocalGet:
@@ -2441,6 +2452,7 @@ BinaryConsts::ASTNodes WasmBinaryBuilder::readExpression(Expression*& curr) {
         BinaryLocations::Span{BinaryLocation(startPos - codeSectionLocation),
                               BinaryLocation(pos - codeSectionLocation)};
     }
+    wasm.features |= curr->type.getFeatures();
   }
   BYN_TRACE("zz recurse from " << depth-- << " at " << pos << std::endl);
   return BinaryConsts::ASTNodes(code);
@@ -2925,6 +2937,7 @@ bool WasmBinaryBuilder::maybeVisitLoad(Expression*& out,
         return false;
     }
     curr->signed_ = false;
+    wasm.features.setAtomics(true);
     BYN_TRACE("zz node: AtomicLoad\n");
   }
 
@@ -3030,6 +3043,7 @@ bool WasmBinaryBuilder::maybeVisitStore(Expression*& out,
       default:
         return false;
     }
+    wasm.features.setAtomics(true);
   }
 
   curr->isAtomic = isAtomic;
@@ -3102,6 +3116,7 @@ bool WasmBinaryBuilder::maybeVisitAtomicRMW(Expression*& out, uint8_t code) {
   curr->ptr = popNonVoidExpression();
   curr->finalize();
   out = curr;
+  wasm.features.setAtomics(true);
   return true;
 }
 
@@ -3155,6 +3170,7 @@ bool WasmBinaryBuilder::maybeVisitAtomicCmpxchg(Expression*& out,
   curr->ptr = popNonVoidExpression();
   curr->finalize();
   out = curr;
+  wasm.features.setAtomics(true);
   return true;
 }
 
@@ -3187,6 +3203,7 @@ bool WasmBinaryBuilder::maybeVisitAtomicWait(Expression*& out, uint8_t code) {
   }
   curr->finalize();
   out = curr;
+  wasm.features.setAtomics(true);
   return true;
 }
 
@@ -3207,6 +3224,7 @@ bool WasmBinaryBuilder::maybeVisitAtomicNotify(Expression*& out, uint8_t code) {
   }
   curr->finalize();
   out = curr;
+  wasm.features.setAtomics(true);
   return true;
 }
 
@@ -3219,6 +3237,7 @@ bool WasmBinaryBuilder::maybeVisitAtomicFence(Expression*& out, uint8_t code) {
   curr->order = getU32LEB();
   curr->finalize();
   out = curr;
+  wasm.features.setAtomics(true);
   return true;
 }
 
@@ -3475,6 +3494,7 @@ bool WasmBinaryBuilder::maybeVisitUnary(Expression*& out, uint8_t code) {
   curr->value = popNonVoidExpression();
   curr->finalize();
   out = curr;
+  wasm.features |= Features::get(curr->op);
   return true;
 }
 
@@ -3537,6 +3557,7 @@ bool WasmBinaryBuilder::maybeVisitMemoryInit(Expression*& out, uint32_t code) {
   }
   curr->finalize();
   out = curr;
+  wasm.features.setBulkMemory(true);
   return true;
 }
 
@@ -3548,6 +3569,7 @@ bool WasmBinaryBuilder::maybeVisitDataDrop(Expression*& out, uint32_t code) {
   curr->segment = getU32LEB();
   curr->finalize();
   out = curr;
+  wasm.features.setBulkMemory(true);
   return true;
 }
 
@@ -3564,6 +3586,7 @@ bool WasmBinaryBuilder::maybeVisitMemoryCopy(Expression*& out, uint32_t code) {
   }
   curr->finalize();
   out = curr;
+  wasm.features.setBulkMemory(true);
   return true;
 }
 
@@ -3580,6 +3603,7 @@ bool WasmBinaryBuilder::maybeVisitMemoryFill(Expression*& out, uint32_t code) {
   }
   curr->finalize();
   out = curr;
+  wasm.features.setBulkMemory(true);
   return true;
 }
 
@@ -3655,6 +3679,7 @@ bool WasmBinaryBuilder::maybeVisitBinary(Expression*& out, uint8_t code) {
   curr->left = popNonVoidExpression();
   curr->finalize();
   out = curr;
+  wasm.features |= Features::get(curr->op);
   return true;
 #undef TYPED_CODE
 #undef INT_TYPED_CODE

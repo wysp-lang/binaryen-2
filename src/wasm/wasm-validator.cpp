@@ -1482,7 +1482,7 @@ void FunctionValidator::visitBinary(Binary* curr) {
       break;
     }
     case InvalidBinary:
-      WASM_UNREACHABLE("invliad binary op");
+      WASM_UNREACHABLE("invalid binary op");
   }
   shouldBeTrue(Features::get(curr->op) <= getModule()->features,
                curr,
