@@ -582,10 +582,13 @@ public:
           bool canIndirectChangeState;
           bool verbose;
 
-          Walker(Info& info, Module& module, bool canIndirectChangeState, bool verbose)
+          Walker(Info& info,
+                 Module& module,
+                 bool canIndirectChangeState,
+                 bool verbose)
             : info(info), module(module),
-              canIndirectChangeState(canIndirectChangeState),
-              verbose(verbose) {}
+              canIndirectChangeState(canIndirectChangeState), verbose(verbose) {
+          }
 
           void visitCall(Call* curr) {
             if (curr->isReturn) {
@@ -622,8 +625,8 @@ public:
             if (!info.canChangeState) {
               info.canChangeState = true;
               if (verbose) {
-                std::cout << "[asyncify] " << func->name <<
-                " can change the state due to " << reason << '\n';
+                std::cout << "[asyncify] " << info.name
+                          << " can change the state due to " << reason << '\n';
               }
             }
           }
