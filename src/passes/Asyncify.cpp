@@ -562,6 +562,10 @@ public:
           if (func->module == ASYNCIFY &&
               (func->base == START_UNWIND || func->base == STOP_REWIND)) {
             info.canChangeState = true;
+            if (verbose) {
+              std::cout << "[asyncify] " << func->name
+                        << " is a runtime import that can change the state\n";
+            }
           } else {
             info.canChangeState =
               canImportChangeState(func->module, func->base);
@@ -576,10 +580,12 @@ public:
           Info& info;
           Module& module;
           bool canIndirectChangeState;
+          bool verbose;
 
-          Walker(Info& info, Module& module, bool canIndirectChangeState)
+          Walker(Info& info, Module& module, bool canIndirectChangeState, bool verbose)
             : info(info), module(module),
-              canIndirectChangeState(canIndirectChangeState) {}
+              canIndirectChangeState(canIndirectChangeState),
+              verbose(verbose) {}
 
           void visitCall(Call* curr) {
             if (curr->isReturn) {
@@ -589,14 +595,14 @@ public:
             if (target->imported() && target->module == ASYNCIFY) {
               // Redirect the imports to the functions we'll add later.
               if (target->base == START_UNWIND) {
-                info.canChangeState = true;
+                noteCanChangeState("calling start_unwind");
                 info.isTopMostRuntime = true;
               } else if (target->base == STOP_UNWIND) {
                 info.isBottomMostRuntime = true;
               } else if (target->base == START_REWIND) {
                 info.isBottomMostRuntime = true;
               } else if (target->base == STOP_REWIND) {
-                info.canChangeState = true;
+                noteCanChangeState("calling stop_rewind");
                 info.isTopMostRuntime = true;
               } else {
                 WASM_UNREACHABLE("call to unidenfied asyncify import");
@@ -608,23 +614,32 @@ public:
               Fatal() << "tail calls not yet supported in asyncify";
             }
             if (canIndirectChangeState) {
-              info.canChangeState = true;
+              noteCanChangeState("indirect call");
             }
             // TODO optimize the other case, at least by type
           }
+          void noteCanChangeState(const char* reason) {
+            if (!info.canChangeState) {
+              info.canChangeState = true;
+              if (verbose) {
+                std::cout << "[asyncify] " << func->name <<
+                " can change the state due to " << reason << '\n';
+              }
+            }
+          }
         };
-        Walker walker(info, module, canIndirectChangeState);
+        Walker walker(info, module, canIndirectChangeState, verbose);
         walker.walk(func->body);
 
-        if (info.isBottomMostRuntime) {
+        if (info.isBottomMostRuntime && info.canChangeState) {
           info.canChangeState = false;
           // TODO: issue warnings on suspicious things, like a function in
           //       the bottom-most runtime also doing top-most runtime stuff
           //       like starting and unwinding.
-        }
-        if (verbose && info.canChangeState) {
-          std::cout << "[asyncify] " << func->name
-                    << " can change the state due to initial scan\n";
+          if (verbose) {
+            std::cout << "[asyncify] " << func->name
+                      << " cannot change the state as bottom-most runtime\n";
+          }
         }
       });
 
