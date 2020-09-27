@@ -476,13 +476,16 @@ class CompareVMs(TestCaseHandler):
                 run([in_bin('wasm-opt'), wasm, '--emit-js-wrapper=' + wasm + '.js'] + FEATURE_OPTS)
                 return run_vm([self.jsc, wasm + '.js', '--', wasm])
 
-            def can_run(self, wasm):
-                # wasm2c doesn't support most features
-                return if_legal_and_no_nans() and \
-                    all([x in FEATURE_OPTS for x in ['--disable-exception-handling', '--disable-simd', '--disable-threads', '--disable-bulk-memory', '--disable-nontrapping-float-to-int', '--disable-tail-call', '--disable-sign-ext', '--disable-reference-types', '--disable-multivalue', '--disable-gc']])
-
             def can_compare_to_self(self):
                 return not NANS
+
+            def can_compare_to_others(self, wasm):
+                # wasm2c doesn't support most features
+                return if_legal_and_no_nans()
+
+            def can_run(self, wasm):
+                # wasm2c doesn't support most features
+                return all([x in FEATURE_OPTS for x in ['--disable-exception-handling', '--disable-simd', '--disable-threads', '--disable-bulk-memory', '--disable-nontrapping-float-to-int', '--disable-tail-call', '--disable-sign-ext', '--disable-reference-types', '--disable-multivalue', '--disable-gc']])
 
         self.vms = [
             VM('binaryen interpreter', byn_run,    can_compare_to_self=yes,        can_compare_to_others=yes),
