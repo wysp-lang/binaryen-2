@@ -473,6 +473,15 @@ class CompareVMs(TestCaseHandler):
             Wasm2C2Wasm(),
         ]
 
+        # jsc integration
+        jsc = shared.which('jsc')
+        if jsc is not None:
+            def jsc_run(wasm):
+                run([in_bin('wasm-opt'), wasm, '--emit-js-wrapper=' + wasm + '.js'] + FEATURE_OPTS)
+                return run_vm([jsc, wasm + '.js', '--', wasm])
+
+            self.vms.append(VM('jsc',                  jsc_run,    can_compare_to_self=if_no_nans, can_compare_to_others=if_legal_and_no_nans))
+
     def handle_pair(self, input, before_wasm, after_wasm, opts):
         before = self.run_vms(before_wasm)
         after = self.run_vms(after_wasm)
