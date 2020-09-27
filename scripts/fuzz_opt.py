@@ -464,6 +464,26 @@ class CompareVMs(TestCaseHandler):
                 # NaNs can differ from wasm VMs
                 return not NANS
 
+        class JavaScriptCore(VM):
+            name = 'jsc'
+
+            jsc = shared.which('jsc')
+
+            def __init__(self):
+                pass
+
+            def run(self, wasm):
+                run([in_bin('wasm-opt'), wasm, '--emit-js-wrapper=' + wasm + '.js'] + FEATURE_OPTS)
+                return run_vm([self.jsc, wasm + '.js', '--', wasm])
+
+            def can_run(self, wasm):
+                # wasm2c doesn't support most features
+                return if_legal_and_no_nans() and \
+                    all([x in FEATURE_OPTS for x in ['--disable-exception-handling', '--disable-simd', '--disable-threads', '--disable-bulk-memory', '--disable-nontrapping-float-to-int', '--disable-tail-call', '--disable-sign-ext', '--disable-reference-types', '--disable-multivalue', '--disable-gc']])
+
+            def can_compare_to_self(self):
+                return not NANS
+
         self.vms = [
             VM('binaryen interpreter', byn_run,    can_compare_to_self=yes,        can_compare_to_others=yes),
             # with nans, VM differences can confuse us, so only very simple VMs can compare to themselves after opts in that case.
@@ -473,14 +493,9 @@ class CompareVMs(TestCaseHandler):
             Wasm2C2Wasm(),
         ]
 
-        # jsc integration
-        jsc = shared.which('jsc')
-        if jsc is not None:
-            def jsc_run(wasm):
-                run([in_bin('wasm-opt'), wasm, '--emit-js-wrapper=' + wasm + '.js'] + FEATURE_OPTS)
-                return run_vm([jsc, wasm + '.js', '--', wasm])
-
-            self.vms.append(VM('jsc',                  jsc_run,    can_compare_to_self=if_no_nans, can_compare_to_others=if_legal_and_no_nans))
+        jsc = JavaScriptCore()
+        if jsc.jsc is not None:
+            self.vms.append(jsc)
 
     def handle_pair(self, input, before_wasm, after_wasm, opts):
         before = self.run_vms(before_wasm)
