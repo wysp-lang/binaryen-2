@@ -479,7 +479,7 @@ class CompareVMs(TestCaseHandler):
             def can_compare_to_self(self):
                 return not NANS
 
-            def can_compare_to_others(self, wasm):
+            def can_compare_to_others(self):
                 # wasm2c doesn't support most features
                 return if_legal_and_no_nans()
 
