@@ -315,9 +315,12 @@ struct Walker : public VisitorType {
 private:
   // the address of the current node, used to replace it
   Expression** replacep = nullptr;
-  SmallVector<Task, 10> stack;      // stack of tasks
   Function* currFunction = nullptr; // current function being processed
   Module* currModule = nullptr;     // current module being processed
+
+protected:
+  // The stack of traversal tasks.
+  SmallVector<Task, 10> stack;
 };
 
 // Walks in post-order, i.e., children first. When there isn't an obvious

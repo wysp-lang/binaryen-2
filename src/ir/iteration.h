@@ -134,12 +134,12 @@ public:
   ChildPointerIterator(Expression* parent) {
     struct Traverser : public PostWalker<Traverser> {
       Expression* parent;
-      SmallVector<Expression*, 4>* children;
+      SmallVector<Expression**, 4>* children;
 
       // We need to scan subchildren exactly once - just the parent.
       bool scanned = false;
 
-      void maybePushTask(TaskFunc func, Expression** currp) override {
+      void maybePushTask(TaskFunc func, Expression** currp) {
         // Override the default maybePushTask to push all children, even
         // nullptr ones.
         stack.emplace_back(func, currp);
@@ -148,8 +148,7 @@ public:
       static void scan(Traverser* self, Expression** currp) {
         if (!self->scanned) {
           self->scanned = true;
-          Scanner<Traverser, UnifiedExpressionVisitor<Traverser>>::scan(self,
-                                                                        currp);
+          PostWalker<Traverser>::scan(self, currp);
         } else {
           // This is one of the children. Do not scan further, just note it.
           self->children->push_back(currp);

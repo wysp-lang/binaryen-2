@@ -109,10 +109,10 @@ bool ExpressionAnalyzer::flexibleEqual(Expression* left,
     struct ComparableImmediates : public Immediates {
       Comparer& parent;
 
-      Immediates(Comparer& parent) : parent(parent) {}
+      ComparableImmediates(Comparer& parent) : parent(parent) {}
 
       // Comparison is by value, except for names, which must match.
-      bool operator==(const Immediates& other) {
+      bool operator==(const ComparableImmediates& other) {
         if (scopeNames.size() != other.scopeNames.size()) {
           return false;
         }
@@ -151,7 +151,7 @@ bool ExpressionAnalyzer::flexibleEqual(Expression* left,
         return true;
       }
 
-      bool operator!=(const Immediates& other) { return !(*this == other); }
+      bool operator!=(const ComparableImmediates& other) { return !(*this == other); }
     };
 
     bool noteNames(Name left, Name right) {
@@ -166,8 +166,6 @@ bool ExpressionAnalyzer::flexibleEqual(Expression* left,
     }
 
     bool compare(Expression* left, Expression* right, ExprComparer comparer) {
-      Immediates leftImmediates(*this), rightImmediates(*this);
-
       // The empty name is the same on both sides.
       rightNames[Name()] = Name();
 
@@ -203,13 +201,12 @@ bool ExpressionAnalyzer::flexibleEqual(Expression* left,
           }
         } else {
           // For all other nodes, compare their immediate values
+          ComparableImmediates leftImmediates(*this), rightImmediates(*this);
           visitImmediates(left, leftImmediates);
           visitImmediates(right, rightImmediates);
           if (leftImmediates != rightImmediates) {
             return false;
           }
-          leftImmediates.clear();
-          rightImmediates.clear();
         }
         // Add child nodes.
         Index counter = 0;

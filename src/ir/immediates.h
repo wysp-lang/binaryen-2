@@ -17,6 +17,10 @@
 #ifndef wasm_ir_immediates_h
 #define wasm_ir_immediates_h
 
+#include <support/small_vector.h>
+#include <wasm.h>
+#include <wasm-traversal.h>
+
 namespace wasm {
 
 //
@@ -219,16 +223,6 @@ struct Immediates {
   void visitType(Type curr) { types.push_back(curr); }
   void visitIndex(Index curr) { indexes.push_back(curr); }
   void visitAddress(Address curr) { addresses.push_back(curr); }
-
-  void clear() {
-    scopeNames.clear();
-    nonScopeNames.clear();
-    ints.clear();
-    literals.clear();
-    types.clear();
-    indexes.clear();
-    addresses.clear();
-  }
 };
 
 // A visitor that accumulates pointers to the immediates.
