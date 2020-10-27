@@ -64,7 +64,7 @@ enum class IRProfile { Normal, Poppy };
 
 // Operators
 
-enum UnaryOp {
+enum UnaryOp : uint32_t {
   // int
   ClzInt32,
   ClzInt64,
@@ -211,7 +211,7 @@ enum UnaryOp {
   InvalidUnary
 };
 
-enum BinaryOp {
+enum BinaryOp : uint32_t {
   // int or float
   AddInt32,
   SubInt32,
@@ -433,9 +433,9 @@ enum BinaryOp {
   InvalidBinary
 };
 
-enum AtomicRMWOp { RMWAdd, RMWSub, RMWAnd, RMWOr, RMWXor, RMWXchg };
+enum AtomicRMWOp : uint32_t { RMWAdd, RMWSub, RMWAnd, RMWOr, RMWXor, RMWXchg };
 
-enum SIMDExtractOp {
+enum SIMDExtractOp : uint32_t {
   ExtractLaneSVecI8x16,
   ExtractLaneUVecI8x16,
   ExtractLaneSVecI16x8,
@@ -446,7 +446,7 @@ enum SIMDExtractOp {
   ExtractLaneVecF64x2
 };
 
-enum SIMDReplaceOp {
+enum SIMDReplaceOp : uint32_t {
   ReplaceLaneVecI8x16,
   ReplaceLaneVecI16x8,
   ReplaceLaneVecI32x4,
@@ -455,7 +455,7 @@ enum SIMDReplaceOp {
   ReplaceLaneVecF64x2
 };
 
-enum SIMDShiftOp {
+enum SIMDShiftOp : uint32_t {
   ShlVecI8x16,
   ShrSVecI8x16,
   ShrUVecI8x16,
@@ -470,7 +470,7 @@ enum SIMDShiftOp {
   ShrUVecI64x2
 };
 
-enum SIMDLoadOp {
+enum SIMDLoadOp : uint32_t {
   LoadSplatVec8x16,
   LoadSplatVec16x8,
   LoadSplatVec32x4,
@@ -485,7 +485,7 @@ enum SIMDLoadOp {
   Load64Zero,
 };
 
-enum SIMDLoadStoreLaneOp {
+enum SIMDLoadStoreLaneOp : uint32_t {
   LoadLaneVec8x16,
   LoadLaneVec16x8,
   LoadLaneVec32x4,
@@ -496,7 +496,7 @@ enum SIMDLoadStoreLaneOp {
   StoreLaneVec64x2,
 };
 
-enum SIMDTernaryOp { Bitselect, QFMAF32x4, QFMSF32x4, QFMAF64x2, QFMSF64x2 };
+enum SIMDTernaryOp : uint32_t { Bitselect, QFMAF32x4, QFMSF32x4, QFMAF64x2, QFMSF64x2 };
 
 //
 // Expressions

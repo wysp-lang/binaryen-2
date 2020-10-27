@@ -93,7 +93,10 @@ flexibleCopy(Expression* original, Module& wasm, CustomCopier custom) {
       }
     COPY_IMMEDIATES(scopeNames);
     COPY_IMMEDIATES(nonScopeNames);
+    COPY_IMMEDIATES(bools);
+    COPY_IMMEDIATES(uint8s);
     COPY_IMMEDIATES(ints);
+    COPY_IMMEDIATES(uint64s);
     COPY_IMMEDIATES(literals);
     COPY_IMMEDIATES(types);
     COPY_IMMEDIATES(indexes);

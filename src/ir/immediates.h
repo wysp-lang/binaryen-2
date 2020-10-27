@@ -33,6 +33,7 @@ namespace wasm {
 //  * visitBool, etc. - a simple int type.
 //  * visitLiteral - a Literal
 //  * visitType - a Type
+//  * visitSignature - a Signature
 //  * visitIndex - an Index
 //  * visitAddress - an Address
 //
@@ -60,8 +61,7 @@ template<typename T> void visitImmediates(Expression* curr, T& visitor) {
       visitor.visitBool(curr->isReturn);
     }
     void visitCallIndirect(CallIndirect* curr) {
-      visitor.visitUint64(curr->sig.params.getID());
-      visitor.visitUint64(curr->sig.results.getID());
+      visitor.visitSignature(curr->sig);
       visitor.visitBool(curr->isReturn);
     }
     void visitLocalGet(LocalGet* curr) { visitor.visitIndex(curr->index); }
@@ -73,29 +73,29 @@ template<typename T> void visitImmediates(Expression* curr, T& visitor) {
       visitor.visitNonScopeName(curr->name);
     }
     void visitLoad(Load* curr) {
-      visitor.visitInt(curr->bytes);
+      visitor.visitUint8(curr->bytes);
       if (curr->type != Type::unreachable &&
           curr->bytes < curr->type.getByteSize()) {
-        visitor.visitInt(curr->signed_);
+        visitor.visitBool(curr->signed_);
       }
       visitor.visitAddress(curr->offset);
       visitor.visitAddress(curr->align);
-      visitor.visitInt(curr->isAtomic);
+      visitor.visitBool(curr->isAtomic);
     }
     void visitStore(Store* curr) {
-      visitor.visitInt(curr->bytes);
+      visitor.visitUint8(curr->bytes);
       visitor.visitAddress(curr->offset);
       visitor.visitAddress(curr->align);
-      visitor.visitInt(curr->isAtomic);
-      visitor.visitInt(curr->valueType.getID());
+      visitor.visitBool(curr->isAtomic);
+      visitor.visitType(curr->valueType);
     }
     void visitAtomicRMW(AtomicRMW* curr) {
       visitor.visitInt(curr->op);
-      visitor.visitInt(curr->bytes);
+      visitor.visitUint8(curr->bytes);
       visitor.visitAddress(curr->offset);
     }
     void visitAtomicCmpxchg(AtomicCmpxchg* curr) {
-      visitor.visitInt(curr->bytes);
+      visitor.visitUint8(curr->bytes);
       visitor.visitAddress(curr->offset);
     }
     void visitAtomicWait(AtomicWait* curr) {
@@ -165,7 +165,7 @@ template<typename T> void visitImmediates(Expression* curr, T& visitor) {
       visitor.visitIndex(curr->index);
     }
     void visitI31New(I31New* curr) {}
-    void visitI31Get(I31Get* curr) { visitor.visitInt(curr->signed_); }
+    void visitI31Get(I31Get* curr) { visitor.visitBool(curr->signed_); }
     void visitRefTest(RefTest* curr) {
       WASM_UNREACHABLE("TODO (gc): ref.test");
     }
@@ -209,20 +209,24 @@ struct Immediates {
   SmallVector<Name, 1> scopeNames;
   SmallVector<Name, 1> nonScopeNames;
   SmallVector<bool, 3> bools;
+  SmallVector<uint8_t, 3> uint8s;
   SmallVector<int32_t, 3> ints;
   SmallVector<uint64_t, 3> uint64s;
   SmallVector<Literal, 1> literals;
   SmallVector<Type, 1> types;
+  SmallVector<Signature, 1> sigs;
   SmallVector<Index, 1> indexes;
   SmallVector<Address, 2> addresses;
 
   void visitScopeName(Name curr) { scopeNames.push_back(curr); }
   void visitNonScopeName(Name curr) { nonScopeNames.push_back(curr); }
   void visitBool(bool curr) { bools.push_back(curr); }
+  void visitUint8(uint8_t curr) { uint8s.push_back(curr); }
   void visitInt(int32_t curr) { ints.push_back(curr); }
   void visitUint64(uint64_t curr) { uint64s.push_back(curr); }
   void visitLiteral(Literal curr) { literals.push_back(curr); }
   void visitType(Type curr) { types.push_back(curr); }
+  void visitSignature(Signature curr) { sigs.push_back(curr); }
   void visitIndex(Index curr) { indexes.push_back(curr); }
   void visitAddress(Address curr) { addresses.push_back(curr); }
 };
@@ -232,20 +236,24 @@ struct ImmediatePointers {
   SmallVector<Name*, 1> scopeNames;
   SmallVector<Name*, 1> nonScopeNames;
   SmallVector<bool*, 3> bools;
+  SmallVector<uint8_t*, 3> uint8s;
   SmallVector<int32_t*, 3> ints;
   SmallVector<uint64_t*, 3> uint64s;
   SmallVector<Literal*, 1> literals;
   SmallVector<Type*, 1> types;
+  SmallVector<Signature*, 1> sigs;
   SmallVector<Index*, 1> indexes;
   SmallVector<Address*, 2> addresses;
 
   void visitScopeName(Name& curr) { scopeNames.push_back(&curr); }
   void visitNonScopeName(Name& curr) { nonScopeNames.push_back(&curr); }
   void visitBool(bool& curr) { bools.push_back(&curr); }
+  void visitUint8(uint8_t& curr) { uint8s.push_back(&curr); }
   void visitInt(int32_t& curr) { ints.push_back(&curr); }
   void visitUint64(uint64_t& curr) { uint64s.push_back(&curr); }
   void visitLiteral(Literal& curr) { literals.push_back(&curr); }
   void visitType(Type& curr) { types.push_back(&curr); }
+  void visitSignature(Signature& curr) { sigs.push_back(&curr); }
   void visitIndex(Index& curr) { indexes.push_back(&curr); }
   void visitAddress(Address& curr) { addresses.push_back(&curr); }
 };

@@ -301,10 +301,15 @@ size_t ExpressionAnalyzer::hash(Expression* curr) {
     }
     void visitNonScopeName(Name curr) { rehash(digest, uint64_t(curr.str)); }
     void visitBool(bool curr) { rehash(digest, curr); }
+    void visitUint8(uint8_t curr) { rehash(digest, curr); }
     void visitInt(int32_t curr) { rehash(digest, curr); }
     void visitUint64(uint64_t curr) { rehash(digest, curr); }
     void visitLiteral(Literal curr) { rehash(digest, curr); }
     void visitType(Type curr) { rehash(digest, curr.getID()); }
+    void visitSignature(Signature curr) {
+      rehash(digest, curr.params.getID());
+      rehash(digest, curr.results.getID());
+    }
     void visitIndex(Index curr) {
       static_assert(sizeof(Index) == sizeof(uint32_t),
                     "wasm64 will need changes here");
