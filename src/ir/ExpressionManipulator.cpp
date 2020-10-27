@@ -51,7 +51,6 @@ flexibleCopy(Expression* original, Module& wasm, CustomCopier custom) {
     // Copy it ourselves.
     ???
     switch (task.source->_id) {
-#include "expression-copying.generated.h"
       default: {
         WASM_UNREACHABLE("invalid copy id");
       }
