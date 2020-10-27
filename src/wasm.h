@@ -682,12 +682,12 @@ public:
 
 class If : public SpecificExpression<Expression::IfId> {
 public:
-  If() : ifFalse(nullptr) {}
+  If() {}
   If(MixedArena& allocator) : If() {}
 
   Expression* condition;
   Expression* ifTrue;
-  Expression* ifFalse;
+  Expression* ifFalse = nullptr;
 
   // set the type given you know its type, which is the case when parsing
   // s-expression or binary, as explicit types are given. the only additional
@@ -719,12 +719,12 @@ public:
 
 class Break : public SpecificExpression<Expression::BreakId> {
 public:
-  Break() : value(nullptr), condition(nullptr) {}
-  Break(MixedArena& allocator) : Break() { type = Type::unreachable; }
+  Break() { type = Type::unreachable; }
+  Break(MixedArena& allocator) : Break() { }
 
   Name name;
-  Expression* value;
-  Expression* condition;
+  Expression* value = nullptr;
+  Expression* condition = nullptr;
 
   void finalize();
 };
@@ -737,7 +737,7 @@ public:
 
   ArenaVector<Name> targets;
   Name default_;
-  Expression* condition = nullptr;
+  Expression* condition;
   Expression* value = nullptr;
 
   void finalize();
