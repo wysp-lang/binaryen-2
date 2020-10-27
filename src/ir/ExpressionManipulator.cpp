@@ -50,7 +50,10 @@ flexibleCopy(Expression* original, Module& wasm, CustomCopier custom) {
       continue;
     }
     // Allocate a new copy.
-    switch (curr->_id) {
+    switch (original->_id) {
+      case Expression::Id::InvalidId:
+      case Expression::Id::NumExpressionIds:
+        WASM_UNREACHABLE("Invalid id");
 
 #define DELEGATE(CLASS_TO_VISIT)                                               \
   case Expression::Id::CLASS_TO_VISIT##Id:                                     \
@@ -71,13 +74,13 @@ flexibleCopy(Expression* original, Module& wasm, CustomCopier custom) {
     for (auto** child : ChildPointerIterator(original)) {
       originalChildren.push_back(*child);
     }
-    std::vector<Expression**> newChildrenPointers;
+    std::vector<Expression**> copyPointers;
     for (auto** child : ChildPointerIterator(copy)) {
-      copyChildren.push_back(child);
+      copyPointers.push_back(child);
     }
-    assert(originalChildren.size() == copyChildren.size());
+    assert(originalChildren.size() == copyPointers.size());
     for (Index i = 0; i < originalChildren.size(); i++) {
-      tasks.push_back({originalChildren[i], copyChildren[i]});
+      tasks.push_back({originalChildren[i], copyPointers[i]});
     }
     Immediates originalImmediates;
     visitImmediates(original, originalImmediates);
@@ -86,7 +89,7 @@ flexibleCopy(Expression* original, Module& wasm, CustomCopier custom) {
     #define COPY_IMMEDIATES(what) \
       assert(originalImmediates.what.size() == copyImmediates.what.size()); \
       for (Index i = 0; i < originalImmediates.what.size(); i++) { \
-        *copyImmediates[i] = originalImmediates[i]; \
+        *copyImmediates.what[i] = originalImmediates.what[i]; \
       }
     COPY_IMMEDIATES(scopeNames);
     COPY_IMMEDIATES(nonScopeNames);

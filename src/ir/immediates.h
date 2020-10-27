@@ -30,9 +30,7 @@ namespace wasm {
 // The passed-in visitor object must implement:
 //  * visitScopeName - a Name that represents a block or loop scope
 //  * visitNonScopeName - a non-scope name
-//  * visitInt - anything that has a short enumeration, including
-//               opcodes, # of bytes in a load, bools, etc. - must be
-//               guaranteed to fit in an int32 or less.
+//  * visitBool, etc. - a simple int type.
 //  * visitLiteral - a Literal
 //  * visitType - a Type
 //  * visitIndex - an Index
@@ -59,12 +57,12 @@ template<typename T> void visitImmediates(Expression* curr, T& visitor) {
     }
     void visitCall(Call* curr) {
       visitor.visitNonScopeName(curr->target);
-      visitor.visitInt(curr->isReturn);
+      visitor.visitBool(curr->isReturn);
     }
     void visitCallIndirect(CallIndirect* curr) {
-      visitor.visitInt(curr->sig.params.getID());
-      visitor.visitInt(curr->sig.results.getID());
-      visitor.visitInt(curr->isReturn);
+      visitor.visitUint64(curr->sig.params.getID());
+      visitor.visitUint64(curr->sig.results.getID());
+      visitor.visitBool(curr->isReturn);
     }
     void visitLocalGet(LocalGet* curr) { visitor.visitIndex(curr->index); }
     void visitLocalSet(LocalSet* curr) { visitor.visitIndex(curr->index); }
@@ -210,7 +208,9 @@ template<typename T> void visitImmediates(Expression* curr, T& visitor) {
 struct Immediates {
   SmallVector<Name, 1> scopeNames;
   SmallVector<Name, 1> nonScopeNames;
+  SmallVector<bool, 3> bools;
   SmallVector<int32_t, 3> ints;
+  SmallVector<uint64_t, 3> uint64s;
   SmallVector<Literal, 1> literals;
   SmallVector<Type, 1> types;
   SmallVector<Index, 1> indexes;
@@ -218,7 +218,9 @@ struct Immediates {
 
   void visitScopeName(Name curr) { scopeNames.push_back(curr); }
   void visitNonScopeName(Name curr) { nonScopeNames.push_back(curr); }
+  void visitBool(bool curr) { bools.push_back(curr); }
   void visitInt(int32_t curr) { ints.push_back(curr); }
+  void visitUint64(uint64_t curr) { uint64s.push_back(curr); }
   void visitLiteral(Literal curr) { literals.push_back(curr); }
   void visitType(Type curr) { types.push_back(curr); }
   void visitIndex(Index curr) { indexes.push_back(curr); }
@@ -229,7 +231,9 @@ struct Immediates {
 struct ImmediatePointers {
   SmallVector<Name*, 1> scopeNames;
   SmallVector<Name*, 1> nonScopeNames;
+  SmallVector<bool*, 3> bools;
   SmallVector<int32_t*, 3> ints;
+  SmallVector<uint64_t*, 3> uint64s;
   SmallVector<Literal*, 1> literals;
   SmallVector<Type*, 1> types;
   SmallVector<Index*, 1> indexes;
@@ -237,7 +241,9 @@ struct ImmediatePointers {
 
   void visitScopeName(Name& curr) { scopeNames.push_back(&curr); }
   void visitNonScopeName(Name& curr) { nonScopeNames.push_back(&curr); }
+  void visitBool(bool& curr) { bools.push_back(&curr); }
   void visitInt(int32_t& curr) { ints.push_back(&curr); }
+  void visitUint64(uint64_t& curr) { uint64s.push_back(&curr); }
   void visitLiteral(Literal& curr) { literals.push_back(&curr); }
   void visitType(Type& curr) { types.push_back(&curr); }
   void visitIndex(Index& curr) { indexes.push_back(&curr); }

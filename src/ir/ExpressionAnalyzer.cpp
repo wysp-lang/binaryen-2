@@ -300,7 +300,9 @@ size_t ExpressionAnalyzer::hash(Expression* curr) {
       rehash(digest, internalNames[curr]);
     }
     void visitNonScopeName(Name curr) { rehash(digest, uint64_t(curr.str)); }
+    void visitBool(bool curr) { rehash(digest, curr); }
     void visitInt(int32_t curr) { rehash(digest, curr); }
+    void visitUint64(uint64_t curr) { rehash(digest, curr); }
     void visitLiteral(Literal curr) { rehash(digest, curr); }
     void visitType(Type curr) { rehash(digest, curr.getID()); }
     void visitIndex(Index curr) {
