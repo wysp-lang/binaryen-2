@@ -201,6 +201,55 @@ template<typename T> void visitImmediates(Expression* curr, T& visitor) {
   } singleton(curr, visitor);
 }
 
+// A simple visitor for immediates that accumulates them to type-specific
+// vectors.
+struct Immediates {
+  SmallVector<Name, 1> scopeNames;
+  SmallVector<Name, 1> nonScopeNames;
+  SmallVector<int32_t, 3> ints;
+  SmallVector<Literal, 1> literals;
+  SmallVector<Type, 1> types;
+  SmallVector<Index, 1> indexes;
+  SmallVector<Address, 2> addresses;
+
+  void visitScopeName(Name curr) { scopeNames.push_back(curr); }
+  void visitNonScopeName(Name curr) { nonScopeNames.push_back(curr); }
+  void visitInt(int32_t curr) { ints.push_back(curr); }
+  void visitLiteral(Literal curr) { literals.push_back(curr); }
+  void visitType(Type curr) { types.push_back(curr); }
+  void visitIndex(Index curr) { indexes.push_back(curr); }
+  void visitAddress(Address curr) { addresses.push_back(curr); }
+
+  void clear() {
+    scopeNames.clear();
+    nonScopeNames.clear();
+    ints.clear();
+    literals.clear();
+    types.clear();
+    indexes.clear();
+    addresses.clear();
+  }
+};
+
+// A visitor that accumulates pointers to the immediates.
+struct ImmediatePointers {
+  SmallVector<Name*, 1> scopeNames;
+  SmallVector<Name*, 1> nonScopeNames;
+  SmallVector<int32_t*, 3> ints;
+  SmallVector<Literal*, 1> literals;
+  SmallVector<Type*, 1> types;
+  SmallVector<Index*, 1> indexes;
+  SmallVector<Address*, 2> addresses;
+
+  void visitScopeName(Name& curr) { scopeNames.push_back(&curr); }
+  void visitNonScopeName(Name& curr) { nonScopeNames.push_back(&curr); }
+  void visitInt(int32_t& curr) { ints.push_back(&curr); }
+  void visitLiteral(Literal& curr) { literals.push_back(&curr); }
+  void visitType(Type& curr) { types.push_back(&curr); }
+  void visitIndex(Index& curr) { indexes.push_back(&curr); }
+  void visitAddress(Address& curr) { addresses.push_back(&curr); }
+};
+
 } // namespace wasm
 
 #endif // wasm_ir_immediates_h

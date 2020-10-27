@@ -106,26 +106,10 @@ bool ExpressionAnalyzer::flexibleEqual(Expression* left,
     std::vector<Expression*> leftStack;
     std::vector<Expression*> rightStack;
 
-    struct Immediates {
+    struct ComparableImmediates : public Immediates {
       Comparer& parent;
 
       Immediates(Comparer& parent) : parent(parent) {}
-
-      SmallVector<Name, 1> scopeNames;
-      SmallVector<Name, 1> nonScopeNames;
-      SmallVector<int32_t, 3> ints;
-      SmallVector<Literal, 1> literals;
-      SmallVector<Type, 1> types;
-      SmallVector<Index, 1> indexes;
-      SmallVector<Address, 2> addresses;
-
-      void visitScopeName(Name curr) { scopeNames.push_back(curr); }
-      void visitNonScopeName(Name curr) { nonScopeNames.push_back(curr); }
-      void visitInt(int32_t curr) { ints.push_back(curr); }
-      void visitLiteral(Literal curr) { literals.push_back(curr); }
-      void visitType(Type curr) { types.push_back(curr); }
-      void visitIndex(Index curr) { indexes.push_back(curr); }
-      void visitAddress(Address curr) { addresses.push_back(curr); }
 
       // Comparison is by value, except for names, which must match.
       bool operator==(const Immediates& other) {
@@ -168,16 +152,6 @@ bool ExpressionAnalyzer::flexibleEqual(Expression* left,
       }
 
       bool operator!=(const Immediates& other) { return !(*this == other); }
-
-      void clear() {
-        scopeNames.clear();
-        nonScopeNames.clear();
-        ints.clear();
-        literals.clear();
-        types.clear();
-        indexes.clear();
-        addresses.clear();
-      }
     };
 
     bool noteNames(Name left, Name right) {

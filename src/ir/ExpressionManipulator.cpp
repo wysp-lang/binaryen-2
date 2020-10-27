@@ -49,12 +49,36 @@ flexibleCopy(Expression* original, Module& wasm, CustomCopier custom) {
       continue;
     }
     // Copy it ourselves.
-    ???
-    switch (task.source->_id) {
-      default: {
-        WASM_UNREACHABLE("invalid copy id");
-      }
+maek it  with delegate
+    // Scan all the existing children (including nullptr ones).
+    std::vector<Expression*> originalChildren;
+    for (auto** child : ChildPointerIterator(original)) {
+      originalChildren.push_back(*child);
     }
+    std::vector<Expression**> newChildrenPointers;
+    for (auto** child : ChildPointerIterator(copy)) {
+      copyChildren.push_back(child);
+    }
+    assert(originalChildren.size() == copyChildren.size());
+    for (Index i = 0; i < originalChildren.size(); i++) {
+      tasks.push_back({originalChildren[i], copyChildren[i]});
+    }
+    Immediates originalImmediates;
+    visitImmediates(original, originalImmediates);
+    ImmediatePointers copyImmediates;
+    visitImmediates(copy, copyImmediates);
+    #define COPY_IMMEDIATES(what) \
+      assert(originalImmediates.what.size() == copyImmediates.what.size()); \
+      for (Index i = 0; i < originalImmediates.what.size(); i++) { \
+        *copyImmediates[i] = originalImmediates[i]; \
+      }
+    COPY_IMMEDIATES(scopeNames);
+    COPY_IMMEDIATES(nonScopeNames);
+    COPY_IMMEDIATES(ints);
+    COPY_IMMEDIATES(literals);
+    COPY_IMMEDIATES(types);
+    COPY_IMMEDIATES(indexes);
+    COPY_IMMEDIATES(addresses);
   }
   return ret;
 }
