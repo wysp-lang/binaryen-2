@@ -26,7 +26,7 @@ Expression*
 flexibleCopy(Expression* original, Module& wasm, CustomCopier custom) {
   struct CopyTask {
     // The thing to copy.
-    Expression* source;
+    Expression* original;
     // The location of the pointer to write the copy to.
     Expression** destPointer;
   };
@@ -37,19 +37,35 @@ flexibleCopy(Expression* original, Module& wasm, CustomCopier custom) {
     auto task = tasks.back();
     tasks.pop_back();
     // If the custom copier handled this one, we have nothing to do.
-    auto* copy = custom(task.source);
+    auto* copy = custom(task.original);
     if (copy) {
       *task.destPointer = copy;
       continue;
     }
-    // If the source is a null, just copy that. (This can happen for an
+    // If the original is a null, just copy that. (This can happen for an
     // optional child.)
-    if (task.source == nullptr) {
+    auto* original = task.original;
+    if (original == nullptr) {
       *task.destPointer = nullptr;
       continue;
     }
-    // Copy it ourselves.
-maek it  with delegate
+    // Allocate a new copy.
+    switch (curr->_id) {
+
+#define DELEGATE(CLASS_TO_VISIT)                                               \
+  case Expression::Id::CLASS_TO_VISIT##Id:                                     \
+    copy = wasm.allocator.alloc<CLASS_TO_VISIT>(); \
+    break;
+
+#include "wasm-delegations.h"
+
+#undef DELEGATE
+
+    }
+
+    // Point to the copy.
+    *task.destPointer = copy;
+
     // Scan all the existing children (including nullptr ones).
     std::vector<Expression*> originalChildren;
     for (auto** child : ChildPointerIterator(original)) {
