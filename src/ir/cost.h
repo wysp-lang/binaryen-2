@@ -68,7 +68,7 @@ struct CostAnalyzer : public Visitor<CostAnalyzer, Index> {
   Index visitLocalGet(LocalGet* curr) { return 0; }
   Index visitLocalSet(LocalSet* curr) { return 1; }
   Index visitGlobalGet(GlobalGet* curr) { return 1; }
-  Index visitGlobalSet(GlobalSet* curr) { return 2; }
+  Index visitGlobalSet(GlobalSet* curr) { return 2; } // FIXME: missing child
   Index visitLoad(Load* curr) {
     return 1 + visit(curr->ptr) + 10 * curr->isAtomic;
   }

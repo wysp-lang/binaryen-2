@@ -58,8 +58,10 @@ struct FunctionInfo {
     usedGlobally = false;
   }
 
-  // See pass.h for how defaults for these options were chosen.
-  bool worthInlining(PassOptions& options) {
+  // Check if we should inline a function.
+  bool worthInlining(const PassOptions& options) {
+    // See pass.h for how defaults for these options were chosen.
+
     // If it's small enough that we always want to inline such things, do so.
     if (size <= options.inlining.alwaysInlineMaxSize) {
       return true;
@@ -85,6 +87,18 @@ struct FunctionInfo {
     }
     return options.optimizeLevel >= 3 && options.shrinkLevel == 0 &&
            (!hasLoops || options.inlining.allowFunctionsWithLoops);
+  }
+
+  // Check if we should speculatively inline a function.
+  bool speculativelyWorthInlining(const PassOptions& options) {
+    PassOptions speculativeOptions = options;
+    auto speculate = [&](Index& value) {
+      return (value * options.speculativePercent) / 100;
+    };
+    speculativeOptions.speculate(options.alwaysInlineMaxSize);
+    speculativeOptions.speculate(options.oneCallerInlineMaxSize);
+    speculativeOptions.speculate(options.flexibleInlineMaxSize);
+    return worthInlining(speculativeOptions);
   }
 };
 
@@ -135,7 +149,9 @@ struct InliningAction {
 };
 
 struct InliningState {
-  std::unordered_set<Name> worthInlining;
+  // The set of all functions that may be worth inlining. This includes ones
+  // that we are sure about, and ones that we will consider speculatively.
+  std::unordered_set<Name> maybeWorthInlining;
   // function name => actions that can be performed in it
   std::unordered_map<Name, std::vector<InliningAction>> actionsForFunction;
 };
@@ -161,7 +177,7 @@ struct Planner : public WalkerPass<PostWalker<Planner>> {
     } else {
       isUnreachable = curr->type == Type::unreachable;
     }
-    if (state->worthInlining.count(curr->target) && !isUnreachable &&
+    if (state->maybeWorthInlining.count(curr->target) && !isUnreachable &&
         curr->target != getFunction()->name) {
       // nest the call in a block. that way the location of the pointer to the
       // call will not change even if we inline multiple times into the same
@@ -347,10 +363,10 @@ struct Inlining : public Pass {
     InliningState state;
     ModuleUtils::iterDefinedFunctions(*module, [&](Function* func) {
       if (infos[func->name].worthInlining(runner->options)) {
-        state.worthInlining.insert(func->name);
+        state.maybeWorthInlining.insert(func->name);
       }
     });
-    if (state.worthInlining.size() == 0) {
+    if (state.maybeWorthInlining.size() == 0) {
       return false;
     }
     // fill in actionsForFunction, as we operate on it in parallel (each

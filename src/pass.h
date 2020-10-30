@@ -81,6 +81,25 @@ struct InliningOptions {
   // Loops usually mean the function does heavy work, so the call overhead
   // is not significant and we do not inline such functions by default.
   bool allowFunctionsWithLoops = false;
+  // What percentage of extra function size we are willing to allow for
+  // *speculative* inlining. Speculative inlining means to see what happens if
+  // we inline and optimize afterwards: if the result is an improvement,
+  // then actually do the inlining, and otherwise not. (What is considered an
+  // improvement depends on whether we are optimizing for size or speed, etc.)
+  // Speculative optimization can take a significant amount of work at compile
+  // time, but it can detect useful opportunities that are hard to detect by
+  // heuristics alone. For example, in some cases inlining + optimizing of a
+  // large function will lead to a net reduction in size in the function it is
+  // inlined into, and this can be unpredictable.
+  // This flag is related to all the size-specifying flags (alwaysInlineMaxSize,
+  // oneCallerInlineMaxSize, and flexibleInlineMaxSize): it is interpreted as a
+  // percentage increase on top of them. For example, if speculativePercent is
+  // 50, then flexibleInlineMaxSize behaves normally, and also we will
+  // speculatively inline in the range
+  //
+  //    [flexibleInlineMaxSize, 1.5 * flexibleInlineMaxSize)
+  //
+  uint32_t speculativePercent = 100;
 };
 
 struct PassOptions {
