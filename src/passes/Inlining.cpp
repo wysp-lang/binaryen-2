@@ -439,7 +439,12 @@ struct Inlining : public Pass {
           continue;
         }
         Name inlinedName = inlinedFunction->name;
-        if (maybeDoInlining(module, func.get(), action, infos[inlinedName], runner->options, optimize)) {
+        if (maybeDoInlining(module,
+                            func.get(),
+                            action,
+                            infos[inlinedName],
+                            runner->options,
+                            optimize)) {
           inlinedUses[inlinedName]++;
           inlinedInto.insert(func.get());
           assert(inlinedUses[inlinedName] <= infos[inlinedName].refs);
