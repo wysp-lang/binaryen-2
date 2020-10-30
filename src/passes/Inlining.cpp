@@ -242,8 +242,10 @@ struct Updater : public PostWalker<Updater> {
 
 // Core inlining logic. Modifies the outside function (adding locals as
 // needed), and returns the inlined code.
-static Expression*
-doInlining(Module* module, Function* into, const InliningAction& action, bool optimize) {
+static Expression* doInlining(Module* module,
+                              Function* into,
+                              const InliningAction& action,
+                              bool optimize) {
   Function* from = action.contents;
 #ifdef INLINING_DEBUG
   std::cout << "inline " << from->name << " into " << info->name << '\n';
@@ -313,14 +315,15 @@ doInlining(Module* module, Function* into, const InliningAction& action, bool op
 // Potentially inline. If we are sure the function is worth inlining, do so.
 // Otherwise, speculatively inline: check if after inlining + optimizations the
 // result is worthwhile, and if so, keep it.
-static Expression*
-maybeDoInlining(Module* module, Function* into, const InliningAction& action, bool optimize) {
+static Expression* maybeDoInlining(Module* module,
+                                   Function* into,
+                                   const InliningAction& action,
+                                   bool optimize) {
 #ifdef INLINING_DEBUG
   std::cout << "maybe inline " << from->name << " into " << info->name << '\n';
 #endif
 
-TODO
-
+  //TODO
 }
 
 struct Inlining : public Pass {
@@ -389,7 +392,8 @@ struct Inlining : public Pass {
     // decide which to inline
     InliningState state;
     ModuleUtils::iterDefinedFunctions(*module, [&](Function* func) {
-      if (infos[func->name].speculativelyWorthInlining(runner->options, optimize)) {
+      if (infos[func->name].speculativelyWorthInlining(runner->options,
+                                                       optimize)) {
         state.maybeWorthInlining.insert(func->name);
       }
     });
@@ -422,7 +426,8 @@ struct Inlining : public Pass {
         auto* inlinedFunction = action.contents;
         // As earlier, if we've already done an inlining with this function,
         // skip it in this iteration.
-        if (inlinedUses.count(inlinedFunction) || inlinedInto.count(inlinedFunction)) {
+        if (inlinedUses.count(inlinedFunction) ||
+            inlinedInto.count(inlinedFunction)) {
           continue;
         }
         Name inlinedName = inlinedFunction->name;
