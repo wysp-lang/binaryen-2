@@ -337,23 +337,30 @@ static Expression* maybeDoInlining(Module* module,
   assert(inlinedInfo.speculativelyWorthInlining(options, optimize));
   // Create a temporary setup to inline into, and perform inlining and
   // optimization there.
-  {
-    Module tempModule;
-    Function tempFunc = *into;
-    tempFunc->body = ExpressionManipulator::copy(into->body, tempModule);
-    // We must inline into the appropriate location in the copy. TODO optimize
-    InliningAction tempAction = action;
-    tempAction.callSite = nullptr;
-    FindAll<Call> originalCalls(into->body), tempCalls(tempFunc->body);
-    assert(originalCalls.list.size() == tempCalls.list.size());
-    for (Index i = 0; i < originalCalls.list.size(); i++) {
-      if (originalCalls.list[i] == action.callSite) {
-        tempAction.callSite = tempCalls.list[i];
-        break;
-      }
+  Module tempModule;
+  Function tempFunc = *into;
+  tempFunc->body = ExpressionManipulator::copy(into->body, tempModule);
+  // We must inline into the appropriate location in the copy. TODO optimize
+  InliningAction tempAction = action;
+  tempAction.callSite = nullptr;
+  FindAll<Call> originalCalls(into->body), tempCalls(tempFunc->body);
+  assert(originalCalls.list.size() == tempCalls.list.size());
+  for (Index i = 0; i < originalCalls.list.size(); i++) {
+    if (originalCalls.list[i] == action.callSite) {
+      tempAction.callSite = tempCalls.list[i];
+      break;
     }
-    assert(tempAction.callSite); 
-    doInlining(&tempModule, tempFunc, tempAction, true);
+  }
+  assert(tempAction.callSite); 
+  doInlining(&tempModule, tempFunc, tempAction, true);
+  // Check if the result is worthwhile. We look for a strict reduction in
+  // the thing we are trying to minimize, which guarantees no cycles (like a
+  // Lyapunov function https://en.wikipedia.org/wiki/Lyapunov_function).
+  if (options.shrinkLevel) {
+    // Check for
+  } else if (options.optimizeLevel >= 3) {
+  } else {
+    WASM_UNREACHABLE("invalid options when speculatively optimizing");
   }
 }
 
