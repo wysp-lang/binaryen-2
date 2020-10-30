@@ -31,6 +31,7 @@
 #include <atomic>
 
 #include "ir/debug.h"
+#include "ir/find_all.h"
 #include "ir/literal-utils.h"
 #include "ir/module-utils.h"
 #include "ir/utils.h"
@@ -95,7 +96,9 @@ struct FunctionInfo {
   // inlining, that exactly precludes speculation.
   bool speculativelyWorthInlining(const PassOptions& options, bool optimize) {
     PassOptions speculativeOptions = options;
-    if (optimize) {
+    // To speculate, we must optimize, and we must be optimizing heavily for
+    // speed or size or both.
+    if (optimize && (options.optimizeLevel >= 3 || options.shrinkLevel))) {
       auto speculate = [&](Index& value) {
         return (value * options.speculativePercent) / 100;
       };
@@ -332,6 +335,26 @@ static Expression* maybeDoInlining(Module* module,
   // We can speculatively inline it. That requires optimization.
   assert(optimize);
   assert(inlinedInfo.speculativelyWorthInlining(options, optimize));
+  // Create a temporary setup to inline into, and perform inlining and
+  // optimization there.
+  {
+    Module tempModule;
+    Function tempFunc = *into;
+    tempFunc->body = ExpressionManipulator::copy(into->body, tempModule);
+    // We must inline into the appropriate location in the copy. TODO optimize
+    InliningAction tempAction = action;
+    tempAction.callSite = nullptr;
+    FindAll<Call> originalCalls(into->body), tempCalls(tempFunc->body);
+    assert(originalCalls.list.size() == tempCalls.list.size());
+    for (Index i = 0; i < originalCalls.list.size(); i++) {
+      if (originalCalls.list[i] == action.callSite) {
+        tempAction.callSite = tempCalls.list[i];
+        break;
+      }
+    }
+    assert(tempAction.callSite); 
+    doInlining(&tempModule, tempFunc, tempAction, true);
+  }
 }
 
 struct Inlining : public Pass {
