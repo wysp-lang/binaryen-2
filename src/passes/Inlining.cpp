@@ -314,16 +314,24 @@ static Expression* doInlining(Module* module,
 
 // Potentially inline. If we are sure the function is worth inlining, do so.
 // Otherwise, speculatively inline: check if after inlining + optimizations the
-// result is worthwhile, and if so, keep it.
+// result is worthwhile, and if so, keep it. If not, nullptr is returned.
 static Expression* maybeDoInlining(Module* module,
                                    Function* into,
                                    const InliningAction& action,
+                                   const FunctionInfo& inlinedInfo,
+                                   const PassOptions& options,
                                    bool optimize) {
 #ifdef INLINING_DEBUG
   std::cout << "maybe inline " << from->name << " into " << info->name << '\n';
 #endif
 
-  //TODO
+  if (inlinedInfo.worthInlining(options)) {
+    // This is definitely worth inlining.
+    return doInlining(module, into, action, optimize);
+  }
+  // We can speculatively inline it. That requires optimization.
+  assert(optimize);
+  assert(inlinedInfo.speculativelyWorthInlining(options, optimize));
 }
 
 struct Inlining : public Pass {
@@ -431,7 +439,7 @@ struct Inlining : public Pass {
           continue;
         }
         Name inlinedName = inlinedFunction->name;
-        if (maybeDoInlining(module, func.get(), action, optimize)) {
+        if (maybeDoInlining(module, func.get(), action, infos[inlinedName], runner->options, optimize)) {
           inlinedUses[inlinedName]++;
           inlinedInto.insert(func.get());
           assert(inlinedUses[inlinedName] <= infos[inlinedName].refs);
