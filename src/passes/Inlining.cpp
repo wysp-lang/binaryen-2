@@ -100,13 +100,13 @@ struct FunctionInfo {
     // To speculate, we must optimize, and we must be optimizing heavily for
     // speed or size or both.
     if (optimize && (options.optimizeLevel >= 3 || options.shrinkLevel)) {
-        auto speculate = [&](Index& value) {
-          value = (value * options.inlining.speculativePercent) / 100;
-        };
-        speculate(speculativeOptions.alwaysInlineMaxSize);
-        speculate(speculativeOptions.oneCallerInlineMaxSize);
-        speculate(speculativeOptions.flexibleInlineMaxSize);
-      }
+      auto speculate = [&](Index& value) {
+        value = (value * options.inlining.speculativePercent) / 100;
+      };
+      speculate(speculativeOptions.alwaysInlineMaxSize);
+      speculate(speculativeOptions.oneCallerInlineMaxSize);
+      speculate(speculativeOptions.flexibleInlineMaxSize);
+    }
     return worthInlining(speculativeOptions);
   }
 };
@@ -319,8 +319,9 @@ static void doInlining(Module* module,
 
 // Given a thing and its copy, find the corresponding call in the copy to a call
 // in the original.
-static Expression* getCorrespondingCallInCopy(Call* call, Expression* original, Expression* copy) {
-  // Traverse them both, and use the fact that the walk is a deterministic 
+static Expression*
+getCorrespondingCallInCopy(Call* call, Expression* original, Expression* copy) {
+  // Traverse them both, and use the fact that the walk is a deterministic
   // order.
   // TODO: Add a way to not need to do these traversal, by noting the
   //       correspondence while copying.
@@ -365,7 +366,8 @@ static bool maybeDoInlining(Module* module,
   Function tempFunc = *target;
   tempFunc->body = ExpressionManipulator::copy(target->body, tempModule);
   InliningAction tempAction = action;
-  tempAction.callSite = getCorrespondingCallInCopy(action.callSite, target->body, tempFunc->body);
+  tempAction.callSite =
+    getCorrespondingCallInCopy(action.callSite, target->body, tempFunc->body);
   assert(tempAction.callSite);
   doInlining(&tempModule, tempFunc, tempAction, true);
   // Check if the result is worthwhile. We look for a strict reduction in
