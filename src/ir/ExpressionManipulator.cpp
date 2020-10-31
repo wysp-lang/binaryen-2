@@ -21,8 +21,8 @@ namespace wasm {
 
 namespace ExpressionManipulator {
 
-Expression*
-flexibleCopy(Expression* original, Module& wasm, CustomCopier custom) {
+template<typename CustomCopier=nullCustomCopier, typename CopyMonitor=nullCopyMonitor>
+flexibleCopy(Expression* original, Module& wasm, CustomCopier custom, CopyMonitor monitor) {
   struct Copier : public OverriddenVisitor<Copier, Expression*> {
     Module& wasm;
     CustomCopier custom;
@@ -37,10 +37,11 @@ flexibleCopy(Expression* original, Module& wasm, CustomCopier custom) {
         return nullptr;
       }
       auto* ret = custom(curr);
-      if (ret) {
-        return ret;
+      if (!ret) {
+        ret = OverriddenVisitor<Copier, Expression*>::visit(curr);
       }
-      return OverriddenVisitor<Copier, Expression*>::visit(curr);
+      monitor(curr, ret);
+      return ret;
     }
 
     Expression* visitBlock(Block* curr) {

@@ -64,13 +64,19 @@ inline OutputType* convert(InputType* input, MixedArena& allocator) {
   return output;
 }
 
-using CustomCopier = std::function<Expression*(Expression*)>;
-Expression*
-flexibleCopy(Expression* original, Module& wasm, CustomCopier custom);
+// A copy operation can receive a custom copier, which is run first on each
+// expression copied. If it returns a non-nullptr result, that is what is put
+// in the copy for that expression.
+// A copy operation can receive a monitor, which is a function that is given
+// the original and the copy for each thing that is copied.
+inline Expression* nullCustomCopier(Expression* curr) { return nullptr; }
+inline void nullCopyMonitor(Expression* original, Expression* copy) { }
+
+template<typename CustomCopier=nullCustomCopier, typename CopyMonitor=nullCopyMonitor>
+flexibleCopy(Expression* original, Module& wasm, CustomCopier custom, CopyMonitor monitor);
 
 inline Expression* copy(Expression* original, Module& wasm) {
-  auto copy = [](Expression* curr) { return nullptr; };
-  return flexibleCopy(original, wasm, copy);
+  return flexibleCopy(original, wasm, copy, monitor);
 }
 
 // Splice an item into the middle of a block's list
