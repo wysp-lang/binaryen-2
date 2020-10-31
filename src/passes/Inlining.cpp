@@ -61,7 +61,7 @@ struct FunctionInfo {
   }
 
   // Check if we should inline a function.
-  bool worthInlining(const PassOptions& options) {
+  bool worthInlining(const PassOptions& options) const {
     // See pass.h for how defaults for these options were chosen.
 
     // If it's small enough that we always want to inline such things, do so.
@@ -95,7 +95,7 @@ struct FunctionInfo {
   // Note that it only makes sense to speculatively optimize if we are
   // optimizing: if we are not willing to run the optimizer after each
   // inlining, that exactly precludes speculation.
-  bool speculativelyWorthInlining(const PassOptions& options, bool optimize) {
+  bool speculativelyWorthInlining(const PassOptions& options, bool optimize) const {
     PassOptions speculativeOptions = options;
     // To speculate, we must optimize, and we must be optimizing heavily for
     // speed or size or both.
@@ -103,9 +103,9 @@ struct FunctionInfo {
       auto speculate = [&](Index& value) {
         value = (value * options.inlining.speculativePercent) / 100;
       };
-      speculate(speculativeOptions.alwaysInlineMaxSize);
-      speculate(speculativeOptions.oneCallerInlineMaxSize);
-      speculate(speculativeOptions.flexibleInlineMaxSize);
+      speculate(speculativeOptions.inlining.alwaysInlineMaxSize);
+      speculate(speculativeOptions.inlining.oneCallerInlineMaxSize);
+      speculate(speculativeOptions.inlining.flexibleInlineMaxSize);
     }
     return worthInlining(speculativeOptions);
   }
@@ -248,17 +248,18 @@ struct Updater : public PostWalker<Updater> {
 
 // Core inlining logic. Modifies the outside function (adding locals as
 // needed), and returns the inlined code.
+// If a PassRunner is provided, optimize after inlining.
 static void doInlining(Module* module,
                        Function* target,
                        const InliningAction& action,
-                       bool optimize = false) {
+                       PassRunner* runner = nullptr) {
   Function* source = action.contents;
 #ifdef INLINING_DEBUG
   std::cout << "inline " << source->name << " into " << target->name << '\n';
 #endif
   auto* call = (*action.callSite)->cast<Call>();
   // Works for return_call, too
-  Type retType = module->getFunction(call->source)->sig.results;
+  Type retType = source->sig.results;
   Builder builder(*module);
   auto* block = builder.makeBlock();
   block->name = Name(std::string("__inlined_func$") + source->name.str);
@@ -312,23 +313,25 @@ static void doInlining(Module* module,
   // After inlining weo may have non-unique label names, fix those up.
   wasm::UniqueNameMapper::uniquify(target->body);
   // If we are optimizing, do so.
-  if (optimize) {
-    OptUtils::optimizeAfterInlining(target, module, runner);
+  if (runner) {
+    // TODO: defer these to later when possible (which is when not speculating)
+    //       and run them in parallel
+    OptUtils::optimizeAfterInlining({target}, module, runner);
   }
 }
 
 // Given a thing and its copy, find the corresponding call in the copy to a call
 // in the original.
-static Expression*
+static Expression**
 getCorrespondingCallInCopy(Call* call, Expression* original, Expression* copy) {
   // Traverse them both, and use the fact that the walk is a deterministic
   // order.
   // TODO: Add a way to not need to do these traversal, by noting the
   //       correspondence while copying.
-  FindAll<Call> originalCalls(original), copyCalls(copy);
+  FindAllPointers<Call> originalCalls(original), copyCalls(copy);
   assert(originalCalls.list.size() == copyCalls.list.size());
   for (Index i = 0; i < originalCalls.list.size(); i++) {
-    if (originalCalls.list[i] == call) {
+    if (*originalCalls.list[i] == call) {
       return copyCalls.list[i];
     }
   }
@@ -345,7 +348,7 @@ static bool maybeDoInlining(Module* module,
                             const FunctionInfo& targetInfo,
                             const FunctionInfo& sourceInfo,
                             const PassOptions& options,
-                            bool optimize) {
+                            PassRunner* runner = nullptr) {
   Function* source = action.contents;
 #ifdef INLINING_DEBUG
   std::cout << "maybe inline " << source->name << " into " << target->name
@@ -354,30 +357,33 @@ static bool maybeDoInlining(Module* module,
 
   if (sourceInfo.worthInlining(options)) {
     // This is definitely worth inlining.
-    doInlining(module, target, action, optimize);
+    doInlining(module, target, action, runner);
     return true;
   }
+
   // We can speculatively inline it. That requires optimization.
-  assert(optimize);
-  assert(sourceInfo.speculativelyWorthInlining(options, optimize));
+  assert(runner);
+  assert(sourceInfo.speculativelyWorthInlining(options, true));
+
   // Create a temporary setup to inline into, and perform inlining and
   // optimization there.
   Module tempModule;
-  Function tempFunc = *target;
-  tempFunc->body = ExpressionManipulator::copy(target->body, tempModule);
+  Function* tempFunc = ModuleUtils::copyFunction(target, tempModule);
   InliningAction tempAction = action;
+  auto* targetCall = (*action.callSite)->cast<Call>();
   tempAction.callSite =
-    getCorrespondingCallInCopy(action.callSite, target->body, tempFunc->body);
+    getCorrespondingCallInCopy(targetCall, target->body, tempFunc->body);
   assert(tempAction.callSite);
-  doInlining(&tempModule, tempFunc, tempAction, true);
+  doInlining(&tempModule, tempFunc, tempAction, runner);
+
   // Check if the result is worthwhile. We look for a strict reduction in
   // the thing we are trying to minimize, which guarantees no cycles (like a
   // Lyapunov function https://en.wikipedia.org/wiki/Lyapunov_function).
   bool keepResults;
   if (options.shrinkLevel) {
     // Check for a decrease in code size.
-    auto newSize = Measurer::measure(tempFunction->body);
-    if (inlinedInfo.refs == 1 && !info.usedGlobally) {
+    auto newSize = Measurer::measure(tempFunc->body);
+    if (sourceInfo.refs == 1 && !sourceInfo.usedGlobally) {
       // The inlined function has no other references, so we will remove it
       // after the inlining. Compare to the previous total size of the inlined
       // function and the function we inlined into.
@@ -392,7 +398,7 @@ static bool maybeDoInlining(Module* module,
   } else if (options.optimizeLevel >= 3) {
     // Check for a decrease in computational cost.
     auto oldCost = CostAnalyzer(target->body).cost;
-    auto newCost = CostAnalyzer(tempFunction->body).cost;
+    auto newCost = CostAnalyzer(tempFunc->body).cost;
     if (!sourceInfo.hasCalls) {
       // The source function has no calls in it. That means that we can tell
       // exactly what is going on, without a call that might do more work (or
@@ -414,9 +420,9 @@ static bool maybeDoInlining(Module* module,
     // This speculation has sadly not worked out.
     return false;
   }
-  // This is worth keeping; copy it over.
-  target->body = ExpressionManipulator::copy(tempFunc->body, module);
 
+  // This is worth keeping; copy it over!
+  target->body = ExpressionManipulator::copy(tempFunc->body, *module);
   return true;
 }
 
@@ -513,14 +519,14 @@ struct Inlining : public Pass {
       // worth inlining).
       // Note that we do not risk stalling progress, as each iteration() will
       // inline at least one call before hitting this
-      if (inlinedUses.count(func->name) || inlinedInto.count(func->name)) {
+      if (inlinedUses.count(func->name) || inlinedInto.count(func.get())) {
         continue;
       }
       for (auto& action : state.actionsForFunction[func->name]) {
         auto* inlinedFunction = action.contents;
         // As earlier, if we've already done an inlining with this function,
         // skip it in this iteration.
-        if (inlinedUses.count(inlinedFunction) ||
+        if (inlinedUses.count(inlinedFunction->name) ||
             inlinedInto.count(inlinedFunction)) {
           continue;
         }
@@ -531,7 +537,7 @@ struct Inlining : public Pass {
                             infos[func->name],
                             infos[inlinedName],
                             runner->options,
-                            optimize)) {
+                            optimize ? runner : nullptr)) {
           inlinedUses[inlinedName]++;
           inlinedInto.insert(func.get());
           assert(inlinedUses[inlinedName] <= infos[inlinedName].refs);
