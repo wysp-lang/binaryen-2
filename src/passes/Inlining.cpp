@@ -404,6 +404,8 @@ static bool maybeDoInlining(Module* module,
     return false;
   }
   // This is worth keeping; copy it over.
+  target->body = ExpressionManipulator::copy(tempFunc->body, module);
+
   return true;
 }
 
