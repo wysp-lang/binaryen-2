@@ -95,7 +95,8 @@ struct FunctionInfo {
   // Note that it only makes sense to speculatively optimize if we are
   // optimizing: if we are not willing to run the optimizer after each
   // inlining, that exactly precludes speculation.
-  bool speculativelyWorthInlining(const PassOptions& options, bool optimize) const {
+  bool speculativelyWorthInlining(const PassOptions& options,
+                                  bool optimize) const {
     PassOptions speculativeOptions = options;
     // To speculate, we must optimize, and we must be optimizing heavily for
     // speed or size or both.
