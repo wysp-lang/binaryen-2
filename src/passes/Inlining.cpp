@@ -100,13 +100,13 @@ struct FunctionInfo {
     // To speculate, we must optimize, and we must be optimizing heavily for
     // speed or size or both.
     if (optimize && (options.optimizeLevel >= 3 || options.shrinkLevel))) {
-      auto speculate = [&](Index& value) {
-        return (value * options.speculativePercent) / 100;
-      };
-      speculativeOptions.speculate(options.alwaysInlineMaxSize);
-      speculativeOptions.speculate(options.oneCallerInlineMaxSize);
-      speculativeOptions.speculate(options.flexibleInlineMaxSize);
-    }
+        auto speculate = [&](Index& value) {
+          return (value * options.speculativePercent) / 100;
+        };
+        speculativeOptions.speculate(options.alwaysInlineMaxSize);
+        speculativeOptions.speculate(options.oneCallerInlineMaxSize);
+        speculativeOptions.speculate(options.flexibleInlineMaxSize);
+      }
     return worthInlining(speculativeOptions);
   }
 };
@@ -249,9 +249,9 @@ struct Updater : public PostWalker<Updater> {
 // Core inlining logic. Modifies the outside function (adding locals as
 // needed), and returns the inlined code.
 static void doInlining(Module* module,
-                              Function* target,
-                              const InliningAction& action,
-                              bool optimize=false) {
+                       Function* target,
+                       const InliningAction& action,
+                       bool optimize = false) {
   Function* source = action.contents;
 #ifdef INLINING_DEBUG
   std::cout << "inline " << source->name << " into " << target->name << '\n';
@@ -322,15 +322,16 @@ static void doInlining(Module* module,
 // result is worthwhile, and if so, keep it.
 // Returns whether we inlined.
 static bool maybeDoInlining(Module* module,
-                                   Function* target,
-                                   const InliningAction& action,
-                                   const FunctionInfo& targetInfo,
-                                   const FunctionInfo& sourceInfo,
-                                   const PassOptions& options,
-                                   bool optimize) {
+                            Function* target,
+                            const InliningAction& action,
+                            const FunctionInfo& targetInfo,
+                            const FunctionInfo& sourceInfo,
+                            const PassOptions& options,
+                            bool optimize) {
   Function* source = action.contents;
 #ifdef INLINING_DEBUG
-  std::cout << "maybe inline " << source->name << " into " << target->name << '\n';
+  std::cout << "maybe inline " << source->name << " into " << target->name
+            << '\n';
 #endif
 
   if (sourceInfo.worthInlining(options)) {
