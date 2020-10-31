@@ -30,6 +30,7 @@
 
 #include <atomic>
 
+#include "ir/cost.h"
 #include "ir/debug.h"
 #include "ir/find_all.h"
 #include "ir/literal-utils.h"
@@ -149,7 +150,9 @@ private:
 };
 
 struct InliningAction {
+  // The call in the target function that we will into onto.
   Expression** callSite;
+  // The contents to be inlined, that is, the source function.
   Function* contents;
 
   InliningAction(Expression** callSite, Function* contents)
@@ -245,20 +248,20 @@ struct Updater : public PostWalker<Updater> {
 
 // Core inlining logic. Modifies the outside function (adding locals as
 // needed), and returns the inlined code.
-static Expression* doInlining(Module* module,
-                              Function* into,
+static void doInlining(Module* module,
+                              Function* target,
                               const InliningAction& action,
-                              bool optimize) {
-  Function* from = action.contents;
+                              bool optimize=false) {
+  Function* source = action.contents;
 #ifdef INLINING_DEBUG
-  std::cout << "inline " << from->name << " into " << info->name << '\n';
+  std::cout << "inline " << source->name << " into " << target->name << '\n';
 #endif
   auto* call = (*action.callSite)->cast<Call>();
   // Works for return_call, too
-  Type retType = module->getFunction(call->target)->sig.results;
+  Type retType = module->getFunction(call->source)->sig.results;
   Builder builder(*module);
   auto* block = builder.makeBlock();
-  block->name = Name(std::string("__inlined_func$") + from->name.str);
+  block->name = Name(std::string("__inlined_func$") + source->name.str);
   if (call->isReturn) {
     if (retType.isConcrete()) {
       *action.callSite = builder.makeReturn(block);
@@ -274,25 +277,25 @@ static Expression* doInlining(Module* module,
   updater.returnName = block->name;
   updater.builder = &builder;
   // Set up a locals mapping
-  for (Index i = 0; i < from->getNumLocals(); i++) {
-    updater.localMapping[i] = builder.addVar(into, from->getLocalType(i));
+  for (Index i = 0; i < source->getNumLocals(); i++) {
+    updater.localMapping[i] = builder.addVar(target, source->getLocalType(i));
   }
   // Assign the operands into the params
-  for (Index i = 0; i < from->sig.params.size(); i++) {
+  for (Index i = 0; i < source->sig.params.size(); i++) {
     block->list.push_back(
       builder.makeLocalSet(updater.localMapping[i], call->operands[i]));
   }
   // Zero out the vars (as we may be in a loop, and may depend on their
   // zero-init value
-  for (Index i = 0; i < from->vars.size(); i++) {
+  for (Index i = 0; i < source->vars.size(); i++) {
     block->list.push_back(
-      builder.makeLocalSet(updater.localMapping[from->getVarIndexBase() + i],
-                           LiteralUtils::makeZero(from->vars[i], *module)));
+      builder.makeLocalSet(updater.localMapping[source->getVarIndexBase() + i],
+                           LiteralUtils::makeZero(source->vars[i], *module)));
   }
   // Generate and update the inlined contents
-  auto* contents = ExpressionManipulator::copy(from->body, *module);
-  if (!from->debugLocations.empty()) {
-    debug::copyDebugInfo(from->body, contents, from, into);
+  auto* contents = ExpressionManipulator::copy(source->body, *module);
+  if (!source->debugLocations.empty()) {
+    debug::copyDebugInfo(source->body, contents, source, target);
   }
   updater.walk(contents);
   block->list.push_back(contents);
@@ -307,43 +310,46 @@ static Expression* doInlining(Module* module,
     block->list.push_back(builder.makeBreak(block->name));
   }
   // After inlining weo may have non-unique label names, fix those up.
-  wasm::UniqueNameMapper::uniquify(into->body);
+  wasm::UniqueNameMapper::uniquify(target->body);
   // If we are optimizing, do so.
   if (optimize) {
-    OptUtils::optimizeAfterInlining(into, module, runner);
+    OptUtils::optimizeAfterInlining(target, module, runner);
   }
-  return block;
 }
 
 // Potentially inline. If we are sure the function is worth inlining, do so.
 // Otherwise, speculatively inline: check if after inlining + optimizations the
-// result is worthwhile, and if so, keep it. If not, nullptr is returned.
-static Expression* maybeDoInlining(Module* module,
-                                   Function* into,
+// result is worthwhile, and if so, keep it.
+// Returns whether we inlined.
+static bool maybeDoInlining(Module* module,
+                                   Function* target,
                                    const InliningAction& action,
-                                   const FunctionInfo& inlinedInfo,
+                                   const FunctionInfo& targetInfo,
+                                   const FunctionInfo& sourceInfo,
                                    const PassOptions& options,
                                    bool optimize) {
+  Function* source = action.contents;
 #ifdef INLINING_DEBUG
-  std::cout << "maybe inline " << from->name << " into " << info->name << '\n';
+  std::cout << "maybe inline " << source->name << " into " << target->name << '\n';
 #endif
 
-  if (inlinedInfo.worthInlining(options)) {
+  if (sourceInfo.worthInlining(options)) {
     // This is definitely worth inlining.
-    return doInlining(module, into, action, optimize);
+    doInlining(module, target, action, optimize);
+    return true;
   }
   // We can speculatively inline it. That requires optimization.
   assert(optimize);
-  assert(inlinedInfo.speculativelyWorthInlining(options, optimize));
+  assert(sourceInfo.speculativelyWorthInlining(options, optimize));
   // Create a temporary setup to inline into, and perform inlining and
   // optimization there.
   Module tempModule;
-  Function tempFunc = *into;
-  tempFunc->body = ExpressionManipulator::copy(into->body, tempModule);
+  Function tempFunc = *target;
+  tempFunc->body = ExpressionManipulator::copy(target->body, tempModule);
   // We must inline into the appropriate location in the copy. TODO optimize
   InliningAction tempAction = action;
   tempAction.callSite = nullptr;
-  FindAll<Call> originalCalls(into->body), tempCalls(tempFunc->body);
+  FindAll<Call> originalCalls(target->body), tempCalls(tempFunc->body);
   assert(originalCalls.list.size() == tempCalls.list.size());
   for (Index i = 0; i < originalCalls.list.size(); i++) {
     if (originalCalls.list[i] == action.callSite) {
@@ -351,17 +357,54 @@ static Expression* maybeDoInlining(Module* module,
       break;
     }
   }
-  assert(tempAction.callSite); 
+  assert(tempAction.callSite);
   doInlining(&tempModule, tempFunc, tempAction, true);
   // Check if the result is worthwhile. We look for a strict reduction in
   // the thing we are trying to minimize, which guarantees no cycles (like a
   // Lyapunov function https://en.wikipedia.org/wiki/Lyapunov_function).
+  bool keepResults;
   if (options.shrinkLevel) {
-    // Check for
+    // Check for a decrease in code size.
+    auto newSize = Measurer::measure(tempFunction->body);
+    if (inlinedInfo.refs == 1 && !info.usedGlobally) {
+      // The inlined function has no other references, so we will remove it
+      // after the inlining. Compare to the previous total size of the inlined
+      // function and the function we inlined into.
+      // (Note that just by removing a function we are saving a few bytes at
+      // least, so make the comparison <=.)
+      keepResults = newSize <= targetInfo.size + sourceInfo.size;
+    } else {
+      // There are other references, so we need a strict decrease in size in
+      // the function we inline to.
+      keepResults = newSize < targetInfo.size;
+    }
   } else if (options.optimizeLevel >= 3) {
+    // Check for a decrease in computational cost.
+    auto oldCost = CostAnalyzer(target->body).cost;
+    auto newCost = CostAnalyzer(tempFunction->body).cost;
+    if (!sourceInfo.hasCalls) {
+      // The source function has no calls in it. That means that we can tell
+      // exactly what is going on, without a call that might do more work (or
+      // even recurse). The previous code that ran is the target function plus
+      // the source function, and after inlining, we have the new target
+      // function, so compare those.
+      auto oldSourceCost = CostAnalyzer(source->body).cost;
+      keepResults = newCost <= oldCost + oldSourceCost;
+    } else {
+      // The source function has a call. In this case we must be careful, and
+      // look for a strict decrease in the target cost, as if the inlined code
+      // has a call, we don't know how much work that does.
+      keepResults = newCost < oldCost;
+    }
   } else {
     WASM_UNREACHABLE("invalid options when speculatively optimizing");
   }
+  if (!keepResults) {
+    // This speculation has sadly not worked out.
+    return false;
+  }
+  // This is worth keeping; copy it over.
+  return true;
 }
 
 struct Inlining : public Pass {
@@ -472,6 +515,7 @@ struct Inlining : public Pass {
         if (maybeDoInlining(module,
                             func.get(),
                             action,
+                            infos[func->name],
                             infos[inlinedName],
                             runner->options,
                             optimize)) {
