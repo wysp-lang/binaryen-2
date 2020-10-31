@@ -99,13 +99,13 @@ struct FunctionInfo {
     PassOptions speculativeOptions = options;
     // To speculate, we must optimize, and we must be optimizing heavily for
     // speed or size or both.
-    if (optimize && (options.optimizeLevel >= 3 || options.shrinkLevel))) {
+    if (optimize && (options.optimizeLevel >= 3 || options.shrinkLevel)) {
         auto speculate = [&](Index& value) {
-          return (value * options.speculativePercent) / 100;
+          value = (value * options.inlining.speculativePercent) / 100;
         };
-        speculativeOptions.speculate(options.alwaysInlineMaxSize);
-        speculativeOptions.speculate(options.oneCallerInlineMaxSize);
-        speculativeOptions.speculate(options.flexibleInlineMaxSize);
+        speculate(speculativeOptions.alwaysInlineMaxSize);
+        speculate(speculativeOptions.oneCallerInlineMaxSize);
+        speculate(speculativeOptions.flexibleInlineMaxSize);
       }
     return worthInlining(speculativeOptions);
   }
