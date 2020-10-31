@@ -317,6 +317,23 @@ static void doInlining(Module* module,
   }
 }
 
+// Given a thing and its copy, find the corresponding call in the copy to a call
+// in the original.
+static Expression* getCorrespondingCallInCopy(Call* call, Expression* original, Expression* copy) {
+  // Traverse them both, and use the fact that the walk is a deterministic 
+  // order.
+  // TODO: Add a way to not need to do these traversal, by noting the
+  //       correspondence while copying.
+  FindAll<Call> originalCalls(original), copyCalls(copy);
+  assert(originalCalls.list.size() == copyCalls.list.size());
+  for (Index i = 0; i < originalCalls.list.size(); i++) {
+    if (originalCalls.list[i] == call) {
+      return copyCalls.list[i];
+    }
+  }
+  WASM_UNREACHABLE("copy is not a copy of original");
+}
+
 // Potentially inline. If we are sure the function is worth inlining, do so.
 // Otherwise, speculatively inline: check if after inlining + optimizations the
 // result is worthwhile, and if so, keep it.
@@ -347,17 +364,8 @@ static bool maybeDoInlining(Module* module,
   Module tempModule;
   Function tempFunc = *target;
   tempFunc->body = ExpressionManipulator::copy(target->body, tempModule);
-  // We must inline into the appropriate location in the copy. TODO optimize
   InliningAction tempAction = action;
-  tempAction.callSite = nullptr;
-  FindAll<Call> originalCalls(target->body), tempCalls(tempFunc->body);
-  assert(originalCalls.list.size() == tempCalls.list.size());
-  for (Index i = 0; i < originalCalls.list.size(); i++) {
-    if (originalCalls.list[i] == action.callSite) {
-      tempAction.callSite = tempCalls.list[i];
-      break;
-    }
-  }
+  tempAction.callSite = getCorrespondingCallInCopy(action.callSite, target->body, tempFunc->body);
   assert(tempAction.callSite);
   doInlining(&tempModule, tempFunc, tempAction, true);
   // Check if the result is worthwhile. We look for a strict reduction in
