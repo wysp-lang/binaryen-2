@@ -248,9 +248,8 @@ struct Updater : public PostWalker<Updater> {
 
 // Core inlining logic. Modifies the outside function (adding locals as
 // needed), and returns the inlined code.
-static void doInlining(Module* module,
-                       Function* target,
-                       const InliningAction& action) {
+static void
+doInlining(Module* module, Function* target, const InliningAction& action) {
   Function* source = action.contents;
 #ifdef INLINING_DEBUG
   std::cout << "inline " << source->name << " into " << target->name << '\n';
@@ -330,8 +329,8 @@ getCorrespondingCallInCopy(Call* call, Expression* original, Expression* copy) {
   WASM_UNREACHABLE("copy is not a copy of original");
 }
 
-static void doOptimize(Function* func, Module* module,
-                     const PassOptions& options) {
+static void
+doOptimize(Function* func, Module* module, const PassOptions& options) {
   PassRunner runner(module, options);
   runner.setIsNested(true);
   runner.setValidateGlobally(false); // not a full valid module
@@ -349,12 +348,12 @@ static void doOptimize(Function* func, Module* module,
 // result is worthwhile, and if so, keep it.
 // Returns whether we inlined.
 static bool maybeInlineAndOptimize(Module* module,
-                            Function* target,
-                            const InliningAction& action,
-                            const FunctionInfo& targetInfo,
-                            const FunctionInfo& sourceInfo,
-                            const PassOptions& options,
-                            bool optimize=false) {
+                                   Function* target,
+                                   const InliningAction& action,
+                                   const FunctionInfo& targetInfo,
+                                   const FunctionInfo& sourceInfo,
+                                   const PassOptions& options,
+                                   bool optimize = false) {
   Function* source = action.contents;
 #ifdef INLINING_DEBUG
   std::cout << "maybe inline " << source->name << " into " << target->name
@@ -366,13 +365,14 @@ static bool maybeInlineAndOptimize(Module* module,
     doInlining(module, target, action);
     // If we are optimizing, do so.
     if (optimize) {
-      // TODO: defer these to later when possible (which is when not speculating)
+      // TODO: defer these to later when possible (which is when not
+      // speculating)
       //       and run them in parallel
       doOptimize(target, module, options);
     }
     return true;
   }
-abort();
+  abort();
   // We were not certain, but since we were called, that means we can at least
   // speculatively inline it.
   assert(sourceInfo.speculativelyWorthInlining(options, true));
@@ -547,12 +547,12 @@ struct Inlining : public Pass {
         }
         Name inlinedName = inlinedFunction->name;
         if (maybeInlineAndOptimize(module,
-                            func.get(),
-                            action,
-                            infos[func->name],
-                            infos[inlinedName],
-                            runner->options,
-                            optimize)) {
+                                   func.get(),
+                                   action,
+                                   infos[func->name],
+                                   infos[inlinedName],
+                                   runner->options,
+                                   optimize)) {
           inlinedUses[inlinedName]++;
           inlinedInto.insert(func.get());
           assert(inlinedUses[inlinedName] <= infos[inlinedName].refs);
