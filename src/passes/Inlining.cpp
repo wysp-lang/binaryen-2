@@ -330,9 +330,9 @@ getCorrespondingCallInCopy(Call* call, Expression* original, Expression* copy) {
   WASM_UNREACHABLE("copy is not a copy of original");
 }
 
-static void optimize(Function* func,
-                     PassRunner* parentRunner) {
-  PassRunner runner(parentRunner);
+static void optimize(Function* func, Module* module,
+                     const PassOptions& options) {
+  PassRunner runner(module, options);
   runner.setIsNested(true);
   runner.setValidateGlobally(false); // not a full valid module
   // this is especially useful after inlining
@@ -368,7 +368,7 @@ static bool maybeInlineAndOptimize(Module* module,
     if (runner) {
       // TODO: defer these to later when possible (which is when not speculating)
       //       and run them in parallel
-      optimize(target, runner);
+      optimize(target, module, options);
     }
     return true;
   }
@@ -388,7 +388,7 @@ abort();
     getCorrespondingCallInCopy(targetCall, target->body, tempFunc->body);
   assert(tempAction.callSite);
   doInlining(&tempModule, tempFunc, tempAction);
-  optimize(target, runner);
+  optimize(target, module, options);
 
   // Check if the result is worthwhile. We look for a strict reduction in
   // the thing we are trying to minimize, which guarantees no cycles (like a
