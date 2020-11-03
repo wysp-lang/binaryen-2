@@ -38,7 +38,6 @@
 #include "ir/utils.h"
 #include "parsing.h"
 #include "pass.h"
-#include "passes/opt-utils.h"
 #include "wasm-builder.h"
 #include "wasm.h"
 
@@ -249,11 +248,9 @@ struct Updater : public PostWalker<Updater> {
 
 // Core inlining logic. Modifies the outside function (adding locals as
 // needed), and returns the inlined code.
-// If a PassRunner is provided, optimize after inlining.
 static void doInlining(Module* module,
                        Function* target,
-                       const InliningAction& action,
-                       PassRunner* runner = nullptr) {
+                       const InliningAction& action) {
   Function* source = action.contents;
 #ifdef INLINING_DEBUG
   std::cout << "inline " << source->name << " into " << target->name << '\n';
@@ -313,12 +310,6 @@ static void doInlining(Module* module,
   }
   // After inlining weo may have non-unique label names, fix those up.
   wasm::UniqueNameMapper::uniquify(target->body);
-  // If we are optimizing, do so.
-  if (runner) {
-    // TODO: defer these to later when possible (which is when not speculating)
-    //       and run them in parallel
-    OptUtils::optimizeAfterInlining({target}, module, runner);
-  }
 }
 
 // Given a thing and its copy, find the corresponding call in the copy to a call
@@ -339,11 +330,25 @@ getCorrespondingCallInCopy(Call* call, Expression* original, Expression* copy) {
   WASM_UNREACHABLE("copy is not a copy of original");
 }
 
-// Potentially inline. If we are sure the function is worth inlining, do so.
-// Otherwise, speculatively inline: check if after inlining + optimizations the
+static void optimize(Function* func,
+                     PassRunner* parentRunner) {
+  PassRunner runner(parentRunner);
+  runner.setIsNested(true);
+  runner.setValidateGlobally(false); // not a full valid module
+  // this is especially useful after inlining
+  runner.add("precompute-propagate");
+  runner.addDefaultFunctionOptimizationPasses(); // do all the usual stuff
+  runner.runOnFunction(func);
+}
+
+// Potentially inline, and potentially optimize.
+// If we are sure the function is worth inlining, do so. If a PassRunner is
+// provided in that case, also optimize.
+// If we are not sure, and a PassRunner has been provided, then we can try to
+// speculatively inline: check if after inlining + optimizations the
 // result is worthwhile, and if so, keep it.
 // Returns whether we inlined.
-static bool maybeDoInlining(Module* module,
+static bool maybeInlineAndOptimize(Module* module,
                             Function* target,
                             const InliningAction& action,
                             const FunctionInfo& targetInfo,
@@ -358,11 +363,18 @@ static bool maybeDoInlining(Module* module,
 
   if (sourceInfo.worthInlining(options)) {
     // This is definitely worth inlining.
-    doInlining(module, target, action, runner);
+    doInlining(module, target, action);
+    // If we are optimizing, do so.
+    if (runner) {
+      // TODO: defer these to later when possible (which is when not speculating)
+      //       and run them in parallel
+      optimize(target, runner);
+    }
     return true;
   }
-
-  // We can speculatively inline it. That requires optimization.
+abort();
+  // We were not certain, but since we were called, that means we can at least
+  // speculatively inline it. That requires optimization.
   assert(runner);
   assert(sourceInfo.speculativelyWorthInlining(options, true));
 
@@ -375,7 +387,8 @@ static bool maybeDoInlining(Module* module,
   tempAction.callSite =
     getCorrespondingCallInCopy(targetCall, target->body, tempFunc->body);
   assert(tempAction.callSite);
-  doInlining(&tempModule, tempFunc, tempAction, runner);
+  doInlining(&tempModule, tempFunc, tempAction);
+  optimize(target, runner);
 
   // Check if the result is worthwhile. We look for a strict reduction in
   // the thing we are trying to minimize, which guarantees no cycles (like a
@@ -532,7 +545,7 @@ struct Inlining : public Pass {
           continue;
         }
         Name inlinedName = inlinedFunction->name;
-        if (maybeDoInlining(module,
+        if (maybeInlineAndOptimize(module,
                             func.get(),
                             action,
                             infos[func->name],

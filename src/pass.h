@@ -185,6 +185,8 @@ struct PassRunner {
   PassRunner(Module* wasm) : wasm(wasm), allocator(&wasm->allocator) {}
   PassRunner(Module* wasm, PassOptions options)
     : wasm(wasm), allocator(&wasm->allocator), options(options) {}
+  PassRunner(const PassRunner& parent)
+    : wasm(parent.wasm), allocator(&wasm->allocator), options(parent.options) {}
 
   // no copying, we control |passes|
   PassRunner(const PassRunner&) = delete;
