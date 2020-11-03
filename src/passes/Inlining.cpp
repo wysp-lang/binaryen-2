@@ -330,7 +330,7 @@ getCorrespondingCallInCopy(Call* call, Expression* original, Expression* copy) {
   WASM_UNREACHABLE("copy is not a copy of original");
 }
 
-static void optimize(Function* func, Module* module,
+static void doOptimize(Function* func, Module* module,
                      const PassOptions& options) {
   PassRunner runner(module, options);
   runner.setIsNested(true);
@@ -354,7 +354,7 @@ static bool maybeInlineAndOptimize(Module* module,
                             const FunctionInfo& targetInfo,
                             const FunctionInfo& sourceInfo,
                             const PassOptions& options,
-                            PassRunner* runner = nullptr) {
+                            bool optimize=false) {
   Function* source = action.contents;
 #ifdef INLINING_DEBUG
   std::cout << "maybe inline " << source->name << " into " << target->name
@@ -365,18 +365,19 @@ static bool maybeInlineAndOptimize(Module* module,
     // This is definitely worth inlining.
     doInlining(module, target, action);
     // If we are optimizing, do so.
-    if (runner) {
+    if (optimize) {
       // TODO: defer these to later when possible (which is when not speculating)
       //       and run them in parallel
-      optimize(target, module, options);
+      doOptimize(target, module, options);
     }
     return true;
   }
 abort();
   // We were not certain, but since we were called, that means we can at least
-  // speculatively inline it. That requires optimization.
-  assert(runner);
+  // speculatively inline it.
   assert(sourceInfo.speculativelyWorthInlining(options, true));
+  // That requires optimization.
+  assert(optimize);
 
   // Create a temporary setup to inline into, and perform inlining and
   // optimization there.
@@ -388,7 +389,7 @@ abort();
     getCorrespondingCallInCopy(targetCall, target->body, tempFunc->body);
   assert(tempAction.callSite);
   doInlining(&tempModule, tempFunc, tempAction);
-  optimize(target, module, options);
+  doOptimize(target, module, options);
 
   // Check if the result is worthwhile. We look for a strict reduction in
   // the thing we are trying to minimize, which guarantees no cycles (like a
@@ -551,7 +552,7 @@ struct Inlining : public Pass {
                             infos[func->name],
                             infos[inlinedName],
                             runner->options,
-                            optimize ? runner : nullptr)) {
+                            optimize)) {
           inlinedUses[inlinedName]++;
           inlinedInto.insert(func.get());
           assert(inlinedUses[inlinedName] <= infos[inlinedName].refs);
