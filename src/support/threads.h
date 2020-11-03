@@ -95,10 +95,10 @@ public:
   // Get the singleton threadpool.
   static ThreadPool* get();
 
-  // Execute a bunch of tasks by the pool. This calls
-  // getTask() (in a thread-safe manner) to get tasks, and
-  // sends them to workers to be executed. This method
-  // blocks until all tasks are complete.
+  // Execute a bunch of tasks by the pool. This gets a list of functions to run,
+  // which must be equal to the number of cores. Each core is then given one
+  // of them to run, and we wait until all of them return
+  // ThreadWorkState::Finished.
   void work(std::vector<std::function<ThreadWorkState()>>& doWorkers);
 
   size_t size();
