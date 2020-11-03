@@ -501,16 +501,25 @@ struct Inlining : public Pass {
     // Find all possible inlinings.
     Planner(&state).run(runner, module);
 
+    auto actions = getAllActions();
+
     // Start with definitely-worth inlinings.
-    bool inlined = pickInlinings([&](const InliningAction& action) {
-      return infos[action.source].worthInlining(runner->options);
-    }, [](const InliningAction& action) {
-      doInlining(module, action);
-      if (optimize) {
-        doOptimize(action.target, module, runner->options);
-      }
-      return true;
-    });
+    bool inlined = pickAndExecute(actions,
+      // Pick
+      [&](const InliningAction& action) {
+        return infos[action.source].worthInlining(runner->options);
+      },
+      // Defer
+      [&](const InliningAction& action) {
+        // Nothing to do if the action is deferred.
+      },
+      // Execute
+      [](const InliningAction& action) {
+        doInlining(module, action);
+        if (optimize) {
+          doOptimize(action.target, module, runner->options);
+        }
+      });
     // Don't do definite and speculative inlinings in the same iteration, to
     // keep things simple.
     if (inlined) {
@@ -521,17 +530,51 @@ struct Inlining : public Pass {
       // Speculation requires optimization.
       return false;
     }
-    inlined = pickInlinings([&](const InliningAction& action) {
-// TODO FIXME: don't try more than once
-      return infos[action.source].speculativelyWorthInlining(runner->options, true);
-    }, [](const InliningAction& action) {
-      return doSpeculativeInlining(module, action);
-    });
-    return inlined;
+    while (1) {
+      // In each loop iteration, run all the actions we can, and accumulate
+      // deferred actions to a later loop iteration. We need this looping
+      // because with speculative inlining we can't tell if we inline until we
+      // actually try.
+      std::vector<InliningAction> laterActions;
+      inlined = pickAndExecute(actions,
+        // Pick
+        [&](const InliningAction& action) {
+          // TODO FIXME: don't try more than once, except in a new uber-iteration?
+          return infos[action.source].speculativelyWorthInlining(runner->options, true);
+        },
+        // Defer
+        [&](const InliningAction& action) {
+          laterActions.push_back(action);
+        },
+        // Execute
+        [](const InliningAction& action) {
+          return doSpeculativeInlining(module, action);
+        });
+      if (inlined) {
+        // TODO: 
+        return true;
+      }
+      actions.swap(laterActions);
+    }
+  }
+
+  std::vector<InliningAction> getAllActions() {
+    std::vector<InliningAction> ret;
+    for (auto& targetFunc : module->functions) {
+      if (inlinedWith.count(targetFunc->name)) {
+        continue;
+      }
+      for (auto& action : state.actionsForFunction[targetFunc->name]) {
+        ret.push_back(action);
+      }
+    }
+    return ret;
   }
 
   // Gets a function that checks which inlining actions can be run, and a
-  // function to execute those tasks. The execute function returns whether it
+  // function to execute those tasks. The checks are done first, sequentially,
+  // and the execution is then done in parallel.
+// XXX  The execute function returns whether it
   // actually did any work.
   // Returns whether there is any more work that could be done in the future,
   // which means either we managed to do some work (we found something to
@@ -547,8 +590,9 @@ struct Inlining : public Pass {
   // iteration, then we would return true to indicate more work must be done,
   // and the caller must not try to speculatively inline the same function again
   // as that would infinite loop.
-  bool pickInlinings(std::function<bool(const InliningAction&)> check,
-                     std::function<bool(const InliningAction&)> execute) {
+  bool pickAndExecute(std::vector<InliningAction> actions,
+                      std::function<bool(const InliningAction&)> check,
+                      std::function<bool(const InliningAction&)> execute) {
     // The main concern we take care of here is
     // if we've inlined a function, or inlined into it, don't do any more
     // inlining with them, to avoid the risk of races (for example,
