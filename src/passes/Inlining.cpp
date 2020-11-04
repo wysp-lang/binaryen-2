@@ -476,8 +476,6 @@ struct Scheduler {
         possibleActions.push_back(action);
       }
     }
-
-    run();
   }
 
   virtual void run();
@@ -494,7 +492,7 @@ struct DefiniteScheduler : public Scheduler {
                     PassRunner* optimizationRunner)
     : Scheduler(module, state, optimizationRunner) {}
 
-  void schedule() {
+  void run() {
     // Scheduling is fairly simple here, as we definitely want to do each
     // action. Schedule a new action unless it interferes with another.
     // Note that it is ok to inline multiple times into the same target, but we
@@ -640,6 +638,7 @@ struct Inlining : public Pass {
     // Start with definitely-worth inlinings.
     DefiniteScheduler definiteScheduler(
       module, state, optimize ? runner : nullptr);
+    definiteScheduler.run();
     // Don't do definite and speculative inlinings in the same iteration, to
     // keep things simple.
     if (definiteScheduler.inlined) {
