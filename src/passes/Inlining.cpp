@@ -198,8 +198,10 @@ struct Planner : public WalkerPass<PostWalker<Planner>> {
       replaceCurrent(block);
       // can't add a new element in parallel
       assert(state->actionsForFunction.count(getFunction()->name) > 0);
-      state->actionsForFunction[getFunction()->name].emplace_back({
-        getFunction(), &block->list[0], getModule()->getFunction(curr->target)});
+      state->actionsForFunction[getFunction()->name].emplace_back(
+        {getFunction(),
+         &block->list[0],
+         getModule()->getFunction(curr->target)});
     }
   }
 
@@ -249,8 +251,7 @@ struct Updater : public PostWalker<Updater> {
 
 // Core inlining logic. Modifies the outside function (adding locals as
 // needed), and returns the inlined code.
-static void
-doInlining(Module* module,  const InliningAction& action) {
+static void doInlining(Module* module, const InliningAction& action) {
   Function* target = action.target;
   Function* source = action.source;
 #ifdef INLINING_DEBUG
@@ -344,17 +345,17 @@ doOptimize(Function* func, Module* module, const PassOptions& options) {
 
 // Returns whether we inlined.
 static bool doSpeculativeInlining(Module* module,
-                                const InliningAction& action,
-                                const FunctionInfo& targetInfo,
-                                const FunctionInfo& sourceInfo,
-                                const PassOptions& options) {
+                                  const InliningAction& action,
+                                  const FunctionInfo& targetInfo,
+                                  const FunctionInfo& sourceInfo,
+                                  const PassOptions& options) {
   Function* target = action.target;
   Function* source = action.source;
 #ifdef INLINING_DEBUG
   std::cout << "maybe inline " << source->name << " into " << target->name
             << '\n';
 #endif
-abort(); // TODO
+  abort(); // TODO
   // We were not certain, but since we were called, that means we can at least
   // speculatively inline it.
   assert(sourceInfo.speculativelyWorthInlining(options, true));
@@ -436,7 +437,8 @@ struct Scheduler {
 
   bool inlined = false;
 
-  void Scheduler(Module* module, const InliningState& state, bool optimize) : optimize(optimize) {
+  void Scheduler(Module* module, const InliningState& state, bool optimize)
+    : optimize(optimize) {
     // Accumulate all the possible actions.
     for (auto& targetFunc : module->functions) {
       for (auto& action : state.actionsForFunction[targetFunc->name]) {
@@ -447,77 +449,76 @@ struct Scheduler {
     run();
   }
 
-
   virtual void run();
 };
 
 // A scheduler for inlinings we definitely want to perform, i.e., that require
 // no speculation.
-struct DefiniteScheduler : public Scheduler
-  void schedule() {
-    // Scheduling is fairly simple here, as we definitely want to do each
-    // action. Schedule a new action unless it interferes with another.
-    // Note that it is ok to inline multiple times into the same target, but we
-    // do want to avoid optimizing that target function more than once, so we
-    // optimize once at the end for each. Which functions were inlined or
-    // inlined into.
+struct DefiniteScheduler : public Scheduler void schedule() {
+  // Scheduling is fairly simple here, as we definitely want to do each
+  // action. Schedule a new action unless it interferes with another.
+  // Note that it is ok to inline multiple times into the same target, but we
+  // do want to avoid optimizing that target function more than once, so we
+  // optimize once at the end for each. Which functions were inlined or
+  // inlined into.
 
-    // How many times we inlined a source. Using this count we can tell if we
-    // inlined into all the calls to the function (which may leave it with no
-    // more uses).
-    std::unordered_map<Function*, Index> sourcesInlinedFrom;
-    // The actions we'll run for each target function.
-    std::map<Function*, std::vector<InliningAction>> actionsForTarget;
+  // How many times we inlined a source. Using this count we can tell if we
+  // inlined into all the calls to the function (which may leave it with no
+  // more uses).
+  std::unordered_map<Function*, Index> sourcesInlinedFrom;
+  // The actions we'll run for each target function.
+  std::map<Function*, std::vector<InliningAction>> actionsForTarget;
 
-    for (auto& action : possibleActions) {
-      // If we've inlined the target into something else, then there is a "race"
-      // here, and potentially this inlining is not necessary (for example, the
-      // function may have no more uses), so leave it for later.
-      if (actionsForTarget.count(action.target)) {
-        continue;
-      }
-      // If we've inlined into the source, then it has been modified, and may
-      // not be worth inlining as it can be larger, so leave it for later.
-      if (targetsInlinedInto.count(action.source)) {
-        continue;
-      }
-      // This is an action we can do!
-      actionsForTarget[action.target].push_back(action);
-      sourcesInlinedFrom[action.source->name]++;
+  for (auto& action : possibleActions) {
+    // If we've inlined the target into something else, then there is a "race"
+    // here, and potentially this inlining is not necessary (for example, the
+    // function may have no more uses), so leave it for later.
+    if (actionsForTarget.count(action.target)) {
+      continue;
     }
-
-    if (actionsForTarget.empty()) {
-      inlined = false;
-      return;
+    // If we've inlined into the source, then it has been modified, and may
+    // not be worth inlining as it can be larger, so leave it for later.
+    if (targetsInlinedInto.count(action.source)) {
+      continue;
     }
-
-    // We found things to inline!
-    inlined = true;
-
-    ParallelFunctionAnalysis(*module,
-      [&](Function* target, const std::vector<InliningAction>& actions) {
-        for (auto& action : actions) {
-          assert(action.target == target);
-          doInlining(module, action);
-        }
-        if (optimize) {
-          doOptimize(target, module, runner->options);
-        }
-      });
-    }
-
-    // remove functions that we no longer need after inlining
-    module->removeFunctions([&](Function* func) {
-      auto name = func->name;
-      auto& info = infos[name];
-      return sourcesInlinedFrom.count(name) && sourcesInlinedFrom[name] == info.refs &&
-             !info.usedGlobally;
-    });
-    // return whether we did any work
-    return inlinedUses.size() > 0;
+    // This is an action we can do!
+    actionsForTarget[action.target].push_back(action);
+    sourcesInlinedFrom[action.source->name]++;
   }
 
-} // anonymous namespace
+  if (actionsForTarget.empty()) {
+    inlined = false;
+    return;
+  }
+
+  // We found things to inline!
+  inlined = true;
+
+  ParallelFunctionAnalysis(*module,
+                           [&](Function* target,
+                               const std::vector<InliningAction>& actions) {
+                             for (auto& action : actions) {
+                               assert(action.target == target);
+                               doInlining(module, action);
+                             }
+                             if (optimize) {
+                               doOptimize(target, module, runner->options);
+                             }
+                           });
+}
+
+// remove functions that we no longer need after inlining
+module->removeFunctions([&](Function* func) {
+  auto name = func->name;
+  auto& info = infos[name];
+  return sourcesInlinedFrom.count(name) &&
+         sourcesInlinedFrom[name] == info.refs && !info.usedGlobally;
+});
+// return whether we did any work
+return inlinedUses.size() > 0;
+} // namespace
+
+} // namespace wasm
 
 struct Inlining : public Pass {
   // whether to optimize where we inline
@@ -624,8 +625,9 @@ struct Inlining : public Pass {
       inlined = pickAndExecute(actions,
         // Pick
         [&](const InliningAction& action) {
-          // TODO FIXME: don't try more than once, except in a new uber-iteration?
-          return infos[action.source].speculativelyWorthInlining(runner->options, true);
+          // TODO FIXME: don't try more than once, except in a new
+    uber-iteration? return
+    infos[action.source].speculativelyWorthInlining(runner->options, true);
         },
         // Defer
         [&](const InliningAction& action) {
@@ -636,7 +638,7 @@ struct Inlining : public Pass {
           return doSpeculativeInlining(module, action);
         });
       if (inlined) {
-        // TODO: 
+        // TODO:
         return true;
       }
       actions.swap(laterActions);
