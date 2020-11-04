@@ -199,9 +199,7 @@ struct Planner : public WalkerPass<PostWalker<Planner>> {
       // can't add a new element in parallel
       assert(state->actionsForFunction.count(getFunction()->name) > 0);
       state->actionsForFunction[getFunction()->name].emplace_back(
-        getFunction(),
-         &block->list[0],
-         getModule()->getFunction(curr->target));
+        getFunction(), &block->list[0], getModule()->getFunction(curr->target));
     }
   }
 
@@ -495,17 +493,17 @@ struct DefiniteScheduler : public Scheduler {
     // We found things to inline!
     inlined = true;
 
-    ParallelFunctionAnalysis(*module,
-                             [&](Function* target,
-                                 const std::vector<InliningAction>& actions) {
-                               for (auto& action : actions) {
-                                 assert(action.target == target);
-                                 doInlining(module, action);
-                               }
-                               if (optimize) {
-                                 doOptimize(target, module, runner->options);
-                               }
-                             });
+    ParallelFunctionAnalysis(
+      *module,
+      [&](Function* target, const std::vector<InliningAction>& actions) {
+        for (auto& action : actions) {
+          assert(action.target == target);
+          doInlining(module, action);
+        }
+        if (optimize) {
+          doOptimize(target, module, runner->options);
+        }
+      });
   }
 };
 
