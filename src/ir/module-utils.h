@@ -251,14 +251,11 @@ inline void parallelFunctionExecution(Module& wasm, T work) {
   struct Executor : public WalkerPass<PostWalker<Executor>> {
     bool isFunctionParallel() override { return true; }
 
-    Executor(Module& module, T work)
-      : module(module), work(work) {}
+    Executor(Module& module, T work) : module(module), work(work) {}
 
     Executor* create() override { return new Executor(module, work); }
 
-    void doWalkFunction(Function* curr) {
-      work(curr);
-    }
+    void doWalkFunction(Function* curr) { work(curr); }
 
   private:
     Module& module;
