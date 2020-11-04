@@ -237,6 +237,38 @@ template<typename T> inline void iterImports(Module& wasm, T visitor) {
   iterImportedEvents(wasm, visitor);
 }
 
+// Helper class for executing an operation on all the functions in the module,
+// in parallel.
+template<typename T>
+inline void parallelFunctionExecution(Module& wasm, T work) {
+  // Run on the imports first. TODO: parallelize this too
+  for (auto& func : wasm.functions) {
+    if (func->imported()) {
+      work(func.get());
+    }
+  }
+
+  struct Executor : public WalkerPass<PostWalker<Executor>> {
+    bool isFunctionParallel() override { return true; }
+
+    Executor(Module& module, T work)
+      : module(module), work(work) {}
+
+    Executor* create() override { return new Executor(module, work); }
+
+    void doWalkFunction(Function* curr) {
+      work(curr);
+    }
+
+  private:
+    Module& module;
+    T work;
+  };
+
+  PassRunner runner(&wasm);
+  Executor(wasm, work).run(&runner, &wasm);
+}
+
 // Helper class for performing an operation on all the functions in the module,
 // in parallel, with an Info object for each one that can contain results of
 // some computation that the operation performs.

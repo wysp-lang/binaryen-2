@@ -132,6 +132,7 @@ struct FunctionInfoScanner
 
   void visitCall(Call* curr) {
     // can't add a new element in parallel
+std::cout << "call to " << curr->target << '\n';
     assert(infos->count(curr->target) > 0);
     (*infos)[curr->target].refs++;
     // having a call
@@ -329,6 +330,7 @@ static void doInlinings(Module* module, const InliningActionVector& actions) {
       assert(action.target == target);
     }
   }
+  assert(target);
   // Do the copying.
   for (auto& action : actions) {
     doInliningCopy(module, action);
@@ -517,6 +519,7 @@ struct DefiniteScheduler : public Scheduler {
         continue;
       }
       // This is an action we can do!
+std::cout << "will inline " << action.target->name << " <-- " << action.source->name << '\n';
       actionsForTarget[action.target].push_back(action);
       sourceInlinings[action.source]++;
     }
@@ -525,20 +528,28 @@ struct DefiniteScheduler : public Scheduler {
       inlined = false;
       return;
     }
+std::cout << "will inline stuffs\n";// " << action.target->name << " <-- " << action.source->name << '\n';
 
     // We found things to inline!
     inlined = true;
 
-    ModuleUtils::ParallelFunctionAnalysis<InliningActionVector>(
-      *module, [&](Function* target, const InliningActionVector& actions) {
-        for (auto& action : actions) {
-          assert(action.target == target);
-        }
-        doInlinings(module, actions);
-        if (optimizationRunner) {
-          doOptimize(target, module, optimizationRunner->options);
-        }
-      });
+    ModuleUtils::parallelFunctionExecution(*module, [&](Function* target) {
+      auto iter = actionsForTarget.find(target);
+      if (iter == actionsForTarget.end()) {
+        return;
+      }
+      const auto& actions = iter->second;
+      assert(!actions.empty());
+std::cout << "will inline stuffs1\n";//
+      for (auto& action : actions) {
+        assert(action.target == target);
+      }
+std::cout << "actually inlining into " << target->name << '\n';// << " <-- " << action.source->name << '\n';
+      doInlinings(module, actions);
+      if (optimizationRunner) {
+        doOptimize(target, module, optimizationRunner->options);
+      }
+    });
   }
 };
 
@@ -588,10 +599,13 @@ struct Inlining : public Pass {
     // fill in info, as we operate on it in parallel (each function to its own
     // entry)
     for (auto& func : module->functions) {
+std::cout << "set " << func->name << '\n';
       infos[func->name];
     }
     PassRunner runner(module);
+std::cout << "runn1\n";
     FunctionInfoScanner(&infos).run(&runner, module);
+std::cout << "runn2\n";
     // fill in global uses
     for (auto& ex : module->exports) {
       if (ex->kind == ExternalKind::Function) {
@@ -653,6 +667,7 @@ struct Inlining : public Pass {
     return false; // XXX TODO
     auto* foo = &doSpeculativeInlining;
     WASM_UNUSED(foo);
+    return false; // XXX TODO
     /*
     while (1) {
       // In each loop iteration, run all the actions we can, and accumulate
@@ -684,8 +699,10 @@ struct Inlining : public Pass {
   }
 
   void removeUnusedFunctions(const Scheduler& scheduler) {
+std::cout << "removings now\n";
     // remove functions that we no longer need after inlining
     module->removeFunctions([&](Function* func) {
+std::cout << "remove " << func->name << "?" << '\n';
       auto& info = infos[func->name];
       if (info.usedGlobally) {
         return false;
@@ -694,6 +711,7 @@ struct Inlining : public Pass {
       if (iter == scheduler.sourceInlinings.end()) {
         return false;
       }
+std::cout << "  yes if  " << iter->second << " == " << info.refs << '\n';
       return iter->second == info.refs;
     });
   }
