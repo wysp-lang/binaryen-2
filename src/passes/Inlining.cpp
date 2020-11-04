@@ -160,12 +160,14 @@ struct InliningAction {
   Function* source;
 };
 
+using InliningActionVector = std::vector<InliningAction>;
+
 struct InliningState {
   // The set of all functions that may be worth inlining. This includes ones
   // that we are sure about, and ones that we will consider speculatively.
   std::unordered_set<Name> maybeWorthInlining;
   // function name => actions that can be performed in it
-  std::unordered_map<Name, std::vector<InliningAction>> actionsForFunction;
+  std::unordered_map<Name, InliningActionVector> actionsForFunction;
 };
 
 struct Planner : public WalkerPass<PostWalker<Planner>> {
@@ -433,7 +435,7 @@ struct Scheduler {
   // If not null, then we can optimize with this pass runner.
   PassRunner* optimizationRunner;
 
-  std::vector<InliningAction> possibleActions;
+  InliningActionVector possibleActions;
 
   bool inlined = false;
 
@@ -471,7 +473,7 @@ struct DefiniteScheduler : public Scheduler {
     std::unordered_map<Function*, Index> sourcesInlinedFrom;
     // The actions we'll run for each target function, each representing an
     // inlining into it.
-    std::map<Function*, std::vector<InliningAction>> actionsForTarget;
+    std::map<Function*, InliningActionVector> actionsForTarget;
 
     for (auto& action : possibleActions) {
       // If we'll inline the target into something else, then there is a "race"
@@ -498,9 +500,9 @@ struct DefiniteScheduler : public Scheduler {
     // We found things to inline!
     inlined = true;
 
-    ModuleUtils::ParallelFunctionAnalysis(
+    ModuleUtils::ParallelFunctionAnalysis<InliningActionVector>(
       *module,
-      [&](Function* target, const std::vector<InliningAction>& actions) {
+      [&](Function* target, const InliningActionVector& actions) {
         for (auto& action : actions) {
           assert(action.target == target);
           doInlining(module, action);
@@ -509,21 +511,19 @@ struct DefiniteScheduler : public Scheduler {
           doOptimize(target, module, optimizationRunner->options);
         }
       });
+
+    // remove functions that we no longer need after inlining
+    module->removeFunctions([&](Function* func) {
+      auto name = func->name;
+      auto& info = infos[name];
+      return sourcesInlinedFrom.count(name) &&
+             sourcesInlinedFrom[name] == info.refs && !info.usedGlobally;
+    });
+
   }
 };
 
-// remove functions that we no longer need after inlining
-module->removeFunctions([&](Function* func) {
-  auto name = func->name;
-  auto& info = infos[name];
-  return sourcesInlinedFrom.count(name) &&
-         sourcesInlinedFrom[name] == info.refs && !info.usedGlobally;
-});
-// return whether we did any work
-return inlinedUses.size() > 0;
-} // namespace
-
-} // namespace wasm
+} // anonymous namespace
 
 struct Inlining : public Pass {
   // whether to optimize where we inline
