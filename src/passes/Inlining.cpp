@@ -201,7 +201,9 @@ struct Planner : public WalkerPass<PostWalker<Planner>> {
       // can't add a new element in parallel
       assert(state->actionsForFunction.count(getFunction()->name) > 0);
       state->actionsForFunction[getFunction()->name].emplace_back(
-        InliningAction{getFunction(), &block->list[0], getModule()->getFunction(curr->target)});
+        InliningAction{getFunction(),
+                       &block->list[0],
+                       getModule()->getFunction(curr->target)});
     }
   }
 
@@ -488,8 +490,9 @@ protected:
 // no speculation.
 struct DefiniteScheduler : public Scheduler {
   DefiniteScheduler(Module* module, // XXX remove
-            const InliningState& state,
-            PassRunner* optimizationRunner) : Scheduler(module, state, optimizationRunner) {}
+                    const InliningState& state,
+                    PassRunner* optimizationRunner)
+    : Scheduler(module, state, optimizationRunner) {}
 
   void schedule() {
     // Scheduling is fairly simple here, as we definitely want to do each
@@ -635,7 +638,8 @@ struct Inlining : public Pass {
     Planner(&state).run(runner, module);
 
     // Start with definitely-worth inlinings.
-    DefiniteScheduler definiteScheduler(module, state, optimize ? runner : nullptr);
+    DefiniteScheduler definiteScheduler(
+      module, state, optimize ? runner : nullptr);
     // Don't do definite and speculative inlinings in the same iteration, to
     // keep things simple.
     if (definiteScheduler.inlined) {
