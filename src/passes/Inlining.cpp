@@ -103,7 +103,7 @@ struct FunctionInfo {
     // speed or size or both.
     if (optimize && (options.optimizeLevel >= 3 || options.shrinkLevel)) {
       auto speculate = [&](Index& value) {
-        value = (value * options.inlining.speculativePercent) / 100;
+        value = (value * (100 + options.inlining.speculativePercent)) / 100;
       };
       speculate(speculativeOptions.inlining.alwaysInlineMaxSize);
       speculate(speculativeOptions.inlining.oneCallerInlineMaxSize);
@@ -488,7 +488,7 @@ protected:
 // A scheduler for inlinings we definitely want to perform, i.e., that require
 // no speculation.
 struct DefiniteScheduler : public Scheduler {
-  DefiniteScheduler(Module* module, // XXX remove
+  DefiniteScheduler(Module* module,
                     const InliningState& state,
                     PassRunner* optimizationRunner)
     : Scheduler(module, state, optimizationRunner) {}
