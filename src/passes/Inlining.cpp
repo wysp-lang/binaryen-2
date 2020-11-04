@@ -199,9 +199,9 @@ struct Planner : public WalkerPass<PostWalker<Planner>> {
       // can't add a new element in parallel
       assert(state->actionsForFunction.count(getFunction()->name) > 0);
       state->actionsForFunction[getFunction()->name].emplace_back(
-        {getFunction(),
+        getFunction(),
          &block->list[0],
-         getModule()->getFunction(curr->target)});
+         getModule()->getFunction(curr->target));
     }
   }
 
@@ -369,7 +369,7 @@ static bool doSpeculativeInlining(Module* module,
   tempAction.callSite =
     getCorrespondingCallInCopy(targetCall, target->body, tempFunc->body);
   assert(tempAction.callSite);
-  doInlining(&tempModule, tempFunc, tempAction);
+  doInlining(&tempModule, tempAction);
   doOptimize(target, module, options);
 
   // Check if the result is worthwhile. We look for a strict reduction in
@@ -437,7 +437,7 @@ struct Scheduler {
 
   bool inlined = false;
 
-  void Scheduler(Module* module, const InliningState& state, bool optimize)
+  Scheduler(Module* module, const InliningState& state, bool optimize)
     : optimize(optimize) {
     // Accumulate all the possible actions.
     for (auto& targetFunc : module->functions) {
@@ -454,58 +454,60 @@ struct Scheduler {
 
 // A scheduler for inlinings we definitely want to perform, i.e., that require
 // no speculation.
-struct DefiniteScheduler : public Scheduler void schedule() {
-  // Scheduling is fairly simple here, as we definitely want to do each
-  // action. Schedule a new action unless it interferes with another.
-  // Note that it is ok to inline multiple times into the same target, but we
-  // do want to avoid optimizing that target function more than once, so we
-  // optimize once at the end for each. Which functions were inlined or
-  // inlined into.
+struct DefiniteScheduler : public Scheduler {
+  void schedule() {
+    // Scheduling is fairly simple here, as we definitely want to do each
+    // action. Schedule a new action unless it interferes with another.
+    // Note that it is ok to inline multiple times into the same target, but we
+    // do want to avoid optimizing that target function more than once, so we
+    // optimize once at the end for each. Which functions were inlined or
+    // inlined into.
 
-  // How many times we inlined a source. Using this count we can tell if we
-  // inlined into all the calls to the function (which may leave it with no
-  // more uses).
-  std::unordered_map<Function*, Index> sourcesInlinedFrom;
-  // The actions we'll run for each target function.
-  std::map<Function*, std::vector<InliningAction>> actionsForTarget;
+    // How many times we inlined a source. Using this count we can tell if we
+    // inlined into all the calls to the function (which may leave it with no
+    // more uses).
+    std::unordered_map<Function*, Index> sourcesInlinedFrom;
+    // The actions we'll run for each target function.
+    std::map<Function*, std::vector<InliningAction>> actionsForTarget;
 
-  for (auto& action : possibleActions) {
-    // If we've inlined the target into something else, then there is a "race"
-    // here, and potentially this inlining is not necessary (for example, the
-    // function may have no more uses), so leave it for later.
-    if (actionsForTarget.count(action.target)) {
-      continue;
+    for (auto& action : possibleActions) {
+      // If we've inlined the target into something else, then there is a "race"
+      // here, and potentially this inlining is not necessary (for example, the
+      // function may have no more uses), so leave it for later.
+      if (actionsForTarget.count(action.target)) {
+        continue;
+      }
+      // If we've inlined into the source, then it has been modified, and may
+      // not be worth inlining as it can be larger, so leave it for later.
+      if (targetsInlinedInto.count(action.source)) {
+        continue;
+      }
+      // This is an action we can do!
+      actionsForTarget[action.target].push_back(action);
+      sourcesInlinedFrom[action.source->name]++;
     }
-    // If we've inlined into the source, then it has been modified, and may
-    // not be worth inlining as it can be larger, so leave it for later.
-    if (targetsInlinedInto.count(action.source)) {
-      continue;
+
+    if (actionsForTarget.empty()) {
+      inlined = false;
+      return;
     }
-    // This is an action we can do!
-    actionsForTarget[action.target].push_back(action);
-    sourcesInlinedFrom[action.source->name]++;
+
+    // We found things to inline!
+    inlined = true;
+
+    ParallelFunctionAnalysis(*module,
+                             [&](Function* target,
+                                 const std::vector<InliningAction>& actions) {
+                               for (auto& action : actions) {
+                                 assert(action.target == target);
+                                 doInlining(module, action);
+                               }
+                               if (optimize) {
+                                 doOptimize(target, module, runner->options);
+                               }
+                             });
   }
-
-  if (actionsForTarget.empty()) {
-    inlined = false;
-    return;
-  }
-
-  // We found things to inline!
-  inlined = true;
-
-  ParallelFunctionAnalysis(*module,
-                           [&](Function* target,
-                               const std::vector<InliningAction>& actions) {
-                             for (auto& action : actions) {
-                               assert(action.target == target);
-                               doInlining(module, action);
-                             }
-                             if (optimize) {
-                               doOptimize(target, module, runner->options);
-                             }
-                           });
-}
+};
 
 // remove functions that we no longer need after inlining
 module->removeFunctions([&](Function* func) {
