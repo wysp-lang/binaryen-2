@@ -438,8 +438,8 @@ struct Scheduler {
   Scheduler(Module* module, const InliningState& state, bool optimize)
     : optimize(optimize) {
     // Accumulate all the possible actions.
-    for (auto& targetFunc : module->functions) {
-      for (auto& action : state.actionsForFunction[targetFunc->name]) {
+    for (auto& pair : state.actionsForFunction) {
+      for (auto& action : pair.second) {
         possibleActions.push_back(action);
       }
     }
@@ -465,19 +465,20 @@ struct DefiniteScheduler : public Scheduler {
     // inlined into all the calls to the function (which may leave it with no
     // more uses).
     std::unordered_map<Function*, Index> sourcesInlinedFrom;
-    // The actions we'll run for each target function.
+    // The actions we'll run for each target function, each representing an
+    // inlining into it.
     std::map<Function*, std::vector<InliningAction>> actionsForTarget;
 
     for (auto& action : possibleActions) {
-      // If we've inlined the target into something else, then there is a "race"
+      // If we'll inline the target into something else, then there is a "race"
       // here, and potentially this inlining is not necessary (for example, the
       // function may have no more uses), so leave it for later.
       if (actionsForTarget.count(action.target)) {
         continue;
       }
-      // If we've inlined into the source, then it has been modified, and may
+      // If we'll inline into the source, then it has been modified, and may
       // not be worth inlining as it can be larger, so leave it for later.
-      if (targetsInlinedInto.count(action.source)) {
+      if (actionsForTarget.count(action.source)) {
         continue;
       }
       // This is an action we can do!
