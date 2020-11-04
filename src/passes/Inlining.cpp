@@ -253,7 +253,7 @@ struct Updater : public PostWalker<Updater> {
 
 // Core inlining logic that copies the inlined code from the source function
 // into the target function. This does not do everything needed for inling,
-// see doInlining() for the full operation.
+// see doInlinings() for the full operation.
 static void doInliningCopy(Module* module, const InliningAction& action) {
   Function* target = action.target;
   Function* source = action.source;
@@ -319,7 +319,7 @@ static void doInliningCopy(Module* module, const InliningAction& action) {
 // design makes it possible to do the "fixup" stage at the end only once, and
 // not once per inlining. Specifically, after inlining we must make sure that
 // block names are unique, and doing so once after multiple inlinings is enough.
-static void doInlining(Module* module, const InliningActionVector& actions) {
+static void doInlinings(Module* module, const InliningActionVector& actions) {
   // Make sure they are all to the same target function.
   Function* target = nullptr;
   for (auto& action : actions) {
@@ -392,7 +392,7 @@ static bool doSpeculativeInlining(Module* module,
   tempAction.callSite =
     getCorrespondingCallInCopy(targetCall, target->body, tempFunc->body);
   assert(tempAction.callSite);
-  doInlining(&tempModule, {tempAction});
+  doInlinings(&tempModule, {tempAction});
   doOptimize(target, module, options);
 
   // Check if the result is worthwhile. We look for a strict reduction in
@@ -534,7 +534,7 @@ struct DefiniteScheduler : public Scheduler {
         for (auto& action : actions) {
           assert(action.target == target);
         }
-        doInlining(module, actions);
+        doInlinings(module, actions);
         if (optimizationRunner) {
           doOptimize(target, module, optimizationRunner->options);
         }
@@ -737,8 +737,7 @@ struct InlineMainPass : public Pass {
       // No call at all.
       return;
     }
-    InliningAction action{main, callSite, originalMain};
-    doInlining(module, {action});
+    doInlinings(module, {{main, callSite, originalMain}});
   }
 };
 
