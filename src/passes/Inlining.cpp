@@ -522,8 +522,7 @@ struct DefiniteScheduler : public Scheduler {
     inlined = true;
 
     ModuleUtils::ParallelFunctionAnalysis<InliningActionVector>(
-      *module,
-      [&](Function* target, const InliningActionVector& actions) {
+      *module, [&](Function* target, const InliningActionVector& actions) {
         for (auto& action : actions) {
           assert(action.target == target);
         }
@@ -540,7 +539,6 @@ struct DefiniteScheduler : public Scheduler {
       return sourcesInlinedFrom.count(name) &&
              sourcesInlinedFrom[name] == info.refs && !info.usedGlobally;
     });
-
   }
 };
 
@@ -717,7 +715,7 @@ struct InlineMainPass : public Pass {
       return;
     }
     doInlining(module, main, {InliningAction(callSite, originalMain)});
-    fixupTarget?
+    fixupTarget ?
   }
 };
 
