@@ -170,16 +170,19 @@ struct OptimizeInstructions
   }
 
   void visitExpression(Expression* curr) {
+    // if this contains dead code, don't bother trying to optimize it, the type
+    // might change (if might not be unreachable if just one arm is, for
+    // example). this optimization pass focuses on actually executing code. the
+    // only exceptions are control flow changes
+    if (curr->is<Const>() || curr->is<Call>() || curr->is<Nop>() ||
+        (curr->type == Type::unreachable && !curr->is<Break>() &&
+         !curr->is<Switch>() && !curr->is<If>())) {
+      return;
+    }
     // we may be able to apply multiple patterns, one may open opportunities
     // that look deeper NB: patterns must not have cycles
-    while (1) {
-      auto* handOptimized = handOptimize(curr);
-      if (handOptimized) {
-        curr = handOptimized;
-        replaceCurrent(curr);
-        continue;
-      }
-      break;
+    while ((curr = handOptimize(curr))) {
+      replaceCurrent(curr);
     }
   }
 
@@ -200,17 +203,14 @@ struct OptimizeInstructions
   // Optimizations that don't yet fit in the pattern DSL, but could be
   // eventually maybe
   Expression* handOptimize(Expression* curr) {
-    FeatureSet features = getModule()->features;
-    // if this contains dead code, don't bother trying to optimize it, the type
-    // might change (if might not be unreachable if just one arm is, for
-    // example). this optimization pass focuses on actually executing code. the
-    // only exceptions are control flow changes
-    if (curr->type == Type::unreachable && !curr->is<Break>() &&
-        !curr->is<Switch>() && !curr->is<If>()) {
+    if (curr->is<Const>()) {
       return nullptr;
     }
+
+    FeatureSet features = getModule()->features;
+
     if (auto* binary = curr->dynCast<Binary>()) {
-      if (isSymmetric(binary)) {
+      if (isSymmetricOrRelational(binary)) {
         canonicalize(binary);
       }
     }
@@ -895,9 +895,12 @@ private:
   // Canonicalizing the order of a symmetric binary helps us
   // write more concise pattern matching code elsewhere.
   void canonicalize(Binary* binary) {
-    assert(isSymmetric(binary));
+    assert(isSymmetricOrRelational(binary));
     auto swap = [&]() {
       assert(canReorder(binary->left, binary->right));
+      if (binary->isRelational()) {
+        binary->op = reverseRelationalOp(binary->op);
+      }
       std::swap(binary->left, binary->right);
     };
     auto maybeSwap = [&]() {
@@ -1694,9 +1697,18 @@ private:
       curr->left = left;
       return curr;
     }
-    // x * -1.0   ==>   -x
-    if (fastMath && matches(curr, binary(Mul, any(), fval(-1.0)))) {
-      return builder.makeUnary(Abstract::getUnary(type, Neg), left);
+    // x * -1.0   ==>
+    //       -x,  if fastMath == true
+    // -0.0 - x,  if fastMath == false
+    if (matches(curr, binary(Mul, any(), fval(-1.0)))) {
+      if (fastMath) {
+        return builder.makeUnary(Abstract::getUnary(type, Neg), left);
+      }
+      // x * -1.0   ==>  -0.0 - x
+      curr->op = Abstract::getBinary(type, Sub);
+      right->value = Literal::makeZero(type).neg();
+      std::swap(curr->left, curr->right);
+      return curr;
     }
     if (matches(curr, binary(Mul, any(&left), constant(1))) ||
         matches(curr, binary(DivS, any(&left), constant(1))) ||
@@ -2183,6 +2195,81 @@ private:
     }
   }
 
+  BinaryOp reverseRelationalOp(BinaryOp op) {
+    switch (op) {
+      case EqInt32:
+        return EqInt32;
+      case NeInt32:
+        return NeInt32;
+      case LtSInt32:
+        return GtSInt32;
+      case LtUInt32:
+        return GtUInt32;
+      case LeSInt32:
+        return GeSInt32;
+      case LeUInt32:
+        return GeUInt32;
+      case GtSInt32:
+        return LtSInt32;
+      case GtUInt32:
+        return LtUInt32;
+      case GeSInt32:
+        return LeSInt32;
+      case GeUInt32:
+        return LeUInt32;
+
+      case EqInt64:
+        return EqInt64;
+      case NeInt64:
+        return NeInt64;
+      case LtSInt64:
+        return GtSInt64;
+      case LtUInt64:
+        return GtUInt64;
+      case LeSInt64:
+        return GeSInt64;
+      case LeUInt64:
+        return GeUInt64;
+      case GtSInt64:
+        return LtSInt64;
+      case GtUInt64:
+        return LtUInt64;
+      case GeSInt64:
+        return LeSInt64;
+      case GeUInt64:
+        return LeUInt64;
+
+      case EqFloat32:
+        return EqFloat32;
+      case NeFloat32:
+        return NeFloat32;
+      case LtFloat32:
+        return GtFloat32;
+      case LeFloat32:
+        return GeFloat32;
+      case GtFloat32:
+        return LtFloat32;
+      case GeFloat32:
+        return LeFloat32;
+
+      case EqFloat64:
+        return EqFloat64;
+      case NeFloat64:
+        return NeFloat64;
+      case LtFloat64:
+        return GtFloat64;
+      case LeFloat64:
+        return GeFloat64;
+      case GtFloat64:
+        return LtFloat64;
+      case GeFloat64:
+        return LeFloat64;
+
+      default:
+        return InvalidBinary;
+    }
+  }
+
   BinaryOp makeUnsignedBinaryOp(BinaryOp op) {
     switch (op) {
       case DivSInt32:
@@ -2220,8 +2307,8 @@ private:
     }
   }
 
-  bool isSymmetric(Binary* binary) {
-    if (Properties::isSymmetric(binary)) {
+  bool isSymmetricOrRelational(Binary* binary) {
+    if (Properties::isSymmetric(binary) || binary->isRelational()) {
       return true;
     }
     switch (binary->op) {
