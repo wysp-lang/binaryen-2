@@ -518,7 +518,8 @@ struct DefiniteScheduler : public Scheduler {
         continue;
       }
 #ifdef INLINING_DEBUG
-      std::cout << "will inline " << action.source->name << " into " << action.target->name << '\n';
+      std::cout << "will inline " << action.source->name << " into "
+                << action.target->name << '\n';
 #endif
       // This is an action we can do!
       actionsForTarget[action.target].push_back(action);
