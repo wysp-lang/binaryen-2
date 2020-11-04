@@ -249,9 +249,10 @@ struct Updater : public PostWalker<Updater> {
   }
 };
 
-// Core inlining logic. Modifies the outside function (adding locals as
-// needed), and returns the inlined code.
-static void doInlining(Module* module, const InliningAction& action) {
+// Core inlining logic that copies the inlined code from the source function
+// into the target function. This does not do everything needed for inling,
+// see doInlining() for the full operation.
+static void doInliningCopy(Module* module, const InliningAction& action) {
   Function* target = action.target;
   Function* source = action.source;
 #ifdef INLINING_DEBUG
@@ -310,7 +311,27 @@ static void doInlining(Module* module, const InliningAction& action) {
     // Make the block reachable by adding a break to it
     block->list.push_back(builder.makeBreak(block->name));
   }
-  // After inlining weo may have non-unique label names, fix those up.
+}
+
+// Do one or more inlinings. They must all be to the same target function. This
+// design makes it possible to do the "fixup" stage at the end only once, and
+// not once per inlining. Specifically, after inlining we must make sure that
+// block names are unique, and doing so once after multiple inlinings is enough.
+static void doInlining(Module* module, const InliningActionVector& actions) {
+  // Make sure they are all to the same target function.
+  Function* target = nullptr;
+  for (auto& action : actions) {
+    if (!target) {
+      target = action.target;
+    } else {
+      assert(action.target == target);
+    }
+  }
+  // Do the copying.
+  for (auto& action : actions) {
+    doInliningCopy(module, action);
+  }
+  // Fix up label names to be unique.
   wasm::UniqueNameMapper::uniquify(target->body);
 }
 
@@ -338,7 +359,7 @@ doOptimize(Function* func, Module* module, const PassOptions& options) {
   runner.setIsNested(true);
   runner.setValidateGlobally(false); // not a full valid module
   // this is especially useful after inlining
-  runner.add("precompute-propagate");
+  runner.add("precompute-propagate"); // is this needed if O3/Os anyhow?
   runner.addDefaultFunctionOptimizationPasses(); // do all the usual stuff
   runner.runOnFunction(func);
 }
@@ -369,7 +390,7 @@ static bool doSpeculativeInlining(Module* module,
   tempAction.callSite =
     getCorrespondingCallInCopy(targetCall, target->body, tempFunc->body);
   assert(tempAction.callSite);
-  doInlining(&tempModule, tempAction);
+  doInlining(&tempModule, {tempAction});
   doOptimize(target, module, options);
 
   // Check if the result is worthwhile. We look for a strict reduction in
@@ -479,7 +500,7 @@ struct DefiniteScheduler : public Scheduler {
       // If we'll inline the target into something else, then there is a "race"
       // here, and potentially this inlining is not necessary (for example, the
       // function may have no more uses), so leave it for later.
-      if (actionsForTarget.count(action.target)) {
+      if (sourcedInlinedFrom.count(action.target)) {
         continue;
       }
       // If we'll inline into the source, then it has been modified, and may
@@ -505,8 +526,8 @@ struct DefiniteScheduler : public Scheduler {
       [&](Function* target, const InliningActionVector& actions) {
         for (auto& action : actions) {
           assert(action.target == target);
-          doInlining(module, action);
         }
+        doInlining(module, actions);
         if (optimizationRunner) {
           doOptimize(target, module, optimizationRunner->options);
         }
@@ -522,6 +543,12 @@ struct DefiniteScheduler : public Scheduler {
 
   }
 };
+
+// Speculative scheduler
+
+/*
+    assert(!inlined into or inlined from)
+*/
 
 } // anonymous namespace
 
@@ -689,7 +716,8 @@ struct InlineMainPass : public Pass {
       // No call at all.
       return;
     }
-    doInlining(module, main, InliningAction(callSite, originalMain));
+    doInlining(module, main, {InliningAction(callSite, originalMain)});
+    fixupTarget?
   }
 };
 
