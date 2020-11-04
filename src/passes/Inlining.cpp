@@ -498,7 +498,7 @@ struct DefiniteScheduler : public Scheduler {
     // We found things to inline!
     inlined = true;
 
-    ParallelFunctionAnalysis(
+    ModuleUtils::ParallelFunctionAnalysis(
       *module,
       [&](Function* target, const std::vector<InliningAction>& actions) {
         for (auto& action : actions) {
