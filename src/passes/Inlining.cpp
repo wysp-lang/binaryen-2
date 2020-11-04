@@ -201,7 +201,7 @@ struct Planner : public WalkerPass<PostWalker<Planner>> {
       // can't add a new element in parallel
       assert(state->actionsForFunction.count(getFunction()->name) > 0);
       state->actionsForFunction[getFunction()->name].emplace_back(
-        getFunction(), &block->list[0], getModule()->getFunction(curr->target));
+        InliningAction{getFunction(), &block->list[0], getModule()->getFunction(curr->target)});
     }
   }
 
@@ -453,10 +453,14 @@ static bool doSpeculativeInlining(Module* module,
 // optimization in particular can be costly.
 struct Scheduler {
   Module* module;
+
   // If not null, then we can optimize with this pass runner.
   PassRunner* optimizationRunner;
 
-  InliningActionVector possibleActions;
+  // How many times we inlined a source. Using this count we can tell if we
+  // inlined into all the calls to the function (which may leave it with no
+  // more uses).
+  std::unordered_map<Function*, Index> sourceInlinings;
 
   bool inlined = false;
 
@@ -475,11 +479,18 @@ struct Scheduler {
   }
 
   virtual void run();
+
+protected:
+  InliningActionVector possibleActions;
 };
 
 // A scheduler for inlinings we definitely want to perform, i.e., that require
 // no speculation.
 struct DefiniteScheduler : public Scheduler {
+  DefiniteScheduler(Module* module, // XXX remove
+            const InliningState& state,
+            PassRunner* optimizationRunner) : Scheduler(module, state, optimizationRunner) {}
+
   void schedule() {
     // Scheduling is fairly simple here, as we definitely want to do each
     // action. Schedule a new action unless it interferes with another.
@@ -488,10 +499,6 @@ struct DefiniteScheduler : public Scheduler {
     // optimize once at the end for each. Which functions were inlined or
     // inlined into.
 
-    // How many times we inlined a source. Using this count we can tell if we
-    // inlined into all the calls to the function (which may leave it with no
-    // more uses).
-    std::unordered_map<Function*, Index> sourcesInlinedFrom;
     // The actions we'll run for each target function, each representing an
     // inlining into it.
     std::map<Function*, InliningActionVector> actionsForTarget;
@@ -500,7 +507,7 @@ struct DefiniteScheduler : public Scheduler {
       // If we'll inline the target into something else, then there is a "race"
       // here, and potentially this inlining is not necessary (for example, the
       // function may have no more uses), so leave it for later.
-      if (sourcedInlinedFrom.count(action.target)) {
+      if (sourceInlinings.count(action.target)) {
         continue;
       }
       // If we'll inline into the source, then it has been modified, and may
@@ -510,7 +517,7 @@ struct DefiniteScheduler : public Scheduler {
       }
       // This is an action we can do!
       actionsForTarget[action.target].push_back(action);
-      sourcesInlinedFrom[action.source]++;
+      sourceInlinings[action.source]++;
     }
 
     if (actionsForTarget.empty()) {
@@ -531,14 +538,6 @@ struct DefiniteScheduler : public Scheduler {
           doOptimize(target, module, optimizationRunner->options);
         }
       });
-
-    // remove functions that we no longer need after inlining
-    module->removeFunctions([&](Function* func) {
-      auto name = func->name;
-      auto& info = infos[name];
-      return sourcesInlinedFrom.count(name) &&
-             sourcesInlinedFrom[name] == info.refs && !info.usedGlobally;
-    });
   }
 };
 
@@ -554,12 +553,15 @@ struct Inlining : public Pass {
   // whether to optimize where we inline
   bool optimize = false;
 
+  Module* module;
+
   // the information for each function. recomputed in each iteraction
   NameInfoMap infos;
 
   Index iterationNumber;
 
-  void run(PassRunner* runner, Module* module) override {
+  void run(PassRunner* runner, Module* module_) override {
+    module = module_;
     Index numFunctions = module->functions.size();
     // keep going while we inline, to handle nesting. TODO: optimize
     iterationNumber = 0;
@@ -572,15 +574,15 @@ struct Inlining : public Pass {
       std::cout << "inlining loop iter " << iterationNumber
                 << " (numFunctions: " << numFunctions << ")\n";
 #endif
-      calculateInfos(module);
-      if (!iteration(runner, module)) {
+      calculateInfos();
+      if (!iteration(runner)) {
         return;
       }
       iterationNumber++;
     }
   }
 
-  void calculateInfos(Module* module) {
+  void calculateInfos() {
     infos.clear();
     // fill in info, as we operate on it in parallel (each function to its own
     // entry)
@@ -612,7 +614,7 @@ struct Inlining : public Pass {
     }
   }
 
-  bool iteration(PassRunner* runner, Module* module) {
+  bool iteration(PassRunner* runner) {
     // Find functions potentially worth inlining.
     InliningState state;
     ModuleUtils::iterDefinedFunctions(*module, [&](Function* func) {
@@ -633,10 +635,11 @@ struct Inlining : public Pass {
     Planner(&state).run(runner, module);
 
     // Start with definitely-worth inlinings.
-    DefiniteScheduler definiteScheduler(module, state, optimize);
+    DefiniteScheduler definiteScheduler(module, state, optimize ? runner : nullptr);
     // Don't do definite and speculative inlinings in the same iteration, to
     // keep things simple.
     if (definiteScheduler.inlined) {
+      removeUnusedFunctions(definiteScheduler);
       return true;
     }
     // If we can, try speculative inlinings.
@@ -673,6 +676,21 @@ struct Inlining : public Pass {
       }
       actions.swap(laterActions);
     }*/
+  }
+
+  void removeUnusedFunctions(const Scheduler& scheduler) {
+    // remove functions that we no longer need after inlining
+    module->removeFunctions([&](Function* func) {
+      auto& info = infos[func->name];
+      if (info.usedGlobally) {
+        return false;
+      }
+      auto iter = scheduler.sourceInlinings.find(func);
+      if (iter == scheduler.sourceInlinings.end()) {
+        return false;
+      }
+      return iter->second == info.refs;
+    });
   }
 };
 
@@ -714,8 +732,8 @@ struct InlineMainPass : public Pass {
       // No call at all.
       return;
     }
-    doInlining(module, main, {InliningAction(callSite, originalMain)});
-    fixupTarget ?
+    InliningAction action{main, callSite, originalMain};
+    doInlining(module, {action});
   }
 };
 
