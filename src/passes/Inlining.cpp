@@ -429,14 +429,16 @@ static bool doSpeculativeInlining(Module* module,
 // also want to run the actual inlinings and optimizations in parallel, as the
 // optimization in particular can be costly.
 struct Scheduler {
-  bool optimize;
+  Module* module;
+  // If not null, then we can optimize with this pass runner.
+  PassRunner* optimizationRunner;
 
   std::vector<InliningAction> possibleActions;
 
   bool inlined = false;
 
-  Scheduler(Module* module, const InliningState& state, bool optimize)
-    : optimize(optimize) {
+  Scheduler(Module* module, const InliningState& state, PassRunner* optimizationRunner)
+    : module(module), optimizationRunner(optimizationRunner) {
     // Accumulate all the possible actions.
     for (auto& pair : state.actionsForFunction) {
       for (auto& action : pair.second) {
@@ -483,7 +485,7 @@ struct DefiniteScheduler : public Scheduler {
       }
       // This is an action we can do!
       actionsForTarget[action.target].push_back(action);
-      sourcesInlinedFrom[action.source->name]++;
+      sourcesInlinedFrom[action.source]++;
     }
 
     if (actionsForTarget.empty()) {
@@ -501,8 +503,8 @@ struct DefiniteScheduler : public Scheduler {
           assert(action.target == target);
           doInlining(module, action);
         }
-        if (optimize) {
-          doOptimize(target, module, runner->options);
+        if (optimizationRunner) {
+          doOptimize(target, module, optimizationRunner->options);
         }
       });
   }
