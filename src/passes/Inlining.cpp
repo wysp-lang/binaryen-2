@@ -437,7 +437,9 @@ struct Scheduler {
 
   bool inlined = false;
 
-  Scheduler(Module* module, const InliningState& state, PassRunner* optimizationRunner)
+  Scheduler(Module* module,
+            const InliningState& state,
+            PassRunner* optimizationRunner)
     : module(module), optimizationRunner(optimizationRunner) {
     // Accumulate all the possible actions.
     for (auto& pair : state.actionsForFunction) {
