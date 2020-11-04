@@ -478,7 +478,7 @@ struct Scheduler {
     }
   }
 
-  virtual void run();
+  virtual void run() = 0;
 
 protected:
   InliningActionVector possibleActions;
@@ -651,6 +651,8 @@ struct Inlining : public Pass {
       return false;
     }
     return false; // XXX TODO
+    auto* foo = &doSpeculativeInlining;
+    WASM_UNUSED(foo);
     /*
     while (1) {
       // In each loop iteration, run all the actions we can, and accumulate
