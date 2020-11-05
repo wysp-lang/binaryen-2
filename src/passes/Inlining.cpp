@@ -417,7 +417,7 @@ protected:
   // If rejectedActions is provided, we add actions we rejected to there.
   std::map<Function*, InliningActionVector>
   scheduleActions(const InliningActionVector& possibleActions,
-                                InliningActionVector* rejectedActions=nullptr) {
+                  InliningActionVector* rejectedActions = nullptr) {
     // The actions we'll run for each target function, each representing an
     // inlining into it.
     std::map<Function*, InliningActionVector> actionsForTarget;
@@ -450,8 +450,7 @@ struct DefiniteScheduler : public Scheduler {
     : Scheduler(module, state, optimizationRunner) {}
 
   bool run() {
-    auto actionsForTarget =
-      scheduleActions(getAllPossibleActionsFromState());
+    auto actionsForTarget = scheduleActions(getAllPossibleActionsFromState());
 
     if (actionsForTarget.empty()) {
       return false;
