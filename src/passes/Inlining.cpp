@@ -485,8 +485,6 @@ struct DefiniteScheduler : public Scheduler {
   }
 };
 
-// Speculative scheduler
-
 // Given a thing and its copy, find the corresponding call in the copy to a call
 // in the original.
 static Expression**
@@ -505,92 +503,145 @@ getCorrespondingCallInCopy(Call* call, Expression* original, Expression* copy) {
   WASM_UNREACHABLE("copy is not a copy of original");
 }
 
-// Returns whether we inlined.
-static bool doSpeculativeInlining(Module* module,
-                                  const InliningAction& action,
-                                  const FunctionInfo& targetInfo,
-                                  const FunctionInfo& sourceInfo,
-                                  const PassOptions& options) {
-  Function* target = action.target;
-  Function* source = action.source;
+// Speculative scheduler
+struct SpeculativeScheduler : public Scheduler {
+  const NameInfoMap& infos;
+
+  SpeculativeScheduler(Module* module,
+                    const InliningState& state,
+                    PassRunner* optimizationRunner,
+                    const NameInfoMap& infos)
+    : Scheduler(module, state, optimizationRunner), infos(infos) {
+    assert(optimizationRunner);
+  }
+
+  bool run() {
+    // TODO: micro-iters
+    InliningActionVector actions = getAllPossibleActionsFromState(), deferredActions;
+    auto actionsForTarget = scheduleActions(actions, &deferredActions);
+
+    if (actionsForTarget.empty()) {
+      return false;
+    }
+
+    // We found things to try to inline!
+
+    bool inlined = false;
+
+    ModuleUtils::parallelFunctionExecution(*module, [&](Function* target) {
+      auto iter = actionsForTarget.find(target);
+      if (iter == actionsForTarget.end()) {
+        return;
+      }
+      const auto& actions = iter->second;
+      assert(!actions.empty());
 #ifdef INLINING_DEBUG
-  std::cout << "maybe inline " << source->name << " into " << target->name
-            << '\n';
+      std::cout << "speculatively inlining into " << target->name << '\n';
 #endif
-  abort(); // TODO
-  // We were not certain, but since we were called, that means we can at least
-  // speculatively inline it.
-  assert(sourceInfo.speculativelyWorthInlining(options, true));
+      bool inlinedIntoTarget = false;
+      for (auto& action : actions) {
+        assert(action.target == target);
+        if (doSpeculativeInlining(action)) {
+          sourceInlinings[action.source]++;
+          inlinedIntoTarget = true;
+          inlined = true;
+        }
+      }
+      if (inlinedIntoTarget) {
+        doOptimize(target, module, optimizationRunner->options);
+      }
+    });
 
-  // Create a temporary setup to inline into, and perform inlining and
-  // optimization there.
-  Module tempModule;
-  Function* tempFunc = ModuleUtils::copyFunction(target, tempModule);
-  InliningAction tempAction = action;
-  auto* targetCall = (*action.callSite)->cast<Call>();
-  tempAction.callSite =
-    getCorrespondingCallInCopy(targetCall, target->body, tempFunc->body);
-  assert(tempAction.callSite);
-  doInlinings(&tempModule, {tempAction});
-  doOptimize(target, module, options);
-
-  // Check if the result is worthwhile. We look for a strict reduction in
-  // the thing we are trying to minimize, which guarantees no cycles (like a
-  // Lyapunov function https://en.wikipedia.org/wiki/Lyapunov_function).
-  bool keepResults;
-  if (options.shrinkLevel) {
-    // Check for a decrease in code size.
-    auto newSize = Measurer::measure(tempFunc->body);
-    if (sourceInfo.refs == 1 && !sourceInfo.usedGlobally) {
-      // The inlined function has no other references, so we will remove it
-      // after the inlining. Compare to the previous total size of the inlined
-      // function and the function we inlined into.
-      // (Note that just by removing a function we are saving a few bytes at
-      // least, so make the comparison <=.)
-      keepResults = newSize <= targetInfo.size + sourceInfo.size;
-    } else {
-      // There are other references, so we need a strict decrease in size in
-      // the function we inline to.
-      keepResults = newSize < targetInfo.size;
-    }
-  } else if (options.optimizeLevel >= 3) {
-    // Check for a decrease in computational cost.
-    auto oldCost = CostAnalyzer(target->body).cost;
-    auto newCost = CostAnalyzer(tempFunc->body).cost;
-    /// no! inline, then measure, then optimize, and see if the new cost is
-    /// better.
-    // it may be more than the old cost! but a reduction suggests an imprvment.
-    // one possible annoyance is inlining adds some local sets, a return, break,
-    // etc. - the "boilerplate" stuff. so maybe this is not quite right to
-    // measure. we can measure cost_target + cost_source. has calls doesn't
-    // matter.
-    if (!sourceInfo.hasCalls) {
-      // The source function has no calls in it. That means that we can tell
-      // exactly what is going on, without a call that might do more work (or
-      // even recurse). The previous code that ran is the target function plus
-      // the source function, and after inlining, we have the new target
-      // function, so compare those.
-      auto oldSourceCost = CostAnalyzer(source->body).cost;
-      keepResults = newCost <= oldCost + oldSourceCost;
-    } else {
-      // XXX doesn't matter.
-      // The source function has a call. In this case we must be careful, and
-      // look for a strict decrease in the target cost, as if the inlined code
-      // has a call, we don't know how much work that does.
-      keepResults = newCost < oldCost;
-    }
-  } else {
-    WASM_UNREACHABLE("invalid options when speculatively optimizing");
-  }
-  if (!keepResults) {
-    // This speculation has sadly not worked out.
-    return false;
+    return inlined;
   }
 
-  // This is worth keeping; copy it over!
-  target->body = ExpressionManipulator::copy(tempFunc->body, *module);
-  return true;
-}
+  // Returns whether we inlined.
+  bool doSpeculativeInlining(const InliningAction& action) {
+    Function* target = action.target;
+    Function* source = action.source;
+    auto& sourceInfo = infos.at(action.source->name);
+  #ifdef INLINING_DEBUG
+    std::cout << "maybe inline " << source->name << " into " << target->name
+              << '\n';
+  #endif
+    abort(); // TODO
+    // We were not certain, but since we were called, that means we can at least
+    // speculatively inline it.
+    auto options = optimizationRunner->options;
+    assert(sourceInfo.speculativelyWorthInlining(options, true));
+
+    // Create a temporary setup to inline into, and perform inlining and
+    // optimization there.
+    Module tempModule;
+    Function* tempFunc = ModuleUtils::copyFunction(target, tempModule);
+    InliningAction tempAction = action;
+    auto* targetCall = (*action.callSite)->cast<Call>();
+    tempAction.callSite =
+      getCorrespondingCallInCopy(targetCall, target->body, tempFunc->body);
+    assert(tempAction.callSite);
+    doInlinings(&tempModule, {tempAction});
+    doOptimize(target, module, options);
+
+    // Check if the result is worthwhile. We look for a strict reduction in
+    // the thing we are trying to minimize, which guarantees no cycles (like a
+    // Lyapunov function https://en.wikipedia.org/wiki/Lyapunov_function).
+    bool keepResults;
+    if (options.shrinkLevel) {
+      // Check for a decrease in code size.
+      auto oldTargetSize = Measurer::measure(target->body);
+      auto newTargetSize = Measurer::measure(tempFunc->body);
+      if (sourceInfo.refs == 1 && !sourceInfo.usedGlobally) {
+        // The inlined function has no other references, so we will remove it
+        // after the inlining. Compare to the previous total size of the inlined
+        // function and the function we inlined into.
+        // (Note that just by removing a function we are saving a few bytes at
+        // least, so make the comparison <=.)
+        keepResults = newTargetSize <= oldTargetSize + sourceInfo.size;
+      } else {
+        // There are other references, so we need a strict decrease in size in
+        // the function we inline to.
+        // TODO: example of when this helps
+        keepResults = newTargetSize < oldTargetSize;
+      }
+    } else if (options.optimizeLevel >= 3) {
+      // Check for a decrease in computational cost.
+      auto oldCost = CostAnalyzer(target->body).cost;
+      auto newCost = CostAnalyzer(tempFunc->body).cost;
+      /// no! inline, then measure, then optimize, and see if the new cost is
+      /// better.
+      // it may be more than the old cost! but a reduction suggests an imprvment.
+      // one possible annoyance is inlining adds some local sets, a return, break,
+      // etc. - the "boilerplate" stuff. so maybe this is not quite right to
+      // measure. we can measure cost_target + cost_source. has calls doesn't
+      // matter.
+      if (!sourceInfo.hasCalls) {
+        // The source function has no calls in it. That means that we can tell
+        // exactly what is going on, without a call that might do more work (or
+        // even recurse). The previous code that ran is the target function plus
+        // the source function, and after inlining, we have the new target
+        // function, so compare those.
+        auto oldSourceCost = CostAnalyzer(source->body).cost;
+        keepResults = newCost <= oldCost + oldSourceCost;
+      } else {
+        // XXX doesn't matter.
+        // The source function has a call. In this case we must be careful, and
+        // look for a strict decrease in the target cost, as if the inlined code
+        // has a call, we don't know how much work that does.
+        keepResults = newCost < oldCost;
+      }
+    } else {
+      WASM_UNREACHABLE("invalid options when speculatively optimizing");
+    }
+    if (!keepResults) {
+      // This speculation has sadly not worked out.
+      return false;
+    }
+
+    // This is worth keeping; copy it over!
+    target->body = ExpressionManipulator::copy(tempFunc->body, *module);
+    return true;
+  }
+};
 
 } // anonymous namespace
 
@@ -693,38 +744,12 @@ struct Inlining : public Pass {
       // Speculation requires optimization.
       return false;
     }
-    return false; // XXX TODO
-    auto* foo = &doSpeculativeInlining;
-    WASM_UNUSED(foo);
-    return false; // XXX TODO
-    /*
-    while (1) {
-      // In each loop iteration, run all the actions we can, and accumulate
-      // deferred actions to a later loop iteration. We need this looping
-      // because with speculative inlining we can't tell if we inline until we
-      // actually try.
-      std::vector<InliningAction> laterActions;
-      inlined = pickAndExecute(actions,
-        // Pick
-        [&](const InliningAction& action) {
-          // TODO FIXME: don't try more than once, except in a new
-    uber-iteration? return
-    infos[action.source].speculativelyWorthInlining(runner->options, true);
-        },
-        // Defer
-        [&](const InliningAction& action) {
-          laterActions.push_back(action);
-        },
-        // Execute
-        [](const InliningAction& action) {
-          return doSpeculativeInlining(module, action);
-        });
-      if (inlined) {
-        // TODO:
-        return true;
-      }
-      actions.swap(laterActions);
-    }*/
+    SpeculativeScheduler speculativeScheduler(module, state, runner, infos);
+    if (speculativeScheduler.run()) {
+      removeUnusedFunctions(speculativeScheduler);
+      return true;
+    }
+    return false;
   }
 
   void removeUnusedFunctions(const Scheduler& scheduler) {
