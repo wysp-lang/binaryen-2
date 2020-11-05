@@ -461,7 +461,7 @@ struct DefiniteScheduler : public Scheduler {
 
     // We found things to inline!
 
-    ModuleUtils::parallelFunctionExecution(*module, [&](Function* target) {
+    ModuleUtils::parallelFunctionForEach(*module, [&](Function* target) {
       auto iter = actionsForTarget.find(target);
       if (iter == actionsForTarget.end()) {
         return;
