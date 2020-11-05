@@ -737,8 +737,7 @@ struct Inlining : public Pass {
     if (!prepareState(state)) {
       return false;
     }
-    DefiniteScheduler scheduler(
-      module, state, optimize ? runner : nullptr);
+    DefiniteScheduler scheduler(module, state, optimize ? runner : nullptr);
     if (scheduler.run()) {
       removeUnusedFunctions(scheduler);
       return true;
