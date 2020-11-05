@@ -274,7 +274,7 @@ parallelFunctionForEach(Module& wasm, T work, bool modifiesBinaryenIR = true) {
 
 template<typename T>
 inline void immutableParallelFunctionForEach(Module& wasm, T work) {
-  parallelFunctionForEach(wasm, work, /* modifiesBinaryenIR= */false);
+  parallelFunctionForEach(wasm, work, /* modifiesBinaryenIR= */ false);
 }
 
 // Helper class for performing an operation on all the functions in the module,
@@ -297,12 +297,10 @@ template<typename T> struct ParallelFunctionAnalysis {
       map[func.get()];
     }
 
-    immutableParallelFunctionForEach(
-      wasm,
-      [&](Function* curr) {
-        assert(map.count(curr));
-        work(curr, map[curr]);
-      });
+    immutableParallelFunctionForEach(wasm, [&](Function* curr) {
+      assert(map.count(curr));
+      work(curr, map[curr]);
+    });
   }
 };
 
