@@ -239,9 +239,9 @@ template<typename T> inline void iterImports(Module& wasm, T visitor) {
 
 // Helper class for executing an operation on all the functions in the module,
 // in parallel.
-template<typename T>
+template<typename T, bool immutable=false>
 inline void
-parallelFunctionForEach(Module& wasm, T work, bool modifiesBinaryenIR = true) {
+parallelFunctionForEach(Module& wasm, T work) {
   // Run on the imports first. TODO: parallelize this too
   for (auto& func : wasm.functions) {
     if (func->imported()) {
@@ -251,13 +251,12 @@ parallelFunctionForEach(Module& wasm, T work, bool modifiesBinaryenIR = true) {
 
   struct Executor : public WalkerPass<PostWalker<Executor>> {
     bool isFunctionParallel() override { return true; }
-    bool modifiesBinaryenIR() override { return modifiesBinaryenIR_; }
+    bool modifiesBinaryenIR() override { return !immutable; }
 
-    Executor(Module& module, T work, bool modifiesBinaryenIR_)
-      : module(module), work(work), modifiesBinaryenIR_(modifiesBinaryenIR_) {}
+    Executor(Module& module, T work) : module(module), work(work) {}
 
     Executor* create() override {
-      return new Executor(module, work, modifiesBinaryenIR_);
+      return new Executor(module, work);
     }
 
     void doWalkFunction(Function* curr) { work(curr); }
@@ -265,16 +264,15 @@ parallelFunctionForEach(Module& wasm, T work, bool modifiesBinaryenIR = true) {
   private:
     Module& module;
     T work;
-    bool modifiesBinaryenIR_;
   };
 
   PassRunner runner(&wasm);
-  Executor(wasm, work, modifiesBinaryenIR).run(&runner, &wasm);
+  Executor(wasm, work).run(&runner, &wasm);
 }
 
 template<typename T>
 inline void immutableParallelFunctionForEach(Module& wasm, T work) {
-  parallelFunctionForEach(wasm, work, /* modifiesBinaryenIR= */ false);
+  parallelFunctionForEach<T, /* immutable= */ true>(wasm, work);
 }
 
 // Helper class for performing an operation on all the functions in the module,
