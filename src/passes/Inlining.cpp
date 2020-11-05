@@ -461,6 +461,8 @@ struct DefiniteScheduler : public Scheduler {
 
     // We found things to inline!
 
+    std::mutex mutex;
+
     ModuleUtils::parallelFunctionForEach(*module, [&](Function* target) {
       auto iter = actionsForTarget.find(target);
       if (iter == actionsForTarget.end()) {
@@ -473,7 +475,10 @@ struct DefiniteScheduler : public Scheduler {
 #endif
       for (auto& action : actions) {
         assert(action.target == target);
-        sourceInlinings[action.source]++;
+        {
+          std::lock_guard<std::mutex> lock(mutex);
+          sourceInlinings[action.source]++;
+        }
       }
       doInlinings(module, actions);
       if (optimizationRunner) {
@@ -528,6 +533,7 @@ struct SpeculativeScheduler : public Scheduler {
     // We found things to try to inline!
 
     bool inlined = false;
+    std::mutex mutex;
 
     ModuleUtils::parallelFunctionForEach(*module, [&](Function* target) {
       auto iter = actionsForTarget.find(target);
@@ -542,6 +548,7 @@ struct SpeculativeScheduler : public Scheduler {
       for (auto& action : actions) {
         assert(action.target == target);
         if (doSpeculativeInlining(action)) {
+          std::lock_guard<std::mutex> lock(mutex);
           sourceInlinings[action.source]++;
           inlined = true;
         }
