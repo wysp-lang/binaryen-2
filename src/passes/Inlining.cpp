@@ -409,19 +409,23 @@ protected:
     return possibleActions;
   }
 
+  // Schedule each new action unless it interferes with another in the
+  // sense mentioned earlier: A single function cannot be both a source and
+  // a target.
+  // If rejectedActions is provided, we add actions we rejected to there.
   std::map<Function*, InliningActionVector>
-  scheduleNonInterferingActions(const InliningActionVector& possibleActions) {
+  scheduleNonInterferingActions(const InliningActionVector& possibleActions,
+                                InliningActionVector* rejectedActions=nullptr) {
     // The actions we'll run for each target function, each representing an
     // inlining into it.
     std::map<Function*, InliningActionVector> actionsForTarget;
 
     for (auto& action : possibleActions) {
-      // Scheduling is fairly simple here, as we definitely want to do each
-      // action. Schedule a new action unless it interferes with another in the
-      // sense mentioned earlier: A single function cannot be both a source and
-      // a target.
       if (sourceInlinings.count(action.target) ||
           actionsForTarget.count(action.source)) {
+        if (rejectedActions) {
+          rejectedActions->push_back(action);
+        }
         continue;
       }
 #ifdef INLINING_DEBUG
