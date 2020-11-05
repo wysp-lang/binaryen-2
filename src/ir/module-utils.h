@@ -239,8 +239,7 @@ template<typename T> inline void iterImports(Module& wasm, T visitor) {
 
 // Helper class for executing an operation on all the functions in the module,
 // in parallel.
-template<typename T>
-inline void parallelFunctionForEach(Module& wasm, T work) {
+template<typename T> inline void parallelFunctionForEach(Module& wasm, T work) {
   // Run on the imports first. TODO: parallelize this too
   for (auto& func : wasm.functions) {
     if (func->imported()) {
