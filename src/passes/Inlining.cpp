@@ -27,6 +27,17 @@
 // or if you intend to run a full set of optimizations anyhow on
 // everything later.
 //
+// We also support both "definite" and "speculative" inlining. Definite inlining
+// means cases that we can see are definitely worthwhile. Speculative inlining
+// means that we suspect something might open up further optimization
+// opportunities after inlining, so we try the inlining to see what happens, and
+// discard the result if it's not worth it. Note that speculative inlining
+// assumes the code is already well-optimized, which is the case in the normal
+// optimization pipeline, which runs inlining intentionally late. This
+// assumption is made because we simply inline the code, then optimize, then see
+// if that helped or not - if the code was not already-optimized, then that may
+// seem to help but not because of the inlining.
+//
 
 #include <atomic>
 
@@ -581,9 +592,7 @@ struct SpeculativeScheduler : public Scheduler {
     doInlinings(&tempModule, {tempAction});
     doOptimize(tempTarget);
 
-    // Check if the result is worthwhile. We look for a strict reduction in
-    // the thing we are trying to minimize, which guarantees no cycles (like a
-    // Lyapunov function https://en.wikipedia.org/wiki/Lyapunov_function).
+    // Check if the result is worthwhile.
     bool keepResults;
     if (options.shrinkLevel) {
       // Check for a decrease in code size.
@@ -604,31 +613,27 @@ struct SpeculativeScheduler : public Scheduler {
         keepResults = newTargetSize < oldTargetSize;
       }
     } else if (options.optimizeLevel >= 3) {
-      // Check for a decrease in computational cost.
-      auto oldCost = CostAnalyzer(target->body).cost;
-      auto newCost = CostAnalyzer(tempTarget->body).cost;
-      /// no! inline, then measure, then optimize, and see if the new cost is
-      /// better.
-      // it may be more than the old cost! but a reduction suggests an
-      // imprvment. one possible annoyance is inlining adds some local sets, a
-      // return, break, etc. - the "boilerplate" stuff. so maybe this is not
-      // quite right to measure. we can measure cost_target + cost_source. has
-      // calls doesn't matter.
-      if (!sourceInfo.hasCalls) {
-        // The source function has no calls in it. That means that we can tell
-        // exactly what is going on, without a call that might do more work (or
-        // even recurse). The previous code that ran is the target function plus
-        // the source function, and after inlining, we have the new target
-        // function, so compare those.
-        auto oldSourceCost = CostAnalyzer(source->body).cost;
-        keepResults = newCost <= oldCost + oldSourceCost;
-      } else {
-        // XXX doesn't matter.
-        // The source function has a call. In this case we must be careful, and
-        // look for a strict decrease in the target cost, as if the inlined code
-        // has a call, we don't know how much work that does.
-        keepResults = newCost < oldCost;
-      }
+      // Check for a decrease in computational cost. The precise decrease we are
+      // looking for is that the inlining allows further optimization: just
+      // removing the cost of the call itself (ignoring what is called) is nice,
+      // but that is already handled by non-speculative inlining. Here we are
+      // looking for an effect such as calling a function with a constant value
+      // that after inlining helps precompute further things, etc.
+      auto oldTargetCost = CostAnalyzer(target->body).cost;
+      auto oldSourceCost = CostAnalyzer(source->body).cost;
+      // Simply adding the costs of the two functions before any changes is an
+      // estimate of the cost after inlining but before optimizing, when we just
+      // copied over the code. (We don't actually measure it that way because
+      // the copy creates some things like a block and local.sets to handle the
+      // inlined code, which almost always end up having no cost.)
+      auto costWithoutOpts = oldTargetCost + oldSourceCost;
+      // The cost after optimization is simply the cost measured on the
+      // temporary function, where we inlined and optimized.
+      auto costWithOpts = CostAnalyzer(tempTarget->body).cost;
+      // If the decrease is at least as large as the cost of doing a call
+      // (which, as mentioned earlier, is not our goal here - we could know that
+      // without speculation), then this is worthwhile.
+      keepResults = costWithOpts < costWithoutOpts - CostAnalyzer::CallCost;
     } else {
       WASM_UNREACHABLE("invalid options when speculatively optimizing");
     }

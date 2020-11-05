@@ -25,6 +25,8 @@ namespace wasm {
 // Measure the execution cost of an AST. Very handwave-ey
 
 struct CostAnalyzer : public Visitor<CostAnalyzer, Index> {
+  static const Index CallCost = 4;
+
   CostAnalyzer(Expression* ast) { cost = visit(ast); }
 
   Index cost;
@@ -52,13 +54,15 @@ struct CostAnalyzer : public Visitor<CostAnalyzer, Index> {
   Index visitCall(Call* curr) {
     // XXX this does not take into account if the call is to an import, which
     //     may be costlier in general
-    Index ret = 4;
+    // Note that does not take into account the cost of the called function.
+    Index ret = CallCost;
     for (auto* child : curr->operands) {
       ret += visit(child);
     }
     return ret;
   }
   Index visitCallIndirect(CallIndirect* curr) {
+    // Note that does not take into account the cost of the called function.
     Index ret = 6 + visit(curr->target);
     for (auto* child : curr->operands) {
       ret += visit(child);
