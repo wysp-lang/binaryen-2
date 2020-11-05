@@ -524,7 +524,7 @@ struct SpeculativeScheduler : public Scheduler {
     if (actionsForTarget.empty()) {
       return false;
     }
-
+    abort(); // TODO
     // We found things to try to inline!
 
     bool inlined = false;
