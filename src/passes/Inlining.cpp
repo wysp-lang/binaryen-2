@@ -461,8 +461,6 @@ struct DefiniteScheduler : public Scheduler {
 
     // We found things to inline!
 
-    std::mutex mutex;
-
     ModuleUtils::parallelFunctionForEach(*module, [&](Function* target) {
       auto iter = actionsForTarget.find(target);
       if (iter == actionsForTarget.end()) {
@@ -473,12 +471,8 @@ struct DefiniteScheduler : public Scheduler {
 #ifdef INLINING_DEBUG
       std::cout << "inlining into " << target->name << '\n';
 #endif
-      {
-        std::lock_guard<std::mutex> lock(mutex);
-        for (auto& action : actions) {
-          assert(action.target == target);
-          sourceInlinings[action.source]++;
-        }
+      for (auto& action : actions) {
+        assert(action.target == target);
       }
       doInlinings(module, actions);
       if (optimizationRunner) {
@@ -486,6 +480,12 @@ struct DefiniteScheduler : public Scheduler {
       }
     });
 
+    // Note what was inlined at the end to avoid multithreaded access to the map.
+    for (auto& pair : actionsForTarget) {
+      for (auto& action : pair.second) {
+        sourceInlinings[action.source]++;
+      }
+    }
     return true;
   }
 };
