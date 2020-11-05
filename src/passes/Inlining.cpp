@@ -473,10 +473,10 @@ struct DefiniteScheduler : public Scheduler {
 #ifdef INLINING_DEBUG
       std::cout << "inlining into " << target->name << '\n';
 #endif
-      for (auto& action : actions) {
-        assert(action.target == target);
-        {
-          std::lock_guard<std::mutex> lock(mutex);
+      {
+        std::lock_guard<std::mutex> lock(mutex);
+        for (auto& action : actions) {
+          assert(action.target == target);
           sourceInlinings[action.source]++;
         }
       }
