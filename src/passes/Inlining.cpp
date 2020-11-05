@@ -580,6 +580,7 @@ struct SpeculativeScheduler : public Scheduler {
     auto& sourceInfo = infos.at(action.source->name);
     auto options = optimizationRunner->options;
     assert(sourceInfo.speculativelyWorthInlining(options, true));
+    assert(options.shrinkLevel || options.optimizeLevel >= 3);
 
     // Create a temporary setup to inline into, and perform inlining and
     // optimization there.
@@ -592,27 +593,30 @@ struct SpeculativeScheduler : public Scheduler {
     doInlinings(&tempModule, {tempAction});
     doOptimize(tempTarget);
 
-    // Check if the result is worthwhile.
     bool keepResults;
-    if (options.shrinkLevel) {
-      // Check for a decrease in code size.
-      auto oldTargetSize = Measurer::measure(target->body);
-      auto newTargetSize = Measurer::measure(tempTarget->body);
-      if (sourceInfo.refs == 1 && !sourceInfo.usedGlobally) {
-        // The inlined function has no other references, so we can remove it
-        // after the inlining. Compare to the previous total size of the inlined
-        // function and the function we inlined into.
-        // (Note that just by removing a function we are saving a few bytes at
-        // least, so make the comparison <=.)
-        keepResults = newTargetSize <= oldTargetSize + sourceInfo.size;
-      } else {
-        // There are other references, so we need a strict decrease in size in
-        // the function we inline to. This is more rare, but can still happen,
-        // for example if inlining allows us to get a constant result from what
-        // was previously a call, and that helps further reductions.
-        keepResults = newTargetSize < oldTargetSize;
-      }
-    } else if (options.optimizeLevel >= 3) {
+    // First, check for a decrease in code size. If code size decreases then
+    // this is definitely doing, whether we are optimizing for size *or* for
+    // speed, as being able to shrink code likely indicates a speedup, or at
+    // worst if there is no speedup, at least startup may be faster.
+    auto oldTargetSize = Measurer::measure(target->body);
+    auto newTargetSize = Measurer::measure(tempTarget->body);
+    if (sourceInfo.refs == 1 && !sourceInfo.usedGlobally) {
+      // The inlined function has no other references, so we can remove it
+      // after the inlining. Compare to the previous total size of the inlined
+      // function and the function we inlined into.
+      // (Note that just by removing a function we are saving a few bytes at
+      // least, so make the comparison <=.)
+      keepResults = newTargetSize <= oldTargetSize + sourceInfo.size;
+    } else {
+      // There are other references, so we look for a strict decrease in size
+      // in the function we inline to. (This is rare, but can still happen,
+      // for example if inlining allows us to get a constant result from what
+      // was previously a call, and that helps further reductions.) Note that
+      // by finding a strict decrease we ensure that we will not keep inlining
+      // forever.
+      keepResults = newTargetSize < oldTargetSize;
+    }
+    if (!keepResults && options.optimizeLevel >= 3) {
       // Check for a decrease in computational cost. The precise decrease we are
       // looking for is that the inlining allows further optimization: just
       // removing the cost of the call itself (ignoring what is called) is nice,
@@ -630,12 +634,34 @@ struct SpeculativeScheduler : public Scheduler {
       // The cost after optimization is simply the cost measured on the
       // temporary function, where we inlined and optimized.
       auto costWithOpts = CostAnalyzer(tempTarget->body).cost;
-      // If the decrease is at least as large as the cost of doing a call
-      // (which, as mentioned earlier, is not our goal here - we could know that
-      // without speculation), then this is worthwhile.
-      keepResults = costWithOpts < costWithoutOpts - CostAnalyzer::CallCost;
-    } else {
-      WASM_UNREACHABLE("invalid options when speculatively optimizing");
+      // Merely by inlining we remove the cost of a call, so that is a 100%
+      // predictable benefit. Non-speculative inlining should be able to handle
+      // that anyhow, so ignore that cost here - look for something showing more
+      // benefit than that. Such a benefit can justify a code size increase -
+      // TODO: estimates on the effects on VMs: register pressure, etc.
+      keepResults = costWithOpts < costWithoutOpts - CostAnalyer::CallCost;
+
+      // Note that this is *not* guaranteed to terminate. For example,
+      //
+      //  function foo() {
+      //    return foo() + 1;
+      //  }
+      //  function bar() {
+      //    return foo() + 10;
+      //  }
+      //
+      // After inlining and optimizing once into bar(), we get
+      //
+      //  function bar() {
+      //    return foo() + 11;
+      //  }
+      //
+      // We can keep doing so, and in fact it is beneficial to do so since it
+      // saves the call overhead and the add every time. (Of course in this
+      // tiny example we recurse infinitely, so it's not actually beneficial but
+      // int other cases it can be.) As this function cannot ensure termination,
+      // the outside code must do so, for example, by inlining up to a fixed
+      // number of times into a target.
     }
     if (!keepResults) {
       // This speculation has sadly not worked out.
