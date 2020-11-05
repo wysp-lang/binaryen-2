@@ -339,18 +339,6 @@ static void doInlinings(Module* module, const InliningActionVector& actions) {
   wasm::UniqueNameMapper::uniquify(target->body);
 }
 
-static void
-doOptimize(Function* func, Module* module, const PassOptions& options) {
-  PassRunner runner(module, options);
-  runner.setIsNested(true);
-  runner.setValidateGlobally(false); // not a full valid module
-  // this is especially useful after inlining
-  // TODO: is this actually useful if pass options do it anyhow?
-  runner.add("precompute-propagate");
-  runner.addDefaultFunctionOptimizationPasses(); // do all the usual stuff
-  runner.runOnFunction(func);
-}
-
 // TODO
 class SpeculationLimiter {};
 
@@ -442,6 +430,17 @@ protected:
     }
     return actionsForTarget;
   }
+
+  void doOptimize(Function* func) {
+    PassRunner runner(module, optimizationRunner->options);
+    runner.setIsNested(true);
+    runner.setValidateGlobally(false); // not a full valid module
+    // this is especially useful after inlining
+    // TODO: is this actually useful if pass options do it anyhow?
+    runner.add("precompute-propagate");
+    runner.addDefaultFunctionOptimizationPasses(); // do all the usual stuff
+    runner.runOnFunction(func);
+  }
 };
 
 // A scheduler for inlinings we definitely want to perform, i.e., that require
@@ -476,7 +475,7 @@ struct DefiniteScheduler : public Scheduler {
       }
       doInlinings(module, actions);
       if (optimizationRunner) {
-        doOptimize(target, module, optimizationRunner->options);
+        doOptimize(target);
       }
     });
 
@@ -579,9 +578,8 @@ struct SpeculativeScheduler : public Scheduler {
     auto** tempCallSite =
       getCorrespondingCallInCopy(callSite, target->body, tempTarget->body);
     InliningAction tempAction = {tempTarget, tempCallSite, source};
-    assert(tempAction.callSite);
     doInlinings(&tempModule, {tempAction});
-    doOptimize(target, module, options);
+    doOptimize(tempTarget);
 
     // Check if the result is worthwhile. We look for a strict reduction in
     // the thing we are trying to minimize, which guarantees no cycles (like a
