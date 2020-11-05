@@ -352,8 +352,7 @@ doOptimize(Function* func, Module* module, const PassOptions& options) {
 }
 
 // TODO
-class SpeculationLimiter {
-};
+class SpeculationLimiter {};
 
 // Schedules inlinings for a list of possible ones, and then runs them.
 //
@@ -410,7 +409,8 @@ protected:
     return possibleActions;
   }
 
-  std::map<Function*, InliningActionVector> scheduleNonInterferingActions(const InliningActionVector& possibleActions) {
+  std::map<Function*, InliningActionVector>
+  scheduleNonInterferingActions(const InliningActionVector& possibleActions) {
     // The actions we'll run for each target function, each representing an
     // inlining into it.
     std::map<Function*, InliningActionVector> actionsForTarget;
@@ -444,7 +444,8 @@ struct DefiniteScheduler : public Scheduler {
     : Scheduler(module, state, optimizationRunner) {}
 
   void run() {
-    auto actionsForTarget = scheduleNonInterferingActions(getAllPossibleActionsFromState());
+    auto actionsForTarget =
+      scheduleNonInterferingActions(getAllPossibleActionsFromState());
 
     if (actionsForTarget.empty()) {
       inlined = false;
@@ -477,7 +478,6 @@ struct DefiniteScheduler : public Scheduler {
 };
 
 // Speculative scheduler
-
 
 // Given a thing and its copy, find the corresponding call in the copy to a call
 // in the original.
@@ -549,11 +549,13 @@ static bool doSpeculativeInlining(Module* module,
     // Check for a decrease in computational cost.
     auto oldCost = CostAnalyzer(target->body).cost;
     auto newCost = CostAnalyzer(tempFunc->body).cost;
-/// no! inline, then measure, then optimize, and see if the new cost is better.
-// it may be more than the old cost! but a reduction suggests an imprvment.
-// one possible annoyance is inlining adds some local sets, a return, break,
-// etc. - the "boilerplate" stuff. so maybe this is not quite right to measure.
-// we can measure cost_target + cost_source. has calls doesn't matter.
+    /// no! inline, then measure, then optimize, and see if the new cost is
+    /// better.
+    // it may be more than the old cost! but a reduction suggests an imprvment.
+    // one possible annoyance is inlining adds some local sets, a return, break,
+    // etc. - the "boilerplate" stuff. so maybe this is not quite right to
+    // measure. we can measure cost_target + cost_source. has calls doesn't
+    // matter.
     if (!sourceInfo.hasCalls) {
       // The source function has no calls in it. That means that we can tell
       // exactly what is going on, without a call that might do more work (or
@@ -563,7 +565,7 @@ static bool doSpeculativeInlining(Module* module,
       auto oldSourceCost = CostAnalyzer(source->body).cost;
       keepResults = newCost <= oldCost + oldSourceCost;
     } else {
-    // XXX doesn't matter.
+      // XXX doesn't matter.
       // The source function has a call. In this case we must be careful, and
       // look for a strict decrease in the target cost, as if the inlined code
       // has a call, we don't know how much work that does.
