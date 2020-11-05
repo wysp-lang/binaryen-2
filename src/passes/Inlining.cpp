@@ -426,6 +426,11 @@ static bool doSpeculativeInlining(Module* module,
     // Check for a decrease in computational cost.
     auto oldCost = CostAnalyzer(target->body).cost;
     auto newCost = CostAnalyzer(tempFunc->body).cost;
+/// no! inline, then measure, then optimize, and see if the new cost is better.
+// it may be more than the old cost! but a reduction suggests an imprvment.
+// one possible annoyance is inlining adds some local sets, a return, break,
+// etc. - the "boilerplate" stuff. so maybe this is not quite right to measure.
+// we can measure cost_target + cost_source. has calls doesn't matter.
     if (!sourceInfo.hasCalls) {
       // The source function has no calls in it. That means that we can tell
       // exactly what is going on, without a call that might do more work (or
@@ -435,6 +440,7 @@ static bool doSpeculativeInlining(Module* module,
       auto oldSourceCost = CostAnalyzer(source->body).cost;
       keepResults = newCost <= oldCost + oldSourceCost;
     } else {
+    // XXX doesn't matter.
       // The source function has a call. In this case we must be careful, and
       // look for a strict decrease in the target cost, as if the inlined code
       // has a call, we don't know how much work that does.
