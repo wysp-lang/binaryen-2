@@ -100,12 +100,7 @@ struct FunctionInfo {
     PassOptions speculativeOptions = options;
     // To speculate, we must optimize, and we must be optimizing heavily for
     // size or speed.
-    // If we optimize for size, we can just check the size after speculation.
-    // If we optimize for speed, we can't be sure we are helping if there are
-    // calls or loops, which can perform an uncertain amount of computation,
-    // so do not speculate in those cases.
-    if (optimize && (options.shrinkLevel ||
-                     (options.optimizeLevel >= 3 && !hasCalls && !hasLoops))) {
+    if (optimize && (options.shrinkLevel || options.optimizeLevel >= 3)) {
       auto speculate = [&](Index& value) {
         value = (value * (100 + options.inlining.speculativePercent)) / 100;
       };
@@ -344,6 +339,146 @@ static void doInlinings(Module* module, const InliningActionVector& actions) {
   wasm::UniqueNameMapper::uniquify(target->body);
 }
 
+static void
+doOptimize(Function* func, Module* module, const PassOptions& options) {
+  PassRunner runner(module, options);
+  runner.setIsNested(true);
+  runner.setValidateGlobally(false); // not a full valid module
+  // this is especially useful after inlining
+  // TODO: is this actually useful if pass options do it anyhow?
+  runner.add("precompute-propagate");
+  runner.addDefaultFunctionOptimizationPasses(); // do all the usual stuff
+  runner.runOnFunction(func);
+}
+
+// TODO
+class SpeculationLimiter {
+};
+
+// Schedules inlinings for a list of possible ones, and then runs them.
+//
+// We need to schedule because we may not be able to do them all. We follow the
+// rule that in a single iteration each
+// function can either be an inlining source, or a target, *but not both*. That
+// is, it is ok to inline a function to multiple places, and it is ok to inline
+// multiple things into a function, but a function must not play both roles at
+// once. If we want to inline A into B, and B into C, then the order matters:
+// perhaps after inlining A into B, thus changing B, we may no longer want to
+// inline it into C (maybe it is bigger). Or, if we inline B into C first, then
+// maybe B has no more uses, and there is no point to inline A into B. To avoid
+// such complexity, we will do one of the inlinings (A into B, or B into C) but
+// not both in a single iteration. This does not stall progress because we do
+// still perform some inlining in each iteration.
+//
+// Note that we need to do this scheduling in a deterministic manner, but we
+// also want to run the actual inlinings and optimizations in parallel, as the
+// optimization in particular can be costly.
+struct Scheduler {
+  Module* module;
+
+  const InliningState& state;
+
+  // If not null, then we can optimize with this pass runner.
+  PassRunner* optimizationRunner;
+
+  // How many times we inlined a source. Using this count we can tell if we
+  // inlined into all the calls to the function (which may leave it with no
+  // more uses).
+  std::unordered_map<Function*, Index> sourceInlinings;
+
+  bool inlined = false;
+
+  Scheduler(Module* module,
+            const InliningState& state,
+            PassRunner* optimizationRunner)
+    : module(module), state(state), optimizationRunner(optimizationRunner) {}
+
+  virtual void run() = 0;
+
+protected:
+  InliningActionVector getAllPossibleActionsFromState() {
+    InliningActionVector possibleActions;
+    // Accumulate all the possible actions in a deterministic order.
+    for (auto& func : module->functions) {
+      auto iter = state.actionsForFunction.find(func->name);
+      if (iter != state.actionsForFunction.end()) {
+        for (auto& action : iter->second) {
+          possibleActions.push_back(action);
+        }
+      }
+    }
+    return possibleActions;
+  }
+
+  std::map<Function*, InliningActionVector> scheduleNonInterferingActions(const InliningActionVector& possibleActions) {
+    // The actions we'll run for each target function, each representing an
+    // inlining into it.
+    std::map<Function*, InliningActionVector> actionsForTarget;
+
+    for (auto& action : possibleActions) {
+      // Scheduling is fairly simple here, as we definitely want to do each
+      // action. Schedule a new action unless it interferes with another in the
+      // sense mentioned earlier: A single function cannot be both a source and
+      // a target.
+      if (sourceInlinings.count(action.target) ||
+          actionsForTarget.count(action.source)) {
+        continue;
+      }
+#ifdef INLINING_DEBUG
+      std::cout << "will inline " << action.source->name << " into "
+                << action.target->name << '\n';
+#endif
+      // This is an action we can do!
+      actionsForTarget[action.target].push_back(action);
+    }
+    return actionsForTarget;
+  }
+};
+
+// A scheduler for inlinings we definitely want to perform, i.e., that require
+// no speculation.
+struct DefiniteScheduler : public Scheduler {
+  DefiniteScheduler(Module* module,
+                    const InliningState& state,
+                    PassRunner* optimizationRunner)
+    : Scheduler(module, state, optimizationRunner) {}
+
+  void run() {
+    auto actionsForTarget = scheduleNonInterferingActions(getAllPossibleActionsFromState());
+
+    if (actionsForTarget.empty()) {
+      inlined = false;
+      return;
+    }
+
+    // We found things to inline!
+    inlined = true;
+
+    ModuleUtils::parallelFunctionExecution(*module, [&](Function* target) {
+      auto iter = actionsForTarget.find(target);
+      if (iter == actionsForTarget.end()) {
+        return;
+      }
+      const auto& actions = iter->second;
+      assert(!actions.empty());
+#ifdef INLINING_DEBUG
+      std::cout << "inlining into " << target->name << '\n';
+#endif
+      for (auto& action : actions) {
+        assert(action.target == target);
+        sourceInlinings[action.source]++;
+      }
+      doInlinings(module, actions);
+      if (optimizationRunner) {
+        doOptimize(target, module, optimizationRunner->options);
+      }
+    });
+  }
+};
+
+// Speculative scheduler
+
+
 // Given a thing and its copy, find the corresponding call in the copy to a call
 // in the original.
 static Expression**
@@ -360,18 +495,6 @@ getCorrespondingCallInCopy(Call* call, Expression* original, Expression* copy) {
     }
   }
   WASM_UNREACHABLE("copy is not a copy of original");
-}
-
-static void
-doOptimize(Function* func, Module* module, const PassOptions& options) {
-  PassRunner runner(module, options);
-  runner.setIsNested(true);
-  runner.setValidateGlobally(false); // not a full valid module
-  // this is especially useful after inlining
-  // TODO: is this actually useful if pass options do it anyhow?
-  runner.add("precompute-propagate");
-  runner.addDefaultFunctionOptimizationPasses(); // do all the usual stuff
-  runner.runOnFunction(func);
 }
 
 // Returns whether we inlined.
@@ -458,124 +581,6 @@ static bool doSpeculativeInlining(Module* module,
   target->body = ExpressionManipulator::copy(tempFunc->body, *module);
   return true;
 }
-
-// Schedules inlinings for a list of possible ones, and then runs them.
-//
-// We need to schedule because we may not be able to do them all. We follow the
-// rule that in a single iteration each
-// function can either be an inlining source, or a target, *but not both*. That
-// is, it is ok to inline a function to multiple places, and it is ok to inline
-// multiple things into a function, but a function must not play both roles at
-// once. If we want to inline A into B, and B into C, then the order matters:
-// perhaps after inlining A into B, thus changing B, we may no longer want to
-// inline it into C (maybe it is bigger). Or, if we inline B into C first, then
-// maybe B has no more uses, and there is no point to inline A into B. To avoid
-// such complexity, we will do one of the inlinings (A into B, or B into C) but
-// not both in a single iteration. This does not stall progress because we do
-// still perform some inlining in each iteration.
-//
-// Note that we need to do this scheduling in a deterministic manner, but we
-// also want to run the actual inlinings and optimizations in parallel, as the
-// optimization in particular can be costly.
-struct Scheduler {
-  Module* module;
-
-  // If not null, then we can optimize with this pass runner.
-  PassRunner* optimizationRunner;
-
-  // How many times we inlined a source. Using this count we can tell if we
-  // inlined into all the calls to the function (which may leave it with no
-  // more uses).
-  std::unordered_map<Function*, Index> sourceInlinings;
-
-  bool inlined = false;
-
-  Scheduler(Module* module,
-            const InliningState& state,
-            PassRunner* optimizationRunner)
-    : module(module), optimizationRunner(optimizationRunner) {
-    // Accumulate all the possible actions in a deterministic order.
-    for (auto& func : module->functions) {
-      auto iter = state.actionsForFunction.find(func->name);
-      if (iter != state.actionsForFunction.end()) {
-        for (auto& action : iter->second) {
-          possibleActions.push_back(action);
-        }
-      }
-    }
-  }
-
-  virtual void run() = 0;
-
-protected:
-  InliningActionVector possibleActions;
-};
-
-// A scheduler for inlinings we definitely want to perform, i.e., that require
-// no speculation.
-struct DefiniteScheduler : public Scheduler {
-  DefiniteScheduler(Module* module,
-                    const InliningState& state,
-                    PassRunner* optimizationRunner)
-    : Scheduler(module, state, optimizationRunner) {}
-
-  void run() {
-    // The actions we'll run for each target function, each representing an
-    // inlining into it.
-    std::map<Function*, InliningActionVector> actionsForTarget;
-
-    for (auto& action : possibleActions) {
-      // Scheduling is fairly simple here, as we definitely want to do each
-      // action. Schedule a new action unless it interferes with another in the
-      // sense mentioned earlier: A single function cannot be both a source and
-      // a target.
-      if (sourceInlinings.count(action.target) ||
-          actionsForTarget.count(action.source)) {
-        continue;
-      }
-#ifdef INLINING_DEBUG
-      std::cout << "will inline " << action.source->name << " into "
-                << action.target->name << '\n';
-#endif
-      // This is an action we can do!
-      actionsForTarget[action.target].push_back(action);
-      sourceInlinings[action.source]++;
-    }
-
-    if (actionsForTarget.empty()) {
-      inlined = false;
-      return;
-    }
-
-    // We found things to inline!
-    inlined = true;
-
-    ModuleUtils::parallelFunctionExecution(*module, [&](Function* target) {
-      auto iter = actionsForTarget.find(target);
-      if (iter == actionsForTarget.end()) {
-        return;
-      }
-      const auto& actions = iter->second;
-      assert(!actions.empty());
-#ifdef INLINING_DEBUG
-      std::cout << "inlining into " << target->name << '\n';
-#endif
-      for (auto& action : actions) {
-        assert(action.target == target);
-      }
-      doInlinings(module, actions);
-      if (optimizationRunner) {
-        doOptimize(target, module, optimizationRunner->options);
-      }
-    });
-  }
-};
-
-// Speculative scheduler
-
-/*
-    assert(!inlined into or inlined from)
-*/
 
 } // anonymous namespace
 
