@@ -516,7 +516,7 @@ struct SpeculativeScheduler : public Scheduler {
   }
 
   bool run() {
-    // TODO: micro-iters
+    // TODO: micro-iters. this is just one so far. can do deferred later.
     InliningActionVector actions = getAllPossibleActionsFromState(),
                          deferredActions;
     auto actionsForTarget = scheduleActions(actions, &deferredActions);
@@ -547,9 +547,6 @@ struct SpeculativeScheduler : public Scheduler {
           inlinedIntoTarget = true;
           inlined = true;
         }
-      }
-      if (inlinedIntoTarget) {
-        doOptimize(target, module, optimizationRunner->options);
       }
     });
 
