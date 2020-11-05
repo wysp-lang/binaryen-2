@@ -272,6 +272,12 @@ parallelFunctionForEach(Module& wasm, T work, bool modifiesBinaryenIR = true) {
   Executor(wasm, work, modifiesBinaryenIR).run(&runner, &wasm);
 }
 
+template<typename T>
+inline void
+immutableParallelFunctionForEach(Module& wasm, T work) {
+  parallelFunctionForEach(Module& wasm, T work, false);
+}
+
 // Helper class for performing an operation on all the functions in the module,
 // in parallel, with an Info object for each one that can contain results of
 // some computation that the operation performs.
@@ -292,10 +298,10 @@ template<typename T> struct ParallelFunctionAnalysis {
       map[func.get()];
     }
 
-    parallelFunctionForEach(wasm, [&](Function* curr) {
+    immutableParallelFunctionForEach(wasm, [&](Function* curr) {
       assert(map.count(curr));
       work(curr, map[curr]);
-    });
+    }, false);
   }
 };
 
