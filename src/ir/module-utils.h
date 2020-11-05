@@ -256,7 +256,9 @@ parallelFunctionForEach(Module& wasm, T work, bool modifiesBinaryenIR = true) {
     Executor(Module& module, T work, bool modifiesBinaryenIR_)
       : module(module), work(work), modifiesBinaryenIR_(modifiesBinaryenIR_) {}
 
-    Executor* create() override { return new Executor(module, work, modifiesBinaryenIR_); }
+    Executor* create() override {
+      return new Executor(module, work, modifiesBinaryenIR_);
+    }
 
     void doWalkFunction(Function* curr) { work(curr); }
 
