@@ -173,9 +173,9 @@ struct InliningAction {
 using InliningActionVector = std::vector<InliningAction>;
 
 struct InliningState {
-  // The set of all functions that may be worth inlining. This includes ones
-  // that we are sure about, and ones that we will consider speculatively.
-  std::unordered_set<Name> maybeWorthInlining;
+  // The set of all functions that are relevant in the current inlining
+  // computation as sources to inline.
+  std::unordered_set<Name> relevantSources;
   // function name => actions that can be performed in it
   std::unordered_map<Name, InliningActionVector> actionsForFunction;
 };
@@ -201,7 +201,7 @@ struct Planner : public WalkerPass<PostWalker<Planner>> {
     } else {
       isUnreachable = curr->type == Type::unreachable;
     }
-    if (state->maybeWorthInlining.count(curr->target) && !isUnreachable &&
+    if (state->relevantSources.count(curr->target) && !isUnreachable &&
         curr->target != getFunction()->name) {
       // nest the call in a block. that way the location of the pointer to the
       // call will not change even if we inline multiple times into the same
@@ -654,6 +654,7 @@ struct Inlining : public Pass {
   // whether to optimize where we inline
   bool optimize = false;
 
+  PassRunner* runner;
   Module* module;
 
   // the information for each function. recomputed in each iteraction
@@ -661,7 +662,8 @@ struct Inlining : public Pass {
 
   Index iterationNumber;
 
-  void run(PassRunner* runner, Module* module_) override {
+  void run(PassRunner* runner_, Module* module_) override {
+    runner = runner_;
     module = module_;
     Index numFunctions = module->functions.size();
     // keep going while we inline, to handle nesting. TODO: optimize
@@ -676,7 +678,7 @@ struct Inlining : public Pass {
                 << " (numFunctions: " << numFunctions << ")\n";
 #endif
       calculateInfos();
-      if (!iteration(runner)) {
+      if (!iteration()) {
         return;
       }
       iterationNumber++;
@@ -715,16 +717,62 @@ struct Inlining : public Pass {
     }
   }
 
-  bool iteration(PassRunner* runner) {
+  bool iteration() {
+    if (doDefiniteInlining()) {
+      // Don't do definite and speculative inlinings in the same iteration, to
+      // keep things simple.
+      return true;
+    }
+    return doSpeculativeInlining();
+  }
+
+  bool doDefiniteInlining() {
     // Find functions potentially worth inlining.
+    InliningState state;
+    ModuleUtils::iterDefinedFunctions(*module, [&](Function* func) {
+      if (infos[func->name].worthInlining(runner->options)) {
+        state.relevantSources.insert(func->name);
+      }
+    });
+    if (!prepareState(state)) {
+      return false;
+    }
+    DefiniteScheduler scheduler(
+      module, state, optimize ? runner : nullptr);
+    if (scheduler.run()) {
+      removeUnusedFunctions(scheduler);
+      return true;
+    }
+    return false;
+  }
+
+  bool doSpeculativeInlining() {
+    if (!optimize) {
+      // Speculation requires optimization.
+      return false;
+    }
     InliningState state;
     ModuleUtils::iterDefinedFunctions(*module, [&](Function* func) {
       if (infos[func->name].speculativelyWorthInlining(runner->options,
                                                        optimize)) {
-        state.maybeWorthInlining.insert(func->name);
+        state.relevantSources.insert(func->name);
       }
     });
-    if (state.maybeWorthInlining.size() == 0) {
+    if (!prepareState(state)) {
+      return false;
+    }
+    SpeculativeScheduler scheduler(module, state, runner, infos);
+    if (scheduler.run()) {
+      removeUnusedFunctions(scheduler);
+      return true;
+    }
+    return false;
+  }
+
+  // Prepares to do inlining by gathering information on functions and finding
+  // all relevant inlining opportunities. Returns whether there are any.
+  bool prepareState(InliningState& state) {
+    if (state.relevantSources.empty()) {
       return false;
     }
     // Fill in actionsForFunction, as we operate on it in parallel (each
@@ -734,27 +782,7 @@ struct Inlining : public Pass {
     }
     // Find all possible inlinings.
     Planner(&state).run(runner, module);
-
-    // Start with definitely-worth inlinings.
-    DefiniteScheduler definiteScheduler(
-      module, state, optimize ? runner : nullptr);
-    if (definiteScheduler.run()) {
-      removeUnusedFunctions(definiteScheduler);
-      // Don't do definite and speculative inlinings in the same iteration, to
-      // keep things simple.
-      return true;
-    }
-    // If we can, try speculative inlinings.
-    if (!optimize) {
-      // Speculation requires optimization.
-      return false;
-    }
-    SpeculativeScheduler speculativeScheduler(module, state, runner, infos);
-    if (speculativeScheduler.run()) {
-      removeUnusedFunctions(speculativeScheduler);
-      return true;
-    }
-    return false;
+    return true;
   }
 
   void removeUnusedFunctions(const Scheduler& scheduler) {
