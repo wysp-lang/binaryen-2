@@ -256,7 +256,7 @@ parallelFunctionForEach(Module& wasm, T work, bool modifiesBinaryenIR = true) {
     Executor(Module& module, T work, bool modifiesBinaryenIR_)
       : module(module), work(work), modifiesBinaryenIR_(modifiesBinaryenIR_) {}
 
-    Executor* create() override { return new Executor(module, work); }
+    Executor* create() override { return new Executor(module, work, modifiesBinaryenIR_); }
 
     void doWalkFunction(Function* curr) { work(curr); }
 
@@ -267,7 +267,7 @@ parallelFunctionForEach(Module& wasm, T work, bool modifiesBinaryenIR = true) {
   };
 
   PassRunner runner(&wasm);
-  Executor(wasm, work, modifiesBinaryenIR_).run(&runner, &wasm);
+  Executor(wasm, work, modifiesBinaryenIR).run(&runner, &wasm);
 }
 
 // Helper class for performing an operation on all the functions in the module,
