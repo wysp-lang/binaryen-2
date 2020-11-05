@@ -539,12 +539,10 @@ struct SpeculativeScheduler : public Scheduler {
 #ifdef INLINING_DEBUG
       std::cout << "speculatively inlining into " << target->name << '\n';
 #endif
-      bool inlinedIntoTarget = false;
       for (auto& action : actions) {
         assert(action.target == target);
         if (doSpeculativeInlining(action)) {
           sourceInlinings[action.source]++;
-          inlinedIntoTarget = true;
           inlined = true;
         }
       }
