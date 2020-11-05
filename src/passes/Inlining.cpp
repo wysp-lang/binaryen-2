@@ -564,24 +564,21 @@ struct SpeculativeScheduler : public Scheduler {
     Function* target = action.target;
     Function* source = action.source;
     auto& sourceInfo = infos.at(action.source->name);
+    auto options = optimizationRunner->options;
+    assert(sourceInfo.speculativelyWorthInlining(options, true));
 #ifdef INLINING_DEBUG
     std::cout << "maybe inline " << source->name << " into " << target->name
               << '\n';
 #endif
-    abort(); // TODO
-    // We were not certain, but since we were called, that means we can at least
-    // speculatively inline it.
-    auto options = optimizationRunner->options;
-    assert(sourceInfo.speculativelyWorthInlining(options, true));
 
     // Create a temporary setup to inline into, and perform inlining and
     // optimization there.
     Module tempModule;
-    Function* tempFunc = ModuleUtils::copyFunction(target, tempModule);
-    InliningAction tempAction = action;
-    auto* targetCall = (*action.callSite)->cast<Call>();
-    tempAction.callSite =
-      getCorrespondingCallInCopy(targetCall, target->body, tempFunc->body);
+    Function* tempTarget = ModuleUtils::copyFunction(target, tempModule);
+    auto* callSite = (*action.callSite)->cast<Call>();
+    auto** tempCallSite =
+      getCorrespondingCallInCopy(callSite, target->body, tempTarget->body);
+    InliningAction tempAction = {tempTarget, tempCallSite, source};
     assert(tempAction.callSite);
     doInlinings(&tempModule, {tempAction});
     doOptimize(target, module, options);
@@ -593,7 +590,7 @@ struct SpeculativeScheduler : public Scheduler {
     if (options.shrinkLevel) {
       // Check for a decrease in code size.
       auto oldTargetSize = Measurer::measure(target->body);
-      auto newTargetSize = Measurer::measure(tempFunc->body);
+      auto newTargetSize = Measurer::measure(tempTarget->body);
       if (sourceInfo.refs == 1 && !sourceInfo.usedGlobally) {
         // The inlined function has no other references, so we will remove it
         // after the inlining. Compare to the previous total size of the inlined
@@ -610,7 +607,7 @@ struct SpeculativeScheduler : public Scheduler {
     } else if (options.optimizeLevel >= 3) {
       // Check for a decrease in computational cost.
       auto oldCost = CostAnalyzer(target->body).cost;
-      auto newCost = CostAnalyzer(tempFunc->body).cost;
+      auto newCost = CostAnalyzer(tempTarget->body).cost;
       /// no! inline, then measure, then optimize, and see if the new cost is
       /// better.
       // it may be more than the old cost! but a reduction suggests an
@@ -642,7 +639,7 @@ struct SpeculativeScheduler : public Scheduler {
     }
 
     // This is worth keeping; copy it over!
-    target->body = ExpressionManipulator::copy(tempFunc->body, *module);
+    target->body = ExpressionManipulator::copy(tempTarget->body, *module);
     return true;
   }
 };
