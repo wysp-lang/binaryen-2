@@ -239,9 +239,8 @@ template<typename T> inline void iterImports(Module& wasm, T visitor) {
 
 // Helper class for executing an operation on all the functions in the module,
 // in parallel.
-template<typename T, bool immutable=false>
-inline void
-parallelFunctionForEach(Module& wasm, T work) {
+template<typename T, bool immutable = false>
+inline void parallelFunctionForEach(Module& wasm, T work) {
   // Run on the imports first. TODO: parallelize this too
   for (auto& func : wasm.functions) {
     if (func->imported()) {
@@ -255,9 +254,7 @@ parallelFunctionForEach(Module& wasm, T work) {
 
     Executor(Module& module, T work) : module(module), work(work) {}
 
-    Executor* create() override {
-      return new Executor(module, work);
-    }
+    Executor* create() override { return new Executor(module, work); }
 
     void doWalkFunction(Function* curr) { work(curr); }
 
