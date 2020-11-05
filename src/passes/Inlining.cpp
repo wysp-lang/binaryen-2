@@ -554,11 +554,15 @@ struct SpeculativeScheduler : public Scheduler {
       const auto& actions = iter->second;
       assert(!actions.empty());
 #ifdef INLINING_DEBUG
-      std::cout << "speculatively inlining into " << target->name << '\n';
+      std::cout << "consider inlining into " << target->name << '\n';
 #endif
       for (auto& action : actions) {
         assert(action.target == target);
         if (doSpeculativeInlining(action)) {
+#ifdef INLINING_DEBUG
+          std::cout << "speculatively inlined " << action.source->name
+                    << " into " << target->name << '\n';
+#endif
           std::lock_guard<std::mutex> lock(mutex);
           sourceInlinings[action.source]++;
           inlined = true;
@@ -576,10 +580,6 @@ struct SpeculativeScheduler : public Scheduler {
     auto& sourceInfo = infos.at(action.source->name);
     auto options = optimizationRunner->options;
     assert(sourceInfo.speculativelyWorthInlining(options, true));
-#ifdef INLINING_DEBUG
-    std::cout << "maybe inline " << source->name << " into " << target->name
-              << '\n';
-#endif
 
     // Create a temporary setup to inline into, and perform inlining and
     // optimization there.
