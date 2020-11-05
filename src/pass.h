@@ -88,9 +88,7 @@ struct InliningOptions {
   // improvement depends on whether we are optimizing for size or speed, etc.)
   // Speculative optimization can take a significant amount of work at compile
   // time, but it can detect useful opportunities that are hard to detect by
-  // heuristics alone. For example, in some cases inlining + optimizing of a
-  // large function will lead to a net reduction in size in the function it is
-  // inlined into, and this can be unpredictable.
+  // heuristics alone.
   // This flag is related to all the size-specifying flags (alwaysInlineMaxSize,
   // oneCallerInlineMaxSize, and flexibleInlineMaxSize): it is interpreted as a
   // percentage increase on top of them. For example, if speculativePercent is
@@ -99,7 +97,7 @@ struct InliningOptions {
   //
   //    [flexibleInlineMaxSize, 1.5 * flexibleInlineMaxSize)
   //
-  uint32_t speculativePercent = 0;
+  uint32_t speculativePercent = 200;
 };
 
 struct PassOptions {
