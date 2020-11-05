@@ -480,7 +480,8 @@ struct DefiniteScheduler : public Scheduler {
       }
     });
 
-    // Note what was inlined at the end to avoid multithreaded access to the map.
+    // Note what was inlined at the end to avoid multithreaded access to the
+    // map.
     for (auto& pair : actionsForTarget) {
       for (auto& action : pair.second) {
         sourceInlinings[action.source]++;

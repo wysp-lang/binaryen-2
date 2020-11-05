@@ -239,7 +239,9 @@ template<typename T> inline void iterImports(Module& wasm, T visitor) {
 
 // Helper class for executing an operation on all the functions in the module,
 // in parallel.
-template<typename T> inline void parallelFunctionForEach(Module& wasm, T work, bool modifiesBinaryenIR=true) {
+template<typename T>
+inline void
+parallelFunctionForEach(Module& wasm, T work, bool modifiesBinaryenIR = true) {
   // Run on the imports first. TODO: parallelize this too
   for (auto& func : wasm.functions) {
     if (func->imported()) {
@@ -251,7 +253,8 @@ template<typename T> inline void parallelFunctionForEach(Module& wasm, T work, b
     bool isFunctionParallel() override { return true; }
     bool modifiesBinaryenIR() override { return modifiesBinaryenIR_; }
 
-    Executor(Module& module, T work, bool modifiesBinaryenIR_) : module(module), work(work), modifiesBinaryenIR_(modifiesBinaryenIR_) {}
+    Executor(Module& module, T work, bool modifiesBinaryenIR_)
+      : module(module), work(work), modifiesBinaryenIR_(modifiesBinaryenIR_) {}
 
     Executor* create() override { return new Executor(module, work); }
 
