@@ -392,7 +392,9 @@ struct Scheduler {
             PassRunner* optimizationRunner)
     : module(module), state(state), optimizationRunner(optimizationRunner) {}
 
-  virtual void run() = 0;
+  // Schedule and run everything.
+  // Returns whether we made any changes.
+  virtual bool run() = 0;
 
 protected:
   InliningActionVector getAllPossibleActionsFromState() {
@@ -414,7 +416,7 @@ protected:
   // a target.
   // If rejectedActions is provided, we add actions we rejected to there.
   std::map<Function*, InliningActionVector>
-  scheduleNonInterferingActions(const InliningActionVector& possibleActions,
+  scheduleActions(const InliningActionVector& possibleActions,
                                 InliningActionVector* rejectedActions=nullptr) {
     // The actions we'll run for each target function, each representing an
     // inlining into it.
@@ -447,17 +449,15 @@ struct DefiniteScheduler : public Scheduler {
                     PassRunner* optimizationRunner)
     : Scheduler(module, state, optimizationRunner) {}
 
-  void run() {
+  bool run() {
     auto actionsForTarget =
-      scheduleNonInterferingActions(getAllPossibleActionsFromState());
+      scheduleActions(getAllPossibleActionsFromState());
 
     if (actionsForTarget.empty()) {
-      inlined = false;
-      return;
+      return false;
     }
 
     // We found things to inline!
-    inlined = true;
 
     ModuleUtils::parallelFunctionExecution(*module, [&](Function* target) {
       auto iter = actionsForTarget.find(target);
@@ -478,6 +478,8 @@ struct DefiniteScheduler : public Scheduler {
         doOptimize(target, module, optimizationRunner->options);
       }
     });
+
+    return true;
   }
 };
 
