@@ -727,7 +727,7 @@ struct Inlining : public Pass {
   }
 
   bool doDefiniteInlining() {
-    // Find functions potentially worth inlining.
+    // Find functions definitely worth inlining.
     InliningState state;
     ModuleUtils::iterDefinedFunctions(*module, [&](Function* func) {
       if (infos[func->name].worthInlining(runner->options)) {
@@ -750,6 +750,7 @@ struct Inlining : public Pass {
       // Speculation requires optimization.
       return false;
     }
+    // Find functions potentially worth inlining, with speculation.
     InliningState state;
     ModuleUtils::iterDefinedFunctions(*module, [&](Function* func) {
       if (infos[func->name].speculativelyWorthInlining(runner->options,
