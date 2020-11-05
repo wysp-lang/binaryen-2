@@ -94,14 +94,17 @@ struct FunctionInfo {
 
   // Check if we should speculatively inline a function.
   // Note that it only makes sense to speculatively optimize if we are
-  // optimizing: if we are not willing to run the optimizer after each
-  // inlining, that exactly precludes speculation.
+  // optimizing, as to check if speculation is worthwhile we must optimize.
   bool speculativelyWorthInlining(const PassOptions& options,
                                   bool optimize) const {
     PassOptions speculativeOptions = options;
     // To speculate, we must optimize, and we must be optimizing heavily for
-    // speed or size or both.
-    if (optimize && (options.optimizeLevel >= 3 || options.shrinkLevel)) {
+    // size or speed.
+    // If we optimize for size, we can just check the size after speculation.
+    // If we optimize for speed, we can't be sure we are helping if there are
+    // calls or loops, which can perform an uncertain amount of computation,
+    // so do not speculate in those cases.
+    if (optimize && (options.shrinkLevel || (options.optimizeLevel >= 3 && !hasCalls && !hasLoops))) {
       auto speculate = [&](Index& value) {
         value = (value * (100 + options.inlining.speculativePercent)) / 100;
       };
@@ -252,8 +255,9 @@ struct Updater : public PostWalker<Updater> {
 };
 
 // Core inlining logic that copies the inlined code from the source function
-// into the target function. This does not do everything needed for inling,
-// see doInlinings() for the full operation.
+// into the target function, replacing the appropriate call. This does *not* do
+// everything needed for inlining, as more operations are needed, and so you
+// should call doInlinings().
 static void doInliningCopy(Module* module, const InliningAction& action) {
   Function* target = action.target;
   Function* source = action.source;
@@ -318,7 +322,8 @@ static void doInliningCopy(Module* module, const InliningAction& action) {
 // Do one or more inlinings. They must all be to the same target function. This
 // design makes it possible to do the "fixup" stage at the end only once, and
 // not once per inlining. Specifically, after inlining we must make sure that
-// block names are unique, and doing so once after multiple inlinings is enough.
+// block names are unique, and it's faster to fix that up once after multiple
+// inlinings.
 static void doInlinings(Module* module, const InliningActionVector& actions) {
   // Make sure they are all to the same target function.
   Function* target = nullptr;
@@ -362,7 +367,8 @@ doOptimize(Function* func, Module* module, const PassOptions& options) {
   runner.setIsNested(true);
   runner.setValidateGlobally(false); // not a full valid module
   // this is especially useful after inlining
-  runner.add("precompute-propagate"); // is this needed if O3/Os anyhow?
+  // TODO: is this actually useful if pass options do it anyhow?
+  runner.add("precompute-propagate");
   runner.addDefaultFunctionOptimizationPasses(); // do all the usual stuff
   runner.runOnFunction(func);
 }
@@ -446,10 +452,20 @@ static bool doSpeculativeInlining(Module* module,
   return true;
 }
 
-// Schedules inlinings for a list of possible ones. We need to schedule because
-// we may not be able to do them all: after we inline A into B, it may not be
-// worth inlining B into anything else, for example, so even if we planned to
-// inline B, we must not do so, at least not in this iteration.
+// Schedules inlinings for a list of possible ones, and then runs them.
+//
+// We need to schedule because we may not be able to do them all. We follow the
+// rule that in a single iteration each
+// function can either be an inlining source, or a target, *but not both*. That
+// is, it is ok to inline a function to multiple places, and it is ok to inline
+// multiple things into a function, but a function must not play both roles at
+// once. If we want to inline A into B, and B into C, then the order matters:
+// perhaps after inlining A into B, thus changing B, we may no longer want to
+// inline it into C (maybe it is bigger). Or, if we inline B into C first, then
+// maybe B has no more uses, and there is no point to inline A into B. To avoid
+// such complexity, we will do one of the inlinings (A into B, or B into C) but
+// not both in a single iteration. This does not stall progress because we do
+// still perform some inlining in each iteration.
 //
 // Note that we need to do this scheduling in a deterministic manner, but we
 // also want to run the actual inlinings and optimizations in parallel, as the
@@ -471,10 +487,13 @@ struct Scheduler {
             const InliningState& state,
             PassRunner* optimizationRunner)
     : module(module), optimizationRunner(optimizationRunner) {
-    // Accumulate all the possible actions.
-    for (auto& pair : state.actionsForFunction) {
-      for (auto& action : pair.second) {
-        possibleActions.push_back(action);
+    // Accumulate all the possible actions in a deterministic order.
+    for (auto& func : module->functions) {
+      auto iter = state.actionsForFunction.find(func->name);
+      if (iter != state.actionsForFunction.end()) {
+        for (auto& action : iter->second) {
+          possibleActions.push_back(action);
+        }
       }
     }
   }
@@ -494,27 +513,16 @@ struct DefiniteScheduler : public Scheduler {
     : Scheduler(module, state, optimizationRunner) {}
 
   void run() {
-    // Scheduling is fairly simple here, as we definitely want to do each
-    // action. Schedule a new action unless it interferes with another.
-    // Note that it is ok to inline multiple times into the same target, but we
-    // do want to avoid optimizing that target function more than once, so we
-    // optimize once at the end for each. Which functions were inlined or
-    // inlined into.
-
     // The actions we'll run for each target function, each representing an
     // inlining into it.
     std::map<Function*, InliningActionVector> actionsForTarget;
 
     for (auto& action : possibleActions) {
-      // If we'll inline the target into something else, then there is a "race"
-      // here, and potentially this inlining is not necessary (for example, the
-      // function may have no more uses), so leave it for later.
-      if (sourceInlinings.count(action.target)) {
-        continue;
-      }
-      // If we'll inline into the source, then it has been modified, and may
-      // not be worth inlining as it can be larger, so leave it for later.
-      if (actionsForTarget.count(action.source)) {
+      // Scheduling is fairly simple here, as we definitely want to do each
+      // action. Schedule a new action unless it interferes with another in the
+      // sense mentioned earlier: A single function cannot be both a source and
+      // a target.
+      if (sourceInlinings.count(action.target) || actionsForTarget.count(action.source)) {
         continue;
       }
 #ifdef INLINING_DEBUG
