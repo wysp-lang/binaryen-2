@@ -240,7 +240,7 @@ template<typename T> inline void iterImports(Module& wasm, T visitor) {
 // Helper class for executing an operation on all the functions in the module,
 // in parallel.
 template<typename T>
-inline void parallelFunctionExecution(Module& wasm, T work) {
+inline void parallelFunctionForEach(Module& wasm, T work) {
   // Run on the imports first. TODO: parallelize this too
   for (auto& func : wasm.functions) {
     if (func->imported()) {
@@ -286,35 +286,10 @@ template<typename T> struct ParallelFunctionAnalysis {
       map[func.get()];
     }
 
-    // Run on the imports first. TODO: parallelize this too
-    for (auto& func : wasm.functions) {
-      if (func->imported()) {
-        work(func.get(), map[func.get()]);
-      }
-    }
-
-    struct Mapper : public WalkerPass<PostWalker<Mapper>> {
-      bool isFunctionParallel() override { return true; }
-      bool modifiesBinaryenIR() override { return false; }
-
-      Mapper(Module& module, Map& map, Func work)
-        : module(module), map(map), work(work) {}
-
-      Mapper* create() override { return new Mapper(module, map, work); }
-
-      void doWalkFunction(Function* curr) {
-        assert(map.count(curr));
-        work(curr, map[curr]);
-      }
-
-    private:
-      Module& module;
-      Map& map;
-      Func work;
-    };
-
-    PassRunner runner(&wasm);
-    Mapper(wasm, map, work).run(&runner, &wasm);
+    parallelFunctionForEach(wasm, [&](Function* curr) {
+      assert(map.count(curr));
+      work(curr, map[curr]);
+    });
   }
 };
 

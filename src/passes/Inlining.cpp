@@ -529,7 +529,7 @@ struct SpeculativeScheduler : public Scheduler {
 
     bool inlined = false;
 
-    ModuleUtils::parallelFunctionExecution(*module, [&](Function* target) {
+    ModuleUtils::parallelFunctionForEach(*module, [&](Function* target) {
       auto iter = actionsForTarget.find(target);
       if (iter == actionsForTarget.end()) {
         return;
