@@ -590,7 +590,7 @@ struct SpeculativeScheduler : public Scheduler {
       auto oldTargetSize = Measurer::measure(target->body);
       auto newTargetSize = Measurer::measure(tempTarget->body);
       if (sourceInfo.refs == 1 && !sourceInfo.usedGlobally) {
-        // The inlined function has no other references, so we will remove it
+        // The inlined function has no other references, so we can remove it
         // after the inlining. Compare to the previous total size of the inlined
         // function and the function we inlined into.
         // (Note that just by removing a function we are saving a few bytes at
@@ -598,8 +598,9 @@ struct SpeculativeScheduler : public Scheduler {
         keepResults = newTargetSize <= oldTargetSize + sourceInfo.size;
       } else {
         // There are other references, so we need a strict decrease in size in
-        // the function we inline to.
-        // TODO: example of when this helps
+        // the function we inline to. This is more rare, but can still happen,
+        // for example if inlining allows us to get a constant result from what
+        // was previously a call, and that helps further reductions.
         keepResults = newTargetSize < oldTargetSize;
       }
     } else if (options.optimizeLevel >= 3) {
