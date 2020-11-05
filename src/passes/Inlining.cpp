@@ -508,16 +508,17 @@ struct SpeculativeScheduler : public Scheduler {
   const NameInfoMap& infos;
 
   SpeculativeScheduler(Module* module,
-                    const InliningState& state,
-                    PassRunner* optimizationRunner,
-                    const NameInfoMap& infos)
+                       const InliningState& state,
+                       PassRunner* optimizationRunner,
+                       const NameInfoMap& infos)
     : Scheduler(module, state, optimizationRunner), infos(infos) {
     assert(optimizationRunner);
   }
 
   bool run() {
     // TODO: micro-iters
-    InliningActionVector actions = getAllPossibleActionsFromState(), deferredActions;
+    InliningActionVector actions = getAllPossibleActionsFromState(),
+                         deferredActions;
     auto actionsForTarget = scheduleActions(actions, &deferredActions);
 
     if (actionsForTarget.empty()) {
@@ -560,10 +561,10 @@ struct SpeculativeScheduler : public Scheduler {
     Function* target = action.target;
     Function* source = action.source;
     auto& sourceInfo = infos.at(action.source->name);
-  #ifdef INLINING_DEBUG
+#ifdef INLINING_DEBUG
     std::cout << "maybe inline " << source->name << " into " << target->name
               << '\n';
-  #endif
+#endif
     abort(); // TODO
     // We were not certain, but since we were called, that means we can at least
     // speculatively inline it.
@@ -609,11 +610,11 @@ struct SpeculativeScheduler : public Scheduler {
       auto newCost = CostAnalyzer(tempFunc->body).cost;
       /// no! inline, then measure, then optimize, and see if the new cost is
       /// better.
-      // it may be more than the old cost! but a reduction suggests an imprvment.
-      // one possible annoyance is inlining adds some local sets, a return, break,
-      // etc. - the "boilerplate" stuff. so maybe this is not quite right to
-      // measure. we can measure cost_target + cost_source. has calls doesn't
-      // matter.
+      // it may be more than the old cost! but a reduction suggests an
+      // imprvment. one possible annoyance is inlining adds some local sets, a
+      // return, break, etc. - the "boilerplate" stuff. so maybe this is not
+      // quite right to measure. we can measure cost_target + cost_source. has
+      // calls doesn't matter.
       if (!sourceInfo.hasCalls) {
         // The source function has no calls in it. That means that we can tell
         // exactly what is going on, without a call that might do more work (or
