@@ -104,7 +104,8 @@ struct FunctionInfo {
     // If we optimize for speed, we can't be sure we are helping if there are
     // calls or loops, which can perform an uncertain amount of computation,
     // so do not speculate in those cases.
-    if (optimize && (options.shrinkLevel || (options.optimizeLevel >= 3 && !hasCalls && !hasLoops))) {
+    if (optimize && (options.shrinkLevel ||
+                     (options.optimizeLevel >= 3 && !hasCalls && !hasLoops))) {
       auto speculate = [&](Index& value) {
         value = (value * (100 + options.inlining.speculativePercent)) / 100;
       };
@@ -522,7 +523,8 @@ struct DefiniteScheduler : public Scheduler {
       // action. Schedule a new action unless it interferes with another in the
       // sense mentioned earlier: A single function cannot be both a source and
       // a target.
-      if (sourceInlinings.count(action.target) || actionsForTarget.count(action.source)) {
+      if (sourceInlinings.count(action.target) ||
+          actionsForTarget.count(action.source)) {
         continue;
       }
 #ifdef INLINING_DEBUG
