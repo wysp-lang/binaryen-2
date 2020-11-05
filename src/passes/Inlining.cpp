@@ -385,8 +385,6 @@ struct Scheduler {
   // more uses).
   std::unordered_map<Function*, Index> sourceInlinings;
 
-  bool inlined = false;
-
   Scheduler(Module* module,
             const InliningState& state,
             PassRunner* optimizationRunner)
@@ -422,8 +420,12 @@ protected:
     // inlining into it.
     std::map<Function*, InliningActionVector> actionsForTarget;
 
+    // Whether something has been chosen to be used as a source for inlining,
+    // in which case, it cannot later be used as a target.
+    std::unordered_set<Function*> usedAsSource;
+
     for (auto& action : possibleActions) {
-      if (sourceInlinings.count(action.target) ||
+      if (usedAsSource.count(action.target) ||
           actionsForTarget.count(action.source)) {
         if (rejectedActions) {
           rejectedActions->push_back(action);
@@ -436,6 +438,7 @@ protected:
 #endif
       // This is an action we can do!
       actionsForTarget[action.target].push_back(action);
+      usedAsSource.insert(action.source);
     }
     return actionsForTarget;
   }
@@ -679,11 +682,10 @@ struct Inlining : public Pass {
     // Start with definitely-worth inlinings.
     DefiniteScheduler definiteScheduler(
       module, state, optimize ? runner : nullptr);
-    definiteScheduler.run();
-    // Don't do definite and speculative inlinings in the same iteration, to
-    // keep things simple.
-    if (definiteScheduler.inlined) {
+    if (definiteScheduler.run()) {
       removeUnusedFunctions(definiteScheduler);
+      // Don't do definite and speculative inlinings in the same iteration, to
+      // keep things simple.
       return true;
     }
     // If we can, try speculative inlinings.
