@@ -272,7 +272,9 @@ struct Updater : public PostWalker<Updater> {
 // functions. The split between the two modules is useful in speculative
 // inlining in which the relevant context is in the real module, while we
 // allocate in another module on the side, and potentially throw that away.
-static void doInliningCopy(const InliningAction& action, Module* allocatingModule, Module* contextModule) {
+static void doInliningCopy(const InliningAction& action,
+                           Module* allocatingModule,
+                           Module* contextModule) {
   Function* target = action.target;
   Function* source = action.source;
   auto* call = (*action.callSite)->cast<Call>();
@@ -307,9 +309,9 @@ static void doInliningCopy(const InliningAction& action, Module* allocatingModul
   // Zero out the vars (as we may be in a loop, and may depend on their
   // zero-init value
   for (Index i = 0; i < source->vars.size(); i++) {
-    block->list.push_back(
-      builder.makeLocalSet(updater.localMapping[source->getVarIndexBase() + i],
-                           LiteralUtils::makeZero(source->vars[i], *allocatingModule)));
+    block->list.push_back(builder.makeLocalSet(
+      updater.localMapping[source->getVarIndexBase() + i],
+      LiteralUtils::makeZero(source->vars[i], *allocatingModule)));
   }
   // Generate and update the inlined contents
   auto* contents = ExpressionManipulator::copy(source->body, *allocatingModule);
@@ -336,7 +338,9 @@ static void doInliningCopy(const InliningAction& action, Module* allocatingModul
 // block names are unique, and it's faster to fix that up once after multiple
 // inlinings.
 // See doInliningCopy for an explanation of the two module parameters here.
-static void doInlinings(const InliningActionVector& actions, Module* allocatingModule, Module* contextModule) {
+static void doInlinings(const InliningActionVector& actions,
+                        Module* allocatingModule,
+                        Module* contextModule) {
   // Make sure they are all to the same target function.
   Function* target = nullptr;
   for (auto& action : actions) {
@@ -623,7 +627,7 @@ struct SpeculativeScheduler : public Scheduler {
       return false;
     }
     InliningAction tempAction = {tempTarget, tempCallSite, source};
-    // 
+    //
     doInlinings({tempAction}, &tempModule, module);
     doOptimize(tempTarget);
 
@@ -636,8 +640,9 @@ struct SpeculativeScheduler : public Scheduler {
     auto newTargetSize = Measurer::measure(tempTarget->body);
     bool removable = sourceInfo.refs == 1 && !sourceInfo.usedGlobally;
 #ifdef INLINING_DEBUG
-    std::cerr << "  old size: " << oldTargetSize << ", new size: "
-              << newTargetSize << ", removable after inlining: " << removable
+    std::cerr << "  old size: " << oldTargetSize
+              << ", new size: " << newTargetSize
+              << ", removable after inlining: " << removable
               << ", source size: " << sourceInfo.size << '\n';
 #endif
     if (removable) {
@@ -675,8 +680,8 @@ struct SpeculativeScheduler : public Scheduler {
       // temporary function, where we inlined and optimized.
       auto costWithOpts = CostAnalyzer(tempTarget->body).cost;
 #ifdef INLINING_DEBUG
-      std::cerr << "  old cost: " << costWithoutOpts << ", new cost: "
-              << costWithOpts << '\n';
+      std::cerr << "  old cost: " << costWithoutOpts
+                << ", new cost: " << costWithOpts << '\n';
 #endif
       // Merely by inlining we remove the cost of a call, so that is a 100%
       // predictable benefit. Non-speculative inlining should be able to handle
