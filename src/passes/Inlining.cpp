@@ -1,3 +1,4 @@
+#define INLINING_DEBUG 1
 /*
  * Copyright 2016 WebAssembly Community Group participants
  *
@@ -269,7 +270,7 @@ static void doInliningCopy(Module* module, const InliningAction& action) {
   Function* target = action.target;
   Function* source = action.source;
 #ifdef INLINING_DEBUG
-  std::cout << "inline copy " << source->name << " into " << target->name << '\n';
+  std::cerr << "inline copy " << source->name << " into " << target->name << '\n';
 #endif
   auto* call = (*action.callSite)->cast<Call>();
   // Works for return_call, too
@@ -429,7 +430,7 @@ protected:
         continue;
       }
 #ifdef INLINING_DEBUG
-      std::cout << "will inline " << action.source->name << " into "
+      std::cerr << "will inline " << action.source->name << " into "
                 << action.target->name << '\n';
 #endif
       // This is an action we can do!
@@ -476,7 +477,7 @@ struct DefiniteScheduler : public Scheduler {
       const auto& actions = iter->second;
       assert(!actions.empty());
 #ifdef INLINING_DEBUG
-      std::cout << "inlining into " << target->name << '\n';
+      std::cerr << "inlining into " << target->name << '\n';
 #endif
       for (auto& action : actions) {
         assert(action.target == target);
@@ -535,11 +536,6 @@ struct SpeculativeScheduler : public Scheduler {
     //       source+target as that would prioritize things that are faster to
     //       check.
     auto actionsForTarget = scheduleActions(actions, &deferredActions);
-#ifdef INLINING_DEBUG
-    std::cout << "speculative inlining: " << actions.size()
-              << " scheduled actions, with " << deferredActions.size()
-              << " deferred\n";
-#endif
     // TODO: Run on the still-possible deferred ones later. We need to note
     //       which functions were already operated on, as normal, but it is
     //       possible we deferred something because it might conflict with an
@@ -548,8 +544,14 @@ struct SpeculativeScheduler : public Scheduler {
     if (actionsForTarget.empty()) {
       return false;
     }
-    abort(); // TODO
+
     // We found things to try to inline!
+
+#ifdef INLINING_DEBUG
+    std::cerr << "speculative inlining: " << actions.size()
+              << " scheduled actions, with " << deferredActions.size()
+              << " deferred\n";
+#endif
 
     bool inlined = false;
     std::mutex mutex;
@@ -563,13 +565,13 @@ struct SpeculativeScheduler : public Scheduler {
       const auto& actions = iter->second;
       assert(!actions.empty());
 #ifdef INLINING_DEBUG
-      std::cout << "consider inlining into " << target->name << '\n';
+      std::cerr << "consider inlining into " << target->name << '\n';
 #endif
       for (auto& action : actions) {
         assert(action.target == target);
         if (doSpeculativeInlining(action)) {
 #ifdef INLINING_DEBUG
-          std::cout << "speculatively inlined " << action.source->name
+          std::cerr << "speculatively inlined " << action.source->name
                     << " into " << target->name << '\n';
 #endif
           std::lock_guard<std::mutex> lock(mutex);
@@ -716,7 +718,7 @@ struct Inlining : public Pass {
     // can look like it is worth inlining)
     while (iterationNumber <= numFunctions) {
 #ifdef INLINING_DEBUG
-      std::cout << "inlining loop iter " << iterationNumber
+      std::cerr << "inlining loop iter " << iterationNumber
                 << " (numFunctions: " << numFunctions << ")\n";
 #endif
       calculateInfos();
