@@ -269,7 +269,7 @@ static void doInliningCopy(Module* module, const InliningAction& action) {
   Function* target = action.target;
   Function* source = action.source;
 #ifdef INLINING_DEBUG
-  std::cout << "inline " << source->name << " into " << target->name << '\n';
+  std::cout << "inline copy " << source->name << " into " << target->name << '\n';
 #endif
   auto* call = (*action.callSite)->cast<Call>();
   // Works for return_call, too
