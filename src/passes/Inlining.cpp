@@ -116,9 +116,7 @@ struct FunctionInfo {
     return size < 100;
   }
 
-  bool removableAfterInlining() const {
-    return refs == 1 && !usedGlobally;
-  }
+  bool removableAfterInlining() const { return refs == 1 && !usedGlobally; }
 };
 
 typedef std::unordered_map<Name, FunctionInfo> NameInfoMap;
