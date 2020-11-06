@@ -1,3 +1,4 @@
+#include <wasm-printing.h>
 #define INLINING_DEBUG 1
 /*
  * Copyright 2016 WebAssembly Community Group participants
@@ -630,7 +631,7 @@ struct SpeculativeScheduler : public Scheduler {
 #ifdef INLINING_DEBUG
     std::cerr << "  old size: " << oldTargetSize << ", new size: "
               << newTargetSize << ", removable after inlining: " << removable
-              << '\n';
+              << ", source size: " << sourceInfo.size << '\n';
 #endif
     if (removable) {
       // The inlined function has no other references, so we can remove it
@@ -708,6 +709,9 @@ struct SpeculativeScheduler : public Scheduler {
 
     // This is worth keeping; copy it over!
     target->body = ExpressionManipulator::copy(tempTarget->body, *module);
+    // When inlining we may have added vars.
+    target->vars = std::move(tempTarget->vars);
+    // TODO: copy debug info
     return true;
   }
 };
