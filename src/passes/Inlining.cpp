@@ -77,22 +77,25 @@ struct FunctionInfo {
   // Check if we should inline a function.
   bool worthInlining(const PassOptions& options) const {
     // See pass.h for how defaults for these options were chosen.
-
+std::cout << "a1\n";
     // If it's small enough that we always want to inline such things, do so.
     if (size <= options.inlining.alwaysInlineMaxSize) {
       return true;
     }
+std::cout << "a2\n";
     // If it has one use, then inlining it would likely reduce code size, at
     // least for reasonable function sizes.
     if (refs == 1 && !usedGlobally &&
         size <= options.inlining.oneCallerInlineMaxSize) {
       return true;
     }
+std::cout << "a3\n";
     // If it's so big that we have no flexible options that could allow it,
     // do not inline.
     if (size > options.inlining.flexibleInlineMaxSize) {
       return false;
     }
+std::cout << "a4\n";
     // More than one use, so we can't eliminate it after inlining,
     // so only worth it if we really care about speed and don't care
     // about size. First, check if it has calls. In that case it is not
@@ -101,6 +104,7 @@ struct FunctionInfo {
     if (hasCalls) {
       return false;
     }
+std::cout << "a5\n";
     return options.optimizeLevel >= 3 && options.shrinkLevel == 0 &&
            (!hasLoops || options.inlining.allowFunctionsWithLoops);
   }
