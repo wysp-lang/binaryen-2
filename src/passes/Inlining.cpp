@@ -269,9 +269,6 @@ struct Updater : public PostWalker<Updater> {
 static void doInliningCopy(Module* module, const InliningAction& action) {
   Function* target = action.target;
   Function* source = action.source;
-#ifdef INLINING_DEBUG
-  std::cerr << "inline copy " << source->name << " into " << target->name << '\n';
-#endif
   auto* call = (*action.callSite)->cast<Call>();
   // Works for return_call, too
   Type retType = source->sig.results;
@@ -345,6 +342,10 @@ static void doInlinings(Module* module, const InliningActionVector& actions) {
   assert(target);
   // Do the copying.
   for (auto& action : actions) {
+#ifdef INLINING_DEBUG
+    std::cerr << "inline " << action.source->name << " into "
+              << action.target->name << '\n';
+#endif
     doInliningCopy(module, action);
   }
   // Fix up label names to be unique.
@@ -617,7 +618,13 @@ struct SpeculativeScheduler : public Scheduler {
     // worst if there is no speedup, at least startup may be faster.
     auto oldTargetSize = Measurer::measure(target->body);
     auto newTargetSize = Measurer::measure(tempTarget->body);
-    if (sourceInfo.refs == 1 && !sourceInfo.usedGlobally) {
+    bool removable = sourceInfo.refs == 1 && !sourceInfo.usedGlobally;
+#ifdef INLINING_DEBUG
+    std::cerr << "  old size: " << oldTargetSize << ", new size: "
+              << newTargetSize << ", removable after inlining: " << removable
+              << '\n';
+#endif
+    if (removable) {
       // The inlined function has no other references, so we can remove it
       // after the inlining. Compare to the previous total size of the inlined
       // function and the function we inlined into.
@@ -651,6 +658,10 @@ struct SpeculativeScheduler : public Scheduler {
       // The cost after optimization is simply the cost measured on the
       // temporary function, where we inlined and optimized.
       auto costWithOpts = CostAnalyzer(tempTarget->body).cost;
+#ifdef INLINING_DEBUG
+      std::cerr << "  old cost: " << costWithoutOpts << ", new cost: "
+              << costWithOpts << '\n';
+#endif
       // Merely by inlining we remove the cost of a call, so that is a 100%
       // predictable benefit. Non-speculative inlining should be able to handle
       // that anyhow, so ignore that cost here - look for something showing more
