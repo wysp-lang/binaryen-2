@@ -342,10 +342,6 @@ static void doInlinings(Module* module, const InliningActionVector& actions) {
   assert(target);
   // Do the copying.
   for (auto& action : actions) {
-#ifdef INLINING_DEBUG
-    std::cerr << "inline " << action.source->name << " into "
-              << action.target->name << '\n';
-#endif
     doInliningCopy(module, action);
   }
   // Fix up label names to be unique.
@@ -477,11 +473,12 @@ struct DefiniteScheduler : public Scheduler {
       }
       const auto& actions = iter->second;
       assert(!actions.empty());
-#ifdef INLINING_DEBUG
-      std::cerr << "inlining into " << target->name << '\n';
-#endif
       for (auto& action : actions) {
         assert(action.target == target);
+#ifdef INLINING_DEBUG
+        std::cerr << "inline " << action.source->name << " into "
+                  << target->name << '\n';
+#endif
       }
       doInlinings(module, actions);
       if (optimizationRunner) {
@@ -515,7 +512,7 @@ getCorrespondingCallInCopy(Call* call, Expression* original, Expression* copy) {
       return copyCalls.list[i];
     }
   }
-  WASM_UNREACHABLE("copy is not a copy of original");
+  return nullptr;
 }
 
 // Speculative scheduler
@@ -607,6 +604,17 @@ struct SpeculativeScheduler : public Scheduler {
     auto* callSite = (*action.callSite)->cast<Call>();
     auto** tempCallSite =
       getCorrespondingCallInCopy(callSite, target->body, tempTarget->body);
+    if (!tempCallSite) {
+      // The action is no longer valid: the callSite no longer exists. This can
+      // happen if we successfull speculatively inline into a function, then
+      // try to inline into it again, as the first one runs optimizations which
+      // may find a call can be removed. (Note that this can't happen in
+      // definite inlining, as there we copy all the inlined code in from all
+      // the sources, then optimize once at the end.)
+      // This is not an error, it just indicates that we found out (fairly late)
+      // that the inlining is not useful.
+      return false;
+    }
     InliningAction tempAction = {tempTarget, tempCallSite, source};
     doInlinings(&tempModule, {tempAction});
     doOptimize(tempTarget);
