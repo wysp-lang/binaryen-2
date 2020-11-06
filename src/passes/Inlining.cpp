@@ -627,7 +627,10 @@ struct SpeculativeScheduler : public Scheduler {
       return false;
     }
     InliningAction tempAction = {tempTarget, tempCallSite, source};
-    //
+    // Allocate in the temp module, while using the existing module for
+    // contextual information that we need while inlining (the temp module is
+    // incomplete in that it just contains the one function we are working on,
+    // and it does not contain things like other functions we have calls to).
     doInlinings({tempAction}, &tempModule, module);
     doOptimize(tempTarget);
 
