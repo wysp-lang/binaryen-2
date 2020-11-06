@@ -55,4 +55,4 @@
     (drop (call $no-loops-but-one-use-but-tabled))
   )
 )
-
+;; spec with return_call of another function

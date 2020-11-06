@@ -267,13 +267,18 @@ struct Updater : public PostWalker<Updater> {
 // into the target function, replacing the appropriate call. This does *not* do
 // everything needed for inlining, as more operations are needed, and so you
 // should call doInlinings().
-static void doInliningCopy(Module* module, const InliningAction& action) {
+// Note that two modules are required here, one for allocation, and one for
+// context. The context needed is global information like the return types of
+// functions. The split between the two modules is useful in speculative
+// inlining in which the relevant context is in the real module, while we
+// allocate in another module on the side, and potentially throw that away.
+static void doInliningCopy(const InliningAction& action, Module* allocatingModule, Module* contextModule) {
   Function* target = action.target;
   Function* source = action.source;
   auto* call = (*action.callSite)->cast<Call>();
   // Works for return_call, too
   Type retType = source->sig.results;
-  Builder builder(*module);
+  Builder builder(*allocatingModule);
   auto* block = builder.makeBlock();
   block->name = Name(std::string("__inlined_func$") + source->name.str);
   if (call->isReturn) {
@@ -287,7 +292,7 @@ static void doInliningCopy(Module* module, const InliningAction& action) {
   }
   // Prepare to update the inlined code's locals and other things.
   Updater updater;
-  updater.module = module;
+  updater.module = contextModule;
   updater.returnName = block->name;
   updater.builder = &builder;
   // Set up a locals mapping
@@ -304,10 +309,10 @@ static void doInliningCopy(Module* module, const InliningAction& action) {
   for (Index i = 0; i < source->vars.size(); i++) {
     block->list.push_back(
       builder.makeLocalSet(updater.localMapping[source->getVarIndexBase() + i],
-                           LiteralUtils::makeZero(source->vars[i], *module)));
+                           LiteralUtils::makeZero(source->vars[i], *allocatingModule)));
   }
   // Generate and update the inlined contents
-  auto* contents = ExpressionManipulator::copy(source->body, *module);
+  auto* contents = ExpressionManipulator::copy(source->body, *allocatingModule);
   if (!source->debugLocations.empty()) {
     debug::copyDebugInfo(source->body, contents, source, target);
   }
@@ -330,7 +335,8 @@ static void doInliningCopy(Module* module, const InliningAction& action) {
 // not once per inlining. Specifically, after inlining we must make sure that
 // block names are unique, and it's faster to fix that up once after multiple
 // inlinings.
-static void doInlinings(Module* module, const InliningActionVector& actions) {
+// See doInliningCopy for an explanation of the two module parameters here.
+static void doInlinings(const InliningActionVector& actions, Module* allocatingModule, Module* contextModule) {
   // Make sure they are all to the same target function.
   Function* target = nullptr;
   for (auto& action : actions) {
@@ -343,7 +349,7 @@ static void doInlinings(Module* module, const InliningActionVector& actions) {
   assert(target);
   // Do the copying.
   for (auto& action : actions) {
-    doInliningCopy(module, action);
+    doInliningCopy(action, allocatingModule, contextModule);
   }
   // Fix up label names to be unique.
   wasm::UniqueNameMapper::uniquify(target->body);
@@ -481,7 +487,7 @@ struct DefiniteScheduler : public Scheduler {
                   << target->name << '\n';
 #endif
       }
-      doInlinings(module, actions);
+      doInlinings(actions, module, module);
       if (optimizationRunner) {
         doOptimize(target);
       }
@@ -617,7 +623,8 @@ struct SpeculativeScheduler : public Scheduler {
       return false;
     }
     InliningAction tempAction = {tempTarget, tempCallSite, source};
-    doInlinings(&tempModule, {tempAction});
+    // 
+    doInlinings({tempAction}, &tempModule, module);
     doOptimize(tempTarget);
 
     bool keepResults;
@@ -912,7 +919,7 @@ struct InlineMainPass : public Pass {
       // No call at all.
       return;
     }
-    doInlinings(module, {{main, callSite, originalMain}});
+    doInlinings({{main, callSite, originalMain}}, module, module);
   }
 };
 

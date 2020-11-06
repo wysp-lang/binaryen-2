@@ -124,7 +124,7 @@ func: func_c
  block          : 1       
  call           : 15      
 export: a (func_a)
- [removable-bytes-without-it]: 72      
+ [removable-bytes-without-it]: 58      
  [total]        : 0       
 export: b (func_b)
  [removable-bytes-without-it]: 18      
