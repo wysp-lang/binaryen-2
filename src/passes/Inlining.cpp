@@ -77,25 +77,22 @@ struct FunctionInfo {
   // Check if we should inline a function.
   bool worthInlining(const PassOptions& options) const {
     // See pass.h for how defaults for these options were chosen.
-std::cout << "a1\n";
     // If it's small enough that we always want to inline such things, do so.
     if (size <= options.inlining.alwaysInlineMaxSize) {
       return true;
     }
-std::cout << "a2\n";
-    // If it has one use, then inlining it would likely reduce code size, at
+    // If we can remove it after inlining (which is the case if it will have no
+    // more uses), then inlining it would likely reduce code size, at
     // least for reasonable function sizes.
-    if (refs == 1 && !usedGlobally &&
+    if (removableAfterInlining() &&
         size <= options.inlining.oneCallerInlineMaxSize) {
       return true;
     }
-std::cout << "a3\n";
     // If it's so big that we have no flexible options that could allow it,
     // do not inline.
     if (size > options.inlining.flexibleInlineMaxSize) {
       return false;
     }
-std::cout << "a4\n";
     // More than one use, so we can't eliminate it after inlining,
     // so only worth it if we really care about speed and don't care
     // about size. First, check if it has calls. In that case it is not
@@ -104,7 +101,6 @@ std::cout << "a4\n";
     if (hasCalls) {
       return false;
     }
-std::cout << "a5\n";
     return options.optimizeLevel >= 3 && options.shrinkLevel == 0 &&
            (!hasLoops || options.inlining.allowFunctionsWithLoops);
   }
@@ -112,20 +108,16 @@ std::cout << "a5\n";
   // Check if we should speculatively inline a function.
   // Note that it only makes sense to speculatively optimize if we are
   // optimizing, as to check if speculation is worthwhile we must optimize.
-  bool speculativelyWorthInlining(const PassOptions& options,
-                                  bool optimize) const {
-    PassOptions speculativeOptions = options;
-    // To speculate, we must optimize, and we must be optimizing heavily for
-    // size or speed.
-    if (optimize && (options.shrinkLevel || options.optimizeLevel >= 3)) {
-      auto speculate = [&](Index& value) {
-        value = (value * (100 + options.inlining.speculativePercent)) / 100;
-      };
-      speculate(speculativeOptions.inlining.alwaysInlineMaxSize);
-      speculate(speculativeOptions.inlining.oneCallerInlineMaxSize);
-      speculate(speculativeOptions.inlining.flexibleInlineMaxSize);
-    }
-    return worthInlining(speculativeOptions);
+  bool speculativelyWorthInlining(const PassOptions& options) const {
+    return size < 50 || worthInlining(options);
+  }
+
+  bool speculativelyWorthInliningInto(const PassOptions& options) const {
+    return size < 100;
+  }
+
+  bool removableAfterInlining() const {
+    return refs == 1 && !usedGlobally;
   }
 };
 
@@ -182,8 +174,19 @@ struct InliningState {
   // The set of all functions that are relevant in the current inlining
   // computation as sources to inline.
   std::unordered_set<Name> relevantSources;
+  // We can either say that all targets are relevant, or have a set.
+  bool allTargetsRelevant = true;
+  std::unordered_set<Name> relevantTargets;
   // function name => actions that can be performed in it
   std::unordered_map<Name, InliningActionVector> actionsForFunction;
+
+  bool isTargetRelevant(Function* func) {
+    return allTargetsRelevant || relevantTargets.count(func->name);
+  }
+
+  bool hasRelevantTargets() {
+    return allTargetsRelevant || !relevantTargets.empty();
+  }
 };
 
 struct Planner : public WalkerPass<PostWalker<Planner>> {
@@ -220,6 +223,12 @@ struct Planner : public WalkerPass<PostWalker<Planner>> {
         InliningAction{getFunction(),
                        &block->list[0],
                        getModule()->getFunction(curr->target)});
+    }
+  }
+
+  void doWalkFunction(Function* func) {
+    if (state->isTargetRelevant(func)) {
+      WalkerPass<PostWalker<Planner>>::doWalkFunction(func);
     }
   }
 
@@ -609,7 +618,7 @@ struct SpeculativeScheduler : public Scheduler {
     Function* source = action.source;
     auto& sourceInfo = infos.at(action.source->name);
     auto options = optimizationRunner->options;
-    assert(sourceInfo.speculativelyWorthInlining(options, true));
+    assert(sourceInfo.speculativelyWorthInlining(options));
     assert(options.shrinkLevel || options.optimizeLevel >= 3);
 
     // Create a temporary setup to inline into, and perform inlining and
@@ -645,7 +654,7 @@ struct SpeculativeScheduler : public Scheduler {
     // worst if there is no speedup, at least startup may be faster.
     auto oldTargetSize = Measurer::measure(target->body);
     auto newTargetSize = Measurer::measure(tempTarget->body);
-    bool removable = sourceInfo.refs == 1 && !sourceInfo.usedGlobally;
+    bool removable = sourceInfo.removableAfterInlining();
 #ifdef INLINING_DEBUG
     std::cerr << "  old size: " << oldTargetSize
               << ", new size: " << newTargetSize
@@ -839,10 +848,14 @@ struct Inlining : public Pass {
     }
     // Find functions potentially worth inlining, with speculation.
     InliningState state;
+    state.allTargetsRelevant = false;
     ModuleUtils::iterDefinedFunctions(*module, [&](Function* func) {
-      if (infos[func->name].speculativelyWorthInlining(runner->options,
-                                                       optimize)) {
+      auto& info = infos[func->name];
+      if (info.speculativelyWorthInlining(runner->options)) {
         state.relevantSources.insert(func->name);
+      }
+      if (info.speculativelyWorthInliningInto(runner->options)) {
+        state.relevantTargets.insert(func->name);
       }
     });
     if (!prepareState(state)) {
@@ -864,7 +877,7 @@ struct Inlining : public Pass {
   // Prepares to do inlining by gathering information on functions and finding
   // all relevant inlining opportunities. Returns whether there are any.
   bool prepareState(InliningState& state) {
-    if (state.relevantSources.empty()) {
+    if (state.relevantSources.empty() || !state.hasRelevantTargets()) {
       return false;
     }
     // Fill in actionsForFunction, as we operate on it in parallel (each
