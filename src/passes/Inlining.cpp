@@ -564,11 +564,12 @@ struct SpeculativeScheduler : public Scheduler {
       }
       const auto& actions = iter->second;
       assert(!actions.empty());
-#ifdef INLINING_DEBUG
-      std::cerr << "consider inlining into " << target->name << '\n';
-#endif
       for (auto& action : actions) {
         assert(action.target == target);
+#ifdef INLINING_DEBUG
+        std::cerr << "consider inlining " << action.source->name << " into "
+                  << target->name << '\n';
+#endif
         if (doSpeculativeInlining(action)) {
 #ifdef INLINING_DEBUG
           std::cerr << "speculatively inlined " << action.source->name
@@ -578,9 +579,9 @@ struct SpeculativeScheduler : public Scheduler {
           // Verify we did not break the invariant of not using a function as
           // both a source and a target, and update what we did.
           assert(!targetsInlinedInto.count(action.source));
-          assert(!sourceInlinings.count(action.target));
+          assert(!sourceInlinings.count(target));
           sourceInlinings[action.source]++;
-          targetsInlinedInto.insert(action.target);
+          targetsInlinedInto.insert(target);
           inlined = true;
         }
       }
