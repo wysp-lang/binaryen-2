@@ -350,9 +350,6 @@ static void doInlinings(Module* module, const InliningActionVector& actions) {
   wasm::UniqueNameMapper::uniquify(target->body);
 }
 
-// TODO
-class SpeculationLimiter {};
-
 // Schedules inlinings for a list of possible ones, and then runs them.
 //
 // We need to schedule because we may not be able to do them all. We follow the
@@ -532,10 +529,21 @@ struct SpeculativeScheduler : public Scheduler {
   }
 
   bool run() {
-    // TODO: micro-iters. this is just one so far. can do deferred later.
     InliningActionVector actions = getAllPossibleActionsFromState(),
                          deferredActions;
+    // TODO: sort them. one option is by a smaller combined size of the
+    //       source+target as that would prioritize things that are faster to
+    //       check.
     auto actionsForTarget = scheduleActions(actions, &deferredActions);
+#ifdef INLINING_DEBUG
+      std::cout << "speculative inlining: " << actions.size() <<
+                << " scheduled actions, with " << deferredActions.size() <<
+                << " deferred\n";
+#endif
+    // TODO: Run on the still-possible deferred ones later. We need to note
+    //       which functions were already operated on, as normal, but it is
+    //       possible we deferred something because it might conflict with an
+    //       action that was discarded.
 
     if (actionsForTarget.empty()) {
       return false;
@@ -545,6 +553,7 @@ struct SpeculativeScheduler : public Scheduler {
 
     bool inlined = false;
     std::mutex mutex;
+    std::unordered_set<Function*> targetsInlinedInto;
 
     ModuleUtils::parallelFunctionForEach(*module, [&](Function* target) {
       auto iter = actionsForTarget.find(target);
@@ -564,7 +573,12 @@ struct SpeculativeScheduler : public Scheduler {
                     << " into " << target->name << '\n';
 #endif
           std::lock_guard<std::mutex> lock(mutex);
+          // Verify we did not break the invariant of not using a function as
+          // both a source and a target, and update what we did.
+          assert(!targetsInlinedInto.count(action.source));
+          assert(!sourceInlinings.count(action.target));
           sourceInlinings[action.source]++;
+          targetsInlinedInto.insert(action.target);
           inlined = true;
         }
       }
@@ -637,9 +651,11 @@ struct SpeculativeScheduler : public Scheduler {
       // Merely by inlining we remove the cost of a call, so that is a 100%
       // predictable benefit. Non-speculative inlining should be able to handle
       // that anyhow, so ignore that cost here - look for something showing more
-      // benefit than that. Such a benefit can justify a code size increase -
+      // benefit than that. Such a benefit can justify a code size increase
+      // (we already checked earlier if code size improved, and would not be
+      // here if it did).
       // TODO: estimates on the effects on VMs: register pressure, etc.
-      keepResults = costWithOpts < costWithoutOpts - CostAnalyer::CallCost;
+      keepResults = costWithOpts < costWithoutOpts - CostAnalyzer::CallCost;
 
       // Note that this is *not* guaranteed to terminate. For example,
       //
@@ -790,7 +806,12 @@ struct Inlining : public Pass {
     SpeculativeScheduler scheduler(module, state, runner, infos);
     if (scheduler.run()) {
       removeUnusedFunctions(scheduler);
-      return true;
+      // TODO: Return true here, to allow further work (both definite and
+      //       speculative inlining may now be possible. However, this would
+      //       require us to avoid repeated work across iterations in
+      //       speculative inlining. For example, we should not try the same
+      //       action more than once, and we need to limit the total number of
+      //       inlinings into a function to avoid infinite recursion, etc.
     }
     return false;
   }
