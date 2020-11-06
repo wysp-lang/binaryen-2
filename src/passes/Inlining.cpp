@@ -536,9 +536,9 @@ struct SpeculativeScheduler : public Scheduler {
     //       check.
     auto actionsForTarget = scheduleActions(actions, &deferredActions);
 #ifdef INLINING_DEBUG
-      std::cout << "speculative inlining: " << actions.size() <<
-                << " scheduled actions, with " << deferredActions.size() <<
-                << " deferred\n";
+    std::cout << "speculative inlining: " << actions.size() << 
+      " scheduled actions, with " << deferredActions.size() <<
+      " deferred\n";
 #endif
     // TODO: Run on the still-possible deferred ones later. We need to note
     //       which functions were already operated on, as normal, but it is
