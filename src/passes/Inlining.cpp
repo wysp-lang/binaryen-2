@@ -840,8 +840,10 @@ struct Inlining : public Pass {
   }
 
   bool doSpeculativeInlining() {
-    if (!optimize) {
-      // Speculation requires optimization.
+    // Speculation requires optimization, and for us to be optimizing for speed
+    // or size heavily.
+    if (!optimize || !(runner->options.optimizeLevel >= 3 ||
+                       runner->options.shrinkLevel)) {
       return false;
     }
     // Find functions potentially worth inlining, with speculation.
