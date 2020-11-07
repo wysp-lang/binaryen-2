@@ -67,7 +67,7 @@
 ;;)
 (module
   (memory 10)
-  (func $source
+  (func $source (param $x i32) (result i32)
     (i32.store offset=0 (i32.const 1) (i32.const 2))
     (i32.store offset=1 (i32.const 1) (i32.const 2))
     (i32.store offset=2 (i32.const 1) (i32.const 2))
@@ -78,9 +78,17 @@
     (i32.store offset=7 (i32.const 1) (i32.const 2))
     (i32.store offset=8 (i32.const 1) (i32.const 2))
     (i32.store offset=9 (i32.const 1) (i32.const 2))
+    (local.get $x)
   )
-  (func $target
-    ;; but with just one use, we can do it.
-    (call $source)
+  (func $target (result i32)
+    ;; a realistic example: inlining the source helps us do further
+    ;; optimizations here
+    (i32.eqz
+      (call $source
+        (call $source
+          (i32.const 0)
+        )
+      )
+    )
   )
 )
