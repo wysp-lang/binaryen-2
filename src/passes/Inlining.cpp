@@ -213,9 +213,8 @@ struct Planner : public WalkerPass<PostWalker<Planner>> {
       // can't add a new element in parallel
       assert(state->actionsForFunction.count(getFunction()->name) > 0);
       state->actionsForFunction[getFunction()->name].emplace_back(
-        InliningAction{getFunction(),
-                       curr,
-                       getModule()->getFunction(curr->target)});
+        InliningAction{
+          getFunction(), curr, getModule()->getFunction(curr->target)});
     }
   }
 
@@ -312,7 +311,8 @@ static bool doInliningCopy(const InliningAction& action,
     Call* callToReplace;
     Expression* replacement;
     bool replaced = false;
-    Replacer(Call* callToReplace, Expression* replacement) : callToReplace(callToReplace), replacement(replacement) {}
+    Replacer(Call* callToReplace, Expression* replacement)
+      : callToReplace(callToReplace), replacement(replacement) {}
     void visitCall(Call* curr) {
       if (curr == callToReplace) {
         replaceCurrent(replacement);
