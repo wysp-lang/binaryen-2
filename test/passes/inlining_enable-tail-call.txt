@@ -12,124 +12,92 @@
   (local $4 f32)
   (local $5 i64)
   (local $6 f32)
-  (block
-   (block $__inlined_func$exported
-    (nop)
-   )
+  (block $__inlined_func$exported
+   (nop)
   )
-  (block
-   (block $__inlined_func$tabled
-    (nop)
-   )
+  (block $__inlined_func$tabled
+   (nop)
   )
-  (block
-   (block $__inlined_func$multi
-    (nop)
-   )
+  (block $__inlined_func$multi
+   (nop)
   )
-  (block
-   (block $__inlined_func$multi0
-    (nop)
-   )
+  (block $__inlined_func$multi0
+   (nop)
   )
-  (block
-   (block $__inlined_func$ok
-    (drop
-     (i32.const 1)
-    )
+  (block $__inlined_func$ok
+   (drop
+    (i32.const 1)
    )
   )
   (drop
-   (block (result i32)
-    (block $__inlined_func$int (result i32)
-     (i32.const 2)
-    )
+   (block $__inlined_func$int (result i32)
+    (i32.const 2)
    )
   )
   (drop
-   (block (result f64)
-    (block $__inlined_func$double (result f64)
-     (f64.const 3.14159)
-    )
+   (block $__inlined_func$double (result f64)
+    (f64.const 3.14159)
    )
   )
   (local.set $x
-   (block (result i32)
-    (block $__inlined_func$int2 (result i32)
-     (i32.const 112)
-    )
+   (block $__inlined_func$int2 (result i32)
+    (i32.const 112)
    )
   )
   (local.set $y
-   (block (result f64)
-    (block $__inlined_func$double2 (result f64)
-     (f64.const 113.14159)
-    )
+   (block $__inlined_func$double2 (result f64)
+    (f64.const 113.14159)
    )
   )
-  (block
-   (block $__inlined_func$with-local
-    (local.set $2
-     (f32.const 0)
-    )
-    (local.set $2
-     (f32.const 2.1418280601501465)
-    )
+  (block $__inlined_func$with-local
+   (local.set $2
+    (f32.const 0)
+   )
+   (local.set $2
+    (f32.const 2.1418280601501465)
    )
   )
-  (block
-   (block $__inlined_func$with-local2
-    (local.set $3
-     (i64.const 0)
-    )
-    (local.set $3
-     (i64.const 4)
-    )
+  (block $__inlined_func$with-local2
+   (local.set $3
+    (i64.const 0)
+   )
+   (local.set $3
+    (i64.const 4)
    )
   )
   (drop
-   (block (result i32)
-    (block $__inlined_func$return (result i32)
-     (br $__inlined_func$return
-      (i32.const 5)
-     )
+   (block $__inlined_func$return (result i32)
+    (br $__inlined_func$return
+     (i32.const 5)
     )
    )
   )
-  (block
-   (block $__inlined_func$multipass
-    (block
-     (block
-      (block $__inlined_func$multipass2
-       (drop
-        (i32.const 6)
-       )
-      )
-     )
+  (block $__inlined_func$multipass
+   (block $__inlined_func$multipass2
+    (drop
+     (i32.const 6)
     )
    )
   )
-  (block
-   (block $__inlined_func$param
-    (local.set $4
-     (f32.const 12.34000015258789)
+  (block $__inlined_func$param
+   (local.set $4
+    (f32.const 12.34000015258789)
+   )
+   (local.set $5
+    (i64.const 890005350012)
+   )
+   (local.set $6
+    (f32.const 0)
+   )
+   (block
+    (drop
+     (local.get $4)
     )
-    (local.set $5
-     (i64.const 890005350012)
+    (drop
+     (local.get $5)
     )
-    (local.set $6
-     (f32.const 0)
-    )
-    (block
-     (drop
-      (local.get $4)
-     )
-     (drop
-      (local.get $5)
-     )
-     (drop
-      (local.get $6)
-     )
+    (drop
+     (local.get $6)
     )
    )
   )
@@ -145,9 +113,7 @@
  )
  (func $cycle1
   (block $__inlined_func$cycle2
-   (block
-    (call $cycle1)
-   )
+   (call $cycle1)
   )
  )
 )
@@ -199,18 +165,16 @@
      (i32.const 1)
      (if (result i32)
       (i32.eqz
-       (block (result i32)
-        (block $__inlined_func$func_3 (result i32)
-         (local.set $8
-          (i32.const 0)
+       (block $__inlined_func$func_3 (result i32)
+        (local.set $8
+         (i32.const 0)
+        )
+        (select
+         (local.get $8)
+         (local.tee $8
+          (i32.const -1)
          )
-         (select
-          (local.get $8)
-          (local.tee $8
-           (i32.const -1)
-          )
-          (i32.const 1)
-         )
+         (i32.const 1)
         )
        )
       )
@@ -271,17 +235,15 @@
  (type $none_=>_none (func))
  (func $0
   (local $0 i32)
-  (block
-   (block $__inlined_func$1
-    (local.set $0
-     (i32.const 42)
-    )
-    (drop
-     (local.get $0)
-    )
+  (block $__inlined_func$1
+   (local.set $0
+    (i32.const 42)
    )
-   (return)
+   (drop
+    (local.get $0)
+   )
   )
+  (return)
  )
 )
 (module
@@ -302,16 +264,10 @@
  (type $none_=>_none (func))
  (func $0
   (drop
-   (block (result i32)
-    (block $__inlined_func$1 (result i32)
-     (block
-      (br $__inlined_func$1
-       (block (result i32)
-        (block $__inlined_func$2 (result i32)
-         (i32.const 42)
-        )
-       )
-      )
+   (block $__inlined_func$1 (result i32)
+    (br $__inlined_func$1
+     (block $__inlined_func$2 (result i32)
+      (i32.const 42)
      )
     )
    )
@@ -324,19 +280,15 @@
   (local $0 i32)
   (block $__inlined_func$1
    (block
-    (block
-     (block
-      (block $__inlined_func$2
-       (local.set $0
-        (i32.const 42)
-       )
-       (drop
-        (local.get $0)
-       )
-      )
+    (block $__inlined_func$2
+     (local.set $0
+      (i32.const 42)
      )
-     (br $__inlined_func$1)
+     (drop
+      (local.get $0)
+     )
     )
+    (br $__inlined_func$1)
    )
    (br $__inlined_func$1)
   )
@@ -348,13 +300,11 @@
  (table $0 10 funcref)
  (func $0
   (drop
-   (block (result i32)
-    (block $__inlined_func$1 (result i32)
-     (br $__inlined_func$1
-      (call_indirect (type $i32_=>_i32)
-       (i32.const 42)
-       (i32.const 0)
-      )
+   (block $__inlined_func$1 (result i32)
+    (br $__inlined_func$1
+     (call_indirect (type $i32_=>_i32)
+      (i32.const 42)
+      (i32.const 0)
      )
     )
    )
@@ -384,34 +334,28 @@
  (global $global$0 (mut i32) (i32.const 10))
  (export "func_102_invoker" (func $19))
  (func $19
-  (block
+  (block $__inlined_func$13
    (block
-    (block $__inlined_func$13
-     (block
-      (if
-       (global.get $global$0)
-       (unreachable)
-      )
+    (if
+     (global.get $global$0)
+     (unreachable)
+    )
+    (block
+     (block $__inlined_func$2
       (block
-       (block
-        (block $__inlined_func$2
-         (block
-          (if
-           (global.get $global$0)
-           (br $__inlined_func$2)
-          )
-          (global.set $global$0
-           (i32.const 1)
-          )
-         )
-        )
-        (br $__inlined_func$13)
+       (if
+        (global.get $global$0)
+        (br $__inlined_func$2)
+       )
+       (global.set $global$0
+        (i32.const 1)
        )
       )
      )
      (br $__inlined_func$13)
     )
    )
+   (br $__inlined_func$13)
   )
   (unreachable)
  )
