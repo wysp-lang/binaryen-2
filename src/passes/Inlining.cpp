@@ -214,6 +214,7 @@ struct Planner : public WalkerPass<PostWalker<Planner>> {
       // call will not change even if we inline multiple times into the same
       // function, otherwise call1(call2()) might be a problem
       auto* block = Builder(*getModule()).makeBlock(curr);
+// XXX
       replaceCurrent(block);
       // can't add a new element in parallel
       assert(state->actionsForFunction.count(getFunction()->name) > 0);
