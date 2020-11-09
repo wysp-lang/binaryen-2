@@ -161,7 +161,7 @@ struct InliningAction {
   // The target function to inline into.
   Function* target;
   // The call in the target function that we will inline onto.
-  Expression** callSite;
+  Call* call;
   // The source contents to be inlined, that is, the source function.
   Function* source;
 };
@@ -210,17 +210,11 @@ struct Planner : public WalkerPass<PostWalker<Planner>> {
     }
     if (state->relevantSources.count(curr->target) && !isUnreachable &&
         curr->target != getFunction()->name) {
-      // nest the call in a block. that way the location of the pointer to the
-      // call will not change even if we inline multiple times into the same
-      // function, otherwise call1(call2()) might be a problem
-      auto* block = Builder(*getModule()).makeBlock(curr);
-// XXX
-      replaceCurrent(block);
       // can't add a new element in parallel
       assert(state->actionsForFunction.count(getFunction()->name) > 0);
       state->actionsForFunction[getFunction()->name].emplace_back(
         InliningAction{getFunction(),
-                       &block->list[0],
+                       curr,
                        getModule()->getFunction(curr->target)});
     }
   }
@@ -284,25 +278,52 @@ struct Updater : public PostWalker<Updater> {
 // functions. The split between the two modules is useful in speculative
 // inlining in which the relevant context is in the real module, while we
 // allocate in another module on the side, and potentially throw that away.
-static void doInliningCopy(const InliningAction& action,
+//
+// This returns whether we inlined. The result is false if the call target to
+// inline onto no longer exists.
+static bool doInliningCopy(const InliningAction& action,
                            Module* allocatingModule,
                            Module* contextModule) {
   Function* target = action.target;
   Function* source = action.source;
-  auto* call = (*action.callSite)->cast<Call>();
+  auto* call = action.call;
   // Works for return_call, too
   Type retType = source->sig.results;
   Builder builder(*allocatingModule);
   auto* block = builder.makeBlock();
   block->name = Name(std::string("__inlined_func$") + source->name.str);
+  // The replacement for the call instruction.
+  Expression* replacement;
   if (call->isReturn) {
     if (retType.isConcrete()) {
-      *action.callSite = builder.makeReturn(block);
+      replacement = builder.makeReturn(block);
     } else {
-      *action.callSite = builder.makeSequence(block, builder.makeReturn());
+      replacement = builder.makeSequence(block, builder.makeReturn());
     }
   } else {
-    *action.callSite = block;
+    replacement = block;
+  }
+  // Replace the call instruction. Note that we could store the pointer to the
+  // call, to avoid this scan of he target function, but doing so would be more
+  // complicated, in particular in allowing multiple inlinings in a single
+  // iteration of the inliner (one issue is that one inlining may move the
+  // pointer to another).
+  struct Replacer : public PostWalker<Replacer> {
+    Call* callToReplace;
+    Expression* replacement;
+    bool replaced = false;
+    Replacer(Call* callToReplace, Expression* replacement) : callToReplace(callToReplace), replacement(replacement) {}
+    void visitCall(Call* curr) {
+      if (curr == callToReplace) {
+        replaceCurrent(replacement);
+        replaced = true;
+      }
+    }
+  } replacer(call, replacement);
+  replacer.walk(target->body);
+  if (!replacer.replaced) {
+    // We couldn't find the target - perhaps it was optimized out?
+    return false;
   }
   // Prepare to update the inlined code's locals and other things.
   Updater updater;
@@ -342,6 +363,7 @@ static void doInliningCopy(const InliningAction& action,
     // Make the block reachable by adding a break to it
     block->list.push_back(builder.makeBreak(block->name));
   }
+  return true;
 }
 
 // Do one or more inlinings. They must all be to the same target function. This
@@ -349,8 +371,9 @@ static void doInliningCopy(const InliningAction& action,
 // not once per inlining. Specifically, after inlining we must make sure that
 // block names are unique, and it's faster to fix that up once after multiple
 // inlinings.
-// See doInliningCopy for an explanation of the two module parameters here.
-static void doInlinings(const InliningActionVector& actions,
+// See doInliningCopy for an explanation of the two module parameters here, and
+// the return value.
+static bool doInlinings(const InliningActionVector& actions,
                         Module* allocatingModule,
                         Module* contextModule) {
   // Make sure they are all to the same target function.
@@ -364,11 +387,17 @@ static void doInlinings(const InliningActionVector& actions,
   }
   assert(target);
   // Do the copying.
+  bool inlined = false;
   for (auto& action : actions) {
-    doInliningCopy(action, allocatingModule, contextModule);
+    if (doInliningCopy(action, allocatingModule, contextModule)) {
+      inlined = true;
+    }
   }
-  // Fix up label names to be unique.
-  wasm::UniqueNameMapper::uniquify(target->body);
+  if (inlined) {
+    // Fix up label names to be unique.
+    wasm::UniqueNameMapper::uniquify(target->body);
+  }
+  return inlined;
 }
 
 // Schedules inlinings for a list of possible ones, and then runs them.
@@ -503,9 +532,10 @@ struct DefiniteScheduler : public Scheduler {
                   << target->name << '\n';
 #endif
       }
-      doInlinings(actions, module, module);
-      if (optimizationRunner) {
-        doOptimize(target);
+      if (doInlinings(actions, module, module)) {
+        if (optimizationRunner) {
+          doOptimize(target);
+        }
       }
     });
 
@@ -522,16 +552,16 @@ struct DefiniteScheduler : public Scheduler {
 
 // Given a thing and its copy, find the corresponding call in the copy to a call
 // in the original.
-static Expression**
+static Call*
 getCorrespondingCallInCopy(Call* call, Expression* original, Expression* copy) {
   // Traverse them both, and use the fact that the walk is a deterministic
   // order.
   // TODO: Add a way to not need to do these traversal, by noting the
   //       correspondence while copying.
-  FindAllPointers<Call> originalCalls(original), copyCalls(copy);
+  FindAll<Call> originalCalls(original), copyCalls(copy);
   assert(originalCalls.list.size() == copyCalls.list.size());
   for (Index i = 0; i < originalCalls.list.size(); i++) {
-    if (*originalCalls.list[i] == call) {
+    if (originalCalls.list[i] == call) {
       return copyCalls.list[i];
     }
   }
@@ -624,11 +654,10 @@ struct SpeculativeScheduler : public Scheduler {
     // optimization there.
     Module tempModule;
     Function* tempTarget = ModuleUtils::copyFunction(target, tempModule);
-    auto* callSite = (*action.callSite)->cast<Call>();
-    auto** tempCallSite =
-      getCorrespondingCallInCopy(callSite, target->body, tempTarget->body);
-    if (!tempCallSite) {
-      // The action is no longer valid: the callSite no longer exists. This can
+    Call* tempCall =
+      getCorrespondingCallInCopy(action.call, target->body, tempTarget->body);
+    if (!tempCall) {
+      // The action is no longer valid: the call no longer exists. This can
       // happen if we successfull speculatively inline into a function, then
       // try to inline into it again, as the first one runs optimizations which
       // may find a call can be removed. (Note that this can't happen in
@@ -638,12 +667,14 @@ struct SpeculativeScheduler : public Scheduler {
       // that the inlining is not useful.
       return false;
     }
-    InliningAction tempAction = {tempTarget, tempCallSite, source};
+    InliningAction tempAction = {tempTarget, tempCall, source};
     // Allocate in the temp module, while using the existing module for
     // contextual information that we need while inlining (the temp module is
     // incomplete in that it just contains the one function we are working on,
     // and it does not contain things like other functions we have calls to).
-    doInlinings({tempAction}, &tempModule, module);
+    if (!doInlinings({tempAction}, &tempModule, module)) {
+      return false;
+    }
     doOptimize(tempTarget);
 
     bool keepResults;
@@ -930,22 +961,22 @@ struct InlineMainPass : public Pass {
         originalMain->imported()) {
       return;
     }
-    FindAllPointers<Call> calls(main->body);
-    Expression** callSite = nullptr;
+    FindAll<Call> calls(main->body);
+    Call* callMain = nullptr;
     for (auto* call : calls.list) {
-      if ((*call)->cast<Call>()->target == ORIGINAL_MAIN) {
-        if (callSite) {
+      if (call->target == ORIGINAL_MAIN) {
+        if (callMain) {
           // More than one call site.
           return;
         }
-        callSite = call;
+        callMain = call;
       }
     }
-    if (!callSite) {
+    if (!callMain) {
       // No call at all.
       return;
     }
-    doInlinings({{main, callSite, originalMain}}, module, module);
+    doInlinings({{main, callMain, originalMain}}, module, module);
   }
 };
 
