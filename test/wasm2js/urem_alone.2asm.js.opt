@@ -1,18 +1,19 @@
 import { setTempRet0 } from 'env';
 
-function asmFunc(global, env) {
- var Math_imul = global.Math.imul;
- var Math_fround = global.Math.fround;
- var Math_abs = global.Math.abs;
- var Math_clz32 = global.Math.clz32;
- var Math_min = global.Math.min;
- var Math_max = global.Math.max;
- var Math_floor = global.Math.floor;
- var Math_ceil = global.Math.ceil;
- var Math_sqrt = global.Math.sqrt;
+function asmFunc(env) {
+ var Math_imul = Math.imul;
+ var Math_fround = Math.fround;
+ var Math_abs = Math.abs;
+ var Math_clz32 = Math.clz32;
+ var Math_min = Math.min;
+ var Math_max = Math.max;
+ var Math_floor = Math.floor;
+ var Math_ceil = Math.ceil;
+ var Math_trunc = Math.trunc;
+ var Math_sqrt = Math.sqrt;
  var abort = env.abort;
- var nan = global.NaN;
- var infinity = global.Infinity;
+ var nan = NaN;
+ var infinity = Infinity;
  var setTempRet0 = env.setTempRet0;
  var __wasm_intrinsics_temp_i64 = 0;
  var __wasm_intrinsics_temp_i64$hi = 0;
@@ -68,7 +69,7 @@ function asmFunc(global, env) {
            if (!$5) {
             break label$6
            }
-           $6 = $5 + -1 | 0;
+           $6 = $5 - 1 | 0;
            if ($6 & $5) {
             break label$6
            }
@@ -78,7 +79,7 @@ function asmFunc(global, env) {
            i64toi32_i32$HIGH_BITS = 0;
            return;
           }
-          $6 = $5 + -1 | 0;
+          $6 = $5 - 1 | 0;
           if (!($6 & $5)) {
            break label$5
           }
@@ -139,10 +140,10 @@ function asmFunc(global, env) {
      $0 = $0 << $4;
     }
     if ($6) {
-     $4 = $3 + -1 | 0;
+     $4 = $3 - 1 | 0;
      $9 = $4 + 1 | 0;
      $8 = $4;
-     $4 = $2 + -1 | 0;
+     $4 = $2 - 1 | 0;
      $8 = ($4 | 0) != -1 ? $9 : $8;
      while (1) {
       $9 = $7 << 1 | $1 >>> 31;
@@ -156,7 +157,7 @@ function asmFunc(global, env) {
       $1 = $1 << 1 | $0 >>> 31;
       $0 = $13 | $0 << 1;
       $13 = $11 & 1;
-      $6 = $6 + -1 | 0;
+      $6 = $6 - 1 | 0;
       if ($6) {
        continue
       }
@@ -177,7 +178,7 @@ function asmFunc(global, env) {
  
  function __wasm_ctz_i32($0) {
   if ($0) {
-   return 31 - Math_clz32($0 + -1 ^ $0) | 0
+   return 31 - Math_clz32($0 - 1 ^ $0) | 0
   }
   return 32;
  }
@@ -187,20 +188,7 @@ function asmFunc(global, env) {
  };
 }
 
-var retasmFunc = asmFunc({
-    Math,
-    Int8Array,
-    Uint8Array,
-    Int16Array,
-    Uint16Array,
-    Int32Array,
-    Uint32Array,
-    Float32Array,
-    Float64Array,
-    NaN,
-    Infinity
-  }, {
-    abort: function() { throw new Error('abort'); },
+var retasmFunc = asmFunc(  { abort: function() { throw new Error('abort'); },
     setTempRet0
   });
 export var rem_u = retasmFunc.rem_u;

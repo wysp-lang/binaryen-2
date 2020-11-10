@@ -56,11 +56,11 @@ total
    (i32.load offset=24
     (i32.add
      (i32.load
-      (i32.add
+      (i32.sub
        (i32.load
         (i32.const 18100)
        )
-       (i32.const -12)
+       (i32.const 12)
       )
      )
      (i32.const 18100)
@@ -119,11 +119,11 @@ total
          (i32.load
           (i32.add
            (i32.load
-            (i32.add
+            (i32.sub
              (i32.load
               (i32.const 18100)
              )
-             (i32.const -12)
+             (i32.const 12)
             )
            )
            (i32.const 18124)
