@@ -77,4 +77,3 @@
   )
  )
 )
-;; TODO: speculative inlining with a return_call of another function
