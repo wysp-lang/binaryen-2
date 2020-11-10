@@ -8,8 +8,10 @@
   (nop)
  )
  (func $ref_func_test (result funcref)
-  (block $__inlined_func$foo
-   (nop)
+  (block
+   (block $__inlined_func$foo
+    (nop)
+   )
   )
   (ref.func $foo)
  )
@@ -18,18 +20,20 @@
   (local $1 exnref)
   (drop
    (block $l (result i32)
-    (block $__inlined_func$func_inner
+    (block
      (local.set $1
       (ref.null exn)
      )
-     (drop
-      (block $l0 (result i32)
-       (drop
-        (br_on_exn $l0 $e
-         (local.get $1)
+     (block $__inlined_func$func_inner
+      (drop
+       (block $l0 (result i32)
+        (drop
+         (br_on_exn $l0 $e
+          (local.get $1)
+         )
         )
+        (i32.const 0)
        )
-       (i32.const 0)
       )
      )
     )

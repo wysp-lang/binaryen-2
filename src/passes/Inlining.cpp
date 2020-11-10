@@ -290,7 +290,6 @@ static bool doInliningCopy(const InliningAction& action,
   Type retType = source->sig.results;
   Builder builder(*allocatingModule);
   auto* block = builder.makeBlock();
-  block->name = Name(std::string("__inlined_func$") + source->name.str);
   // The replacement for the call instruction.
   Expression* replacement;
   if (call->isReturn) {
@@ -328,7 +327,10 @@ static bool doInliningCopy(const InliningAction& action,
   // Prepare to update the inlined code's locals and other things.
   Updater updater;
   updater.module = contextModule;
-  updater.returnName = block->name;
+  // The "return name" is the name of a block in which the content is placed,
+  // so that we can replace a return to exit the function (before inlining) with
+  // a break to exit the block (after inlining).
+  updater.returnName = Name(std::string("__inlined_func$") + source->name.str);
   updater.builder = &builder;
   // Set up a locals mapping
   for (Index i = 0; i < source->getNumLocals(); i++) {
@@ -352,17 +354,25 @@ static bool doInliningCopy(const InliningAction& action,
     debug::copyDebugInfo(source->body, contents, source, target);
   }
   updater.walk(contents);
-  block->list.push_back(contents);
-  block->type = retType;
-  // If the function returned a value, we just set the block containing the
-  // inlined code to have that type. or, if the function was void and
-  // contained void, that is fine too. a bad case is a void function in which
-  // we have unreachable code, so we would be replacing a void call with an
-  // unreachable.
-  if (contents->type == Type::unreachable && block->type == Type::none) {
-    // Make the block reachable by adding a break to it
-    block->list.push_back(builder.makeBreak(block->name));
+  // Create the inner block for the contents. We need an inner block so that the
+  // name only applies to the inlined contents, and not to the parameters for
+  // example, which may refer to names that also appear there.
+  Block* contentsBlock = builder.makeBlock(updater.returnName, {contents});
+  // We need the type of the contents block to be the same as the call we just
+  // replaced (to avoid needing to do a full update of types on all the
+  // parents). We have previously ensured that the call does not have
+  // unreachable parameters, and handled a return call as well. The remaining
+  // thing to handle is when the inlined content is unreachable. If the function
+  // returns a value, we can just set the block's type to that. If it does not,
+  // that is, we have inlined a void function whose body is unreachable, then
+  // we must ensure the block is reachable (or else we'd need to update all the
+  // parents). To do that, add a break.
+  if (contents->type == Type::unreachable && retType == Type::none) {
+    contentsBlock->list.push_back(builder.makeBreak(updater.returnName));
+    contentsBlock->type = Type::none;
   }
+  block->list.push_back(contentsBlock);
+  block->type = retType;
   return true;
 }
 

@@ -15701,3 +15701,25 @@
   )
  )
 )
+;; Fuzz testcase for a name collision between the parameter to an inlined call
+;; and the new block for the inlined contents.
+(module
+ (func $0 (param $x i32) (result i32)
+  (i32.const 2)
+ )
+ (func $1
+  ;; a block name from a previous inlining
+  (block $__inlined_func$0
+   (drop
+    (call $0
+     (block (result i32)
+      (br $__inlined_func$0) ;; this goes to the outer block here. after we
+                             ;; inline, we will create another block with a
+                             ;; similar name, and must not be confused.
+      (i32.const 1)
+     )
+    )
+   )
+  )
+ )
+)

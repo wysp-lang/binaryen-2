@@ -15434,3 +15434,9 @@
   )
  )
 )
+(module
+ (type $none_=>_none (func))
+ (func $1
+  (nop)
+ )
+)
