@@ -148,3 +148,24 @@
   )
  )
 )
+(module
+ (type $none_=>_none (func))
+ (func $1
+  (local $0 i32)
+  (block $__inlined_func$0
+   (drop
+    (block (result i32)
+     (local.set $0
+      (block $block (result i32)
+       (br $__inlined_func$0)
+       (i32.const 1)
+      )
+     )
+     (block $__inlined_func$00 (result i32)
+      (i32.const 2)
+     )
+    )
+   )
+  )
+ )
+)
