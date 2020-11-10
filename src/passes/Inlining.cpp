@@ -109,11 +109,11 @@ struct FunctionInfo {
   // Note that it only makes sense to speculatively optimize if we are
   // optimizing, as to check if speculation is worthwhile we must optimize.
   bool speculativelyWorthInlining(const PassOptions& options) const {
-    return size < 50 || worthInlining(options);
+    return size < 500 || worthInlining(options);
   }
 
   bool speculativelyWorthInliningInto(const PassOptions& options) const {
-    return size < 100;
+    return size < 1000;
   }
 
   bool removableAfterInlining() const { return refs == 1 && !usedGlobally; }
