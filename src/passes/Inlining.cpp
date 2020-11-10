@@ -867,6 +867,9 @@ struct Inlining : public Pass {
     InliningState state;
     ModuleUtils::iterDefinedFunctions(*module, [&](Function* func) {
       if (infos[func->name].worthInlining(runner->options)) {
+#ifdef INLINING_DEBUG
+        std::cerr << "relevant definite source: " << func->name << '\n';
+#endif
         state.relevantSources.insert(func->name);
       }
     });
@@ -894,9 +897,15 @@ struct Inlining : public Pass {
     ModuleUtils::iterDefinedFunctions(*module, [&](Function* func) {
       auto& info = infos[func->name];
       if (info.speculativelyWorthInlining(runner->options)) {
+#ifdef INLINING_DEBUG
+        std::cerr << "relevant speculative source: " << func->name << '\n';
+#endif
         state.relevantSources.insert(func->name);
       }
       if (info.speculativelyWorthInliningInto(runner->options)) {
+#ifdef INLINING_DEBUG
+        std::cerr << "relevant speculative target: " << func->name << '\n';
+#endif
         state.relevantTargets.insert(func->name);
       }
     });
