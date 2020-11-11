@@ -109,11 +109,25 @@ struct FunctionInfo {
   // Note that it only makes sense to speculatively optimize if we are
   // optimizing, as to check if speculation is worthwhile we must optimize.
   bool speculativelyWorthInlining(const PassOptions& options) const {
-    return size < 500 || worthInlining(options);
+    static char* str = getenv("SOURCE_LIMIT");
+    Index limit = 500;
+    if (str) {
+      limit = atoi(str);
+      std::cerr << "source limit: " << limit << '\n';
+      str = nullptr;
+    }
+    return size <= limit || worthInlining(options);
   }
 
   bool speculativelyWorthInliningInto(const PassOptions& options) const {
-    return size < 1000;
+    static char* str = getenv("TARGET_LIMIT");
+    Index limit = 1000;
+    if (str) {
+      limit = atoi(str);
+      std::cerr << "target limit: " << limit << '\n';
+      str = nullptr;
+    }
+    return size <= limit;
   }
 
   bool removableAfterInlining() const { return refs == 1 && !usedGlobally; }
@@ -747,6 +761,8 @@ struct SpeculativeScheduler : public Scheduler {
       // here if it did).
       // TODO: estimates on the effects on VMs: register pressure, etc.
       keepResults = costWithOpts < costWithoutOpts - CostAnalyzer::CallCost;
+
+      // maybe 2* call cost? maybe compare to size diff?
 
       // Note that this is *not* guaranteed to terminate. For example,
       //
