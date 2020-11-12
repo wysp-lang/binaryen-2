@@ -647,7 +647,7 @@ struct SpeculativeScheduler : public Scheduler {
 #endif
         if (doSpeculativeInlining(action)) {
 #ifdef INLINING_DEBUG
-          std::cerr << "speculatively inlined " << action.source->name
+          std::cerr << "!!!!!!speculatively inlined " << action.source->name
                     << " into " << target->name << '\n';
 #endif
           std::lock_guard<std::mutex> lock(mutex);
@@ -737,8 +737,8 @@ struct SpeculativeScheduler : public Scheduler {
       // looking for an effect such as calling a function with a constant value
       // that after inlining helps precompute further things, etc. We must also
       // consider size/speed tradeoffs.
-      auto oldTargetCost = CostAnalyzer(target->body).cost;
-      auto oldSourceCost = CostAnalyzer(source->body).cost;
+      ssize_t oldTargetCost = CostAnalyzer(target->body).cost;
+      ssize_t oldSourceCost = CostAnalyzer(source->body).cost;
       // Simply adding the costs of the two functions before any changes is an
       // estimate of the cost after inlining but before optimizing, when we just
       // copied over the code. (We don't actually measure it that way because
@@ -748,64 +748,67 @@ struct SpeculativeScheduler : public Scheduler {
       // The cost after optimization is simply the cost measured on the
       // temporary function, where we inlined and optimized.
       auto costWithOpts = CostAnalyzer(tempTarget->body).cost;
-      // If we didn't decide to inline earlier, then code size did not decrease,
-      // and we should take into account how much it increased - a tiny
-      // computational benefit for a huge size increase is likely not worth it,
-      // in particular since size increases have speed risks due to register
-      // pressure etc.
-      auto sizeIncrease = newTargetSize - oldTargetSize;
-      // If the number of locals increased, then that is a possible signal that
-      // register pressure is getting worse.
-      auto localIncrease = tempTarget->vars.size() - target->vars.size();
-      // Merely by inlining we remove the cost of a call, so that is a 100%
-      // predictable benefit. Non-speculative inlining should be able to handle
-      // that anyhow, so ignore that cost here - look for something showing more
-      // benefit than that. Such a benefit can justify a code size increase
-      // (we already checked earlier if code size improved, and would not be
-      // here if it did).
-      // Compute the estimated benefit, which if it ends up positive, we will
-      // inline. Start with the decrease in cost.
-      ssize_t estimatedBenefit = costWithoutOpts - costWithOpts;
-      // Subtract the cost of a call. As mentioned earlier, our bar is higher
-      // than just removing a call - we want to see real optimization work.
-      estimatedBenefit -= CostAnalyzer::CallCost;
-      // Add a cost for a code size increase. Units of size are the number of
-      // instructions, while units of cost are 1+ per instruction, so adjust by
-      // a handwavey factor.
-      estimatedBenefit -= sizeIncrease * 2;
-      // Add a cost for a local count increase. Also adjust by a factor.
-      estimatedBenefit -= localIncrease * 5;
-      // Decision time.
-      keepResults = estimatedBenefit > 0;
-#ifdef INLINING_DEBUG
-      std::cerr << "  old cost: " << costWithoutOpts
-                << ", new cost: " << costWithOpts
-                << ", size increase: " << sizeIncrease
-                << ", local increase: " << localIncrease << " => "
-                << keepResults << '\n';
-#endif
+      // Only consider moving forward if the cost actually decreased.
+      if (costWithOpts < costWithoutOpts) {
+        // If we didn't decide to inline earlier, then code size did not decrease,
+        // and we should take into account how much it increased - a tiny
+        // computational benefit for a huge size increase is likely not worth it,
+        // in particular since size increases have speed risks due to register
+        // pressure etc.
+        auto sizeIncrease = newTargetSize - oldTargetSize;
+        // If the number of locals increased, then that is a possible signal that
+        // register pressure is getting worse.
+        auto localIncrease = ssize_t(tempTarget->vars.size()) - ssize_t(target->vars.size());
+        // Merely by inlining we remove the cost of a call, so that is a 100%
+        // predictable benefit. Non-speculative inlining should be able to handle
+        // that anyhow, so ignore that cost here - look for something showing more
+        // benefit than that. Such a benefit can justify a code size increase
+        // (we already checked earlier if code size improved, and would not be
+        // here if it did).
+        // Compute the estimated benefit, which if it ends up positive, we will
+        // inline. Start with the decrease in cost.
+        ssize_t estimatedBenefit = costWithoutOpts - costWithOpts;
+        // Subtract the cost of a call. As mentioned earlier, our bar is higher
+        // than just removing a call - we want to see real optimization work.
+        estimatedBenefit -= CostAnalyzer::CallCost;
+        // Add a cost for a code size increase. Units of size are the number of
+        // instructions, while units of cost are 1+ per instruction, so adjust by
+        // a handwavey factor.
+        estimatedBenefit -= sizeIncrease / 2;
+        // Add a cost for a local count increase. Also adjust by a factor.
+        estimatedBenefit -= localIncrease * 2;
+        // Decision time.
+        keepResults = estimatedBenefit > 0;
+  #ifdef INLINING_DEBUG
+        std::cerr << "  cost decrease: " << (costWithoutOpts - costWithOpts)
+                  << ", size increase: " << sizeIncrease
+                  << ", local increase: " << localIncrease
+                  << ", estimated benefit: " << estimatedBenefit << " => "
+                  << keepResults << '\n';
+  #endif
 
-      // Note that this is *not* guaranteed to terminate. For example,
-      //
-      //  function foo() {
-      //    return foo() + 1;
-      //  }
-      //  function bar() {
-      //    return foo() + 10;
-      //  }
-      //
-      // After inlining and optimizing once into bar(), we get
-      //
-      //  function bar() {
-      //    return foo() + 11;
-      //  }
-      //
-      // We can keep doing so, and in fact it is beneficial to do so since it
-      // saves the call overhead and the add every time. (Of course in this
-      // tiny example we recurse infinitely, so it's not actually beneficial but
-      // int other cases it can be.) As this function cannot ensure termination,
-      // the outside code must do so, for example, by inlining up to a fixed
-      // number of times into a target.
+        // Note that this is *not* guaranteed to terminate. For example,
+        //
+        //  function foo() {
+        //    return foo() + 1;
+        //  }
+        //  function bar() {
+        //    return foo() + 10;
+        //  }
+        //
+        // After inlining and optimizing once into bar(), we get
+        //
+        //  function bar() {
+        //    return foo() + 11;
+        //  }
+        //
+        // We can keep doing so, and in fact it is beneficial to do so since it
+        // saves the call overhead and the add every time. (Of course in this
+        // tiny example we recurse infinitely, so it's not actually beneficial but
+        // int other cases it can be.) As this function cannot ensure termination,
+        // the outside code must do so, for example, by inlining up to a fixed
+        // number of times into a target.
+      }
     }
     if (!keepResults) {
       // This speculation has sadly not worked out.
@@ -905,7 +908,7 @@ struct Inlining : public Pass {
     ModuleUtils::iterDefinedFunctions(*module, [&](Function* func) {
       if (infos[func->name].worthInlining(runner->options)) {
 #ifdef INLINING_DEBUG
-        std::cerr << "relevant definite source: " << func->name << '\n';
+        // std::cerr << "relevant definite source: " << func->name << '\n';
 #endif
         state.relevantSources.insert(func->name);
       }
@@ -935,13 +938,13 @@ struct Inlining : public Pass {
       auto& info = infos[func->name];
       if (info.speculativelyWorthInlining(runner->options)) {
 #ifdef INLINING_DEBUG
-        std::cerr << "relevant speculative source: " << func->name << '\n';
+        // std::cerr << "relevant speculative source: " << func->name << '\n';
 #endif
         state.relevantSources.insert(func->name);
       }
       if (info.speculativelyWorthInliningInto(runner->options)) {
 #ifdef INLINING_DEBUG
-        std::cerr << "relevant speculative target: " << func->name << '\n';
+        // std::cerr << "relevant speculative target: " << func->name << '\n';
 #endif
         state.relevantTargets.insert(func->name);
       }
