@@ -765,12 +765,12 @@ struct SpeculativeScheduler : public Scheduler {
         // benefit than that. Such a benefit can justify a code size increase
         // (we already checked earlier if code size improved, and would not be
         // here if it did).
-        // Compute the estimated benefit, which if it ends up positive, we will
-        // inline. Start with the decrease in cost.
-        ssize_t estimatedBenefit = costWithoutOpts - costWithOpts;
         // Subtract the cost of a call. As mentioned earlier, our bar is higher
         // than just removing a call - we want to see real optimization work.
-        estimatedBenefit -= CostAnalyzer::CallCost;
+        ssize_t relevantCostImprovement = costWithoutOpts - costWithOpts - CostAnalyzer::CallCost;
+        // Compute the estimated benefit, which if it ends up positive, we will
+        // inline. Start with the decrease in cost.
+        auto estimatedBenefit = relevantCostImprovement;
         // Add a cost for a code size increase. Units of size are the number of
         // instructions, while units of cost are 1+ per instruction, so adjust by
         // a handwavey factor.
@@ -780,7 +780,7 @@ struct SpeculativeScheduler : public Scheduler {
         // Decision time.
         keepResults = estimatedBenefit > 0;
   #ifdef INLINING_DEBUG
-        std::cerr << "  cost decrease: " << (costWithoutOpts - costWithOpts)
+        std::cerr << "  cost decrease: " << relevantCostImprovement
                   << ", size increase: " << sizeIncrease
                   << ", local increase: " << localIncrease
                   << ", estimated benefit: " << estimatedBenefit << " => "
