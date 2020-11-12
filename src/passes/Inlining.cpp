@@ -701,43 +701,42 @@ struct SpeculativeScheduler : public Scheduler {
     }
     doOptimize(tempTarget);
 
-    bool keepResults;
-    // First, check for a decrease in code size. If code size decreases then
-    // this is definitely doing, whether we are optimizing for size *or* for
-    // speed, as being able to shrink code likely indicates a speedup, or at
-    // worst if there is no speedup, at least startup may be faster.
-    auto oldTargetSize = Measurer::measure(target->body);
-    auto newTargetSize = Measurer::measure(tempTarget->body);
-    bool removable = sourceInfo.removableAfterInlining();
+    ssize_t oldTargetSize = Measurer::measure(target->body);
+    ssize_t newTargetSize = Measurer::measure(tempTarget->body);
 #ifdef INLINING_DEBUG
     std::cerr << "  old size: " << oldTargetSize
               << ", new size: " << newTargetSize
-              << ", removable after inlining: " << removable
               << ", source size: " << sourceInfo.size << '\n';
 #endif
-    if (removable) {
-      // The inlined function has no other references, so we can remove it
-      // after the inlining. Compare to the previous total size of the inlined
-      // function and the function we inlined into.
-      // (Note that just by removing a function we are saving a few bytes at
-      // least, so make the comparison <=.)
-      keepResults = newTargetSize <= oldTargetSize + sourceInfo.size;
+    bool keepResults = false;
+    // First, check for a decrease in code size. If code size decreases then
+    // this is definitely doing, whether we are optimizing for size *or* for
+    // speed, as being able to shrink code likely indicates significant
+    // optimizations happened after inlining.
+    if (newTargetSize < oldTargetSize) {
+      keepResults = true;
     } else {
-      // There are other references, so we look for a strict decrease in size
-      // in the function we inline to. (This is rare, but can still happen,
-      // for example if inlining allows us to get a constant result from what
-      // was previously a call, and that helps further reductions.) Note that
-      // by finding a strict decrease we ensure that we will not keep inlining
-      // forever.
-      keepResults = newTargetSize < oldTargetSize;
+      // If we can remove the source after inlining, then we can look at if the
+      // total code size (of the two functions before, to the single one now)
+      // has decreased. This comparison is <= and not < to take into account
+      // that by just removing a function we saw some amount of binary size.
+      // Note that we only do this when optimizing for size, as if we reduce
+      // total code size but increase the target's size, we may be reducing
+      // speed there (possibly due to register pressure changes), and we leave
+      // speed concerns to the checks below.
+      if (options.shrinkLevel && sourceInfo.removableAfterInlining() &&
+          newTargetSize <= oldTargetSize + sourceInfo.size) {
+        keepResults = true;
+      }
     }
     if (!keepResults && options.optimizeLevel >= 3) {
-      // Check for a decrease in computational cost. The precise decrease we are
-      // looking for is that the inlining allows further optimization: just
+      // Check for a decrease in computational cost. In particular we are
+      // looking for whether inlining allows further optimization: just
       // removing the cost of the call itself (ignoring what is called) is nice,
       // but that is already handled by non-speculative inlining. Here we are
       // looking for an effect such as calling a function with a constant value
-      // that after inlining helps precompute further things, etc.
+      // that after inlining helps precompute further things, etc. We must also
+      // consider size/speed tradeoffs.
       auto oldTargetCost = CostAnalyzer(target->body).cost;
       auto oldSourceCost = CostAnalyzer(source->body).cost;
       // Simply adding the costs of the two functions before any changes is an
@@ -749,20 +748,42 @@ struct SpeculativeScheduler : public Scheduler {
       // The cost after optimization is simply the cost measured on the
       // temporary function, where we inlined and optimized.
       auto costWithOpts = CostAnalyzer(tempTarget->body).cost;
-#ifdef INLINING_DEBUG
-      std::cerr << "  old cost: " << costWithoutOpts
-                << ", new cost: " << costWithOpts << '\n';
-#endif
+      // If we didn't decide to inline earlier, then code size did not decrease,
+      // and we should take into account how much it increased - a tiny
+      // computational benefit for a huge size increase is likely not worth it,
+      // in particular since size increases have speed risks due to register
+      // pressure etc.
+      auto sizeIncrease = newTargetSize - oldTargetSize;
+      // If the number of locals increased, then that is a possible signal that
+      // register pressure is getting worse.
+      auto localIncrease = tempTarget->vars.size() - target->vars.size();
       // Merely by inlining we remove the cost of a call, so that is a 100%
       // predictable benefit. Non-speculative inlining should be able to handle
       // that anyhow, so ignore that cost here - look for something showing more
       // benefit than that. Such a benefit can justify a code size increase
       // (we already checked earlier if code size improved, and would not be
       // here if it did).
-      // TODO: estimates on the effects on VMs: register pressure, etc.
-      keepResults = costWithOpts < costWithoutOpts - CostAnalyzer::CallCost;
-
-      // maybe 2* call cost? maybe compare to size diff?
+      // Compute the estimated benefit, which if it ends up positive, we will
+      // inline. Start with the decrease in cost.
+      ssize_t estimatedBenefit = costWithoutOpts - costWithOpts;
+      // Subtract the cost of a call. As mentioned earlier, our bar is higher
+      // than just removing a call - we want to see real optimization work.
+      estimatedBenefit -= CostAnalyzer::CallCost;
+      // Add a cost for a code size increase. Units of size are the number of
+      // instructions, while units of cost are 1+ per instruction, so adjust by
+      // a handwavey factor.
+      estimatedBenefit -= sizeIncrease * 2;
+      // Add a cost for a local count increase. Also adjust by a factor.
+      estimatedBenefit -= localIncrease * 5;
+      // Decision time.
+      keepResults = estimatedBenefit > 0;
+#ifdef INLINING_DEBUG
+      std::cerr << "  old cost: " << costWithoutOpts
+                << ", new cost: " << costWithOpts
+                << ", size increase: " << sizeIncrease
+                << ", local increase: " << localIncrease
+                << " => " << keepResults << '\n';
+#endif
 
       // Note that this is *not* guaranteed to terminate. For example,
       //
