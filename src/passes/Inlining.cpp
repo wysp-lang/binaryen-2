@@ -781,8 +781,8 @@ struct SpeculativeScheduler : public Scheduler {
       std::cerr << "  old cost: " << costWithoutOpts
                 << ", new cost: " << costWithOpts
                 << ", size increase: " << sizeIncrease
-                << ", local increase: " << localIncrease
-                << " => " << keepResults << '\n';
+                << ", local increase: " << localIncrease << " => "
+                << keepResults << '\n';
 #endif
 
       // Note that this is *not* guaranteed to terminate. For example,
