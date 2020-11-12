@@ -750,42 +750,44 @@ struct SpeculativeScheduler : public Scheduler {
       auto costWithOpts = CostAnalyzer(tempTarget->body).cost;
       // Only consider moving forward if the cost actually decreased.
       if (costWithOpts < costWithoutOpts) {
-        // If we didn't decide to inline earlier, then code size did not decrease,
-        // and we should take into account how much it increased - a tiny
-        // computational benefit for a huge size increase is likely not worth it,
-        // in particular since size increases have speed risks due to register
-        // pressure etc.
+        // If we didn't decide to inline earlier, then code size did not
+        // decrease, and we should take into account how much it increased - a
+        // tiny computational benefit for a huge size increase is likely not
+        // worth it, in particular since size increases have speed risks due to
+        // register pressure etc.
         auto sizeIncrease = newTargetSize - oldTargetSize;
-        // If the number of locals increased, then that is a possible signal that
-        // register pressure is getting worse.
-        auto localIncrease = ssize_t(tempTarget->vars.size()) - ssize_t(target->vars.size());
+        // If the number of locals increased, then that is a possible signal
+        // that register pressure is getting worse.
+        auto localIncrease =
+          ssize_t(tempTarget->vars.size()) - ssize_t(target->vars.size());
         // Merely by inlining we remove the cost of a call, so that is a 100%
-        // predictable benefit. Non-speculative inlining should be able to handle
-        // that anyhow, so ignore that cost here - look for something showing more
-        // benefit than that. Such a benefit can justify a code size increase
-        // (we already checked earlier if code size improved, and would not be
-        // here if it did).
-        // Subtract the cost of a call. As mentioned earlier, our bar is higher
-        // than just removing a call - we want to see real optimization work.
-        ssize_t relevantCostImprovement = costWithoutOpts - costWithOpts - CostAnalyzer::CallCost;
+        // predictable benefit. Non-speculative inlining should be able to
+        // handle that anyhow, so ignore that cost here - look for something
+        // showing more benefit than that. Such a benefit can justify a code
+        // size increase (we already checked earlier if code size improved, and
+        // would not be here if it did). Subtract the cost of a call. As
+        // mentioned earlier, our bar is higher than just removing a call - we
+        // want to see real optimization work.
+        ssize_t relevantCostImprovement =
+          costWithoutOpts - costWithOpts - CostAnalyzer::CallCost;
         // Compute the estimated benefit, which if it ends up positive, we will
         // inline. Start with the decrease in cost.
         auto estimatedBenefit = relevantCostImprovement;
         // Add a cost for a code size increase. Units of size are the number of
-        // instructions, while units of cost are 1+ per instruction, so adjust by
-        // a handwavey factor.
+        // instructions, while units of cost are 1+ per instruction, so adjust
+        // by a handwavey factor.
         estimatedBenefit -= sizeIncrease / 2;
         // Add a cost for a local count increase. Also adjust by a factor.
         estimatedBenefit -= localIncrease * 2;
         // Decision time.
         keepResults = estimatedBenefit > 0;
-  #ifdef INLINING_DEBUG
+#ifdef INLINING_DEBUG
         std::cerr << "  cost decrease: " << relevantCostImprovement
                   << ", size increase: " << sizeIncrease
                   << ", local increase: " << localIncrease
                   << ", estimated benefit: " << estimatedBenefit << " => "
                   << keepResults << '\n';
-  #endif
+#endif
 
         // Note that this is *not* guaranteed to terminate. For example,
         //
@@ -804,10 +806,10 @@ struct SpeculativeScheduler : public Scheduler {
         //
         // We can keep doing so, and in fact it is beneficial to do so since it
         // saves the call overhead and the add every time. (Of course in this
-        // tiny example we recurse infinitely, so it's not actually beneficial but
-        // int other cases it can be.) As this function cannot ensure termination,
-        // the outside code must do so, for example, by inlining up to a fixed
-        // number of times into a target.
+        // tiny example we recurse infinitely, so it's not actually beneficial
+        // but int other cases it can be.) As this function cannot ensure
+        // termination, the outside code must do so, for example, by inlining up
+        // to a fixed number of times into a target.
       }
     }
     if (!keepResults) {
