@@ -6,6 +6,10 @@
  (export "wasm_func1" (func $wasm_func_1))
  (export "wasm_func2" (func $wasm_func_2))
  (export "wasm_func3" (func $wasm_func_3))
+ (export "wasm_func4" (func $wasm_func_4))
+ (func $wasm_func_4
+  (unreachable)
+ )
  (func $wasm_func_3
   (call $js_func_4)
  )

@@ -19,7 +19,7 @@
   (call $js_func_4)
  )
  (func $wasm_func_4
-  (nop)
+  (unreachable) ;; avoid removing this function entirely as an unneeded export
  )
 )
 
