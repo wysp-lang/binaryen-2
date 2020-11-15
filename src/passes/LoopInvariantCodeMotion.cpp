@@ -125,9 +125,7 @@ struct LoopInvariantCodeMotion
                             effectsSoFar.invalidates(effects) ||
                             (effects.readsGlobalState() &&
                              loopEffects.writesGlobalState());
-        // Exceptions can be caught and execution can resume. For now, assume
-        // that any exception prevents this optimization, but we could do
-        // better. TODO
+        // TODO: look into optimizing this with exceptions. for now, disallow
         if (effects.throws || loopEffects.throws) {
           unsafeToMove = true;
         }
