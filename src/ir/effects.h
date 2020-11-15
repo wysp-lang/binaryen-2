@@ -343,10 +343,18 @@ private:
         parent.branchesOut = true;
       }
     }
-    void visitLocalGet(LocalGet* curr) { parent.localsRead.insert(curr->index); }
-    void visitLocalSet(LocalSet* curr) { parent.localsWritten.insert(curr->index); }
-    void visitGlobalGet(GlobalGet* curr) { parent.globalsRead.insert(curr->name); }
-    void visitGlobalSet(GlobalSet* curr) { parent.globalsWritten.insert(curr->name); }
+    void visitLocalGet(LocalGet* curr) {
+      parent.localsRead.insert(curr->index);
+    }
+    void visitLocalSet(LocalSet* curr) {
+      parent.localsWritten.insert(curr->index);
+    }
+    void visitGlobalGet(GlobalGet* curr) {
+      parent.globalsRead.insert(curr->name);
+    }
+    void visitGlobalSet(GlobalSet* curr) {
+      parent.globalsWritten.insert(curr->name);
+    }
     void visitLoad(Load* curr) {
       parent.readsMemory = true;
       parent.isAtomic |= curr->isAtomic;
