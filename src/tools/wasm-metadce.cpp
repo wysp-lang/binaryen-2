@@ -100,7 +100,8 @@ struct MetaDCEGraph {
   Module& wasm;
   PassOptions options;
 
-  MetaDCEGraph(Module& wasm, PassOptions options) : wasm(wasm), options(options) {}
+  MetaDCEGraph(Module& wasm, PassOptions options)
+    : wasm(wasm), options(options) {}
 
   // populate the graph with info from the wasm, integrating with
   // potentially-existing nodes for imports and exports that the graph may
@@ -251,8 +252,9 @@ struct MetaDCEGraph {
         if (!getModule()->getFunction(curr->target)->imported()) {
           target = parent->functionToDCENode[curr->target];
         } else {
-          target = parent
-                ->importIdToDCENode[parent->getFunctionImportId(curr->target)];
+          target =
+            parent
+              ->importIdToDCENode[parent->getFunctionImportId(curr->target)];
         }
         parent->nodes[parent->functionToDCENode[getFunction()->name]]
           .reaches.push_back(target);
@@ -262,7 +264,8 @@ struct MetaDCEGraph {
 
       void doWalkFunction(Function* func) {
         assert(parent->functionToDCENode.count(func->name) > 0);
-        if (!EffectAnalyzer(parent->options, parent->wasm.features, func->body).hasGlobalSideEffects()) {
+        if (!EffectAnalyzer(parent->options, parent->wasm.features, func->body)
+               .hasGlobalSideEffects()) {
           // A function with no side effects is never needed in the sense of
           // metadce: it calls nothing, and does nothing (that is noticeable
           // from the outside). For example, if a wasm function does nothing,
