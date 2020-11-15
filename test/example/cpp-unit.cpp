@@ -4,7 +4,7 @@
 
 #include <ir/bits.h>
 #include <ir/cost.h>
-#include <ir/effect.h>
+#include <ir/effects.h>
 #include <pass.h>
 #include <wasm.h>
 
