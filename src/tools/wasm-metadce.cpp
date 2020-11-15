@@ -272,7 +272,8 @@ struct MetaDCEGraph {
           // externally noticeable. For example, if a wasm function does nothing
           // and is exported to be called from JS, then we can remove that
           // export.
-          parent->nodes[parent->functionToDCENode[func->name]].doesNothing = true;
+          parent->nodes[parent->functionToDCENode[func->name]].doesNothing =
+            true;
         }
       }
 
