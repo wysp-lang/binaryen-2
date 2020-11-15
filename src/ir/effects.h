@@ -67,6 +67,7 @@ struct EffectAnalyzer
   std::set<Name> globalsWritten;
   bool readsMemory = false;
   bool writesMemory = false;
+  bool trap = false;
   // a load or div/rem, which may trap. we ignore trap differences, so it is ok
   // to reorder these, but we can't remove them, as they count as side effects,
   // and we can't move them in a way that would cause other noticeable (global)
@@ -138,17 +139,24 @@ struct EffectAnalyzer
     return branchesOut || throws || hasExternalBreakTargets();
   }
 
+  // Changes something in global state that could be noticeable by others. This
+  // matches noticesGlobalSideEffects().
   bool hasGlobalSideEffects() const {
-    return calls || globalsWritten.size() > 0 || writesMemory || isAtomic ||
-           throws;
+    return calls || globalsWritten.size() > 0 || writesMemory || isAtomic;
+  }
+  // In addition to hasGlobalSideEffects, this includes anything that someone
+  // from outside the function could observe. For example, a trap is not a part
+  // of global state, but it is noticeable if you call the function.
+  bool hasExternallyNoticeableEffects() const {
+    return hasGlobalSideEffects() || trap || implicitTrap || throws;
   }
   bool hasSideEffects() const {
-    return implicitTrap || localsWritten.size() > 0 || danglingPop ||
-           hasGlobalSideEffects() || transfersControlFlow();
+    return localsWritten.size() > 0 || danglingPop ||
+           hasExternallyNoticeableEffects() || transfersControlFlow();
   }
   bool hasAnything() const {
     return hasSideEffects() || accessesLocal() || readsMemory ||
-           accessesGlobal() || isAtomic;
+           accessesGlobal();
   }
 
   bool noticesGlobalSideEffects() const {
@@ -494,7 +502,10 @@ struct EffectAnalyzer
     implicitTrap = true;
   }
   void visitNop(Nop* curr) {}
-  void visitUnreachable(Unreachable* curr) { branchesOut = true; }
+  void visitUnreachable(Unreachable* curr) {
+    branchesOut = true;
+    trap = true;
+  }
   void visitPop(Pop* curr) {
     if (catchDepth == 0) {
       danglingPop = true;
