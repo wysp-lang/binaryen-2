@@ -156,7 +156,7 @@ struct EffectAnalyzer
   }
   bool hasAnything() const {
     return hasSideEffects() || accessesLocal() || readsMemory ||
-           accessesGlobal() || isAtomic;
+           accessesGlobal();
   }
 
   bool noticesGlobalSideEffects() const {
