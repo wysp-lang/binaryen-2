@@ -1,4 +1,2 @@
-unused: global$STACKTOP$1
 unused: global$UNUSEDTOP$2
 unused: ignorable import
-unused: imported_twice

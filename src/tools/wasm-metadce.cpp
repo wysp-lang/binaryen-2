@@ -274,6 +274,9 @@ struct MetaDCEGraph {
           // export.
           parent->nodes[parent->functionToDCENode[func->name]].doesNothing =
             true;
+        } else {
+          // Otherwise, walk normally.
+          WalkerPass<PostWalker<FunctionScanner>>::doWalkFunction(func);
         }
       }
 
