@@ -268,8 +268,8 @@ private:
         self->pushTask(doStartTry, currp);
         return;
       }
-      PostWalker<InternalAnalyzer, OverriddenVisitor<InternalAnalyzer>>::scan(self,
-                                                                          currp);
+      PostWalker<InternalAnalyzer, OverriddenVisitor<InternalAnalyzer>>::scan(
+        self, currp);
     }
 
     static void doStartTry(InternalAnalyzer* self, Expression** currp) {
@@ -299,13 +299,13 @@ private:
       }
       // if the loop is unreachable, then there is branching control flow:
       //  (1) if the body is unreachable because of a (return), uncaught (br)
-      //      etc., then we already noted branching, so it is ok to mark it again
-      //      (if we have *caught* (br)s, then they did not lead to the loop body
-      //      being unreachable). (same logic applies to blocks)
+      //      etc., then we already noted branching, so it is ok to mark it
+      //      again (if we have *caught* (br)s, then they did not lead to the
+      //      loop body being unreachable). (same logic applies to blocks)
       //  (2) if the loop is unreachable because it only has branches up to the
-      //      loop top, but no way to get out, then it is an infinite loop, and we
-      //      consider that a branching side effect (note how the same logic does
-      //      not apply to blocks).
+      //      loop top, but no way to get out, then it is an infinite loop, and
+      //      we consider that a branching side effect (note how the same logic
+      //      does not apply to blocks).
       if (curr->type == Type::unreachable) {
         branchesOut = true;
       }
@@ -371,25 +371,25 @@ private:
     }
     void visitAtomicWait(AtomicWait* curr) {
       readsMemory = true;
-      // AtomicWait doesn't strictly write memory, but it does modify the waiters
-      // list associated with the specified address, which we can think of as a
-      // write.
+      // AtomicWait doesn't strictly write memory, but it does modify the
+      // waiters list associated with the specified address, which we can think
+      // of as a write.
       writesMemory = true;
       isAtomic = true;
       implicitTrap = true;
     }
     void visitAtomicNotify(AtomicNotify* curr) {
       // AtomicNotify doesn't strictly write memory, but it does modify the
-      // waiters list associated with the specified address, which we can think of
-      // as a write.
+      // waiters list associated with the specified address, which we can think
+      // of as a write.
       readsMemory = true;
       writesMemory = true;
       isAtomic = true;
       implicitTrap = true;
     }
     void visitAtomicFence(AtomicFence* curr) {
-      // AtomicFence should not be reordered with any memory operations, so we set
-      // these to true.
+      // AtomicFence should not be reordered with any memory operations, so we
+      // set these to true.
       readsMemory = true;
       writesMemory = true;
       isAtomic = true;
@@ -491,9 +491,9 @@ private:
     }
     void visitMemoryGrow(MemoryGrow* curr) {
       calls = true;
-      // memory.grow technically does a read-modify-write operation on the memory
-      // size in the successful case, modifying the set of valid addresses, and
-      // just a read operation in the failure case
+      // memory.grow technically does a read-modify-write operation on the
+      // memory size in the successful case, modifying the set of valid
+      // addresses, and just a read operation in the failure case
       readsMemory = true;
       writesMemory = true;
       // Atomics are also sequentially consistent with memory.grow.
@@ -535,8 +535,12 @@ private:
     void visitTupleExtract(TupleExtract* curr) {}
     void visitI31New(I31New* curr) {}
     void visitI31Get(I31Get* curr) {}
-    void visitRefTest(RefTest* curr) { WASM_UNREACHABLE("TODO (gc): ref.test"); }
-    void visitRefCast(RefCast* curr) { WASM_UNREACHABLE("TODO (gc): ref.cast"); }
+    void visitRefTest(RefTest* curr) {
+      WASM_UNREACHABLE("TODO (gc): ref.test");
+    }
+    void visitRefCast(RefCast* curr) {
+      WASM_UNREACHABLE("TODO (gc): ref.cast");
+    }
     void visitBrOnCast(BrOnCast* curr) {
       WASM_UNREACHABLE("TODO (gc): br_on_cast");
     }
@@ -644,9 +648,7 @@ public:
   }
 
 private:
-  void pre() {
-    breakTargets.clear();
-  }
+  void pre() { breakTargets.clear(); }
 
   void post() {
     assert(tryDepth == 0);
