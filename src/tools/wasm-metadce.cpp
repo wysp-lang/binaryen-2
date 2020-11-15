@@ -26,6 +26,7 @@
 
 #include <memory>
 
+#include "ir/effects.h"
 #include "ir/module-utils.h"
 #include "pass.h"
 #include "support/colors.h"
@@ -42,7 +43,12 @@ using namespace wasm;
 
 struct DCENode {
   Name name;
-  std::vector<Name> reaches; // the other nodes this one can reach
+  // The other nodes this one can reach.
+  std::vector<Name> reaches;
+  // By default we assume every node is needed, but in some cases we can mark
+  // them as definitely not needed.
+  bool needed = true;
+
   DCENode() = default;
   DCENode(Name name) : name(name) {}
 };
@@ -92,8 +98,9 @@ struct MetaDCEGraph {
   std::unordered_map<Name, Name> importIdToDCENode;
 
   Module& wasm;
+  PassOptions options;
 
-  MetaDCEGraph(Module& wasm) : wasm(wasm) {}
+  MetaDCEGraph(Module& wasm, PassOptions options) : wasm(wasm), options(options) {}
 
   // populate the graph with info from the wasm, integrating with
   // potentially-existing nodes for imports and exports that the graph may
@@ -232,27 +239,38 @@ struct MetaDCEGraph {
     }
 
     // A parallel scanner for function bodies
-    struct Scanner : public WalkerPass<PostWalker<Scanner>> {
+    struct FunctionScanner : public WalkerPass<PostWalker<FunctionScanner>> {
       bool isFunctionParallel() override { return true; }
 
-      Scanner(MetaDCEGraph* parent) : parent(parent) {}
+      FunctionScanner(MetaDCEGraph* parent) : parent(parent) {}
 
-      Scanner* create() override { return new Scanner(parent); }
+      FunctionScanner* create() override { return new FunctionScanner(parent); }
 
       void visitCall(Call* curr) {
+        Name target;
         if (!getModule()->getFunction(curr->target)->imported()) {
-          parent->nodes[parent->functionToDCENode[getFunction()->name]]
-            .reaches.push_back(parent->functionToDCENode[curr->target]);
+          target = parent->functionToDCENode[curr->target];
         } else {
-          assert(parent->functionToDCENode.count(getFunction()->name) > 0);
-          parent->nodes[parent->functionToDCENode[getFunction()->name]]
-            .reaches.push_back(
-              parent
-                ->importIdToDCENode[parent->getFunctionImportId(curr->target)]);
+          target = parent
+                ->importIdToDCENode[parent->getFunctionImportId(curr->target)];
         }
+        parent->nodes[parent->functionToDCENode[getFunction()->name]]
+          .reaches.push_back(target);
       }
       void visitGlobalGet(GlobalGet* curr) { handleGlobal(curr->name); }
       void visitGlobalSet(GlobalSet* curr) { handleGlobal(curr->name); }
+
+      void doWalkFunction(Function* func) {
+        assert(parent->functionToDCENode.count(func->name) > 0);
+        if (!EffectAnalyzer(parent->options, parent->wasm.features, func->body).hasGlobalSideEffects()) {
+          // A function with no side effects is never needed in the sense of
+          // metadce: it calls nothing, and does nothing (that is noticeable
+          // from the outside). For example, if a wasm function does nothing,
+          // and is exported to be called from JS, then we can remove that
+          // export.
+          parent->nodes[parent->functionToDCENode[func->name]].needed = false;
+        }
+      }
 
     private:
       MetaDCEGraph* parent;
@@ -275,7 +293,22 @@ struct MetaDCEGraph {
     };
 
     PassRunner runner(&wasm);
-    Scanner(this).run(&runner, &wasm);
+    FunctionScanner(this).run(&runner, &wasm);
+
+    // Exports to functions that are not needed are themselves not needed. This
+    // helps avoid calls into the wasm that do nothing.
+    // TODO: perhaps the other direction, to JS, is interesting as well?
+    for (auto& exp : wasm.exports) {
+      auto& node = nodes[exportToDCENode[exp->name]];
+      if (exp->kind == ExternalKind::Function) {
+        auto target = exp->value;
+        if (!wasm.getFunction(target)->imported()) {
+          if (!nodes[functionToDCENode[target]].needed) {
+            node.needed = false;
+          }
+        }
+      }
+    }
   }
 
 private:
@@ -297,19 +330,22 @@ private:
 public:
   // Perform the DCE: simple marking from the roots
   void deadCodeElimination() {
-    std::vector<Name> queue;
+    std::set<Name> queue;
     for (auto root : roots) {
-      reached.insert(root);
-      queue.push_back(root);
+      queue.insert(root);
     }
     while (queue.size() > 0) {
-      auto name = queue.back();
-      queue.pop_back();
+      auto iter = queue.begin();
+      auto name = *iter;
+      queue.erase(iter);
       auto& node = nodes[name];
+      if (!node.needed) {
+        continue;
+      }
+      reached.insert(name);
       for (auto target : node.reaches) {
         if (reached.find(target) == reached.end()) {
-          reached.insert(target);
-          queue.push_back(target);
+          queue.insert(target);
         }
       }
     }
@@ -529,7 +565,7 @@ int main(int argc, const char* argv[]) {
   const json::IString EXPORT("export");
   const json::IString IMPORT("import");
 
-  MetaDCEGraph graph(wasm);
+  MetaDCEGraph graph(wasm, options.passOptions);
 
   if (!outside.isArray()) {
     Fatal()
