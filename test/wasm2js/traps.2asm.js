@@ -19,13 +19,11 @@ function asmFunc(env) {
  function $0(x, y) {
   x = x | 0;
   y = y | 0;
-  (x | 0) / (y | 0) | 0;
  }
  
  function $1(x, y) {
   x = x | 0;
   y = y | 0;
-  (x >>> 0) / (y >>> 0) | 0;
  }
  
  function $2(x, x$hi, y, y$hi) {
@@ -756,13 +754,11 @@ function asmFunc(env) {
  function $0(x, y) {
   x = x | 0;
   y = y | 0;
-  (x | 0) % (y | 0) | 0;
  }
  
  function $1(x, y) {
   x = x | 0;
   y = y | 0;
-  (x >>> 0) % (y >>> 0) | 0;
  }
  
  function $2(x, x$hi, y, y$hi) {
@@ -1471,22 +1467,18 @@ function asmFunc(env) {
  var infinity = Infinity;
  function $0(x) {
   x = Math_fround(x);
-  ~~x;
  }
  
  function $1(x) {
   x = Math_fround(x);
-  ~~x >>> 0;
  }
  
  function $2(x) {
   x = +x;
-  ~~x;
  }
  
  function $3(x) {
   x = +x;
-  ~~x >>> 0;
  }
  
  function $4(x) {
@@ -1503,7 +1495,6 @@ function asmFunc(env) {
   } else {
    $3_1 = 0
   }
-  ~~i64toi32_i32$0 >>> 0;
  }
  
  function $5(x) {
@@ -1520,7 +1511,6 @@ function asmFunc(env) {
   } else {
    $3_1 = 0
   }
-  ~~i64toi32_i32$0 >>> 0;
  }
  
  function $6(x) {
@@ -1537,7 +1527,6 @@ function asmFunc(env) {
   } else {
    $3_1 = 0
   }
-  ~~i64toi32_i32$0 >>> 0;
  }
  
  function $7(x) {
@@ -1554,7 +1543,6 @@ function asmFunc(env) {
   } else {
    $3_1 = 0
   }
-  ~~i64toi32_i32$0 >>> 0;
  }
  
  return {

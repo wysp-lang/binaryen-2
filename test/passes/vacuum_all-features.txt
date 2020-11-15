@@ -260,11 +260,7 @@
   )
  )
  (func $unary-binary-may-trap
-  (drop
-   (i64.trunc_f32_u
-    (f32.const 70847791997969805621592064)
-   )
-  )
+  (nop)
  )
  (func $unreachable-if-with-nop-arm-that-leaves-a-concrete-value-if-nop-is-removed
   (block $label$0
