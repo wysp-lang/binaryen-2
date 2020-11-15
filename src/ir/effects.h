@@ -139,12 +139,19 @@ struct EffectAnalyzer
     return branchesOut || throws || hasExternalBreakTargets();
   }
 
+  // Changes something in global state that could be noticeable by others. This
+  // matches noticesGlobalSideEffects().
   bool hasGlobalSideEffects() const {
-    return calls || globalsWritten.size() > 0 || writesMemory || isAtomic ||
-           throws || trap || implicitTrap;
+    return calls || globalsWritten.size() > 0 || writesMemory || isAtomic;
   }
+  // In addition to hasGlobalSideEffects, this includes anything that someone
+  // from outside the function could observe. For example, a trap is not a part
+  // of global state, but it is noticeable if you call the function.
+  bool hasExternallyNoticeableEffects() const {
+    return hasGlobalSideEffects() || trap || implicitTrap || throws;
+  } 
   bool hasSideEffects() const {
-    return localsWritten.size() > 0 || danglingPop || hasGlobalSideEffects() ||
+    return localsWritten.size() > 0 || danglingPop || hasExternallyNoticeableEffects() ||
            transfersControlFlow();
   }
   bool hasAnything() const {

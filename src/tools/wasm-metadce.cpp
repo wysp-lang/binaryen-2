@@ -266,7 +266,7 @@ struct MetaDCEGraph {
         assert(parent->functionToDCENode.count(func->name) > 0);
         if (func->sig.results == Type::none &&
             !EffectAnalyzer(parent->options, parent->wasm.features, func->body)
-               .hasGlobalSideEffects()) {
+               .hasExternallyNoticeableSideEffects()) {
           // A function that returns nothing and has no side effects is never
           // needed in the sense of metadce: it calls nothing, and does nothing
           // externally noticeable. For example, if a wasm function does nothing
