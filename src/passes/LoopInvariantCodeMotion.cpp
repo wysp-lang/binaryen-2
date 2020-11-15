@@ -114,17 +114,23 @@ struct LoopInvariantCodeMotion
       }
       if (interestingToMove(curr)) {
         // Let's see if we can move this out.
-        // Global side effects would prevent this - we might end up
+        // Global state changes would prevent this - we might end up
         // executing them just once.
         // And we must also move across anything not moved out already,
         // so check for issues there too.
         // The rest of the loop's effects matter too, we must also
         // take into account global state like interacting loads and
         // stores.
-        bool unsafeToMove = effects.hasGlobalSideEffects() ||
+        bool unsafeToMove = effects.writesGlobalState() ||
                             effectsSoFar.invalidates(effects) ||
-                            (effects.noticesGlobalSideEffects() &&
-                             loopEffects.hasGlobalSideEffects());
+                            (effects.readsGlobalState() &&
+                             loopEffects.writesGlobalState());
+        // Exceptions can be caught and execution can resume. For now, assume
+        // that any exception prevents this optimization, but we could do
+        // better. TODO
+        if (effects.throws || loopEffects.throws) {
+          unsafeToMove = true;
+        }
         if (!unsafeToMove) {
           // So far so good. Check if our local dependencies are all
           // outside of the loop, in which case everything is good -

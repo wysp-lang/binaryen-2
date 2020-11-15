@@ -49,6 +49,9 @@ struct EffectAnalyzer
     if (ignoreImplicitTraps) {
       implicitTrap = false;
     }
+    if (implicitTrap) {
+      trap = true;
+    }
   }
 
   // Core effect tracking
@@ -151,7 +154,7 @@ struct EffectAnalyzer
   // the function. That does not include a write to a local, for example, but
   // does include any writes to global state as well as trapping and throwing.
   bool hasExternallyNoticeableEffects() const {
-    return writesGlobalState() || trap || implicitTrap || throws;
+    return writesGlobalState() || trap || throws;
   }
   bool hasSideEffects() const {
     return localsWritten.size() > 0 || danglingPop ||
@@ -206,14 +209,21 @@ struct EffectAnalyzer
         return true;
       }
     }
-    // we are ok to reorder implicit traps, but not conditionalize them
-    if ((implicitTrap && other.transfersControlFlow()) ||
-        (other.implicitTrap && transfersControlFlow())) {
+    // We are ok to reorder implicit traps, but not conditionalize them.
+    if ((trap && other.transfersControlFlow()) ||
+        (other.trap && transfersControlFlow())) {
       return true;
     }
-    // we can't reorder an implicit trap in a way that alters global state
-    if ((implicitTrap && other.writesGlobalState()) ||
-        (other.implicitTrap && writesGlobalState())) {
+    // Note that the above includes disallowing the reordering of a trap with an
+    // exception (as an exception can transfer control flow inside the current
+    // function, so transfersControlFlow would be true) - while we allow the
+    // reordering of traps with each other, we do not reorder exceptions with
+    // anything.
+    assert(!((trap && other.throws) || (throws && other.trap)));
+    // We can't reorder an implicit trap in a way that could alter what global
+    // state is modified.
+    if ((trap && other.writesGlobalState()) ||
+        (other.trap && writesGlobalState())) {
       return true;
     }
     return false;
@@ -224,7 +234,7 @@ struct EffectAnalyzer
     calls = calls || other.calls;
     readsMemory = readsMemory || other.readsMemory;
     writesMemory = writesMemory || other.writesMemory;
-    implicitTrap = implicitTrap || other.implicitTrap;
+    trap = trap || other.trap;
     isAtomic = isAtomic || other.isAtomic;
     throws = throws || other.throws;
     danglingPop = danglingPop || other.danglingPop;
@@ -568,7 +578,7 @@ struct EffectAnalyzer
     WritesGlobal = 1 << 5,
     ReadsMemory = 1 << 6,
     WritesMemory = 1 << 7,
-    ImplicitTrap = 1 << 8,
+    Trap = 1 << 8,
     IsAtomic = 1 << 9,
     Throws = 1 << 10,
     DanglingPop = 1 << 11,
@@ -600,8 +610,8 @@ struct EffectAnalyzer
     if (writesMemory) {
       effects |= SideEffects::WritesMemory;
     }
-    if (implicitTrap) {
-      effects |= SideEffects::ImplicitTrap;
+    if (trap) {
+      effects |= SideEffects::Trap;
     }
     if (isAtomic) {
       effects |= SideEffects::IsAtomic;
