@@ -4,6 +4,8 @@
 
 #include <ir/bits.h>
 #include <ir/cost.h>
+#include <ir/effect.h>
+#include <pass.h>
 #include <wasm.h>
 
 using namespace wasm;
@@ -548,7 +550,7 @@ void test_effects() {
   FeatureSet features;
   // Unreachables trap.
   Unreachable unreachable;
-  assert_equal(EffectAnalyzer(options, features, &uneachable).trap, true);
+  assert_equal(EffectAnalyzer(options, features, &unreachable).trap, true);
   // Nops... do not.
   Nop nop;
   assert_equal(EffectAnalyzer(options, features, &nop).trap, false);
