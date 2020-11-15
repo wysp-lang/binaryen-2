@@ -434,7 +434,8 @@ struct EffectAnalyzer
         implicitTrap = true;
         break;
       }
-      default: {}
+      default: {
+      }
     }
   }
   void visitBinary(Binary* curr) {
@@ -463,7 +464,8 @@ struct EffectAnalyzer
         }
         break;
       }
-      default: {}
+      default: {
+      }
     }
   }
   void visitSelect(Select* curr) {}
