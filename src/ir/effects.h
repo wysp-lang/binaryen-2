@@ -149,10 +149,10 @@ struct EffectAnalyzer
   // of global state, but it is noticeable if you call the function.
   bool hasExternallyNoticeableEffects() const {
     return hasGlobalSideEffects() || trap || implicitTrap || throws;
-  } 
+  }
   bool hasSideEffects() const {
-    return localsWritten.size() > 0 || danglingPop || hasExternallyNoticeableEffects() ||
-           transfersControlFlow();
+    return localsWritten.size() > 0 || danglingPop ||
+           hasExternallyNoticeableEffects() || transfersControlFlow();
   }
   bool hasAnything() const {
     return hasSideEffects() || accessesLocal() || readsMemory ||
