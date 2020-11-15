@@ -1,0 +1,14 @@
+(module
+ (type $i32_=>_none (func (param i32)))
+ (export "wasm_func_a" (func $a_wasm_func))
+ (func $a_wasm_func (param $x i32)
+  (block $nothing
+   (nop)
+   (local.set $x
+    (i32.const 10)
+   )
+   (nop)
+   (return)
+  )
+ )
+)
