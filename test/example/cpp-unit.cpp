@@ -543,9 +543,21 @@ void test_cost() {
   assert_equal(CostAnalyzer(&get).cost, 0);
 }
 
+void test_effects() {
+  PassOptions options;
+  FeatureSet features;
+  // Unreachables trap.
+  Unreachable unreachable;
+  assert_equal(EffectAnalyzer(options, features, &uneachable).trap, true);
+  // Nops... do not.
+  Nop nop;
+  assert_equal(EffectAnalyzer(options, features, &nop).trap, false);
+}
+
 int main() {
   test_bits();
   test_cost();
+  test_effects();
 
   if (failsCount > 0) {
     abort();
