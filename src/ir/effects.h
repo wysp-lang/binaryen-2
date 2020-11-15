@@ -273,29 +273,29 @@ private:
     }
 
     static void doStartTry(InternalAnalyzer* self, Expression** currp) {
-      self->tryDepth++;
+      self->parent.tryDepth++;
     }
 
     static void doStartCatch(InternalAnalyzer* self, Expression** currp) {
-      assert(self->tryDepth > 0 && "try depth cannot be negative");
-      self->tryDepth--;
-      self->catchDepth++;
+      assert(self->parent.tryDepth > 0 && "try depth cannot be negative");
+      self->parent.tryDepth--;
+      self->parent.catchDepth++;
     }
 
     static void doEndCatch(InternalAnalyzer* self, Expression** currp) {
-      assert(self->catchDepth > 0 && "catch depth cannot be negative");
-      self->catchDepth--;
+      assert(self->parent.catchDepth > 0 && "catch depth cannot be negative");
+      self->parent.catchDepth--;
     }
 
     void visitBlock(Block* curr) {
       if (curr->name.is()) {
-        breakTargets.erase(curr->name); // these were internal breaks
+        parent.breakTargets.erase(curr->name); // these were internal breaks
       }
     }
     void visitIf(If* curr) {}
     void visitLoop(Loop* curr) {
       if (curr->name.is()) {
-        breakTargets.erase(curr->name); // these were internal breaks
+        parent.breakTargets.erase(curr->name); // these were internal breaks
       }
       // if the loop is unreachable, then there is branching control flow:
       //  (1) if the body is unreachable because of a (return), uncaught (br)
@@ -307,92 +307,92 @@ private:
       //      we consider that a branching side effect (note how the same logic
       //      does not apply to blocks).
       if (curr->type == Type::unreachable) {
-        branchesOut = true;
+        parent.branchesOut = true;
       }
     }
-    void visitBreak(Break* curr) { breakTargets.insert(curr->name); }
+    void visitBreak(Break* curr) { parent.breakTargets.insert(curr->name); }
     void visitSwitch(Switch* curr) {
       for (auto name : curr->targets) {
-        breakTargets.insert(name);
+        parent.breakTargets.insert(name);
       }
-      breakTargets.insert(curr->default_);
+      parent.breakTargets.insert(curr->default_);
     }
 
     void visitCall(Call* curr) {
-      calls = true;
+      parent.calls = true;
       // When EH is enabled, any call can throw.
-      if (features.hasExceptionHandling() && tryDepth == 0) {
-        throws = true;
+      if (parent.features.hasExceptionHandling() && parent.tryDepth == 0) {
+        parent.throws = true;
       }
       if (curr->isReturn) {
-        branchesOut = true;
+        parent.branchesOut = true;
       }
-      if (debugInfo) {
+      if (parent.debugInfo) {
         // debugInfo call imports must be preserved very strongly, do not
         // move code around them
         // FIXME: we could check if the call is to an import
-        branchesOut = true;
+        parent.branchesOut = true;
       }
     }
     void visitCallIndirect(CallIndirect* curr) {
-      calls = true;
-      if (features.hasExceptionHandling() && tryDepth == 0) {
-        throws = true;
+      parent.calls = true;
+      if (parent.features.hasExceptionHandling() && parent.tryDepth == 0) {
+        parent.throws = true;
       }
       if (curr->isReturn) {
-        branchesOut = true;
+        parent.branchesOut = true;
       }
     }
-    void visitLocalGet(LocalGet* curr) { localsRead.insert(curr->index); }
-    void visitLocalSet(LocalSet* curr) { localsWritten.insert(curr->index); }
-    void visitGlobalGet(GlobalGet* curr) { globalsRead.insert(curr->name); }
-    void visitGlobalSet(GlobalSet* curr) { globalsWritten.insert(curr->name); }
+    void visitLocalGet(LocalGet* curr) { parent.localsRead.insert(curr->index); }
+    void visitLocalSet(LocalSet* curr) { parent.localsWritten.insert(curr->index); }
+    void visitGlobalGet(GlobalGet* curr) { parent.globalsRead.insert(curr->name); }
+    void visitGlobalSet(GlobalSet* curr) { parent.globalsWritten.insert(curr->name); }
     void visitLoad(Load* curr) {
-      readsMemory = true;
-      isAtomic |= curr->isAtomic;
-      implicitTrap = true;
+      parent.readsMemory = true;
+      parent.isAtomic |= curr->isAtomic;
+      parent.implicitTrap = true;
     }
     void visitStore(Store* curr) {
-      writesMemory = true;
-      isAtomic |= curr->isAtomic;
-      implicitTrap = true;
+      parent.writesMemory = true;
+      parent.isAtomic |= curr->isAtomic;
+      parent.implicitTrap = true;
     }
     void visitAtomicRMW(AtomicRMW* curr) {
-      readsMemory = true;
-      writesMemory = true;
-      isAtomic = true;
-      implicitTrap = true;
+      parent.readsMemory = true;
+      parent.writesMemory = true;
+      parent.isAtomic = true;
+      parent.implicitTrap = true;
     }
     void visitAtomicCmpxchg(AtomicCmpxchg* curr) {
-      readsMemory = true;
-      writesMemory = true;
-      isAtomic = true;
-      implicitTrap = true;
+      parent.readsMemory = true;
+      parent.writesMemory = true;
+      parent.isAtomic = true;
+      parent.implicitTrap = true;
     }
     void visitAtomicWait(AtomicWait* curr) {
-      readsMemory = true;
+      parent.readsMemory = true;
       // AtomicWait doesn't strictly write memory, but it does modify the
       // waiters list associated with the specified address, which we can think
       // of as a write.
-      writesMemory = true;
-      isAtomic = true;
-      implicitTrap = true;
+      parent.writesMemory = true;
+      parent.isAtomic = true;
+      parent.implicitTrap = true;
     }
     void visitAtomicNotify(AtomicNotify* curr) {
       // AtomicNotify doesn't strictly write memory, but it does modify the
       // waiters list associated with the specified address, which we can think
       // of as a write.
-      readsMemory = true;
-      writesMemory = true;
-      isAtomic = true;
-      implicitTrap = true;
+      parent.readsMemory = true;
+      parent.writesMemory = true;
+      parent.isAtomic = true;
+      parent.implicitTrap = true;
     }
     void visitAtomicFence(AtomicFence* curr) {
       // AtomicFence should not be reordered with any memory operations, so we
       // set these to true.
-      readsMemory = true;
-      writesMemory = true;
-      isAtomic = true;
+      parent.readsMemory = true;
+      parent.writesMemory = true;
+      parent.isAtomic = true;
     }
     void visitSIMDExtract(SIMDExtract* curr) {}
     void visitSIMDReplace(SIMDReplace* curr) {}
@@ -400,36 +400,36 @@ private:
     void visitSIMDTernary(SIMDTernary* curr) {}
     void visitSIMDShift(SIMDShift* curr) {}
     void visitSIMDLoad(SIMDLoad* curr) {
-      readsMemory = true;
-      implicitTrap = true;
+      parent.readsMemory = true;
+      parent.implicitTrap = true;
     }
     void visitSIMDLoadStoreLane(SIMDLoadStoreLane* curr) {
       if (curr->isLoad()) {
-        readsMemory = true;
+        parent.readsMemory = true;
       } else {
-        writesMemory = true;
+        parent.writesMemory = true;
       }
-      implicitTrap = true;
+      parent.implicitTrap = true;
     }
     void visitMemoryInit(MemoryInit* curr) {
-      writesMemory = true;
-      implicitTrap = true;
+      parent.writesMemory = true;
+      parent.implicitTrap = true;
     }
     void visitDataDrop(DataDrop* curr) {
       // data.drop does not actually write memory, but it does alter the size of
       // a segment, which can be noticeable later by memory.init, so we need to
       // mark it as having a global side effect of some kind.
-      writesMemory = true;
-      implicitTrap = true;
+      parent.writesMemory = true;
+      parent.implicitTrap = true;
     }
     void visitMemoryCopy(MemoryCopy* curr) {
-      readsMemory = true;
-      writesMemory = true;
-      implicitTrap = true;
+      parent.readsMemory = true;
+      parent.writesMemory = true;
+      parent.implicitTrap = true;
     }
     void visitMemoryFill(MemoryFill* curr) {
-      writesMemory = true;
-      implicitTrap = true;
+      parent.writesMemory = true;
+      parent.implicitTrap = true;
     }
     void visitConst(Const* curr) {}
     void visitUnary(Unary* curr) {
@@ -442,7 +442,7 @@ private:
         case TruncSFloat64ToInt64:
         case TruncUFloat64ToInt32:
         case TruncUFloat64ToInt64: {
-          implicitTrap = true;
+          parent.implicitTrap = true;
           break;
         }
         default: {
@@ -465,13 +465,13 @@ private:
           // divider.
           if (auto* c = curr->right->dynCast<Const>()) {
             if (c->value.isZero()) {
-              implicitTrap = true;
+              parent.implicitTrap = true;
             } else if ((curr->op == DivSInt32 || curr->op == DivSInt64) &&
                        c->value.getInteger() == -1LL) {
-              implicitTrap = true;
+              parent.implicitTrap = true;
             }
           } else {
-            implicitTrap = true;
+            parent.implicitTrap = true;
           }
           break;
         }
@@ -481,23 +481,23 @@ private:
     }
     void visitSelect(Select* curr) {}
     void visitDrop(Drop* curr) {}
-    void visitReturn(Return* curr) { branchesOut = true; }
+    void visitReturn(Return* curr) { parent.branchesOut = true; }
     void visitMemorySize(MemorySize* curr) {
       // memory.size accesses the size of the memory, and thus can be modeled as
       // reading memory
-      readsMemory = true;
+      parent.readsMemory = true;
       // Atomics are sequentially consistent with memory.size.
-      isAtomic = true;
+      parent.isAtomic = true;
     }
     void visitMemoryGrow(MemoryGrow* curr) {
-      calls = true;
+      parent.calls = true;
       // memory.grow technically does a read-modify-write operation on the
       // memory size in the successful case, modifying the set of valid
       // addresses, and just a read operation in the failure case
-      readsMemory = true;
-      writesMemory = true;
+      parent.readsMemory = true;
+      parent.writesMemory = true;
       // Atomics are also sequentially consistent with memory.grow.
-      isAtomic = true;
+      parent.isAtomic = true;
     }
     void visitRefNull(RefNull* curr) {}
     void visitRefIsNull(RefIsNull* curr) {}
@@ -505,30 +505,30 @@ private:
     void visitRefEq(RefEq* curr) {}
     void visitTry(Try* curr) {}
     void visitThrow(Throw* curr) {
-      if (tryDepth == 0) {
-        throws = true;
+      if (parent.tryDepth == 0) {
+        parent.throws = true;
       }
     }
     void visitRethrow(Rethrow* curr) {
-      if (tryDepth == 0) {
-        throws = true;
+      if (parent.tryDepth == 0) {
+        parent.throws = true;
       }
       // rethrow traps when the arg is null
-      implicitTrap = true;
+      parent.implicitTrap = true;
     }
     void visitBrOnExn(BrOnExn* curr) {
-      breakTargets.insert(curr->name);
+      parent.breakTargets.insert(curr->name);
       // br_on_exn traps when the arg is null
-      implicitTrap = true;
+      parent.implicitTrap = true;
     }
     void visitNop(Nop* curr) {}
     void visitUnreachable(Unreachable* curr) {
-      branchesOut = true;
-      trap = true;
+      parent.branchesOut = true;
+      parent.trap = true;
     }
     void visitPop(Pop* curr) {
-      if (catchDepth == 0) {
-        danglingPop = true;
+      if (parent.catchDepth == 0) {
+        parent.danglingPop = true;
       }
     }
     void visitTupleMake(TupleMake* curr) {}
