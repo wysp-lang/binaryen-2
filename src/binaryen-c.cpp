@@ -3875,9 +3875,9 @@ BinaryenSideEffects BinaryenSideEffectWritesMemory(void) {
   return static_cast<BinaryenSideEffects>(
     EffectAnalyzer::SideEffects::WritesMemory);
 }
-BinaryenSideEffects BinaryenSideEffectImplicitTrap(void) {
+BinaryenSideEffects BinaryenSideEffectTrap(void) {
   return static_cast<BinaryenSideEffects>(
-    EffectAnalyzer::SideEffects::ImplicitTrap);
+    EffectAnalyzer::SideEffects::Trap);
 }
 BinaryenSideEffects BinaryenSideEffectIsAtomic(void) {
   return static_cast<BinaryenSideEffects>(

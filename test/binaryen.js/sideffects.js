@@ -7,7 +7,7 @@ console.log("SideEffects.ReadsGlobal=" + binaryen.SideEffects.ReadsGlobal);
 console.log("SideEffects.WritesGlobal=" + binaryen.SideEffects.WritesGlobal);
 console.log("SideEffects.ReadsMemory=" + binaryen.SideEffects.ReadsMemory);
 console.log("SideEffects.WritesMemory=" + binaryen.SideEffects.WritesMemory);
-console.log("SideEffects.ImplicitTrap=" + binaryen.SideEffects.ImplicitTrap);
+console.log("SideEffects.Trap=" + binaryen.SideEffects.Trap);
 console.log("SideEffects.IsAtomic=" + binaryen.SideEffects.IsAtomic);
 console.log("SideEffects.Throws=" + binaryen.SideEffects.Throws);
 console.log("SideEffects.DanglingPop=" + binaryen.SideEffects.DanglingPop);
@@ -72,7 +72,7 @@ assert(
     )
   )
   ==
-  binaryen.SideEffects.ReadsMemory | binaryen.SideEffects.ImplicitTrap
+  binaryen.SideEffects.ReadsMemory | binaryen.SideEffects.Trap
 );
 assert(
   binaryen.getSideEffects(
@@ -82,7 +82,7 @@ assert(
     )
   )
   ==
-  binaryen.SideEffects.WritesMemory | binaryen.SideEffects.ImplicitTrap
+  binaryen.SideEffects.WritesMemory | binaryen.SideEffects.Trap
 );
 assert(
   binaryen.getSideEffects(
@@ -92,7 +92,7 @@ assert(
     )
   )
   ==
-  binaryen.SideEffects.ImplicitTrap
+  binaryen.SideEffects.Trap
 );
 
 // If exception handling feature is enabled, calls can throw

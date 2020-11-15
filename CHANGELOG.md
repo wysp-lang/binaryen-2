@@ -15,6 +15,9 @@ full changeset diff at the end of each section.
 Current Trunk
 -------------
 
+- The C and JS APIs changed from having `ImplicitTrap` in effect handling to
+  `Trap`. That can now represent a non-implicit trap as well, that is, from an
+  `unreachable` instruction.
 - JS API functions for atomic notify/wait instructions are renamed.
   - `module.atomic.notify` -> `module.memory.atomic.notify`
   - `module.i32.atomic.wait` -> `module.memory.atomic.wait32`

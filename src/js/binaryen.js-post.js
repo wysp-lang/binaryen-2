@@ -503,7 +503,7 @@ function initializeConstants() {
     'WritesGlobal',
     'ReadsMemory',
     'WritesMemory',
-    'ImplicitTrap',
+    'Trap',
     'IsAtomic',
     'Throws',
     'DanglingPop',

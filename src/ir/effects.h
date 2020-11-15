@@ -150,9 +150,11 @@ struct EffectAnalyzer
     return globalsRead.size() || readsMemory || isAtomic || calls;
   }
 
-  // Whether this has any effect that could be noticeable from someone calling
-  // the function. That does not include a write to a local, for example, but
-  // does include any writes to global state as well as trapping and throwing.
+  // Whether this has any effect that could be noticeable from someone outside
+  // the current function call. That does not include a write to a local, for
+  // example, but  does include any writes to global state as well as trapping
+  // and throwing. Note that this does not consider the return value from the
+  // function (which we do not have access to directly here).
   bool hasExternallyNoticeableEffects() const {
     return writesGlobalState() || trap || throws;
   }
