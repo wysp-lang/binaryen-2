@@ -67,6 +67,7 @@ struct EffectAnalyzer
   std::set<Name> globalsWritten;
   bool readsMemory = false;
   bool writesMemory = false;
+  bool trap = false;
   // a load or div/rem, which may trap. we ignore trap differences, so it is ok
   // to reorder these, but we can't remove them, as they count as side effects,
   // and we can't move them in a way that would cause other noticeable (global)
@@ -140,11 +141,11 @@ struct EffectAnalyzer
 
   bool hasGlobalSideEffects() const {
     return calls || globalsWritten.size() > 0 || writesMemory || isAtomic ||
-           throws;
+           throws || trap || implicitTrap;
   }
   bool hasSideEffects() const {
-    return implicitTrap || localsWritten.size() > 0 || danglingPop ||
-           hasGlobalSideEffects() || transfersControlFlow();
+    return localsWritten.size() > 0 || danglingPop || hasGlobalSideEffects() ||
+           transfersControlFlow();
   }
   bool hasAnything() const {
     return hasSideEffects() || accessesLocal() || readsMemory ||
@@ -494,7 +495,10 @@ struct EffectAnalyzer
     implicitTrap = true;
   }
   void visitNop(Nop* curr) {}
-  void visitUnreachable(Unreachable* curr) { branchesOut = true; }
+  void visitUnreachable(Unreachable* curr) {
+    branchesOut = true;
+    trap = true;
+  }
   void visitPop(Pop* curr) {
     if (catchDepth == 0) {
       danglingPop = true;

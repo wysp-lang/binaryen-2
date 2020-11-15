@@ -264,13 +264,15 @@ struct MetaDCEGraph {
 
       void doWalkFunction(Function* func) {
         assert(parent->functionToDCENode.count(func->name) > 0);
-        if (!EffectAnalyzer(parent->options, parent->wasm.features, func->body)
+        if (func->sig.results == Type::none &&
+            !EffectAnalyzer(parent->options, parent->wasm.features, func->body)
                .hasGlobalSideEffects()) {
-          // A function with no side effects is never needed in the sense of
-          // metadce: it calls nothing, and does nothing (that is noticeable
-          // from the outside). For example, if a wasm function does nothing,
+          // A function that returns nothing and has no side effects is never
+          // needed in the sense of metadce: it calls nothing, and does nothing
+          // externally noticeable. For example, if a wasm function does nothing
           // and is exported to be called from JS, then we can remove that
           // export.
+          std::cout << "nt needed\n";
           parent->nodes[parent->functionToDCENode[func->name]].needed = false;
         }
       }
@@ -303,7 +305,7 @@ struct MetaDCEGraph {
     // TODO: perhaps the other direction, to JS, is interesting as well?
     for (auto& exp : wasm.exports) {
       auto& node = nodes[exportToDCENode[exp->name]];
-      if (exp->kind == ExternalKind::Function) {
+      if (!roots.count(node.name) && exp->kind == ExternalKind::Function) {
         auto target = exp->value;
         if (!wasm.getFunction(target)->imported()) {
           if (!nodes[functionToDCENode[target]].needed) {
