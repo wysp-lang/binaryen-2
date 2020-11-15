@@ -139,16 +139,19 @@ struct EffectAnalyzer
     return branchesOut || throws || hasExternalBreakTargets();
   }
 
-  // Changes something in global state that could be noticeable by others. This
-  // matches noticesGlobalSideEffects().
-  bool hasGlobalSideEffects() const {
-    return calls || globalsWritten.size() > 0 || writesMemory || isAtomic;
+  // Changes something in globally-stored state.
+  bool writesGlobalState() const {
+    return globalsWritten.size() > 0 || writesMemory || isAtomic || calls;
   }
-  // In addition to hasGlobalSideEffects, this includes anything that someone
-  // from outside the function could observe. For example, a trap is not a part
-  // of global state, but it is noticeable if you call the function.
+  bool readsGlobalState() const {
+    return globalsRead.size() || readsMemory || isAtomic || calls;
+  }
+
+  // Whether this has any effect that could be noticeable from someone calling
+  // the function. That does not include a write to a local, for example, but
+  // does include any writes to global state as well as trapping and throwing.
   bool hasExternallyNoticeableEffects() const {
-    return hasGlobalSideEffects() || trap || implicitTrap || throws;
+    return writesGlobalState() || trap || implicitTrap || throws;
   }
   bool hasSideEffects() const {
     return localsWritten.size() > 0 || danglingPop ||
@@ -157,10 +160,6 @@ struct EffectAnalyzer
   bool hasAnything() const {
     return hasSideEffects() || accessesLocal() || readsMemory ||
            accessesGlobal();
-  }
-
-  bool noticesGlobalSideEffects() const {
-    return calls || readsMemory || isAtomic || globalsRead.size();
   }
 
   // check if we break to anything external from ourselves
@@ -213,8 +212,8 @@ struct EffectAnalyzer
       return true;
     }
     // we can't reorder an implicit trap in a way that alters global state
-    if ((implicitTrap && other.hasGlobalSideEffects()) ||
-        (other.implicitTrap && hasGlobalSideEffects())) {
+    if ((implicitTrap && other.writesGlobalState()) ||
+        (other.implicitTrap && writesGlobalState())) {
       return true;
     }
     return false;
