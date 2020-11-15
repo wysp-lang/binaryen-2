@@ -256,18 +256,16 @@
     )
    )
    (call $waka)
-   (local.set $a
-    (i32.load
-     (i32.const 101)
-    )
-   )
+   (nop)
    (drop
     (i32.load
      (i32.const 1)
     )
    )
-   (drop
-    (local.get $a)
+   (local.set $a
+    (i32.load
+     (i32.const 101)
+    )
    )
    (call $waka)
    (local.set $a
@@ -1141,17 +1139,15 @@
  (global $global$0 (mut i32) (i32.const 10))
  (func $nonatomics (result i32)
   (local $x i32)
-  (local.set $x
-   (i32.load
-    (i32.const 1024)
-   )
-  )
+  (nop)
   (drop
    (i32.load
     (i32.const 1028)
    )
   )
-  (local.get $x)
+  (i32.load
+   (i32.const 1024)
+  )
  )
  (func $nonatomic-growmem (result i32)
   (local $x i32)

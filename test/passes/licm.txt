@@ -49,12 +49,13 @@
   )
  )
  (func $loop4
-  (loop $loop
-   (drop
-    (i32.load
-     (i32.const 1)
-    )
+  (drop
+   (i32.load
+    (i32.const 1)
    )
+  )
+  (loop $loop
+   (nop)
    (br_if $loop
     (i32.const 1)
    )
@@ -79,17 +80,19 @@
   )
  )
  (func $loop3-4-b
+  (drop
+   (i32.load
+    (i32.const 10)
+   )
+  )
+  (drop
+   (i32.load
+    (i32.const 20)
+   )
+  )
   (loop $loop
-   (drop
-    (i32.load
-     (i32.const 10)
-    )
-   )
-   (drop
-    (i32.load
-     (i32.const 20)
-    )
-   )
+   (nop)
+   (nop)
    (br_if $loop
     (i32.const 1)
    )
@@ -161,17 +164,19 @@
   )
  )
  (func $loop10
+  (drop
+   (i32.load
+    (i32.const 1)
+   )
+  )
+  (drop
+   (i32.load
+    (i32.const 2)
+   )
+  )
   (loop $loop
-   (drop
-    (i32.load
-     (i32.const 1)
-    )
-   )
-   (drop
-    (i32.load
-     (i32.const 2)
-    )
-   )
+   (nop)
+   (nop)
    (br_if $loop
     (i32.const 1)
    )
