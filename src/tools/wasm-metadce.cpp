@@ -45,9 +45,9 @@ struct DCENode {
   Name name;
   // The other nodes this one can reach.
   std::vector<Name> reaches;
-  // By default we assume every node is needed, but in some cases we can mark
-  // them as definitely not needed.
-  bool needed = true;
+  // Some nodes don't do anything, and can be ignored if they are not also a
+  // root.
+  bool doesNothing = false;
 
   DCENode() = default;
   DCENode(Name name) : name(name) {}
@@ -272,8 +272,7 @@ struct MetaDCEGraph {
           // externally noticeable. For example, if a wasm function does nothing
           // and is exported to be called from JS, then we can remove that
           // export.
-          std::cout << "nt needed\n";
-          parent->nodes[parent->functionToDCENode[func->name]].needed = false;
+          parent->nodes[parent->functionToDCENode[func->name]].doesNothing = true;
         }
       }
 
@@ -300,16 +299,16 @@ struct MetaDCEGraph {
     PassRunner runner(&wasm);
     FunctionScanner(this).run(&runner, &wasm);
 
-    // Exports to functions that are not needed are themselves not needed. This
-    // helps avoid calls into the wasm that do nothing.
+    // Exports to functions that do nothing are useless as well. This helps
+    // avoid calls into the wasm that do nothing.
     // TODO: perhaps the other direction, to JS, is interesting as well?
     for (auto& exp : wasm.exports) {
       auto& node = nodes[exportToDCENode[exp->name]];
       if (!roots.count(node.name) && exp->kind == ExternalKind::Function) {
         auto target = exp->value;
         if (!wasm.getFunction(target)->imported()) {
-          if (!nodes[functionToDCENode[target]].needed) {
-            node.needed = false;
+          if (nodes[functionToDCENode[target]].doesNothing) {
+            node.doesNothing = true;
           }
         }
       }
@@ -344,7 +343,8 @@ public:
       auto name = *iter;
       queue.erase(iter);
       auto& node = nodes[name];
-      if (!node.needed) {
+      // A node that does nothing is not needed unless it is a root.
+      if (node.doesNothing && !roots.count(name)) {
         continue;
       }
       reached.insert(name);
