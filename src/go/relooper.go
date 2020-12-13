@@ -54,23 +54,23 @@ type RelooperBuilder interface {
   getShapeContinueName(id) string
 }
 
-struct Relooper
-struct Block
-struct Shape
+type FlowType int
 
-// Info about a branching from one block to another
-struct Branch {
-  enum FlowType {
-    Direct = 0, // We will directly reach the right location through other
-                // means, no need for continue or break
-    Break = 1,
-    Continue = 2
-  }
+const (
+   // We will directly reach the right location through other
+              // means, no need for continue or break
+  Direct FlowType = iota
+  Break
+  Continue
+)
+
+// Info about a branching from one block to another.
+type Branch struct {
   // If not NULL, this shape is the relevant one for purposes of getting to the
-  // target block. We break or continue on it
-  Shape* Ancestor = nullptr
+  // target block. We break or continue on it.
+  Ancestor *Shape
   // If Ancestor is not NULL, this says whether to break or continue
-  Branch::FlowType Type
+  Type FlowType
 
   // A branch either has a condition expression if the block ends in ifs, or if
   // the block ends in a switch, then a list of indexes, which becomes the
@@ -78,141 +78,19 @@ struct Branch {
   // any expression (or nullptr for the branch taken when no other condition is
   // true) A condition must not have side effects, as the Relooper can reorder
   // or eliminate condition checking. This must not have side effects.
-  wasm::Expression* Condition
+  Condition *Code
   // Switches are rare, so have just a pointer for their values. This contains
   // the values for which the branch will be taken, or for the default it is
   // simply not present.
-  std::unique_ptr<std::vector<wasm::Index>> SwitchValues
+  SwitchValues []int32
 
   // If provided, code that is run right before the branch is taken. This is
   // useful for phis.
-  wasm::Expression* Code
-
-  Branch(wasm::Expression* ConditionInit, wasm::Expression* CodeInit = nullptr)
-
-  Branch(std::vector<wasm::Index>&& ValuesInit,
-         wasm::Expression* CodeInit = nullptr)
-
-  // Emits code for branch
-  wasm::Expression*
-  Render(RelooperBuilder& Builder, Block* Target, bool SetLabel)
+  Code Code
 }
 
-// like std::set, except that begin() -> end() iterates in the
-// order that elements were added to the set (not in the order
-// of operator<(T, T))
-template<typename T> struct InsertOrderedSet {
-  std::map<T, typename std::list<T>::iterator> Map
-  std::list<T> List
-
-  typedef typename std::list<T>::iterator iterator
-  iterator begin() { return List.begin(); }
-  iterator end() { return List.end(); }
-
-  void erase(const T& val) {
-    auto it = Map.find(val)
-    if (it != Map.end()) {
-      List.erase(it->second)
-      Map.erase(it)
-    }
-  }
-
-  void erase(iterator position) {
-    Map.erase(*position)
-    List.erase(position)
-  }
-
-  // cheating a bit, not returning the iterator
-  void insert(const T& val) {
-    auto it = Map.find(val)
-    if (it == Map.end()) {
-      List.push_back(val)
-      Map.insert(std::make_pair(val, --List.end()))
-    }
-  }
-
-  size_t size() const { return Map.size(); }
-  bool empty() const { return Map.empty(); }
-
-  void clear() {
-    Map.clear()
-    List.clear()
-  }
-
-  size_t count(const T& val) const { return Map.count(val); }
-
-  InsertOrderedSet() = default
-  InsertOrderedSet(const InsertOrderedSet& other) { *this = other; }
-  InsertOrderedSet& operator=(const InsertOrderedSet& other) {
-    clear()
-    for (auto i : other.List) {
-      insert(i); // inserting manually creates proper iterators
-    }
-    return *this
-  }
-}
-
-// like std::map, except that begin() -> end() iterates in the
-// order that elements were added to the map (not in the order
-// of operator<(Key, Key))
-template<typename Key, typename T> struct InsertOrderedMap {
-  std::map<Key, typename std::list<std::pair<Key, T>>::iterator> Map
-  std::list<std::pair<Key, T>> List
-
-  T& operator[](const Key& k) {
-    auto it = Map.find(k)
-    if (it == Map.end()) {
-      List.push_back(std::make_pair(k, T()))
-      auto e = --List.end()
-      Map.insert(std::make_pair(k, e))
-      return e->second
-    }
-    return it->second->second
-  }
-
-  typedef typename std::list<std::pair<Key, T>>::iterator iterator
-  iterator begin() { return List.begin(); }
-  iterator end() { return List.end(); }
-
-  void erase(const Key& k) {
-    auto it = Map.find(k)
-    if (it != Map.end()) {
-      List.erase(it->second)
-      Map.erase(it)
-    }
-  }
-
-  void erase(iterator position) { erase(position->first); }
-
-  void clear() {
-    Map.clear()
-    List.clear()
-  }
-
-  void swap(InsertOrderedMap<Key, T>& Other) {
-    Map.swap(Other.Map)
-    List.swap(Other.List)
-  }
-
-  size_t size() const { return Map.size(); }
-  bool empty() const { return Map.empty(); }
-  size_t count(const Key& k) const { return Map.count(k); }
-
-  InsertOrderedMap() = default
-  InsertOrderedMap(InsertOrderedMap& other) {
-    abort(); // TODO, watch out for iterators
-  }
-  InsertOrderedMap& operator=(const InsertOrderedMap& other) {
-    abort(); // TODO, watch out for iterators
-  }
-  bool operator==(const InsertOrderedMap& other) {
-    return Map == other.Map && List == other.List
-  }
-  bool operator!=(const InsertOrderedMap& other) { return !(*this == other); }
-}
-
-typedef InsertOrderedSet<Block*> BlockSet
-typedef InsertOrderedMap<Block*, Branch*> BlockBranchMap
+type BlockSet map[*Block]bool
+type BlockBranchMap map[*Block]*Branch
 
 // Represents a basic block of code - some instructions that end with a
 // control flow modifier (a branch, return or throw).
