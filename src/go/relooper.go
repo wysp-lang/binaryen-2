@@ -31,6 +31,8 @@ package main
 
 import "fmt"
 
+// Represents code. This is opaque to the relooper, which doesn't need to know
+// about the contents.
 type Code interface {
 }
 
@@ -94,58 +96,30 @@ type BlockBranchMap map[*Block]*Branch
 
 // Represents a basic block of code - some instructions that end with a
 // control flow modifier (a branch, return or throw).
-struct Block {
+type Block struct {
   // Reference to the relooper containing this block.
-  Relooper* relooper
+  relooper *Relooper
   // Branches become processed after we finish the shape relevant to them. For
   // example, when we recreate a loop, branches to the loop start become
   // continues and are now processed. When we calculate what shape to generate
   // from a set of blocks, we ignore processed branches. Blocks own the Branch
   // objects they use, and destroy them when done.
-  BlockBranchMap BranchesOut
-  BlockSet BranchesIn
-  BlockBranchMap ProcessedBranchesOut
-  BlockSet ProcessedBranchesIn
-  Shape* Parent = nullptr; // The shape we are directly inside
-  int Id = -1; // A unique identifier, defined when added to relooper
+  BranchesOut BlockBranchMap
+  BranchesIn BlockSet
+  ProcessedBranchesOut BlockBranchMap
+  ProcessedBranchesIn BlockSet
+  Parent *Shape
+  // A unique identifier, defined when added to relooper
+  Id int // TODO = -1
   // The code in this block. This can be arbitrary wasm code, including internal
   // control flow, it should just not branch to the outside
-  wasm::Expression* Code
+  Code *Code
   // If nullptr, then this block ends in ifs (or nothing). otherwise, this block
   // ends in a switch, done on this condition
-  wasm::Expression* SwitchCondition
+  SwitchCondition *Code
   // If true, we are a multiple entry, so reaching us requires setting the label
   // variable
-  bool IsCheckedMultipleEntry
-
-  Block(Relooper* relooper,
-        wasm::Expression* CodeInit,
-        wasm::Expression* SwitchConditionInit = nullptr)
-
-  // Add a branch: if the condition holds we branch (or if null, we branch if
-  // all others failed) Note that there can be only one branch from A to B (if
-  // you need multiple conditions for the branch, create a more interesting
-  // expression in the Condition). If a Block has no outgoing branches, the
-  // contents in Code must contain a terminating instruction, as the relooper
-  // doesn't know whether you want control flow to stop with an `unreachable` or
-  // a `return` or something else (if you forget to do this, control flow may
-  // continue into the block that happens to be emitted right after it).
-  // Internally, adding a branch only adds the outgoing branch. The matching
-  // incoming branch on the target is added by the Relooper itself as it works.
-  void AddBranchTo(Block* Target,
-                   wasm::Expression* Condition,
-                   wasm::Expression* Code = nullptr)
-
-  // Add a switch branch: if the switch condition is one of these values, we
-  // branch (or if the list is empty, we are the default) Note that there can be
-  // only one branch from A to B (if you need multiple values for the branch,
-  // that's what the array and default are for).
-  void AddSwitchBranchTo(Block* Target,
-                         std::vector<wasm::Index>&& Values,
-                         wasm::Expression* Code = nullptr)
-
-  // Emit code for the block, including its contents and branchings out
-  wasm::Expression* Render(RelooperBuilder& Builder, bool InLoop)
+  IsCheckedMultipleEntry bool
 }
 
 // Represents a structured control flow shape, one of
@@ -166,19 +140,17 @@ struct Block {
 //        flow, of course.
 //
 
-struct SimpleShape
-struct MultipleShape
-struct LoopShape
-
-struct Shape {
+type Shape struct {
   // A unique identifier. Used to identify loops, labels are Lx where x is the
   // Id. Defined when added to relooper
-  int Id = -1
+  Id int // TODO = -1
   // The shape that will appear in the code right after this one
-  Shape* Next = nullptr
+  Next *Shape
   // The shape that control flow gets to naturally (if there is Next, then this
   // is Next)
-  Shape* Natural
+  Natural *Shape
+
+// TODO
 
   enum ShapeType { Simple, Multiple, Loop }
   ShapeType Type
@@ -295,4 +267,34 @@ struct Debugging {
 func main() {
 	fmt.Println("Hello, loops")
 }
+
+
+
+
+  // Add a branch: if the condition holds we branch (or if null, we branch if
+  // all others failed) Note that there can be only one branch from A to B (if
+  // you need multiple conditions for the branch, create a more interesting
+  // expression in the Condition). If a Block has no outgoing branches, the
+  // contents in Code must contain a terminating instruction, as the relooper
+  // doesn't know whether you want control flow to stop with an `unreachable` or
+  // a `return` or something else (if you forget to do this, control flow may
+  // continue into the block that happens to be emitted right after it).
+  // Internally, adding a branch only adds the outgoing branch. The matching
+  // incoming branch on the target is added by the Relooper itself as it works.
+  void AddBranchTo(Block* Target,
+                   wasm::Expression* Condition,
+                   wasm::Expression* Code = nullptr)
+
+  // Add a switch branch: if the switch condition is one of these values, we
+  // branch (or if the list is empty, we are the default) Note that there can be
+  // only one branch from A to B (if you need multiple values for the branch,
+  // that's what the array and default are for).
+  void AddSwitchBranchTo(Block* Target,
+                         std::vector<wasm::Index>&& Values,
+                         wasm::Expression* Code = nullptr)
+
+  // Emit code for the block, including its contents and branchings out
+  wasm::Expression* Render(RelooperBuilder& Builder, bool InLoop)
+
+
 
