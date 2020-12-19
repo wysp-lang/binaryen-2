@@ -29,8 +29,6 @@ http://doi.acm.org/10.1145/2048147.2048224
 
 package main
 
-import "fmt"
-
 // Represents code. This is opaque to the relooper, which doesn't need to know
 // about the contents.
 type Code interface {
@@ -166,7 +164,7 @@ type SimpleShape struct {
   Inner *Block
 }
 
-type IdShapeMap [int]*Shape
+type IdShapeMap map[int]*Shape
 
 type MultipleShape struct {
   Shape
@@ -192,68 +190,23 @@ type LoopShape struct {
 // Implementation details: The Relooper instance takes ownership of the blocks,
 // branches and shapes when created using the `AddBlock` etc. methods, and frees
 // them when done.
-struct Relooper {
-  wasm::Module* Module
-  std::deque<std::unique_ptr<Block>> Blocks
-  std::deque<std::unique_ptr<Branch>> Branches
-  std::deque<std::unique_ptr<Shape>> Shapes
-  Shape* Root
-  bool MinSize
-  int BlockIdCounter
-  int ShapeIdCounter
-
-  Relooper(wasm::Module* ModuleInit)
-
-  // Creates a new block associated with (and cleaned up along) this relooper.
-  Block* AddBlock(wasm::Expression* CodeInit,
-                  wasm::Expression* SwitchConditionInit = nullptr)
-  // Creates a new branch associated with (and cleaned up along) this relooper.
-  Branch* AddBranch(wasm::Expression* ConditionInit,
-                    wasm::Expression* CodeInit)
-  // Creates a new branch associated with (and cleaned up along) this relooper.
-  Branch* AddBranch(std::vector<wasm::Index>&& ValuesInit,
-                    wasm::Expression* CodeInit = nullptr)
-  // Creates a new simple shape associated with (and cleaned up along) this
-  // relooper.
-  SimpleShape* AddSimpleShape()
-  // Creates a new multiple shape associated with (and cleaned up along) this
-  // relooper.
-  MultipleShape* AddMultipleShape()
-  // Creates a new loop shape associated with (and cleaned up along) this
-  // relooper.
-  LoopShape* AddLoopShape()
-
-  // Calculates the shapes
-  void Calculate(Block* Entry)
-
-  // Renders the result.
-  wasm::Expression* Render(RelooperBuilder& Builder)
-
-  // Sets us to try to minimize size
-  void SetMinSize(bool MinSize_) { MinSize = MinSize_; }
-}
-
-typedef InsertOrderedMap<Block*, BlockSet> BlockBlockSetMap
-
-#ifdef RELOOPER_DEBUG
-struct Debugging {
-  static void Dump(Block* Curr, const char* prefix = NULL)
-  static void Dump(BlockSet& Blocks, const char* prefix = NULL)
-  static void Dump(Shape* S, const char* prefix = NULL)
-}
-#endif
-
-} // namespace CFG
-
-// TODO: the .cpp file
-
-func main() {
-	fmt.Println("Hello, loops")
+type Relooper struct {
+  Builder *RelooperBuilder
+  // TODO needed? were they just for unique_ptrs to manage memory?
+  Blocks []*Block
+  Branches []*Branch
+  Shapes []*Shape
+  Root *Shape
+  MinSize bool
+  BlockIdCounter int
+  ShapeIdCounter int
 }
 
 
 
 
+// Take comments:
+/*
   // Add a branch: if the condition holds we branch (or if null, we branch if
   // all others failed) Note that there can be only one branch from A to B (if
   // you need multiple conditions for the branch, create a more interesting
@@ -294,4 +247,33 @@ func main() {
   static LoopShape* IsLoop(Shape* It) {
     return It && It->Type == Loop ? (LoopShape*)It : NULL
   }
+
+  // Creates a new block associated with (and cleaned up along) this relooper.
+  Block* AddBlock(wasm::Expression* CodeInit,
+                  wasm::Expression* SwitchConditionInit = nullptr)
+  // Creates a new branch associated with (and cleaned up along) this relooper.
+  Branch* AddBranch(wasm::Expression* ConditionInit,
+                    wasm::Expression* CodeInit)
+  // Creates a new branch associated with (and cleaned up along) this relooper.
+  Branch* AddBranch(std::vector<wasm::Index>&& ValuesInit,
+                    wasm::Expression* CodeInit = nullptr)
+  // Creates a new simple shape associated with (and cleaned up along) this
+  // relooper.
+  SimpleShape* AddSimpleShape()
+  // Creates a new multiple shape associated with (and cleaned up along) this
+  // relooper.
+  MultipleShape* AddMultipleShape()
+  // Creates a new loop shape associated with (and cleaned up along) this
+  // relooper.
+  LoopShape* AddLoopShape()
+
+  // Calculates the shapes
+  void Calculate(Block* Entry)
+
+  // Renders the result.
+  wasm::Expression* Render(RelooperBuilder& Builder)
+
+  // Sets us to try to minimize size
+  void SetMinSize(bool MinSize_) { MinSize = MinSize_; }
+*/
 
