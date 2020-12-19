@@ -140,6 +140,14 @@ type Block struct {
 //        flow, of course.
 //
 
+type ShapeType int
+
+const (
+  Simple ShapeType = iota
+  Multiple
+  Loop
+)
+
 type Shape struct {
   // A unique identifier. Used to identify loops, labels are Lx where x is the
   // Id. Defined when added to relooper
@@ -150,51 +158,26 @@ type Shape struct {
   // is Next)
   Natural *Shape
 
-// TODO
-
-  enum ShapeType { Simple, Multiple, Loop }
-  ShapeType Type
-
-  Shape(ShapeType TypeInit) : Type(TypeInit) {}
-  virtual ~Shape() = default
-
-  virtual wasm::Expression* Render(RelooperBuilder& Builder, bool InLoop) = 0
-
-  static SimpleShape* IsSimple(Shape* It) {
-    return It && It->Type == Simple ? (SimpleShape*)It : NULL
-  }
-  static MultipleShape* IsMultiple(Shape* It) {
-    return It && It->Type == Multiple ? (MultipleShape*)It : NULL
-  }
-  static LoopShape* IsLoop(Shape* It) {
-    return It && It->Type == Loop ? (LoopShape*)It : NULL
-  }
+  Type ShapeType
 }
 
-struct SimpleShape : public Shape {
-  Block* Inner = nullptr
-
-  SimpleShape() : Shape(Simple) {}
-  wasm::Expression* Render(RelooperBuilder& Builder, bool InLoop) override
+type SimpleShape struct {
+  Shape
+  Inner *Block
 }
 
-typedef std::map<int, Shape*> IdShapeMap
+type IdShapeMap [int]*Shape
 
-struct MultipleShape : public Shape {
-  IdShapeMap InnerMap; // entry block ID -> shape
-
-  MultipleShape() : Shape(Multiple) {}
-
-  wasm::Expression* Render(RelooperBuilder& Builder, bool InLoop) override
+type MultipleShape struct {
+  Shape
+  InnerMap IdShapeMap // entry block ID -> shape
 }
 
-struct LoopShape : public Shape {
-  Shape* Inner = nullptr
+type LoopShape struct {
+  Shape
+  Inner *Shape
 
-  BlockSet Entries; // we must visit at least one of these
-
-  LoopShape() : Shape(Loop) {}
-  wasm::Expression* Render(RelooperBuilder& Builder, bool InLoop) override
+  Entries BlockSet // we must visit at least one of these
 }
 
 // Implements the relooper algorithm for a function's blocks.
@@ -297,4 +280,18 @@ func main() {
   wasm::Expression* Render(RelooperBuilder& Builder, bool InLoop)
 
 
+  Shape(ShapeType TypeInit) : Type(TypeInit) {}
+  virtual ~Shape() = default
+
+  virtual wasm::Expression* Render(RelooperBuilder& Builder, bool InLoop) = 0
+
+  static SimpleShape* IsSimple(Shape* It) {
+    return It && It->Type == Simple ? (SimpleShape*)It : NULL
+  }
+  static MultipleShape* IsMultiple(Shape* It) {
+    return It && It->Type == Multiple ? (MultipleShape*)It : NULL
+  }
+  static LoopShape* IsLoop(Shape* It) {
+    return It && It->Type == Loop ? (LoopShape*)It : NULL
+  }
 
