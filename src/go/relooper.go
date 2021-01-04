@@ -296,7 +296,7 @@ func HandleFollowupMultiples(Ret *Code,
                                                 Parent *Shape,
                                                  Builder *RelooperBuilder,
                                                  InLoop bool) *Code {
-  if !Parent.Next {
+  if Parent.Next == nil {
     return Ret
   }
 
