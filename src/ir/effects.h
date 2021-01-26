@@ -600,7 +600,7 @@ private:
     }
     void visitRefAs(RefAs* curr) {
       // traps when the arg is null
-      if (curr->ref->type.isNullable()) {
+      if (curr->value->type.isNullable()) {
         parent.implicitTrap = true;
       }
     }
