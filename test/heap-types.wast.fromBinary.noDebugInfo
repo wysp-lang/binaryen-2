@@ -218,17 +218,17 @@
  )
  (func $6 (param $0 anyref)
   (drop
-   (ref.is_func
+   (ref.as_func
     (local.get $0)
    )
   )
   (drop
-   (ref.is_data
+   (ref.as_data
     (local.get $0)
    )
   )
   (drop
-   (ref.is_i31
+   (ref.as_i31
     (local.get $0)
    )
   )

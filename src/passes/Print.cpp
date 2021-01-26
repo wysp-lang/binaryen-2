@@ -1859,13 +1859,13 @@ struct PrintExpressionContents
   void visitRefAs(RefAs* curr) {
     switch (curr->op) {
       case RefAsFunc:
-        printMedium(o, "ref.is_func");
+        printMedium(o, "ref.as_func");
         break;
       case RefAsData:
-        printMedium(o, "ref.is_data");
+        printMedium(o, "ref.as_data");
         break;
       case RefAsI31:
-        printMedium(o, "ref.is_i31");
+        printMedium(o, "ref.as_i31");
         break;
       default:
         WASM_UNREACHABLE("unimplemented ref.is_*");
