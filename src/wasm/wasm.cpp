@@ -245,6 +245,17 @@ const char* getExpressionName(Expression* curr) {
       return "array.set";
     case Expression::Id::ArrayLenId:
       return "array.len";
+    case Expression::Id::RefAsId:
+      switch (curr->cast<RefAs>()->op) {
+        case RefAsFunc:
+          return "ref.as_func";
+        case RefAsData:
+          return "ref.as_data";
+        case RefAsI31:
+          return "ref.as_i31";
+        default:
+          WASM_UNREACHABLE("unimplemented ref.is_*");
+      }
     case Expression::Id::NumExpressionIds:
       WASM_UNREACHABLE("invalid expr id");
   }
