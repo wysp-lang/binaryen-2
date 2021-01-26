@@ -2251,11 +2251,11 @@ Expression* SExpressionWasmBuilder::makeArrayLen(Element& s) {
 
 Expression* SExpressionWasmBuilder::makeRefAs(Element& s) {
   auto ret = allocator.alloc<RefAs>();
-  if (*s[0] == REF_IS_FUNC) {
+  if (*s[0] == REF_AS_FUNC) {
     ret->op = RefAsFunc;
-  } else if (*s[0] == REF_IS_DATA) {
+  } else if (*s[0] == REF_AS_DATA) {
     ret->op = RefAsData;
-  } else if (*s[0] == REF_IS_I31) {
+  } else if (*s[0] == REF_AS_I31) {
     ret->op = RefAsI31;
   } else {
     WASM_UNREACHABLE("unimplemented ref.as_*");
