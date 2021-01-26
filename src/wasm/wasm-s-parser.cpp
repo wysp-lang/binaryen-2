@@ -2248,6 +2248,22 @@ Expression* SExpressionWasmBuilder::makeArrayLen(Element& s) {
   return Builder(wasm).makeArrayLen(ref);
 }
 
+Expression* SExpressionWasmBuilder::makeRefAs(Element& s) {
+  auto ret = allocator.alloc<RefAs>();
+  if (*s[0] == REF_IS_FUNC) {
+    ret->op = RefAsFunc;
+  } else if (*s[0] == REF_IS_DATA) {
+    ret->op = RefAsData;
+  } else if (*s[0] == REF_IS_I31) {
+    ret->op = RefAsI31;
+  } else {
+    WASM_UNREACHABLE("unimplemented ref.as_*");
+  }
+  ret->value = parseExpression(s[1]);
+  ret->finalize();
+  return ret;
+}
+
 // converts an s-expression string representing binary data into an output
 // sequence of raw bytes this appends to data, which may already contain
 // content.

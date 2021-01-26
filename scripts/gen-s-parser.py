@@ -568,6 +568,9 @@ instructions = [
     ("ref.is_func",         "makeRefIs(s)"),
     ("ref.is_data",         "makeRefIs(s)"),
     ("ref.is_i31",          "makeRefIs(s)"),
+    ("ref.as_func",         "makeRefAs(s)"),
+    ("ref.as_data",         "makeRefAs(s)"),
+    ("ref.as_i31",          "makeRefAs(s)"),
 ]
 
 
