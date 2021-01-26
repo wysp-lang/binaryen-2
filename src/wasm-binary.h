@@ -1549,6 +1549,7 @@ public:
   void visitThrow(Throw* curr);
   void visitRethrow(Rethrow* curr);
   void visitCallRef(CallRef* curr);
+  void visitRefAs(RefAs* curr, uint8_t code);
   // Let is lowered into a block.
   void visitLet(Block* curr);
 
