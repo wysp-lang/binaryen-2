@@ -1658,7 +1658,7 @@ public:
         }
         break;
       case RefAsI31:
-        if (!value.type.getHeapType() == HeapType::i31) {
+        if (value.type.getHeapType() != HeapType::i31) {
           trap("not an i31");
         }
         break;
