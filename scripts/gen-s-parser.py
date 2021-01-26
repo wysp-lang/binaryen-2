@@ -529,7 +529,7 @@ instructions = [
     # reference types instructions
     # TODO Add table instructions
     ("ref.null",             "makeRefNull(s)"),
-    ("ref.is_null",          "makeRefIs(s)"),
+    ("ref.is_null",          "makeRefIs(s, RefIsNull)"),
     ("ref.func",             "makeRefFunc(s)"),
     # exception handling instructions
     ("try",                  "makeTry(s)"),
@@ -565,12 +565,12 @@ instructions = [
     ("array.get_u",         "makeArrayGet(s, false)"),
     ("array.set",           "makeArraySet(s)"),
     ("array.len",           "makeArrayLen(s)"),
-    ("ref.is_func",         "makeRefIs(s)"),
-    ("ref.is_data",         "makeRefIs(s)"),
-    ("ref.is_i31",          "makeRefIs(s)"),
-    ("ref.as_func",         "makeRefAs(s)"),
-    ("ref.as_data",         "makeRefAs(s)"),
-    ("ref.as_i31",          "makeRefAs(s)"),
+    ("ref.is_func",         "makeRefIs(s, RefIsFunc)"),
+    ("ref.is_data",         "makeRefIs(s, RefIsData)"),
+    ("ref.is_i31",          "makeRefIs(s, RefIsI31)"),
+    ("ref.as_func",         "makeRefAs(s, RefAsFunc)"),
+    ("ref.as_data",         "makeRefAs(s, RefAsData)"),
+    ("ref.as_i31",          "makeRefAs(s, RefAsI31)"),
 ]
 
 

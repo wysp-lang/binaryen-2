@@ -51,10 +51,7 @@ int unhex(char c) {
 namespace wasm {
 
 static Name STRUCT("struct"), FIELD("field"), ARRAY("array"), I8("i8"),
-  I16("i16"), RTT("rtt"), REF_IS_NULL("ref.is_null"),
-  REF_IS_FUNC("ref.is_func"), REF_IS_DATA("ref.is_data"),
-  REF_IS_I31("ref.is_i31"), REF_AS_FUNC("ref.as_func"),
-  REF_AS_DATA("ref.as_data"), REF_AS_I31("ref.as_i31");
+  I16("i16"), RTT("rtt");
 
 static Address getAddress(const Element* s) { return atoll(s->c_str()); }
 
@@ -1925,19 +1922,9 @@ Expression* SExpressionWasmBuilder::makeRefNull(Element& s) {
   return ret;
 }
 
-Expression* SExpressionWasmBuilder::makeRefIs(Element& s) {
+Expression* SExpressionWasmBuilder::makeRefIs(Element& s, RefIsOp op) {
   auto ret = allocator.alloc<RefIs>();
-  if (*s[0] == REF_IS_NULL) {
-    ret->op = RefIsNull;
-  } else if (*s[0] == REF_IS_FUNC) {
-    ret->op = RefIsFunc;
-  } else if (*s[0] == REF_IS_DATA) {
-    ret->op = RefIsData;
-  } else if (*s[0] == REF_IS_I31) {
-    ret->op = RefIsI31;
-  } else {
-    WASM_UNREACHABLE("unimplemented ref.is_*");
-  }
+  ret->op = op;
   ret->value = parseExpression(s[1]);
   ret->finalize();
   return ret;
@@ -2249,20 +2236,8 @@ Expression* SExpressionWasmBuilder::makeArrayLen(Element& s) {
   return Builder(wasm).makeArrayLen(ref);
 }
 
-Expression* SExpressionWasmBuilder::makeRefAs(Element& s) {
-  auto ret = allocator.alloc<RefAs>();
-  if (*s[0] == REF_AS_FUNC) {
-    ret->op = RefAsFunc;
-  } else if (*s[0] == REF_AS_DATA) {
-    ret->op = RefAsData;
-  } else if (*s[0] == REF_AS_I31) {
-    ret->op = RefAsI31;
-  } else {
-    WASM_UNREACHABLE("unimplemented ref.as_*");
-  }
-  ret->value = parseExpression(s[1]);
-  ret->finalize();
-  return ret;
+Expression* SExpressionWasmBuilder::makeRefAs(Element& s, RefAsOp op) {
+  return Builder(wasm).makeRefAs(op, parseExpression(s[1]));
 }
 
 // converts an s-expression string representing binary data into an output
