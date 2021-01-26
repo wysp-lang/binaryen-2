@@ -1164,6 +1164,26 @@ void ArrayLen::finalize() {
   }
 }
 
+void RefAs::finalize() {
+  if (value->type == Type::unreachable) {
+    type = Type::unreachable;
+    return;
+  }
+  switch (op) {
+    case RefAsFunc:
+      type = Type::funcref;
+      break;
+    case RefAsData:
+      type = Type::dataref;
+      break;
+    case RefAsI31:
+      type = Type::i31ref;
+      break;
+    default:
+      WASM_UNREACHABLE("unimplemented ref.is_*");
+  }
+}
+
 size_t Function::getNumParams() { return sig.params.size(); }
 
 size_t Function::getNumVars() { return vars.size(); }
