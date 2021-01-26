@@ -53,7 +53,8 @@ namespace wasm {
 static Name STRUCT("struct"), FIELD("field"), ARRAY("array"), I8("i8"),
   I16("i16"), RTT("rtt"), REF_IS_NULL("ref.is_null"),
   REF_IS_FUNC("ref.is_func"), REF_IS_DATA("ref.is_data"),
-  REF_IS_I31("ref.is_i31");
+  REF_IS_I31("ref.is_i31"), REF_AS_FUNC("ref.as_func"),
+  REF_AS_DATA("ref.as_data"), REF_AS_I31("ref.as_i31");
 
 static Address getAddress(const Element* s) { return atoll(s->c_str()); }
 
