@@ -1799,6 +1799,7 @@ struct PrintExpressionContents
         break;
       default:
         WASM_UNREACHABLE("invalid ref.is_*");
+    }
     printName(curr->name, o);
   }
   void visitRttCanon(RttCanon* curr) {
