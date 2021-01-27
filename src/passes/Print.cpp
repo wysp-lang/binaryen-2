@@ -2551,7 +2551,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
     printFullLine(curr->rtt);
     decIndent();
   }
-  void visitBrOnCast(BrOnCast* curr) {
+  void visitBrOn(BrOn* curr) {
     o << '(';
     PrintExpressionContents(currFunction, o).visit(curr);
     incIndent();
