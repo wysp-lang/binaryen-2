@@ -1469,17 +1469,52 @@ public:
     assert(cast.outcome == cast.Success);
     return cast.castRef;
   }
-  Flow visitBrOnCast(BrOnCast* curr) {
-    NOTE_ENTER("BrOnCast");
-    auto cast = doCast(curr);
-    if (cast.outcome == cast.Break) {
-      return cast.breaking;
+  Flow visitBrOn(BrOn* curr) {
+    NOTE_ENTER("BrOn");
+    if (curr->op == BrOnCast) {
+      auto cast = doCast(curr);
+      if (cast.outcome == cast.Break) {
+        return cast.breaking;
+      }
+      if (cast.outcome == cast.Null || cast.outcome == cast.Failure) {
+        return cast.originalRef;
+      }
+      assert(cast.outcome == cast.Success);
+      return Flow(curr->name, cast.castRef);
     }
-    if (cast.outcome == cast.Null || cast.outcome == cast.Failure) {
-      return cast.originalRef;
+    Flow flow = visit(curr->value);
+    if (flow.breaking()) {
+      return flow;
     }
-    assert(cast.outcome == cast.Success);
-    return Flow(curr->name, cast.castRef);
+    const auto& value = flow.getSingleValue();
+    NOTE_EVAL1(value);
+    // Prepare to break. If we do not break, we will unset the break target, and
+    // we just flow out the value.
+    Flow flow(curr->name, value);
+    if (value.isNull()) {
+      flow.breakTo = Name();
+    } else {
+      switch (curr->op) {
+        case RefIsFunc:
+          if (!value.type.isFunction()) {
+            flow.breakTo = Name();
+          }
+          break;
+        case RefIsData:
+          if (!value.isGCData()) {
+            flow.breakTo = Name();
+          }
+          break;
+        case RefIsI31:
+          if (value.type.getHeapType() != HeapType::i31) {
+            flow.breakTo = Name();
+          }
+          break;
+        default:
+          WASM_UNREACHABLE("invalid br_on_*");
+      }
+    }
+    return flow;
   }
   Flow visitRttCanon(RttCanon* curr) { return Literal(curr->type); }
   Flow visitRttSub(RttSub* curr) {
