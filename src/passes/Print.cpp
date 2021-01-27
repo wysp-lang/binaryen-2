@@ -1784,7 +1784,21 @@ struct PrintExpressionContents
     printHeapTypeName(o, curr->getCastType().getHeapType());
   }
   void visitBrOnCast(BrOnCast* curr) {
-    printMedium(o, "br_on_cast ");
+    switch (curr->op) {
+      case BrOnCast:
+        printMedium(o, "br_on_cast ");
+        break;
+      case BrOnFunc:
+        printMedium(o, "br_on_func ");
+        break;
+      case BrOnData:
+        printMedium(o, "br_on_data ");
+        break;
+      case BrOnI31:
+        printMedium(o, "br_on_i31 ");
+        break;
+      default:
+        WASM_UNREACHABLE("invalid ref.is_*");
     printName(curr->name, o);
   }
   void visitRttCanon(RttCanon* curr) {
