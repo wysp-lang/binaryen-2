@@ -2141,7 +2141,7 @@ Expression* SExpressionWasmBuilder::makeBrOn(Element& s, BrOnOp op) {
     // such a case, as we'd have no idea what it casts to.
     return builder.makeSequence(builder.makeDrop(ref), rtt);
   }
-  return builder.makeBrOn(name, ref, rtt);
+  return builder.makeBrOn(op, name, ref, rtt);
 }
 
 Expression* SExpressionWasmBuilder::makeRttCanon(Element& s) {

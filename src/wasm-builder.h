@@ -709,7 +709,8 @@ public:
     ret->finalize();
     return ret;
   }
-  BrOn* makeBrOn(BrOnOp op, Name name, Expression* ref, Expression* rtt) {
+  BrOn* makeBrOn(BrOnOp op, Name name, Expression* ref,
+                 Expression* rtt = nullptr) {
     auto* ret = wasm.allocator.alloc<BrOn>();
     ret->op = op;
     ret->name = name;
