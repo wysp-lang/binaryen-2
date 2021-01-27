@@ -3019,7 +3019,7 @@ BinaryConsts::ASTNodes WasmBinaryBuilder::readExpression(Expression*& curr) {
       if (maybeVisitRefCast(curr, opcode)) {
         break;
       }
-      if (maybeVisitBrOnCast(curr, opcode)) {
+      if (maybeVisitBrOn(curr, opcode)) {
         break;
       }
       if (maybeVisitRttCanon(curr, opcode)) {
@@ -5826,8 +5826,22 @@ bool WasmBinaryBuilder::maybeVisitRefCast(Expression*& out, uint32_t code) {
 }
 
 bool WasmBinaryBuilder::maybeVisitBrOnCast(Expression*& out, uint32_t code) {
-  if (code != BinaryConsts::BrOnCast) {
-    return false;
+  BrOnOp op;
+  switch (code) {
+    case BinaryConsts::BrOnCast:
+      op = BrOnCast;
+      break;
+    case BinaryConsts::BrOnFunc:
+      op = BrOnFunc;
+      break;
+    case BinaryConsts::BrOnData:
+      op = BrOnData;
+      break;
+    case BinaryConsts::BrOnI31:
+      op = BrOnI31;
+      break;
+    default:
+      return false;
   }
   auto name = getBreakTarget(getU32LEB()).name;
   auto* rtt = popNonVoidExpression();
@@ -5835,7 +5849,7 @@ bool WasmBinaryBuilder::maybeVisitBrOnCast(Expression*& out, uint32_t code) {
     throwError("bad rtt for br_on_cast");
   }
   auto* ref = popNonVoidExpression();
-  out = Builder(wasm).makeBrOnCast(name, ref, rtt);
+  out = Builder(wasm).makeBrOn(op, name, ref, rtt);
   return true;
 }
 
