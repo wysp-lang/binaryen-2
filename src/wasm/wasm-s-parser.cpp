@@ -2130,7 +2130,7 @@ Expression* SExpressionWasmBuilder::makeRefCast(Element& s) {
   return Builder(wasm).makeRefCast(ref, rtt);
 }
 
-Expression* SExpressionWasmBuilder::makeBrOnCast(Element& s) {
+Expression* SExpressionWasmBuilder::makeBrOn(Element& s, BrOnOp op) {
   auto name = getLabel(*s[1]);
   auto heapType = parseHeapType(*s[2]);
   auto* ref = parseExpression(*s[3]);
