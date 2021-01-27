@@ -565,7 +565,7 @@ private:
       // Traps if the ref is not null and it has an invalid rtt.
       parent.implicitTrap = true;
     }
-    void visitBrOnCast(BrOnCast* curr) {
+    void visitBrOn(BrOn* curr) {
       parent.breakTargets.insert(curr->name);
     }
     void visitRttCanon(RttCanon* curr) {}
