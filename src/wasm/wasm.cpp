@@ -939,7 +939,7 @@ void BrOn::finalize() {
   }
 }
 
-Type BrOn::getCastType() { return castType; }
+Type BrOn::getCastType() { return Type(rtt->type.getHeapType(), Nullable); }
 
 void RttCanon::finalize() {
   // Nothing to do - the type must have been set already during construction.
