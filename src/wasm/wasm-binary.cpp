@@ -5825,7 +5825,7 @@ bool WasmBinaryBuilder::maybeVisitRefCast(Expression*& out, uint32_t code) {
   return true;
 }
 
-bool WasmBinaryBuilder::maybeVisitBrOnCast(Expression*& out, uint32_t code) {
+bool WasmBinaryBuilder::maybeVisitBrOn(Expression*& out, uint32_t code) {
   BrOnOp op;
   switch (code) {
     case BinaryConsts::BrOnCast:
