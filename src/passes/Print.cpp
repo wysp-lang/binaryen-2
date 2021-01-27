@@ -1783,7 +1783,7 @@ struct PrintExpressionContents
     printMedium(o, "ref.cast ");
     printHeapTypeName(o, curr->getCastType().getHeapType());
   }
-  void visitBrOnCast(BrOnCast* curr) {
+  void visitBrOn(BrOn* curr) {
     switch (curr->op) {
       case BrOnCast:
         printMedium(o, "br_on_cast ");
