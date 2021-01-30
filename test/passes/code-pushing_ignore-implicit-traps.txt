@@ -266,13 +266,13 @@
  (func $value-might-interfere
   (local $x i32)
   (block $out
-   (br_if $out
-    (i32.const 2)
-   )
    (local.set $x
     (i32.load
      (i32.const 0)
     )
+   )
+   (br_if $out
+    (i32.const 2)
    )
    (drop
     (local.get $x)

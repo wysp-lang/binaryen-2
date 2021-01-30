@@ -3,7 +3,6 @@
  (type $none_=>_none (func))
  (memory $0 256 256)
  (func $b14 (result i32)
-  (local $x i32)
   (drop
    (select
     (block $block1 (result i32)
@@ -29,7 +28,7 @@
     (i32.const 1)
     (i32.rem_s
      (i32.const 11)
-     (local.get $x)
+     (call $b14)
     )
     (i32.const 27)
    )
