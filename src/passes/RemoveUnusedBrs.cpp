@@ -952,11 +952,12 @@ struct RemoveUnusedBrs : public WalkerPass<PostWalker<RemoveUnusedBrs>> {
         // unconditionally, and also to make the condition run last.
         FeatureSet features = getModule()->features;
         EffectAnalyzer ifTrue(passOptions, features, iff->ifTrue);
-        if (ifTrue.hasSideEffects()) {
+        if (ifTrue.caresAboutConditionality()) {
           return nullptr;
         }
+        // TODO: audit all calls of hasSideEffects for possible => caresAboutConditionality
         EffectAnalyzer ifFalse(passOptions, features, iff->ifFalse);
-        if (ifFalse.hasSideEffects()) {
+        if (ifFalse.caresAboutConditionality()) {
           return nullptr;
         }
         EffectAnalyzer condition(passOptions, features, iff->condition);

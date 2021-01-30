@@ -15,12 +15,31 @@
    )
   )
   (drop
-   (select
+   (if (result i32)
+    (i32.const 1)
     (i32.load
      (i32.const 10)
     )
     (i32.const 27)
+   )
+  )
+  (drop
+   (if (result i32)
     (i32.const 1)
+    (i32.rem_s
+     (i32.const 11)
+     (call $b14)
+    )
+    (i32.const 27)
+   )
+  )
+  (drop
+   (if (result i32)
+    (i32.const 1)
+    (i32.trunc_f64_u
+     (f64.const 12.34)
+    )
+    (i32.const 27)
    )
   )
   (drop
@@ -28,15 +47,6 @@
     (i32.rem_s
      (i32.const 11)
      (i32.const 12)
-    )
-    (i32.const 27)
-    (i32.const 1)
-   )
-  )
-  (drop
-   (select
-    (i32.trunc_f64_u
-     (f64.const 12.34)
     )
     (i32.const 27)
     (i32.const 1)
@@ -113,11 +123,11 @@
     (nop)
    )
   )
-  (block $out83
-   (br_if $out83
+  (block $out84
+   (br_if $out84
     (i32.const 1)
    )
-   (br_if $out83
+   (br_if $out84
     (call $b14)
    )
   )

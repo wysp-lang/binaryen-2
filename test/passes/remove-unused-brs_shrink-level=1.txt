@@ -3,6 +3,7 @@
  (type $none_=>_none (func))
  (memory $0 256 256)
  (func $b14 (result i32)
+  (local $x i32)
   (drop
    (select
     (block $block1 (result i32)
@@ -24,13 +25,13 @@
    )
   )
   (drop
-   (select
+   (if (result i32)
+    (i32.const 1)
     (i32.rem_s
      (i32.const 11)
-     (i32.const 12)
+     (local.get $x)
     )
     (i32.const 27)
-    (i32.const 1)
    )
   )
   (drop
@@ -40,6 +41,16 @@
      (f64.const 12.34)
     )
     (i32.const 27)
+   )
+  )
+  (drop
+   (select
+    (i32.rem_s
+     (i32.const 11)
+     (i32.const 12)
+    )
+    (i32.const 27)
+    (i32.const 1)
    )
   )
   (i32.const 0)
@@ -113,11 +124,11 @@
     (nop)
    )
   )
-  (block $out83
-   (br_if $out83
+  (block $out84
+   (br_if $out84
     (i32.const 1)
    )
-   (br_if $out83
+   (br_if $out84
     (call $b14)
    )
   )

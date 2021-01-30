@@ -79,6 +79,13 @@ public:
   bool trap = false;
   // A trap from an instruction like a load or div/rem, which may trap on corner
   // cases. If we do not ignore implicit traps then these are counted as a trap.
+  // If we *do* ignore them, we still care about one case: we avoid changing
+  // whether they are executed or not. That is because the implicit trap may be
+  // behind a guard check that prevents the trap:
+  //
+  //   if (x != 0) foo(1 / x);
+  //
+  // Executing the 1 / x unconditionally could trap.
   bool implicitTrap = false;
   // An atomic load/store/RMW/Cmpxchg or an operator that has a defined ordering
   // wrt atomics (e.g. memory.grow)
@@ -133,6 +140,17 @@ public:
            accessesGlobal();
   }
 
+  // "Conditionality" means whether code definitely executes, or whether there
+  // is some condition it is behind. Code cares about whether it is conditional
+  // if it has side effects. The difference between having side effects and
+  // caring about conditionality is that we also care about implicit traps in
+  // the latter case: if we are ignoring implicit traps, then the one thing we
+  // disallow with them is to make them execute unconditionally, or vice versa
+  // (see above on implicit traps).
+  bool caresAboutConditionality() const {
+    return hasSideEffects() || implicitTrap;
+  }
+
   // check if we break to anything external from ourselves
   bool hasExternalBreakTargets() const { return !breakTargets.empty(); }
 
@@ -177,7 +195,7 @@ public:
         return true;
       }
     }
-    // We are ok to reorder implicit traps, but not conditionalize them.
+    // We are ok to reorder traps, but not conditionalize them.
     if ((trap && other.transfersControlFlow()) ||
         (other.trap && transfersControlFlow())) {
       return true;
@@ -188,10 +206,15 @@ public:
     // reordering of traps with each other, we do not reorder exceptions with
     // anything.
     assert(!((trap && other.throws) || (throws && other.trap)));
-    // We can't reorder an implicit trap in a way that could alter what global
-    // state is modified.
+    // We can't reorder a trap in a way that could alter what global state is
+    // modified.
     if ((trap && other.writesGlobalState()) ||
         (other.trap && writesGlobalState())) {
+      return true;
+    }
+    // See notes above on caresAboutConditionality().
+    if ((implicitTrap && other.transfersControlFlow()) ||
+        (other.implicitTrap && transfersControlFlow())) {
       return true;
     }
     return false;
@@ -686,9 +709,7 @@ private:
   void post() {
     assert(tryDepth == 0);
 
-    if (ignoreImplicitTraps) {
-      implicitTrap = false;
-    } else if (implicitTrap) {
+    if (!ignoreImplicitTraps && implicitTrap) {
       trap = true;
     }
   }
