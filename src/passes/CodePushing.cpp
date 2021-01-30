@@ -128,7 +128,7 @@ private:
     // but also have no side effects, as it may not execute if pushed.
     if (analyzer.isSFA(index) &&
         numGetsSoFar[index] == analyzer.getNumGets(index) &&
-        !EffectAnalyzer(passOptions, features, set->value).hasSideEffects()) {
+        !EffectAnalyzer(passOptions, features, set->value).caresAboutConditionality()) {
       return set;
     }
     return nullptr;

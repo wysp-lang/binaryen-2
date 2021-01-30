@@ -1371,13 +1371,13 @@ private:
     }
     auto leftEffects = effects(left);
     auto rightEffects = effects(right);
-    auto leftHasSideEffects = leftEffects.hasSideEffects();
-    auto rightHasSideEffects = rightEffects.hasSideEffects();
-    if (leftHasSideEffects && rightHasSideEffects) {
+    auto leftCares = leftEffects.caresAboutConditionality();
+    auto rightCares = rightEffects.caresAboutConditionality();
+    if (leftCares && rightCares) {
       return nullptr; // both must execute
     }
     // canonicalize with side effects, if any, happening on the left
-    if (rightHasSideEffects) {
+    if (rightCares) {
       if (CostAnalyzer(left).cost < MIN_COST) {
         return nullptr; // avoidable code is too cheap
       }
@@ -1385,7 +1385,7 @@ private:
         return nullptr; // cannot reorder
       }
       std::swap(left, right);
-    } else if (leftHasSideEffects) {
+    } else if (leftCares) {
       if (CostAnalyzer(right).cost < MIN_COST) {
         return nullptr; // avoidable code is too cheap
       }
