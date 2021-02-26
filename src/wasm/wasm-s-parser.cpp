@@ -3025,7 +3025,9 @@ void SExpressionWasmBuilder::parseTable(Element& s, bool preParseImport) {
     return;
   }
   if (!s[i]->dollared()) {
-    if (s[i]->str() == FUNCREF) {
+    // TODO: use the type in the table.
+    Type type = stringToType(s[i]->str(), true /* allowError */);
+    if (type != Type::none) {
       // (table type (elem ..))
       parseInnerElem(table.get(), *s[i + 1]);
       if (table->segments.size() > 0) {
@@ -3039,7 +3041,8 @@ void SExpressionWasmBuilder::parseTable(Element& s, bool preParseImport) {
     // first element isn't dollared, and isn't funcref. this could be old syntax
     // for (table 0 1) which means function 0 and 1, or it could be (table
     // initial max? type), look for type
-    if (s[s.size() - 1]->str() == FUNCREF) {
+    type = stringToType(s[s.size() - 1]->str(), true /* allowError */);
+    if (type != Type::none) {
       // (table initial max? type)
       if (i < s.size() - 1) {
         table->initial = atoi(s[i++]->c_str());
