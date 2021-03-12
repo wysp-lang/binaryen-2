@@ -232,8 +232,10 @@ void If::finalize(Type type_) {
 void If::finalize() {
   if (ifFalse) {
     // TODO: Calculate a proper LUB.
+//std::cout << "suuuper " << ifTrue->type << " : " << ifFalse->type << " : " << type << '\n';
     Type::ensureSuperType(std::array<Type, 2>{{ifTrue->type, ifFalse->type}},
                           type);
+//std::cout << "suuuper  ==>  " << type << " : " << Type::isSubType(ifTrue->type, type) << " : " << Type::isSubType(ifFalse->type, type) << '\n';
   } else {
     type = Type::none;
   }

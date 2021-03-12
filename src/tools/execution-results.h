@@ -121,10 +121,6 @@ struct ExecutionResults {
   }
 
   bool areEqual(Literal a, Literal b) {
-    if (!Type::isSubType(a.type, b.type) && !Type::isSubType(b.type, a.type)) {
-      std::cout << "types not compatible! " << a << " != " << b << '\n';
-      return false;
-    }
     if (a.type.isRef()) {
       // Don't compare references - only their types. There are several issues
       // here that we can't fully handle, see
@@ -137,6 +133,10 @@ struct ExecutionResults {
       // will end up with a type that does not compare equally as we do not
       // currently globally canonicalize recursive types.
       return true;
+    }
+    if (!Type::isSubType(a.type, b.type) && !Type::isSubType(b.type, a.type)) {
+      std::cout << "types not compatible! " << a.type << " != " << b.type << '\n';
+      return false;
     }
     if (a != b) {
       std::cout << "values not identical! " << a << " != " << b << '\n';
