@@ -153,6 +153,9 @@ def randomize_fuzz_settings():
 IMPORTANT_INITIAL_CONTENTS = [
     os.path.join('lit', 'passes', 'optimize-instructions.wast'),
     os.path.join('passes', 'optimize-instructions_fuzz-exec.wast'),
+    'lit/gc-read-write-effects.wast',
+    'lit/passes/optimize-instructions-gc.wast',
+    'heap-types.wast',
 ]
 IMPORTANT_INITIAL_CONTENTS = [os.path.join(shared.get_test_dir('.'), t) for t in IMPORTANT_INITIAL_CONTENTS]
 
@@ -956,14 +959,14 @@ opt_choices = [
     ["--precompute"],
     ["--precompute-propagate"],
     ["--print"],
-    ["--remove-unused-brs"],
+    #["--remove-unused-brs"],
     ["--remove-unused-nonfunction-module-elements"],
     ["--remove-unused-module-elements"],
     ["--remove-unused-names"],
     ["--reorder-functions"],
     ["--reorder-locals"],
     ["--flatten", "--rereloop"],
-    ["--roundtrip"],
+    #["--roundtrip"],
     ["--rse"],
     ["--simplify-locals"],
     ["--simplify-locals-nonesting"],

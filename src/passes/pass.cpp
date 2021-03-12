@@ -401,7 +401,7 @@ void PassRunner::addDefaultFunctionOptimizationPasses() {
   }
   addIfNoDWARFIssues("dce");
   addIfNoDWARFIssues("remove-unused-names");
-  addIfNoDWARFIssues("remove-unused-brs");
+//  addIfNoDWARFIssues("remove-unused-brs");
   addIfNoDWARFIssues("remove-unused-names");
   addIfNoDWARFIssues("optimize-instructions");
   if (options.optimizeLevel >= 2 || options.shrinkLevel >= 2) {
@@ -429,7 +429,7 @@ void PassRunner::addDefaultFunctionOptimizationPasses() {
   addIfNoDWARFIssues("vacuum"); // previous pass creates garbage
   addIfNoDWARFIssues("reorder-locals");
   // simplify-locals opens opportunities for optimizations
-  addIfNoDWARFIssues("remove-unused-brs");
+//  addIfNoDWARFIssues("remove-unused-brs");
   // if we are willing to work hard, also optimize copies before coalescing
   if (options.optimizeLevel >= 3 || options.shrinkLevel >= 2) {
     addIfNoDWARFIssues("merge-locals"); // very slow on e.g. sqlite
@@ -445,8 +445,8 @@ void PassRunner::addDefaultFunctionOptimizationPasses() {
     addIfNoDWARFIssues("code-folding");
   }
   addIfNoDWARFIssues("merge-blocks"); // makes remove-unused-brs more effective
-  addIfNoDWARFIssues(
-    "remove-unused-brs"); // coalesce-locals opens opportunities
+//  addIfNoDWARFIssues(
+//    "remove-unused-brs"); // coalesce-locals opens opportunities
   addIfNoDWARFIssues(
     "remove-unused-names");           // remove-unused-brs opens opportunities
   addIfNoDWARFIssues("merge-blocks"); // clean up remove-unused-brs new blocks
