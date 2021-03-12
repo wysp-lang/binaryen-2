@@ -121,8 +121,8 @@ struct ExecutionResults {
   }
 
   bool areEqual(Literal a, Literal b) {
-    if (a.type != b.type) {
-      std::cout << "types not identical! " << a << " != " << b << '\n';
+    if (!Type::isSubType(a.type, b.type) && !Type::isSubType(b.type, a.type)) {
+      std::cout << "types not compatible! " << a << " != " << b << '\n';
       return false;
     }
     if (a.type.isRef()) {
@@ -133,6 +133,9 @@ struct ExecutionResults {
       // a separate instance of each) - we can't really identify an identical
       // reference between such things. We can only compare things structurally,
       // for which we compare the types.
+      // Another issue is that the same module, when passed through --roundtrip,
+      // will end up with a type that does not compare equally as we do not
+      // currently globally canonicalize recursive types.
       return true;
     }
     if (a != b) {
