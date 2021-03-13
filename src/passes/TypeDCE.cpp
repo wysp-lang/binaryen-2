@@ -233,7 +233,8 @@ std::cout << "found! " << foundName << "\n";
     auto& struct_ = *found;
 std::cout << struct_ << '\n';
     assert(struct_[0]->str() == "struct");
-    auto numFields = struct_.size() - 1;
+    auto& list = struct_.list();
+    auto numFields = list.size() - 1;
     if (nextField >= numFields) {
       // We must proceed to the next struct. This can happen because we came to
       // the end of the current struct, or we are on a new struct and it happens
@@ -245,6 +246,7 @@ std::cout << struct_ << '\n';
       return pruneNext(root, nextType, nextField);
     }
     // We have something to prune!
+    list.erase(list.begin() + nextField);
     return true;
   }
 };
