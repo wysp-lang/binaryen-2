@@ -98,8 +98,8 @@ std::cout << "iter2\n";
 
       // Prune the next field.
       if (!pruneNext(root, nextType, nextField)) {
-        // Nothing to prune.
-        return false;
+        // Nothing to prune, so we are all done here.
+        return dced;
       }
 
       Module pruned;
@@ -120,7 +120,7 @@ p.dump(std::cerr);
         // The module does not validate, continue to the next field.
 std::cout << "novalidate\n";
         nextField++;
-        return false;
+        continue;
       }
 
       // Success! Swap to the pruned module.
@@ -132,9 +132,6 @@ std::cout << "success! " << root << "\n";
       // Do not increment nextField - we just pruned at the current index, so
       // there will be a new field in that position.
     }
-
-std::cout << "dceAllTypes returning " << dced << '\n';
-    return dced;
   }
 
   void ensureNames(Module& wasm, std::vector<HeapType>& types) {
