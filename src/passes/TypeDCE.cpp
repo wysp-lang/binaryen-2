@@ -197,11 +197,17 @@ std::cout << "pruneloop " << item << '\n';
       if (nextType.is() && name < nextType) {
         continue;
       }
+      if (nextType == name && nextField == Index(-1)) {
+        // We were told to skip this struct and look for the next.
+        continue;
+      }
 std::cout << "  l1\n";
       // Look for the name we want, or the first after it.
       if (!nextType.is() || !found || name < foundName) {
 std::cout << "  l2\n";
-        // Look for (struct ..), and not (func ..) etc.
+        // "item" is a type declaration, something like this:
+        //      (type $struct.A (struct (field ..) (field ..) ..))
+        // Look for (struct ..), and not (func ..) etc. in the inner part.
         auto& inner = *item[2];
 std::cout << inner << '\n';
         if (inner[0]->str() == "struct") {
@@ -215,17 +221,30 @@ std::cout << "none\n";
       return false;
     }
 std::cout << "found! " << foundName << "\n";
-    if (!nextType.is() || nextType < foundName) {
+    if (!nextType.is() || nextType < foundName || nextField == Index(-1)) {
       // We did not find the exact type, but one after it, or this is the very
-      // first iteration, so reset the field.
+      // first iteration; so reset the field.
       nextField = 0;
     }
+    // We can now focus on the name we found.
+    nextType = foundName;
     // "found" is a type declaration, something like this:
     //      (type $struct.A (struct (field ..) (field ..) ..))
     auto& struct_ = *found;
 std::cout << struct_ << '\n';
     assert(struct_[0]->str() == "struct");
-//    auto numFields = struct_.size() - 1;
+    auto numFields = struct_.size() - 1;
+    if (nextField >= numFields) {
+      // We must proceed to the next struct. This can happen because we came to
+      // the end of the current struct, or we are on a new struct and it happens
+      // to have size 0. To find the next one's name we must scan the list once
+      // more, which we do recursively to keep this code simple. We mark
+      // "nextField" as -1 so that the loop can easily know to ignore the struct
+      // with an exact name match, and look for one after.
+      nextField = -1;
+      return pruneNext(root, nextType, nextField);
+    }
+    // We have something to prune!
     return true;
   }
 };
