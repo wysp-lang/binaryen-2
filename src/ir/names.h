@@ -49,7 +49,7 @@ inline void ensureNames(Function* func) {
 // Given a root of a name, finds a valid name with perhaps a number appended
 // to it, by calling a function to check if a name is valid.
 inline Name
-getValidName(Module& module, Name root, std::function<bool(Name)> check) {
+getValidName(Name root, std::function<bool(Name)> check) {
   if (check(root)) {
     return root;
   }
@@ -66,26 +66,26 @@ getValidName(Module& module, Name root, std::function<bool(Name)> check) {
 
 inline Name getValidExportName(Module& module, Name root) {
   return getValidName(
-    module, root, [&](Name test) { return !module.getExportOrNull(test); });
+    root, [&](Name test) { return !module.getExportOrNull(test); });
 }
 inline Name getValidGlobalName(Module& module, Name root) {
   return getValidName(
-    module, root, [&](Name test) { return !module.getGlobalOrNull(test); });
+    root, [&](Name test) { return !module.getGlobalOrNull(test); });
 }
 inline Name getValidFunctionName(Module& module, Name root) {
   return getValidName(
-    module, root, [&](Name test) { return !module.getFunctionOrNull(test); });
+    root, [&](Name test) { return !module.getFunctionOrNull(test); });
 }
 inline Name getValidTableName(Module& module, Name root) {
   return getValidName(
-    module, root, [&](Name test) { return !module.getTableOrNull(test); });
+    root, [&](Name test) { return !module.getTableOrNull(test); });
 }
 inline Name getValidEventName(Module& module, Name root) {
   return getValidName(
-    module, root, [&](Name test) { return !module.getEventOrNull(test); });
+    root, [&](Name test) { return !module.getEventOrNull(test); });
 }
 inline Name getValidElementSegmentName(Module& module, Name root) {
-  return getValidName(module, root, [&](Name test) {
+  return getValidName(root, [&](Name test) {
     return !module.getElementSegmentOrNull(test);
   });
 }

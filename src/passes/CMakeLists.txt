@@ -70,13 +70,14 @@ set(passes_SOURCES
   ReorderLocals.cpp
   ReorderFunctions.cpp
   ReReloop.cpp
-  TrapMode.cpp
   SafeHeap.cpp
   SimplifyGlobals.cpp
   SimplifyLocals.cpp
   Souperify.cpp
   StackCheck.cpp
   SSAify.cpp
+  TrapMode.cpp
+  TypeDCE.cpp
   Untee.cpp
   Vacuum.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/WasmIntrinsics.cpp
