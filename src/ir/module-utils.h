@@ -130,6 +130,7 @@ inline void copyModule(const Module& in, Module& out) {
   out.userSections = in.userSections;
   out.debugInfoFileNames = in.debugInfoFileNames;
   out.features = in.features;
+  out.typeNames = in.typeNames;
 }
 
 inline void clearModule(Module& wasm) {

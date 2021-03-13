@@ -130,6 +130,7 @@ std::cout << "iter1\n";
       SExpressionParser parser(const_cast<char*>(stream.str().c_str()));
 //std::cout << "iter2\n";
       Element& root = *(*parser.root)[0];
+std::cout << root << '\n';
 
       // Prune the next field.
       if (!pruneNext(root, nextType, nextField)) {
