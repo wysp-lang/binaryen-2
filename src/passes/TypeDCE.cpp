@@ -30,6 +30,7 @@
 // behavior.
 //
 
+#include "ir/find_all.h"
 #include "ir/module-utils.h"
 #include "ir/names.h"
 #include "pass.h"
@@ -44,10 +45,16 @@ namespace wasm {
 
 struct TypeDCE : public Pass {
   // The list of type names in the initial wasm (after we ensure all types are
-  // named).
+  // named). These names will remain valid even after we prune fields and the
+  // types change.
   // TODO: use this
   std::set<Name> typeNames;
-  
+
+  // It is useful to know which fields are referenced in the code. These are
+  // stored here as pairs <type name, field name>
+  using ReferencedFields = std::unordered_set<std::pair<Name, Name>>;
+  ReferencedFields referencedFields;
+
   void run(PassRunner* runner, Module* module) override {
     // Find all the types.
     std::vector<HeapType> types;
@@ -61,6 +68,34 @@ struct TypeDCE : public Pass {
     // Note all the names.
     for (auto type : types) {
       typeNames.insert(module->typeNames.at(type).name);
+    }
+
+    // Note all the fields that are references. Those definitely cannot be
+    // pruned.
+
+    ModuleUtils::ParallelFunctionAnalysis<ReferencedFields> analysis(*module, [&](Function* func, ReferencedFields& info) {
+      if (func->imported()) {
+        return;
+      }
+      auto note = [&](Expression* ref, Index index) {
+        auto& typeNameInfo = module->typeNames.at(ref->type.getHeapType());
+        auto typeName = typeNameInfo.name;
+        auto fieldName = typeNameInfo.fieldNames.at(index);
+        info.insert({typeName, fieldName});
+      };
+      for (auto* get : FindAll<StructGet>(func->body).list) {
+        note(get->ref, get->index);
+      }
+      for (auto* set : FindAll<StructSet>(func->body).list) {
+        note(set->ref, set->index);
+      }
+    });
+
+    for (auto& kv : analysis.map) {
+      auto& currReferencedFields = kv.second;
+      for (auto pair : currReferencedFields) {
+        referencedFields.insert(pair);
+      }
     }
 
     // Keep DCEing while we can.
@@ -93,7 +128,7 @@ std::cout << "dceAllTypes\n";
       Colors::setEnabled(true);
 std::cout << "iter1\n";
       SExpressionParser parser(const_cast<char*>(stream.str().c_str()));
-std::cout << "iter2\n";
+//std::cout << "iter2\n";
       Element& root = *(*parser.root)[0];
 
       // Prune the next field.
@@ -103,14 +138,13 @@ std::cout << "iter2\n";
       }
 
       Module pruned;
-std::cout << "iter3 " << wasm.features << "\n";
+//std::cout << "iter3 " << wasm.features << "\n";
       pruned.features = wasm.features;
-std::cout << "  pruned s: " << root << '\n';
+//std::cout << "  pruned s: " << root << '\n';
       try {
         SExpressionWasmBuilder builder(pruned, root, IRProfile::Normal);
       } catch (ParseException& p) {
-std::cout << "parse error\n";
-p.dump(std::cerr);
+//std::cout << "parse error\n";
         // The module does not parse, continue to the next field.
         nextField++;
         continue;
@@ -118,13 +152,13 @@ p.dump(std::cerr);
 
       if (!wasm::WasmValidator().validate(pruned, WasmValidator::Quiet)) {
         // The module does not validate, continue to the next field.
-std::cout << "novalidate\n";
+//std::cout << "novalidate\n";
         nextField++;
         continue;
       }
 
       // Success! Swap to the pruned module.
-std::cout << "success! " << root << "\n";
+std::cout << "success! " << "\n";
       ModuleUtils::clearModule(wasm);
       ModuleUtils::copyModule(pruned, wasm);
       dced = true;
@@ -178,7 +212,7 @@ std::cout << "success! " << root << "\n";
   // Finds and prunes the next thing. Returns true if successful and false if
   // nothing could be found to prune. Updates nextType/nextField accordingly.
   bool pruneNext(Element& root, Name& nextType, Index& nextField) {
-std::cout << "pruneNext " << nextType << " : " << nextField << '\n';
+//std::cout << "pruneNext " << nextType << " : " << nextField << '\n';
     // Look for nextType.nextField. It is possible the type does not exist, if
     // it was optimized out; it is also possible the next field is one past the
     // end; in both cases simply continue forward in order. On the very first
@@ -218,7 +252,7 @@ std::cout << "pruneNext " << nextType << " : " << nextField << '\n';
     if (!found) {
       return false;
     }
-std::cout << "  found! " << foundName << " : " << *found << "\n";
+//std::cout << "  found! " << foundName << " : " << *found << "\n";
     if (!nextType.is() || nextType < foundName || nextField == Index(-1)) {
       // We did not find the exact type, but one after it, or this is the very
       // first iteration; so reset the field.
@@ -232,20 +266,31 @@ std::cout << "  found! " << foundName << " : " << *found << "\n";
     auto& struct_ = *found;
     assert(struct_[0]->str() == "struct");
     auto& list = struct_.list();
+    // Look for a relevant field. We must skip any fields that are known to be
+    // referenced, as those are definitely impossible to remove.
     auto numFields = list.size() - 1;
-    if (nextField >= numFields) {
-      // We must proceed to the next struct. This can happen because we came to
-      // the end of the current struct, or we are on a new struct and it happens
-      // to have size 0. To find the next one's name we must scan the list once
-      // more, which we do recursively to keep this code simple. We mark
-      // "nextField" as -1 so that the loop can easily know to ignore the struct
-      // with an exact name match, and look for one after.
-      nextField = -1;
-      return pruneNext(root, nextType, nextField);
+    while (nextField < numFields) {
+      auto& field = *list[1 + nextField];
+      Name fieldName = field[1]->str();
+      if (referencedFields.count({foundName, fieldName})) {
+        // Skip this referenced field.
+        nextField++;
+        continue;
+      }
+      // We have something to prune!
+      list.erase(list.begin() + 1 + nextField);
+std::cout << "try to prune " << foundName << " : " << fieldName << '\n';
+      return true;
     }
-    // We have something to prune!
-    list.erase(list.begin() + 1 + nextField);
-    return true;
+    // We must proceed to the next struct. This can happen because we came to
+    // the end of the current struct, or we are on a new struct and it happens
+    // to have size 0. To find the next one's name we must scan the list once
+    // more, which we do recursively to keep this code simple. We mark
+    // "nextField" as -1 so that the loop can easily know to ignore the struct
+    // with an exact name match, and look for one after.
+    // (This should never deeply recurse, but FIXME)
+    nextField = -1;
+    return pruneNext(root, nextType, nextField);
   }
 };
 
