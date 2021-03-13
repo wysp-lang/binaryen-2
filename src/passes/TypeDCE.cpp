@@ -105,11 +105,12 @@ std::cout << "iter2\n";
       Module pruned;
 std::cout << "iter3 " << wasm.features << "\n";
       pruned.features = wasm.features;
-std::cout << root << '\n';
+std::cout << "  pruned s: " << root << '\n';
       try {
         SExpressionWasmBuilder builder(pruned, root, IRProfile::Normal);
       } catch (ParseException& p) {
 std::cout << "parse error\n";
+p.dump(std::cerr);
         // The module does not parse, continue to the next field.
         nextField++;
         continue;
@@ -131,6 +132,8 @@ std::cout << "success! " << root << "\n";
       // Do not increment nextField - we just pruned at the current index, so
       // there will be a new field in that position.
     }
+
+std::cout << "dceAllTypes returning " << dced << '\n';
     return dced;
   }
 
@@ -146,9 +149,10 @@ std::cout << "success! " << root << "\n";
     for (auto type : types) {
       auto& name = wasm.typeNames[type].name;
       if (!name.is()) {
-        name = Names::getValidName("$type", [&](Name test) {
+        name = Names::getValidName("type", [&](Name test) {
           return used.count(test) == 0;
         });
+        used.insert(name);
       }
     }
 
@@ -165,9 +169,10 @@ std::cout << "success! " << root << "\n";
       auto& fields = type.getStruct().fields;
       for (Index i = 0; i < fields.size(); i++) {
         if (fieldNames.count(i) == 0) {
-          fieldNames[i] = Names::getValidName("$field", [&](Name test) {
+          fieldNames[i] = Names::getValidName("field", [&](Name test) {
             return used.count(test) == 0;
           });
+          used.insert(fieldNames[i]);
         }
       }
     }
@@ -176,6 +181,7 @@ std::cout << "success! " << root << "\n";
   // Finds and prunes the next thing. Returns true if successful and false if
   // nothing could be found to prune. Updates nextType/nextField accordingly.
   bool pruneNext(Element& root, Name& nextType, Index& nextField) {
+std::cout << "pruneNext " << nextType << " : " << nextField << '\n';
     // Look for nextType.nextField. It is possible the type does not exist, if
     // it was optimized out; it is also possible the next field is one past the
     // end; in both cases simply continue forward in order. On the very first
@@ -185,7 +191,6 @@ std::cout << "success! " << root << "\n";
     Name foundName;
     for (Index i = 0; i < root.size(); i++) {
       auto& item = *root[i];
-std::cout << "pruneloop " << item << '\n';
       // Look for (type ..)
       if (!item.isList() || !item.size() || *item[0] != TYPE) {
         continue;
@@ -201,15 +206,12 @@ std::cout << "pruneloop " << item << '\n';
         // We were told to skip this struct and look for the next.
         continue;
       }
-std::cout << "  l1\n";
       // Look for the name we want, or the first after it.
       if (!nextType.is() || !found || name < foundName) {
-std::cout << "  l2\n";
         // "item" is a type declaration, something like this:
         //      (type $struct.A (struct (field ..) (field ..) ..))
         // Look for (struct ..), and not (func ..) etc. in the inner part.
         auto& inner = *item[2];
-std::cout << inner << '\n';
         if (inner[0]->str() == "struct") {
           found = &inner;
           foundName = name;
@@ -217,10 +219,9 @@ std::cout << inner << '\n';
       }
     }
     if (!found) {
-std::cout << "none\n";
       return false;
     }
-std::cout << "found! " << foundName << "\n";
+std::cout << "  found! " << foundName << " : " << *found << "\n";
     if (!nextType.is() || nextType < foundName || nextField == Index(-1)) {
       // We did not find the exact type, but one after it, or this is the very
       // first iteration; so reset the field.
@@ -228,10 +229,10 @@ std::cout << "found! " << foundName << "\n";
     }
     // We can now focus on the name we found.
     nextType = foundName;
-    // "found" is a type declaration, something like this:
-    //      (type $struct.A (struct (field ..) (field ..) ..))
+    // "found" is a structure, something like this:
+    //      (struct (field ..) (field ..) ..)
+    // Note how the fields start at index 1.
     auto& struct_ = *found;
-std::cout << struct_ << '\n';
     assert(struct_[0]->str() == "struct");
     auto& list = struct_.list();
     auto numFields = list.size() - 1;
@@ -246,7 +247,7 @@ std::cout << struct_ << '\n';
       return pruneNext(root, nextType, nextField);
     }
     // We have something to prune!
-    list.erase(list.begin() + nextField);
+    list.erase(list.begin() + 1 + nextField);
     return true;
   }
 };
