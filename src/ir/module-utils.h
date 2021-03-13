@@ -129,6 +129,7 @@ inline void copyModule(const Module& in, Module& out) {
   out.start = in.start;
   out.userSections = in.userSections;
   out.debugInfoFileNames = in.debugInfoFileNames;
+  out.features = in.features;
 }
 
 inline void clearModule(Module& wasm) {

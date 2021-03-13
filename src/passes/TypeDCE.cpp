@@ -22,6 +22,13 @@
 // That format has all types in a single place and allows types to be modified,
 // unlike Binaryen IR which is designed to assume types are immutable.
 //
+// This works in a simple brute-force manner, removing a field and then seeing
+// if the wasm parses and validates. If we altered subtyping in a way that
+// matters then that will fail, and we'll try something else. Note that we
+// should not be changing runtime behavior, as RTT subtyping is a subset of
+// static subtyping, so our preserving the latter ensures identical RTT
+// behavior.
+//
 
 #include "ir/module-utils.h"
 #include "ir/names.h"
@@ -36,66 +43,95 @@ using namespace std;
 namespace wasm {
 
 struct TypeDCE : public Pass {
+  // The list of type names in the initial wasm (after we ensure all types are
+  // named).
+  // TODO: use this
+  std::set<Name> typeNames;
+  
   void run(PassRunner* runner, Module* module) override {
-    // Keep DCEing while we can.
-    while (iteration(*module)) {}
-  }
-
-  // Global state of what is the next type.field we will attempt to DCE.
-  Name nextType;
-  Index nextField;
-
-  bool iteration(Module& wasm) {
-std::cout << "iter\n";
     // Find all the types.
     std::vector<HeapType> types;
     std::unordered_map<HeapType, Index> typeIndices;
-    ModuleUtils::collectHeapTypes(wasm, types, typeIndices);
+    ModuleUtils::collectHeapTypes(*module, types, typeIndices);
 
     // Ensure all types and fields are named, so that we can refer to them
     // easily in the text format.
-    ensureNames(wasm, types);
+    ensureNames(*module, types);
 
-    // Generate the text format and parse it.
-    std::stringstream stream;
-    Colors::setEnabled(false);
-    stream << wasm;
-    Colors::setEnabled(true);
-std::cout << "iter1\n";
-    SExpressionParser parser(const_cast<char*>(stream.str().c_str()));
-std::cout << "iter2\n";
-    Element& root = *(*parser.root)[0];
-    // Prune the next type.field, and see if we are left with a valid module.
-    if (!pruneNext(root)) {
-      // Nothing to prune.
-      return false;
+    // Note all the names.
+    for (auto type : types) {
+      typeNames.insert(module->typeNames.at(type).name);
     }
 
-    Module pruned;
-    pruned.features = wasm.features;
-std::cout << "iter3\n";
-std::cout << root << '\n';
-  try {
-    SExpressionWasmBuilder builder(pruned, root, IRProfile::Normal);
-  } catch (ParseException& p) {
-    p.dump(std::cerr);
-    Fatal() << "error in parsing input";
+    // Keep DCEing while we can.
+    while (dceAllTypes(*module)) {}
   }
-std::cout << "iter4\n";
 
-    if (!wasm::WasmValidator().validate(pruned)) {
-      // Move on to try the next field.
-      nextField++;
-      return false;
+  // A single pass on all the types in the module. Returns true if we managed
+  // to remove anything - if so, another pass on them all may find even more.
+  bool dceAllTypes(Module& wasm) {
+std::cout << "dceAllTypes\n";
+
+    bool dced = false;
+
+    // Current state of what is the next type.field we will attempt to DCE.
+    Name nextType;
+    Index nextField;
+
+    while (1) {
+      // Each loop iteration starts by printing the module, which by itself is a
+      // procedure that DCEs unneeded types, as only used types are printed.
+      // This takes a lot of work, but ensures we do not wait to perform such a
+      // DCE until later, which may be even slower.
+      // TODO: this could avoid the work in the case the pruning fails, by
+      //       undoing the pruning
+
+      // Generate the text format and parse it.
+      std::stringstream stream;
+      Colors::setEnabled(false);
+      stream << wasm;
+      Colors::setEnabled(true);
+std::cout << "iter1\n";
+      SExpressionParser parser(const_cast<char*>(stream.str().c_str()));
+std::cout << "iter2\n";
+      Element& root = *(*parser.root)[0];
+
+      // Prune the next field.
+      if (!pruneNext(root, nextType, nextField)) {
+        // Nothing to prune.
+        return false;
+      }
+
+      Module pruned;
+std::cout << "iter3 " << wasm.features << "\n";
+      pruned.features = wasm.features;
+std::cout << root << '\n';
+      try {
+        SExpressionWasmBuilder builder(pruned, root, IRProfile::Normal);
+      } catch (ParseException& p) {
+std::cout << "parse error\n";
+        // The module does not parse, continue to the next field.
+        nextField++;
+        continue;
+      }
+
+      if (!wasm::WasmValidator().validate(pruned, WasmValidator::Quiet)) {
+        // The module does not validate, continue to the next field.
+std::cout << "novalidate\n";
+        nextField++;
+        return false;
+      }
+
+      // Success! Swap to the pruned module.
+std::cout << "success! " << root << "\n";
+      ModuleUtils::clearModule(wasm);
+      ModuleUtils::copyModule(pruned, wasm);
+      dced = true;
+
+      // Do not increment nextField - we just pruned at the current index, so
+      // there will be a new field in that position.
     }
-
-    // Success!
-    ModuleUtils::clearModule(wasm);
-    ModuleUtils::copyModule(pruned, wasm);
-
-    // Do not increment nextField - we just pruned at the current index, so
-    // there will be a new field in that position.
-    return true;
+    return dced;
   }
 
   void ensureNames(Module& wasm, std::vector<HeapType>& types) {
@@ -138,11 +174,13 @@ std::cout << "iter4\n";
   }
 
   // Finds and prunes the next thing. Returns true if successful and false if
-  // nothing could be found to prune.
-  bool pruneNext(Element& root) {
+  // nothing could be found to prune. Updates nextType/nextField accordingly.
+  bool pruneNext(Element& root, Name& nextType, Index& nextField) {
     // Look for nextType.nextField. It is possible the type does not exist, if
     // it was optimized out; it is also possible the next field is one past the
-    // end. In both cases simply continue forward in order.
+    // end; in both cases simply continue forward in order. On the very first
+    // call here nextType is not even set, so look for the first type to begin
+    // our process.
     Element* found = nullptr;
     Name foundName;
     for (Index i = 0; i < root.size(); i++) {

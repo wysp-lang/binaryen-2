@@ -327,8 +327,6 @@ SExpressionWasmBuilder::SExpressionWasmBuilder(Module& wasm,
   if (module.size() == 0) {
     throw ParseException("empty toplevel, expected module");
   }
-std::cout << "parsey1 " << module << '\n';
-std::cout << "parsey2 " << module[0]->str().str << '\n';
   if (module[0]->str() != MODULE) {
     throw ParseException("toplevel does not start with module");
   }
