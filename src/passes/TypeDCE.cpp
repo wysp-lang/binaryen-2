@@ -16,7 +16,11 @@
 
 //
 // DCE the types in the program, removing unneeded fields of structs which can
-// then lead to removal of more types and so forth.
+// then lead to removal of more types and so forth. Note that just a simple
+// round-trip operation (through either text or binary) will "DCE" types in that
+// no unused type will be emit; what this pass does on top of that is to also
+// remove fields that are not actually needed. Removing fields can allow much
+// more DCEing as a type may only be used in an unused field.
 //
 // For convenience at the cost of efficiency this operates on the text format.
 // That format has all types in a single place and allows types to be modified,
@@ -29,6 +33,7 @@
 // static subtyping, so our preserving the latter ensures identical RTT
 // behavior.
 //
+// TODO: Signature params/results too and not just Struct fields.
 
 #include "ir/find_all.h"
 #include "ir/module-utils.h"
@@ -47,13 +52,16 @@ struct TypeDCE : public Pass {
   // The list of type names in the initial wasm (after we ensure all types are
   // named). These names will remain valid even after we prune fields and the
   // types change.
-  // TODO: use this
-  std::set<Name> typeNames;
+  // In addition to holding the names, this maps them to their index in the
+  // list of names.
+  std::map<Name, Index> typeNameIndexes;
 
   // It is useful to know which fields are referenced in the code. These are
   // stored here as pairs <type name, field name>
   using ReferencedFields = std::unordered_set<std::pair<Name, Name>>;
   ReferencedFields referencedFields;
+
+  Index totalIterations = 0;
 
   void run(PassRunner* runner, Module* module) override {
     // Find all the types.
@@ -66,8 +74,13 @@ struct TypeDCE : public Pass {
     ensureNames(*module, types);
 
     // Note all the names.
+    std::set<Name> allNames;
     for (auto type : types) {
-      typeNames.insert(module->typeNames.at(type).name);
+      allNames.insert(module->typeNames.at(type).name);
+    }
+    Index i = 0;
+    for (auto name : allNames) {
+      typeNameIndexes[name] = i++;
     }
 
     // Note all the fields that are references. Those definitely cannot be
@@ -99,13 +112,15 @@ struct TypeDCE : public Pass {
     }
 
     // Keep DCEing while we can.
-    while (dceAllTypes(*module)) {}
+    while (iteration(*module)) {
+      totalIterations++;
+    }
   }
 
   // A single pass on all the types in the module. Returns true if we managed
   // to remove anything - if so, another pass on them all may find even more.
-  bool dceAllTypes(Module& wasm) {
-std::cout << "dceAllTypes\n";
+  bool iteration(Module& wasm) {
+std::cout << "iteration\n";
 
     bool dced = false;
 
@@ -126,11 +141,11 @@ std::cout << "dceAllTypes\n";
       Colors::setEnabled(false);
       stream << wasm;
       Colors::setEnabled(true);
-std::cout << "iter1\n";
+std::cout << "iter " << typeNameIndexes[nextType] << " / " << typeNameIndexes.size() << " [" << totalIterations << "]\n";
       SExpressionParser parser(const_cast<char*>(stream.str().c_str()));
 //std::cout << "iter2\n";
       Element& root = *(*parser.root)[0];
-std::cout << root << '\n';
+//std::cout << root << '\n';
 
       // Prune the next field.
       if (!pruneNext(root, nextType, nextField)) {
@@ -280,7 +295,7 @@ std::cout << "success! " << "\n";
       }
       // We have something to prune!
       list.erase(list.begin() + 1 + nextField);
-std::cout << "try to prune " << foundName << " : " << fieldName << '\n';
+//std::cout << "try to prune " << foundName << " : " << fieldName << '\n';
       return true;
     }
     // We must proceed to the next struct. This can happen because we came to
