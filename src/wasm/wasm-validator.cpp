@@ -2253,6 +2253,7 @@ void FunctionValidator::visitRttSub(RttSub* curr) {
                     curr,
                     "rtt.canon has a depth of 1 over the parent");
     }
+    shouldBeTrue(HeapType::isSubType(rtt.heapType, parentRtt.heapType), curr, "rtt.sub parent must be a supertype");
   }
 }
 
@@ -2710,6 +2711,9 @@ static void validateGlobals(Module& module, ValidationInfo& info) {
         !info.quiet) {
       info.getStream(nullptr) << "(on global " << curr->name << ")\n";
     }
+    FunctionValidator initValidator(&info);
+    initValidator.setModule(&module);
+    initValidator.walk(curr->init);
   });
 }
 
