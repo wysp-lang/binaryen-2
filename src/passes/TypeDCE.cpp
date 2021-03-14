@@ -166,7 +166,7 @@ std::cout << "iter " << typeNameIndexes[nextType] << " / " << typeNameIndexes.si
         continue;
       }
 
-      if (!wasm::WasmValidator().validate(pruned, WasmValidator::Quiet)) {
+      if (!wasm::WasmValidator().validate(pruned, WasmValidator::Globally | WasmValidator::Quiet)) {
         // The module does not validate, continue to the next field.
 //std::cout << "novalidate\n";
         nextField++;
