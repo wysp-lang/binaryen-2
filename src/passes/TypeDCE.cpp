@@ -73,16 +73,6 @@ struct TypeDCE : public Pass {
     // easily in the text format.
     ensureNames(*module, types);
 
-    // Note all the names.
-    std::set<Name> allNames;
-    for (auto type : types) {
-      allNames.insert(module->typeNames.at(type).name);
-    }
-    Index i = 0;
-    for (auto name : allNames) {
-      typeNameIndexes[name] = i++;
-    }
-
     // Note all the fields that are references. Those definitely cannot be
     // pruned.
 
@@ -129,6 +119,10 @@ std::cout << "iteration\n";
     Index nextField;
 
     while (1) {
+      // Updating the names is not necessary, but improves logging. Updating
+      // each iteration ensures we notice each type that is removed.
+      updateNamesForLogging(wasm);
+
       // Each loop iteration starts by printing the module, which by itself is a
       // procedure that DCEs unneeded types, as only used types are printed.
       // This takes a lot of work, but ensures we do not wait to perform such a
@@ -222,6 +216,19 @@ std::cout << "success! " << "\n";
           used.insert(fieldNames[i]);
         }
       }
+    }
+  }
+
+  // Update the global list of names.
+  void updateNamesForLogging(Module& wasm) {
+    std::set<Name> allNames;
+    for (auto& kv : wasm.typeNames) {
+      allNames.insert(kv.second.name);
+    }
+    typeNameIndexes.clear();
+    Index i = 0;
+    for (auto name : allNames) {
+      typeNameIndexes[name] = i++;
     }
   }
 
