@@ -76,23 +76,24 @@ struct TypeDCE : public Pass {
     // Note all the fields that are references. Those definitely cannot be
     // pruned.
 
-    ModuleUtils::ParallelFunctionAnalysis<ReferencedFields> analysis(*module, [&](Function* func, ReferencedFields& info) {
-      if (func->imported()) {
-        return;
-      }
-      auto note = [&](Expression* ref, Index index) {
-        auto& typeNameInfo = module->typeNames.at(ref->type.getHeapType());
-        auto typeName = typeNameInfo.name;
-        auto fieldName = typeNameInfo.fieldNames.at(index);
-        info.insert({typeName, fieldName});
-      };
-      for (auto* get : FindAll<StructGet>(func->body).list) {
-        note(get->ref, get->index);
-      }
-      for (auto* set : FindAll<StructSet>(func->body).list) {
-        note(set->ref, set->index);
-      }
-    });
+    ModuleUtils::ParallelFunctionAnalysis<ReferencedFields> analysis(
+      *module, [&](Function* func, ReferencedFields& info) {
+        if (func->imported()) {
+          return;
+        }
+        auto note = [&](Expression* ref, Index index) {
+          auto& typeNameInfo = module->typeNames.at(ref->type.getHeapType());
+          auto typeName = typeNameInfo.name;
+          auto fieldName = typeNameInfo.fieldNames.at(index);
+          info.insert({typeName, fieldName});
+        };
+        for (auto* get : FindAll<StructGet>(func->body).list) {
+          note(get->ref, get->index);
+        }
+        for (auto* set : FindAll<StructSet>(func->body).list) {
+          note(set->ref, set->index);
+        }
+      });
 
     for (auto& kv : analysis.map) {
       auto& currReferencedFields = kv.second;
@@ -110,7 +111,7 @@ struct TypeDCE : public Pass {
   // A single pass on all the types in the module. Returns true if we managed
   // to remove anything - if so, another pass on them all may find even more.
   bool iteration(Module& wasm) {
-std::cout << "iteration\n";
+    std::cout << "iteration\n";
 
     bool dced = false;
 
@@ -135,11 +136,12 @@ std::cout << "iteration\n";
       Colors::setEnabled(false);
       stream << wasm;
       Colors::setEnabled(true);
-std::cout << "iter " << typeNameIndexes[nextType] << " / " << typeNameIndexes.size() << " [" << totalIterations << "]\n";
+      std::cout << "iter " << typeNameIndexes[nextType] << " / "
+                << typeNameIndexes.size() << " [" << totalIterations << "]\n";
       SExpressionParser parser(const_cast<char*>(stream.str().c_str()));
-//std::cout << "iter2\n";
+      // std::cout << "iter2\n";
       Element& root = *(*parser.root)[0];
-//std::cout << root << '\n';
+      // std::cout << root << '\n';
 
       // Prune the next field.
       if (!pruneNext(root, nextType, nextField)) {
@@ -148,27 +150,29 @@ std::cout << "iter " << typeNameIndexes[nextType] << " / " << typeNameIndexes.si
       }
 
       Module pruned;
-//std::cout << "iter3 " << wasm.features << "\n";
+      // std::cout << "iter3 " << wasm.features << "\n";
       pruned.features = wasm.features;
-//std::cout << "  pruned s: " << root << '\n';
+      // std::cout << "  pruned s: " << root << '\n';
       try {
         SExpressionWasmBuilder builder(pruned, root, IRProfile::Normal);
       } catch (ParseException& p) {
-//std::cout << "parse error\n";
+        // std::cout << "parse error\n";
         // The module does not parse, continue to the next field.
         nextField++;
         continue;
       }
 
-      if (!wasm::WasmValidator().validate(pruned, WasmValidator::Globally | WasmValidator::Quiet)) {
+      if (!wasm::WasmValidator().validate(
+            pruned, WasmValidator::Globally | WasmValidator::Quiet)) {
         // The module does not validate, continue to the next field.
-//std::cout << "novalidate\n";
+        // std::cout << "novalidate\n";
         nextField++;
         continue;
       }
 
       // Success! Swap to the pruned module.
-std::cout << "success! " << "\n";
+      std::cout << "success! "
+                << "\n";
       ModuleUtils::clearModule(wasm);
       ModuleUtils::copyModule(pruned, wasm);
       dced = true;
@@ -190,9 +194,8 @@ std::cout << "success! " << "\n";
     for (auto type : types) {
       auto& name = wasm.typeNames[type].name;
       if (!name.is()) {
-        name = Names::getValidName("type", [&](Name test) {
-          return used.count(test) == 0;
-        });
+        name = Names::getValidName(
+          "type", [&](Name test) { return used.count(test) == 0; });
         used.insert(name);
       }
     }
@@ -210,9 +213,8 @@ std::cout << "success! " << "\n";
       auto& fields = type.getStruct().fields;
       for (Index i = 0; i < fields.size(); i++) {
         if (fieldNames.count(i) == 0) {
-          fieldNames[i] = Names::getValidName("field", [&](Name test) {
-            return used.count(test) == 0;
-          });
+          fieldNames[i] = Names::getValidName(
+            "field", [&](Name test) { return used.count(test) == 0; });
           used.insert(fieldNames[i]);
         }
       }
@@ -235,7 +237,7 @@ std::cout << "success! " << "\n";
   // Finds and prunes the next thing. Returns true if successful and false if
   // nothing could be found to prune. Updates nextType/nextField accordingly.
   bool pruneNext(Element& root, Name& nextType, Index& nextField) {
-//std::cout << "pruneNext " << nextType << " : " << nextField << '\n';
+    // std::cout << "pruneNext " << nextType << " : " << nextField << '\n';
     // Look for nextType.nextField. It is possible the type does not exist, if
     // it was optimized out; it is also possible the next field is one past the
     // end; in both cases simply continue forward in order. On the very first
@@ -275,7 +277,7 @@ std::cout << "success! " << "\n";
     if (!found) {
       return false;
     }
-//std::cout << "  found! " << foundName << " : " << *found << "\n";
+    // std::cout << "  found! " << foundName << " : " << *found << "\n";
     if (!nextType.is() || nextType < foundName || nextField == Index(-1)) {
       // We did not find the exact type, but one after it, or this is the very
       // first iteration; so reset the field.
@@ -302,7 +304,8 @@ std::cout << "success! " << "\n";
       }
       // We have something to prune!
       list.erase(list.begin() + 1 + nextField);
-//std::cout << "try to prune " << foundName << " : " << fieldName << '\n';
+      // std::cout << "try to prune " << foundName << " : " << fieldName <<
+      // '\n';
       return true;
     }
     // We must proceed to the next struct. This can happen because we came to

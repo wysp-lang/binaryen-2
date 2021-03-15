@@ -361,9 +361,8 @@ void PassRegistry::registerPasses() {
   registerPass("trap-mode-js",
                "replace trapping operations with js semantics",
                createTrapModeJS);
-  registerPass("type-dce",
-               "remove unneeded types and parts of them",
-               createTypeDCEPass);
+  registerPass(
+    "type-dce", "remove unneeded types and parts of them", createTypeDCEPass);
   registerPass("untee",
                "removes local.tees, replacing them with sets and gets",
                createUnteePass);

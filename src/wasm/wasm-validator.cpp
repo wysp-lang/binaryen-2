@@ -2253,7 +2253,9 @@ void FunctionValidator::visitRttSub(RttSub* curr) {
                     curr,
                     "rtt.canon has a depth of 1 over the parent");
     }
-    shouldBeTrue(HeapType::isSubType(rtt.heapType, parentRtt.heapType), curr, "rtt.sub parent must be a supertype");
+    shouldBeTrue(HeapType::isSubType(rtt.heapType, parentRtt.heapType),
+                 curr,
+                 "rtt.sub parent must be a supertype");
   }
 }
 
