@@ -201,13 +201,21 @@ struct ValidationInfo {
 struct FunctionValidator : public WalkerPass<PostWalker<FunctionValidator>> {
   bool isFunctionParallel() override { return true; }
 
-  Pass* create() override { return new FunctionValidator(&info); }
+  Pass* create() override { return new FunctionValidator(*getModule(), &info); }
 
   bool modifiesBinaryenIR() override { return false; }
 
   ValidationInfo& info;
 
-  FunctionValidator(ValidationInfo* info) : info(*info) {}
+  FunctionValidator(Module& wasm, ValidationInfo* info) : info(*info) {
+    setModule(&wasm);
+  }
+
+  // Validate the entire module.
+  void validate(PassRunner* runner) { run(runner, getModule()); }
+
+  // Validate a specific expression.
+  void validate(Expression* curr) { walk(curr); }
 
   std::unordered_map<Name, std::unordered_set<Type>> breakTypes;
   std::unordered_set<Name> delegateTargetNames;
@@ -2713,9 +2721,7 @@ static void validateGlobals(Module& module, ValidationInfo& info) {
         !info.quiet) {
       info.getStream(nullptr) << "(on global " << curr->name << ")\n";
     }
-    FunctionValidator initValidator(&info);
-    initValidator.setModule(&module);
-    initValidator.walk(curr->init);
+    FunctionValidator(module, &info).validate(curr->init);
   });
 }
 
@@ -2781,6 +2787,7 @@ static void validateMemory(Module& module, ValidationInfo& info) {
                           segment.data.size(),
                           "segment size should fit in memory (end)");
       }
+      FunctionValidator(module, &info).validate(segment.offset);
     }
     // If the memory is imported we don't actually know its initial size.
     // Specifically wasm dll's import a zero sized memory which is perfectly
@@ -2815,6 +2822,7 @@ static void validateTables(Module& module, ValidationInfo& info) {
                                            table->initial * Table::kPageSize),
                         segment->offset,
                         "table segment offset should be reasonable");
+      FunctionValidator(module, &info).validate(segment->offset);
     }
     for (auto name : segment->data) {
       info.shouldBeTrue(
@@ -2885,7 +2893,7 @@ bool WasmValidator::validate(Module& module, Flags flags) {
   info.quiet = (flags & Quiet) != 0;
   // parallel wasm logic validation
   PassRunner runner(&module);
-  FunctionValidator(&info).run(&runner, &module);
+  FunctionValidator(module, &info).validate(&runner);
   // validate globally
   if (info.validateGlobally) {
     validateImports(module, info);
