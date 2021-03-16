@@ -811,7 +811,7 @@ class Asyncify(TestCaseHandler):
 
 # Check that the text format round-trips without error.
 class RoundtripText(TestCaseHandler):
-    frequency = 0.05
+    frequency = 0.00
 
     def handle(self, wasm):
         run([in_bin('wasm-dis'), wasm, '-o', 'a.wast'])
