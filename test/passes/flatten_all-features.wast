@@ -1055,3 +1055,14 @@
   )
  )
 )
+;; local.tee has the type of the value. if it is more specific than the local
+;; type then we need to ensure we replace the tee with the more specific type.
+(module
+ (type $specific (func (param f32)))
+ (func $0 (result (ref null $specific))
+  (local $temp funcref)
+  (local.tee $temp
+   (ref.null $specific)
+  )
+ )
+)

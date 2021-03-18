@@ -187,14 +187,34 @@ struct Flatten
       if (auto* set = curr->dynCast<LocalSet>()) {
         if (set->isTee()) {
           // we disallow local.tee
-          if (set->value->type == Type::unreachable) {
+          auto valueType = set->value->type;
+          if (valueType == Type::unreachable) {
             replaceCurrent(set->value); // trivial, no set happens
           } else {
-            // use a set in a prelude + a get
+            // Use a set in a prelude + a get.
             set->makeSet();
             ourPreludes.push_back(set);
+            // Note that we must use a more specific type potentially, in which
+            // case we need a new local, as the type of the tee was the type of
+            // the value.
             Type localType = getFunction()->getLocalType(set->index);
-            replaceCurrent(builder.makeLocalGet(set->index, localType));
+            if (valueType != localType) {
+              // Write the value to a local with the value type, so we can get
+              // the more specialized type later.
+              auto oldLocal = set->index;
+              Index newLocal = builder.addVar(getFunction(), valueType);
+              set->index = newLocal;
+              // Also write it to this local, for subsequent reads.
+              auto* newGet = builder.makeLocalGet(newLocal, valueType);
+              auto* newSet = builder.makeLocalSet(oldLocal, newGet);
+              ourPreludes.push_back(newSet);
+              // Replace ourseles with a get of the local with the specialized
+              // type.
+              replaceCurrent(builder.makeLocalGet(newLocal, valueType));
+            } else {
+              // The type is identical, so we can just get it.
+              replaceCurrent(builder.makeLocalGet(set->index, localType));
+            }
           }
         }
 
