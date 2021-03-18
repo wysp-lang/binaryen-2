@@ -158,7 +158,7 @@ struct SSAify : public Pass {
         if (set) {
           // a set exists, just add a tee of its value
           auto* value = set->value;
-          auto* tee = builder.makeLocalTee(new_, value, get->type);
+          auto* tee = builder.makeLocalTee(new_, value);
           set->value = tee;
           // the value may have been something we tracked the location
           // of. if so, update that, since we moved it into the tee

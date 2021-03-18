@@ -861,7 +861,7 @@ public:
   Expression* value;
 
   bool isTee() const;
-  void makeTee(Type type);
+  void makeTee();
   void makeSet();
 };
 

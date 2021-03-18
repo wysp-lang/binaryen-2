@@ -3867,7 +3867,7 @@ void WasmBinaryBuilder::visitLocalSet(LocalSet* curr, uint8_t code) {
   }
   curr->value = popNonVoidExpression();
   if (code == BinaryConsts::LocalTee) {
-    curr->makeTee(currFunction->getLocalType(curr->index));
+    curr->makeTee();
   } else {
     curr->makeSet();
   }

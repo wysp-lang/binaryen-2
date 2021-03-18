@@ -297,11 +297,12 @@ public:
     ret->finalize();
     return ret;
   }
-  LocalSet* makeLocalTee(Index index, Expression* value, Type type) {
+  LocalSet* makeLocalTee(Index index, Expression* value) {
     auto* ret = wasm.allocator.alloc<LocalSet>();
     ret->index = index;
     ret->value = value;
-    ret->makeTee(type);
+    ret->makeTee();
+    ret->finalize();
     return ret;
   }
   GlobalGet* makeGlobalGet(Name name, Type type) {

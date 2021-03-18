@@ -309,9 +309,8 @@ void CallIndirect::finalize() {
 
 bool LocalSet::isTee() const { return type != Type::none; }
 
-// Changes to local.tee. The type of the local should be given.
-void LocalSet::makeTee(Type type_) {
-  type = type_;
+void LocalSet::makeTee() {
+  type = value->type;
   finalize(); // type may need to be unreachable
 }
 

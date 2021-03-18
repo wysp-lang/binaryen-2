@@ -256,7 +256,7 @@ struct SimplifyLocals
       } else {
         this->replaceCurrent(set);
         assert(!set->isTee());
-        set->makeTee(this->getFunction()->getLocalType(set->index));
+        set->makeTee();
       }
       // reuse the local.get that is dying
       *found->second.item = curr;
@@ -583,7 +583,7 @@ struct SimplifyLocals
       auto* set = (*breakLocalSetPointer)->template cast<LocalSet>();
       if (br->condition) {
         br->value = set;
-        set->makeTee(this->getFunction()->getLocalType(set->index));
+        set->makeTee();
         *breakLocalSetPointer =
           this->getModule()->allocator.template alloc<Nop>();
         // in addition, as this is a conditional br that now has a value, it now

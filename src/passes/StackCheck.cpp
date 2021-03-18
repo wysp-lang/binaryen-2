@@ -91,7 +91,7 @@ struct EnforceStackLimits : public WalkerPass<PostWalker<EnforceStackLimits>> {
         BinaryOp::OrInt32,
         builder.makeBinary(
           BinaryOp::GtUInt32,
-          builder.makeLocalTee(newSP, value, stackPointer->type),
+          builder.makeLocalTee(newSP, value),
           builder.makeGlobalGet(stackBase->name, stackBase->type)),
         builder.makeBinary(
           BinaryOp::LtUInt32,

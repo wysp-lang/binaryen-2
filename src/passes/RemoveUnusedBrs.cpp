@@ -286,7 +286,7 @@ struct RemoveUnusedBrs : public WalkerPass<PostWalker<RemoveUnusedBrs>> {
         auto temp = builder.addVar(getFunction(), Type::i32);
         Expression* z;
         replaceCurrent(z = builder.makeIf(
-                         builder.makeLocalTee(temp, curr->condition, Type::i32),
+                         builder.makeLocalTee(temp, curr->condition),
                          builder.makeIf(builder.makeBinary(
                                           EqInt32,
                                           builder.makeLocalGet(temp, Type::i32),

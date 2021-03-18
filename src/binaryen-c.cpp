@@ -878,7 +878,7 @@ BinaryenExpressionRef BinaryenLocalTee(BinaryenModuleRef module,
   auto* ret = ((Module*)module)->allocator.alloc<LocalSet>();
   ret->index = index;
   ret->value = (Expression*)value;
-  ret->makeTee(Type(type));
+  ret->makeTee();
   ret->finalize();
   return static_cast<Expression*>(ret);
 }

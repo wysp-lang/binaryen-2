@@ -384,7 +384,7 @@ void Poppifier::emitLocalSet(LocalSet* curr) {
     if (curr->isTee()) {
       // Use a tee followed by gets to retrieve the tuple
       instrs.push_back(
-        builder.makeLocalTee(elems[0], builder.makePop(types[0]), types[0]));
+        builder.makeLocalTee(elems[0], builder.makePop(types[0])));
       for (size_t i = 1; i < types.size(); ++i) {
         instrs.push_back(builder.makeLocalGet(elems[i], types[i]));
       }
