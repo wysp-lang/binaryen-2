@@ -825,7 +825,7 @@ void FunctionValidator::visitLocalSet(LocalSet* curr) {
                    "local.set index must be small enough")) {
     if (curr->value->type != Type::unreachable) {
       if (curr->type != Type::none) { // tee is ok anyhow
-        shouldBeEqual(getFunction()->getLocalType(curr->index),
+        shouldBeEqual(curr->value->type,
                       curr->type,
                       curr,
                       "local.set type must be correct");
