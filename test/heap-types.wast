@@ -262,4 +262,11 @@
       (struct.set $struct.A 0 (unreachable) (unreachable))
     )
   )
+  (func $get-grandchild (result (ref $grandchild))
+    (local $child (ref null $child))
+    ;; local.tee has the type of the value, which may be more specific.
+    (local.tee $child
+      (call $get-grandchild)
+    )
+  )
 )
