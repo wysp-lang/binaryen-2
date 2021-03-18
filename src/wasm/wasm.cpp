@@ -321,6 +321,9 @@ void LocalSet::makeSet() {
 }
 
 void LocalSet::finalize() {
+  if (isTee()) {
+    type = value->type;
+  }
   if (value->type == Type::unreachable) {
     type = Type::unreachable;
   }
