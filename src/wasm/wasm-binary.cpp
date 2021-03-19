@@ -1424,7 +1424,11 @@ void WasmBinaryBuilder::readUserSection(size_t payloadLen) {
   }
   payloadLen -= read;
   if (sectionName.equals(BinaryConsts::UserSections::Name)) {
-    readNames(payloadLen);
+    if (debugInfo) {
+      readNames(payloadLen);
+    } else {
+      pos += payloadLen;
+    }
   } else if (sectionName.equals(BinaryConsts::UserSections::TargetFeatures)) {
     readFeatures(payloadLen);
   } else if (sectionName.equals(BinaryConsts::UserSections::Dylink)) {
@@ -1922,17 +1926,17 @@ void WasmBinaryBuilder::getResizableLimits(Address& initial,
                                            Type& indexType,
                                            Address defaultIfNoMax) {
   auto flags = getU32LEB();
-  initial = getU32LEB();
   bool hasMax = (flags & BinaryConsts::HasMaximum) != 0;
   bool isShared = (flags & BinaryConsts::IsShared) != 0;
   bool is64 = (flags & BinaryConsts::Is64) != 0;
+  initial = is64 ? getU64LEB() : getU32LEB();
   if (isShared && !hasMax) {
     throwError("shared memory must have max size");
   }
   shared = isShared;
   indexType = is64 ? Type::i64 : Type::i32;
   if (hasMax) {
-    max = getU32LEB();
+    max = is64 ? getU64LEB() : getU32LEB();
   } else {
     max = defaultIfNoMax;
   }
@@ -2137,7 +2141,17 @@ void WasmBinaryBuilder::readFunctions() {
       assert(controlFlowStack.empty());
       assert(letStack.empty());
       assert(depth == 0);
-      func->body = getBlockOrSingleton(func->sig.results);
+      if (!skipFunctionBodies) {
+        func->body = getBlockOrSingleton(func->sig.results);
+      } else {
+        // When skipping the function body we need to put something valid in
+        // their place so we validate. An unreachable is always acceptable
+        // there.
+        func->body = Builder(wasm).makeUnreachable();
+
+        // Skip reading the contents.
+        pos = endOfFunction;
+      }
       assert(depth == 0);
       assert(breakStack.empty());
       assert(breakTargetNames.empty());
