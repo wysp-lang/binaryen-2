@@ -1020,7 +1020,7 @@ struct OptimizeInstructions
     }
 
     // Finally, see if we can remove a null check.
-    if ((curr->op == RefAsNonNull && !valueType.isNullable()) {
+    if (curr->op == RefAsNonNull && !valueType.isNullable()) {
       replaceCurrent(curr->value);
     }
   }
