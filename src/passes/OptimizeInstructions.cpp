@@ -1005,6 +1005,26 @@ struct OptimizeInstructions
     }
   }
 
+  void visitRefAs(RefAs* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+
+    // See if the type information tells us this is a func/data/etc. If it is of
+    // the right kind then all we need to check is for a null.
+    auto valueType = curr->value->type;
+    if ((curr->op == RefAsFunc && valueType.isFunction()) ||
+        (curr->op == RefAsData && valueType.isData()) ||
+        (curr->op == RefAsI31 && valueType.getHeapType() == HeapType::i31)) {
+      curr->op = RefAsNonNull;
+    }
+
+    // Finally, see if we can remove a null check.
+    if ((curr->op == RefAsNonNull && !valueType.isNullable()) {
+      replaceCurrent(curr->value);
+    }
+  }
+
   Index getMaxBitsForLocal(LocalGet* get) {
     // check what we know about the local
     return localInfo[get->index].maxBits;

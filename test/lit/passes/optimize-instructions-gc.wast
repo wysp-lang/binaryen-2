@@ -90,4 +90,14 @@
       (i32.const 0x123) ;; data over 0xff is unnecessary
     )
   )
+
+  ;; ref.as_non_null is not needed on a non-nullable value.
+  ;; CHECK:      (func $it_is_non_null (param $x (ref null $struct)) (result (ref null $struct))
+  ;; CHECK-NEXT:  (ref.as_non_null
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $it_is_non_null (param $x (ref $struct)) (result (ref $struct))
+   (ref.as_non_null (local.get $x))
+  )
 )
