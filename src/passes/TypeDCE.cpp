@@ -73,7 +73,7 @@ struct TypeDCE : public Pass {
     // easily in the text format.
     ensureNames(*module, types);
 
-    // Note all the fields that are references. Those definitely cannot be
+    // Note all the fields that are referenced. Those definitely cannot be
     // pruned.
 
     ModuleUtils::ParallelFunctionAnalysis<ReferencedFields> analysis(

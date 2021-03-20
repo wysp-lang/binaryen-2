@@ -1005,6 +1005,30 @@ struct OptimizeInstructions
     }
   }
 
+  void visitRefIs(RefIs* curr) {
+/*
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+
+    // See if the type information tells us this is a func/data/etc. If it is of
+    // the right kind then all we need to check is for a null.
+    auto valueType = curr->value->type;
+    if ((curr->op == RefIsFunc && valueType.isFunction()) ||
+        (curr->op == RefIsData && valueType.isData()) ||
+        (curr->op == RefIsI31 && valueType.getHeapType() == HeapType::i31)) {
+  //    need an eqz here. is it worth it?
+      curr->op = RefIsNull;
+    }
+
+    // Finally, see if we can remove a null check.
+    if (curr->op == RefAsNull && !valueType.isNullable()) {
+//      sid eeffects, return 1.
+      replaceCurrent(curr->value);
+    }
+    */
+  }
+
   void visitRefAs(RefAs* curr) {
     if (curr->type == Type::unreachable) {
       return;
@@ -1023,6 +1047,9 @@ struct OptimizeInstructions
     if (curr->op == RefAsNonNull && !valueType.isNullable()) {
       replaceCurrent(curr->value);
     }
+    // TODO: can replace with an unreachable when we know the type is wrong!
+    // also can use ignore implicit traps here. when ignoring them, we can
+    // always assume we need no unreachable here.
   }
 
   Index getMaxBitsForLocal(LocalGet* get) {
