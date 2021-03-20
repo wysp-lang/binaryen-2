@@ -87,6 +87,7 @@ struct TypeDCE : public Pass {
           auto fieldName = typeNameInfo.fieldNames.at(index);
           info.insert({typeName, fieldName});
         };
+        // TODO: mark all struct.new fields?
         for (auto* get : FindAll<StructGet>(func->body).list) {
           note(get->ref, get->index);
         }
