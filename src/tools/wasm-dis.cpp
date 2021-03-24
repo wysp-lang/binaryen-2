@@ -19,18 +19,19 @@
 //
 
 #include "support/colors.h"
-#include "support/command-line.h"
 #include "support/file.h"
 #include "wasm-io.h"
+
+#include "tool-options.h"
 
 using namespace cashew;
 using namespace wasm;
 
 int main(int argc, const char* argv[]) {
   std::string sourceMapFilename;
-  Options options("wasm-dis",
-                  "Un-assemble a .wasm (WebAssembly binary format) into a "
-                  ".wat (WebAssembly text format)");
+  ToolOptions options("wasm-dis",
+                      "Un-assemble a .wasm (WebAssembly binary format) into a "
+                      ".wat (WebAssembly text format)");
   options
     .add("--output",
          "-o",
@@ -70,6 +71,14 @@ int main(int argc, const char* argv[]) {
     std::cerr << '\n';
     Fatal() << "error in parsing wasm source mapping";
   }
+
+  options.applyFeatures(wasm);
+
+  // TODO: Validation. However, validating would mean that users are forced to
+  //       run with  wasm-dis -all  or such, to enable the features (unless the
+  //       features section is present, but that's rare in general). It would be
+  //       better to have an "autodetect" code path that enables used features
+  //       eventually.
 
   if (options.debug) {
     std::cerr << "Printing..." << std::endl;

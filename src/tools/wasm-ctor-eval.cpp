@@ -215,30 +215,43 @@ struct CtorEvalExternalInterface : EvallingModuleInstance::ExternalInterface {
                               extra);
   }
 
-  Literals callTable(Index index,
+  Literals callTable(Name tableName,
+                     Index index,
                      Signature sig,
                      LiteralList& arguments,
                      Type result,
                      EvallingModuleInstance& instance) override {
+
+    std::unordered_map<wasm::Name, std::vector<wasm::Name>>::iterator it;
+
+    auto* table = wasm->getTableOrNull(tableName);
+    if (!table) {
+      throw FailToEvalException("callTable on non-existing table");
+    }
+
     // we assume the table is not modified (hmm)
     // look through the segments, try to find the function
-    for (auto& segment : wasm->table.segments) {
+    for (auto& segment : wasm->elementSegments) {
+      if (segment->table != tableName) {
+        continue;
+      }
+
       Index start;
       // look for the index in this segment. if it has a constant offset, we
       // look in the proper range. if it instead gets a global, we rely on the
       // fact that when not dynamically linking then the table is loaded at
       // offset 0.
-      if (auto* c = segment.offset->dynCast<Const>()) {
+      if (auto* c = segment->offset->dynCast<Const>()) {
         start = c->value.getInteger();
-      } else if (segment.offset->is<GlobalGet>()) {
+      } else if (segment->offset->is<GlobalGet>()) {
         start = 0;
       } else {
         // wasm spec only allows const and global.get there
         WASM_UNREACHABLE("invalid expr type");
       }
-      auto end = start + segment.data.size();
+      auto end = start + segment->data.size();
       if (start <= index && index < end) {
-        auto name = segment.data[index - start];
+        auto name = segment->data[index - start];
         // if this is one of our functions, we can call it; if it was imported,
         // fail
         auto* func = wasm->getFunction(name);
@@ -282,7 +295,7 @@ struct CtorEvalExternalInterface : EvallingModuleInstance::ExternalInterface {
   }
 
   // called during initialization, but we don't keep track of a table
-  void tableStore(Address addr, Name value) override {}
+  void tableStore(Name tableName, Address addr, Name value) override {}
 
   bool growMemory(Address /*oldSize*/, Address newSize) override {
     throw FailToEvalException("grow memory");

@@ -295,6 +295,7 @@ console.log("# CallIndirect");
 (function testCallIndirect() {
   const module = new binaryen.Module();
 
+  var table = "0";
   var target = module.i32.const(42);
   var params = binaryen.none;
   var results = binaryen.none;
@@ -302,9 +303,10 @@ console.log("# CallIndirect");
     module.i32.const(1),
     module.i32.const(2)
   ];
-  const theCallIndirect = binaryen.CallIndirect(module.call_indirect(target, operands, params, results));
+  const theCallIndirect = binaryen.CallIndirect(module.call_indirect(table, target, operands, params, results));
   assert(theCallIndirect instanceof binaryen.CallIndirect);
   assert(theCallIndirect instanceof binaryen.Expression);
+  assert(theCallIndirect.table === table);
   assert(theCallIndirect.target === target);
   assertDeepEqual(theCallIndirect.operands, operands);
   assert(theCallIndirect.params === params);
@@ -346,7 +348,7 @@ console.log("# CallIndirect");
   assert(
     theCallIndirect.toText()
     ==
-    "(call_indirect (type $i32_i32_=>_i32)\n (i32.const 7)\n (i32.const 6)\n (i32.const 9000)\n)\n"
+    "(call_indirect $0 (type $i32_i32_=>_i32)\n (i32.const 7)\n (i32.const 6)\n (i32.const 9000)\n)\n"
   );
 
   module.dispose();
@@ -1357,13 +1359,18 @@ console.log("# RefIs");
 (function testRefIs() {
   const module = new binaryen.Module();
 
+  var op = binaryen.Operations.RefIsNull;
   var value = module.local.get(1, binaryen.externref);
   const theRefIs = binaryen.RefIs(module.ref.is_null(value));
   assert(theRefIs instanceof binaryen.RefIs);
   assert(theRefIs instanceof binaryen.Expression);
+  assert(theRefIs.op === op);
   assert(theRefIs.value === value);
   assert(theRefIs.type === binaryen.i32);
 
+  theRefIs.op = op = binaryen.Operations.RefIsFunc;
+  assert(theRefIs.op === op);
+  theRefIs.op = op = binaryen.Operations.RefIsNull;
   theRefIs.value = value = module.local.get(2, binaryen.externref);
   assert(theRefIs.value === value);
   theRefIs.type = binaryen.f64;
@@ -1391,6 +1398,54 @@ console.log("# RefIs");
     binaryen.RefIs(module.ref.is_i31(value)).toText()
     ==
     "(ref.is_i31\n (local.get $2)\n)\n"
+  );
+
+  module.dispose();
+})();
+
+console.log("# RefAs");
+(function testRefAs() {
+  const module = new binaryen.Module();
+
+  var op = binaryen.Operations.RefAsNonNull;
+  var value = module.local.get(1, binaryen.anyref);
+  const theRefAs = binaryen.RefAs(module.ref.as_non_null(value));
+  assert(theRefAs instanceof binaryen.RefAs);
+  assert(theRefAs instanceof binaryen.Expression);
+  assert(theRefAs.op === op);
+  assert(theRefAs.value === value);
+  assert(theRefAs.type !== binaryen.i32); // TODO: === (ref any)
+
+  theRefAs.op = op = binaryen.Operations.RefAsFunc;
+  assert(theRefAs.op === op);
+  theRefAs.op = op = binaryen.Operations.RefAsNull;
+  theRefAs.value = value = module.local.get(2, binaryen.anyref);
+  assert(theRefAs.value === value);
+  theRefAs.type = binaryen.f64;
+  theRefAs.finalize();
+  assert(theRefAs.type !== binaryen.f64); // TODO: === (ref any)
+
+  console.log(theRefAs.toText());
+  assert(
+    theRefAs.toText()
+    ==
+    "(ref.as_non_null\n (local.get $2)\n)\n"
+  );
+
+  assert(
+    binaryen.RefAs(module.ref.as_func(value)).toText()
+    ==
+    "(ref.as_func\n (local.get $2)\n)\n"
+  );
+  assert(
+    binaryen.RefAs(module.ref.as_data(value)).toText()
+    ==
+    "(ref.as_data\n (local.get $2)\n)\n"
+  );
+  assert(
+    binaryen.RefAs(module.ref.as_i31(value)).toText()
+    ==
+    "(ref.as_i31\n (local.get $2)\n)\n"
   );
 
   module.dispose();
@@ -1467,7 +1522,7 @@ console.log("# Try");
     module.i32.const(2),
     module.i32.const(3)
   ];
-  const theTry = binaryen.Try(module.try(body, ["event1"], catchBodies));
+  const theTry = binaryen.Try(module.try('', body, ["event1"], catchBodies, ''));
   assert(theTry instanceof binaryen.Try);
   assert(theTry instanceof binaryen.Expression);
   assert(theTry.body === body);
@@ -1521,6 +1576,14 @@ console.log("# Try");
   assert(theTry.type === binaryen.i32);
 
   console.log(theTry.toText());
+
+  const tryDelegate = binaryen.Try(module.try('', body, [], [], "try_blah"));
+  assert(tryDelegate.isDelegate() == 1);
+  assert(tryDelegate.getDelegateTarget() == "try_blah");
+  tryDelegate.setDelegateTarget("try_outer");
+  assert(tryDelegate.getDelegateTarget() == "try_outer");
+  console.log(tryDelegate.toText());
+
   module.dispose();
 })();
 
@@ -1575,14 +1638,14 @@ console.log("# Rethrow");
 (function testRethrow() {
   const module = new binaryen.Module();
 
-  const theRethrow = binaryen.Rethrow(module.rethrow(0));
+  const theRethrow = binaryen.Rethrow(module.rethrow("l0"));
   assert(theRethrow instanceof binaryen.Rethrow);
   assert(theRethrow instanceof binaryen.Expression);
-  assert(theRethrow.depth === 0);
+  assert(theRethrow.target === "l0");
   assert(theRethrow.type === binaryen.unreachable);
 
-  theRethrow.depth = 1
-  assert(theRethrow.depth === 1);
+  theRethrow.target = "l1";
+  assert(theRethrow.target === "l1");
   theRethrow.type = binaryen.f64;
   theRethrow.finalize();
   assert(theRethrow.type === binaryen.unreachable);
@@ -1591,7 +1654,7 @@ console.log("# Rethrow");
   assert(
     theRethrow.toText()
     ==
-    "(rethrow 1)\n"
+    "(rethrow $l1)\n"
   );
 
   module.dispose();

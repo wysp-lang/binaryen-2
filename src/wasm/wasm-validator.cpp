@@ -196,46 +196,30 @@ struct ValidationInfo {
     fail(text, curr, func);
     return false;
   }
-
-  // Type 'left' should be a subtype of 'right', or unreachable.
-  bool shouldBeSubTypeOrFirstIsUnreachable(Type left,
-                                           Type right,
-                                           Expression* curr,
-                                           const char* text,
-                                           Function* func = nullptr) {
-    if (left == Type::unreachable) {
-      return true;
-    }
-    return shouldBeSubType(left, right, curr, text, func);
-  }
 };
 
 struct FunctionValidator : public WalkerPass<PostWalker<FunctionValidator>> {
   bool isFunctionParallel() override { return true; }
 
-  Pass* create() override { return new FunctionValidator(&info); }
+  Pass* create() override { return new FunctionValidator(*getModule(), &info); }
 
   bool modifiesBinaryenIR() override { return false; }
 
   ValidationInfo& info;
 
-  FunctionValidator(ValidationInfo* info) : info(*info) {}
+  FunctionValidator(Module& wasm, ValidationInfo* info) : info(*info) {
+    setModule(&wasm);
+  }
 
-  struct BreakInfo {
-    enum { UnsetArity = Index(-1), PoisonArity = Index(-2) };
+  // Validate the entire module.
+  void validate(PassRunner* runner) { run(runner, getModule()); }
 
-    Type type;
-    Index arity;
-    BreakInfo() : arity(UnsetArity) {}
-    BreakInfo(Type type, Index arity) : type(type), arity(arity) {}
+  // Validate a specific expression.
+  void validate(Expression* curr) { walk(curr); }
 
-    bool hasBeenSet() {
-      // Compare to the impossible value.
-      return arity != UnsetArity;
-    }
-  };
-
-  std::unordered_map<Name, BreakInfo> breakInfos;
+  std::unordered_map<Name, std::unordered_set<Type>> breakTypes;
+  std::unordered_set<Name> delegateTargetNames;
+  std::unordered_set<Name> rethrowTargetNames;
 
   std::set<Type> returnTypes; // types used in returns
 
@@ -258,7 +242,7 @@ public:
   static void visitPreBlock(FunctionValidator* self, Expression** currp) {
     auto* curr = (*currp)->cast<Block>();
     if (curr->name.is()) {
-      self->breakInfos[curr->name];
+      self->breakTypes[curr->name];
     }
   }
 
@@ -269,18 +253,60 @@ public:
   static void visitPreLoop(FunctionValidator* self, Expression** currp) {
     auto* curr = (*currp)->cast<Loop>();
     if (curr->name.is()) {
-      self->breakInfos[curr->name];
+      self->breakTypes[curr->name];
     }
   }
 
   void visitLoop(Loop* curr);
   void visitIf(If* curr);
 
+  static void visitPreTry(FunctionValidator* self, Expression** currp) {
+    auto* curr = (*currp)->cast<Try>();
+    if (curr->name.is()) {
+      self->delegateTargetNames.insert(curr->name);
+    }
+  }
+
+  // We remove try's label before proceeding to verify catch bodies because the
+  // following is a validation failure:
+  // (try $l0
+  //   (do ... )
+  //   (catch $e
+  //     (try
+  //       (do ...)
+  //       (delegate $l0) ;; validation failure
+  //     )
+  //   )
+  // )
+  // Unlike branches, if delegate's target 'catch' is located above the
+  // delegate, it is a validation failure.
+  static void visitPreCatch(FunctionValidator* self, Expression** currp) {
+    auto* curr = (*currp)->cast<Try>();
+    if (curr->name.is()) {
+      self->delegateTargetNames.erase(curr->name);
+      self->rethrowTargetNames.insert(curr->name);
+    }
+  }
+
   // override scan to add a pre and a post check task to all nodes
   static void scan(FunctionValidator* self, Expression** currp) {
+    auto* curr = *currp;
+    // Treat 'Try' specially because we need to run visitPreCatch between the
+    // try body and catch bodies
+    if (curr->is<Try>()) {
+      self->pushTask(doVisitTry, currp);
+      auto& list = curr->cast<Try>()->catchBodies;
+      for (int i = int(list.size()) - 1; i >= 0; i--) {
+        self->pushTask(scan, &list[i]);
+      }
+      self->pushTask(visitPreCatch, currp);
+      self->pushTask(scan, &curr->cast<Try>()->body);
+      self->pushTask(visitPreTry, currp);
+      return;
+    }
+
     PostWalker<FunctionValidator>::scan(self, currp);
 
-    auto* curr = *currp;
     if (curr->is<Block>()) {
       self->pushTask(visitPreBlock, currp);
     }
@@ -334,6 +360,8 @@ public:
   void visitRefIs(RefIs* curr);
   void visitRefFunc(RefFunc* curr);
   void visitRefEq(RefEq* curr);
+  void noteDelegate(Name name, Expression* curr);
+  void noteRethrow(Name name, Expression* curr);
   void visitTry(Try* curr);
   void visitThrow(Throw* curr);
   void visitRethrow(Rethrow* curr);
@@ -395,14 +423,6 @@ private:
     return info.shouldBeSubType(left, right, curr, text, getFunction());
   }
 
-  bool shouldBeSubTypeOrFirstIsUnreachable(Type left,
-                                           Type right,
-                                           Expression* curr,
-                                           const char* text) {
-    return info.shouldBeSubTypeOrFirstIsUnreachable(
-      left, right, curr, text, getFunction());
-  }
-
   void validateAlignment(
     size_t align, Type type, Index bytes, bool isAtomic, Expression* curr);
   void validateMemBytes(uint8_t bytes, Type type, Expression* curr);
@@ -422,10 +442,10 @@ private:
     }
     size_t i = 0;
     for (const auto& param : sig.params) {
-      if (!shouldBeSubTypeOrFirstIsUnreachable(curr->operands[i]->type,
-                                               param,
-                                               curr,
-                                               "call param types must match") &&
+      if (!shouldBeSubType(curr->operands[i]->type,
+                           param,
+                           curr,
+                           "call param types must match") &&
           !info.quiet) {
         getStream() << "(on argument " << i << ")\n";
       }
@@ -507,49 +527,17 @@ void FunctionValidator::visitBlock(Block* curr) {
   // if we are break'ed to, then the value must be right for us
   if (curr->name.is()) {
     noteLabelName(curr->name);
-    auto iter = breakInfos.find(curr->name);
-    assert(iter != breakInfos.end()); // we set it ourselves
-    auto& info = iter->second;
-    if (info.hasBeenSet()) {
-      if (curr->type.isConcrete()) {
-        shouldBeTrue(info.arity != 0,
-                     curr,
-                     "break arities must be > 0 if block has a value");
-      } else {
-        shouldBeTrue(info.arity == 0,
-                     curr,
-                     "break arities must be 0 if block has no value");
-      }
+    auto iter = breakTypes.find(curr->name);
+    assert(iter != breakTypes.end()); // we set it ourselves
+    for (Type breakType : iter->second) {
       // none or unreachable means a poison value that we should ignore - if
       // consumed, it will error
-      if (info.type.isConcrete() && curr->type.isConcrete()) {
-        shouldBeSubType(
-          info.type,
-          curr->type,
-          curr,
-          "block+breaks must have right type if breaks return a value");
-      }
-      if (curr->type.isConcrete() && info.arity &&
-          info.type != Type::unreachable) {
-        shouldBeSubType(
-          info.type,
-          curr->type,
-          curr,
-          "block+breaks must have right type if breaks have arity");
-      }
-      shouldBeTrue(
-        info.arity != BreakInfo::PoisonArity, curr, "break arities must match");
-      if (curr->list.size() > 0) {
-        auto last = curr->list.back()->type;
-        if (last == Type::none) {
-          shouldBeTrue(info.arity == Index(0),
-                       curr,
-                       "if block ends with a none, breaks cannot send a value "
-                       "of any type");
-        }
-      }
+      shouldBeSubType(breakType,
+                      curr->type,
+                      curr,
+                      "break type must be a subtype of the target block type");
     }
-    breakInfos.erase(iter);
+    breakTypes.erase(iter);
   }
   switch (getFunction()->profile) {
     case IRProfile::Normal:
@@ -620,8 +608,8 @@ void FunctionValidator::validatePoppyBlockElements(Block* curr) {
         !info.quiet) {
       getStream() << "(on index " << i << ":\n"
                   << expr << "\n), required: " << sig.params << ", available: ";
-      if (blockSig.unreachable) {
-        getStream() << "unreachable, ";
+      if (blockSig.kind == StackSignature::Polymorphic) {
+        getStream() << "polymorphic, ";
       }
       getStream() << blockSig.results << "\n";
       return;
@@ -629,16 +617,22 @@ void FunctionValidator::validatePoppyBlockElements(Block* curr) {
     blockSig += sig;
   }
   if (curr->type == Type::unreachable) {
-    shouldBeTrue(blockSig.unreachable,
+    shouldBeTrue(blockSig.kind == StackSignature::Polymorphic,
                  curr,
                  "unreachable block should have unreachable element");
   } else {
-    if (!shouldBeTrue(blockSig.satisfies(Signature(Type::none, curr->type)),
-                      curr,
-                      "block contents should satisfy block type") &&
+    if (!shouldBeTrue(
+          StackSignature::isSubType(
+            blockSig,
+            StackSignature(Type::none, curr->type, StackSignature::Fixed)),
+          curr,
+          "block contents should satisfy block type") &&
         !info.quiet) {
       getStream() << "contents: " << blockSig.results
-                  << (blockSig.unreachable ? " [unreachable]" : "") << "\n"
+                  << (blockSig.kind == StackSignature::Polymorphic
+                        ? " [polymorphic]"
+                        : "")
+                  << "\n"
                   << "expected: " << curr->type << "\n";
     }
   }
@@ -647,14 +641,15 @@ void FunctionValidator::validatePoppyBlockElements(Block* curr) {
 void FunctionValidator::visitLoop(Loop* curr) {
   if (curr->name.is()) {
     noteLabelName(curr->name);
-    auto iter = breakInfos.find(curr->name);
-    assert(iter != breakInfos.end()); // we set it ourselves
-    auto& info = iter->second;
-    if (info.hasBeenSet()) {
-      shouldBeEqual(
-        info.arity, Index(0), curr, "breaks to a loop cannot pass a value");
+    auto iter = breakTypes.find(curr->name);
+    assert(iter != breakTypes.end()); // we set it ourselves
+    for (Type breakType : iter->second) {
+      shouldBeEqual(breakType,
+                    Type(Type::none),
+                    curr,
+                    "breaks to a loop cannot pass a value");
     }
-    breakInfos.erase(iter);
+    breakTypes.erase(iter);
   }
   if (curr->type == Type::none) {
     shouldBeFalse(curr->body->type.isConcrete(),
@@ -672,11 +667,10 @@ void FunctionValidator::visitLoop(Loop* curr) {
                     "if loop is not returning a value, final element should "
                     "not flow out a value");
     } else {
-      shouldBeSubTypeOrFirstIsUnreachable(
-        curr->body->type,
-        curr->type,
-        curr,
-        "loop with value and body must match types");
+      shouldBeSubType(curr->body->type,
+                      curr->type,
+                      curr,
+                      "loop with value and body must match types");
     }
   }
 }
@@ -698,16 +692,14 @@ void FunctionValidator::visitIf(If* curr) {
     }
   } else {
     if (curr->type != Type::unreachable) {
-      shouldBeSubTypeOrFirstIsUnreachable(
-        curr->ifTrue->type,
-        curr->type,
-        curr,
-        "returning if-else's true must have right type");
-      shouldBeSubTypeOrFirstIsUnreachable(
-        curr->ifFalse->type,
-        curr->type,
-        curr,
-        "returning if-else's false must have right type");
+      shouldBeSubType(curr->ifTrue->type,
+                      curr->type,
+                      curr,
+                      "returning if-else's true must have right type");
+      shouldBeSubType(curr->ifFalse->type,
+                      curr->type,
+                      curr,
+                      "returning if-else's false must have right type");
     } else {
       if (curr->condition->type != Type::unreachable) {
         shouldBeEqual(curr->ifTrue->type,
@@ -746,25 +738,14 @@ void FunctionValidator::noteBreak(Name name,
 }
 
 void FunctionValidator::noteBreak(Name name, Type valueType, Expression* curr) {
-  Index arity = 0;
-  if (valueType != Type::none) {
-    arity = 1;
-  }
-  auto iter = breakInfos.find(name);
+  auto iter = breakTypes.find(name);
   if (!shouldBeTrue(
-        iter != breakInfos.end(), curr, "all break targets must be valid")) {
+        iter != breakTypes.end(), curr, "all break targets must be valid")) {
     return;
   }
-  auto& info = iter->second;
-  if (!info.hasBeenSet()) {
-    info = BreakInfo(valueType, arity);
-  } else {
-    info.type = Type::getLeastUpperBound(info.type, valueType);
-    if (arity != info.arity) {
-      info.arity = BreakInfo::PoisonArity;
-    }
-  }
+  iter->second.insert(valueType);
 }
+
 void FunctionValidator::visitBreak(Break* curr) {
   noteBreak(curr->name, curr->value, curr);
   if (curr->value) {
@@ -809,6 +790,12 @@ void FunctionValidator::visitCallIndirect(CallIndirect* curr) {
                                     Type(Type::i32),
                                     curr,
                                     "indirect call target must be an i32");
+
+  if (curr->target->type != Type::unreachable) {
+    auto* table = getModule()->getTableOrNull(curr->table);
+    shouldBeTrue(!!table, curr, "call-indirect table must exist");
+  }
+
   validateCallParamsAndResult(curr, curr->sig);
 }
 
@@ -870,11 +857,10 @@ void FunctionValidator::visitGlobalSet(GlobalSet* curr) {
                    "global.set name must be valid (and not an import; imports "
                    "can't be modified)")) {
     shouldBeTrue(global->mutable_, curr, "global.set global must be mutable");
-    shouldBeSubTypeOrFirstIsUnreachable(
-      curr->value->type,
-      global->type,
-      curr,
-      "global.set value must have right type");
+    shouldBeSubType(curr->value->type,
+                    global->type,
+                    curr,
+                    "global.set value must have right type");
   }
 }
 
@@ -2009,34 +1995,47 @@ void FunctionValidator::visitRefFunc(RefFunc* curr) {
 void FunctionValidator::visitRefEq(RefEq* curr) {
   shouldBeTrue(
     getModule()->features.hasGC(), curr, "ref.eq requires gc to be enabled");
-  shouldBeSubTypeOrFirstIsUnreachable(
-    curr->left->type,
-    Type::eqref,
-    curr->left,
-    "ref.eq's left argument should be a subtype of eqref");
-  shouldBeSubTypeOrFirstIsUnreachable(
-    curr->right->type,
-    Type::eqref,
-    curr->right,
-    "ref.eq's right argument should be a subtype of eqref");
+  shouldBeSubType(curr->left->type,
+                  Type::eqref,
+                  curr->left,
+                  "ref.eq's left argument should be a subtype of eqref");
+  shouldBeSubType(curr->right->type,
+                  Type::eqref,
+                  curr->right,
+                  "ref.eq's right argument should be a subtype of eqref");
+}
+
+void FunctionValidator::noteDelegate(Name name, Expression* curr) {
+  if (name != DELEGATE_CALLER_TARGET) {
+    shouldBeTrue(delegateTargetNames.count(name) != 0,
+                 curr,
+                 "all delegate targets must be valid");
+  }
+}
+
+void FunctionValidator::noteRethrow(Name name, Expression* curr) {
+  shouldBeTrue(rethrowTargetNames.count(name) != 0,
+               curr,
+               "all rethrow targets must be valid");
 }
 
 void FunctionValidator::visitTry(Try* curr) {
   shouldBeTrue(getModule()->features.hasExceptionHandling(),
                curr,
                "try requires exception-handling to be enabled");
+  if (curr->name.is()) {
+    noteLabelName(curr->name);
+  }
   if (curr->type != Type::unreachable) {
-    shouldBeSubTypeOrFirstIsUnreachable(
-      curr->body->type,
-      curr->type,
-      curr->body,
-      "try's type does not match try body's type");
+    shouldBeSubType(curr->body->type,
+                    curr->type,
+                    curr->body,
+                    "try's type does not match try body's type");
     for (auto catchBody : curr->catchBodies) {
-      shouldBeSubTypeOrFirstIsUnreachable(
-        catchBody->type,
-        curr->type,
-        catchBody,
-        "try's type does not match catch's body type");
+      shouldBeSubType(catchBody->type,
+                      curr->type,
+                      catchBody,
+                      "try's type does not match catch's body type");
     }
   } else {
     shouldBeEqual(curr->body->type,
@@ -2053,6 +2052,19 @@ void FunctionValidator::visitTry(Try* curr) {
   shouldBeTrue(curr->catchBodies.size() - curr->catchEvents.size() <= 1,
                curr,
                "the number of catch blocks and events do not match");
+
+  shouldBeFalse(curr->isCatch() && curr->isDelegate(),
+                curr,
+                "try cannot have both catch and delegate at the same time");
+  shouldBeTrue(curr->isCatch() || curr->isDelegate(),
+               curr,
+               "try should have either catches or a delegate");
+
+  if (curr->isDelegate()) {
+    noteDelegate(curr->delegateTarget, curr);
+  }
+
+  rethrowTargetNames.erase(curr->name);
 }
 
 void FunctionValidator::visitThrow(Throw* curr) {
@@ -2077,10 +2089,10 @@ void FunctionValidator::visitThrow(Throw* curr) {
   }
   size_t i = 0;
   for (const auto& param : event->sig.params) {
-    if (!shouldBeSubTypeOrFirstIsUnreachable(curr->operands[i]->type,
-                                             param,
-                                             curr->operands[i],
-                                             "event param types must match") &&
+    if (!shouldBeSubType(curr->operands[i]->type,
+                         param,
+                         curr->operands[i],
+                         "event param types must match") &&
         !info.quiet) {
       getStream() << "(on argument " << i << ")\n";
     }
@@ -2096,8 +2108,7 @@ void FunctionValidator::visitRethrow(Rethrow* curr) {
                 Type(Type::unreachable),
                 curr,
                 "rethrow's type must be unreachable");
-  // TODO Validate the depth field. The current LLVM toolchain only generates
-  // depth 0 for C++ support.
+  noteRethrow(curr->target, curr);
 }
 
 void FunctionValidator::visitTupleMake(TupleMake* curr) {
@@ -2162,23 +2173,20 @@ void FunctionValidator::visitCallRef(CallRef* curr) {
 void FunctionValidator::visitI31New(I31New* curr) {
   shouldBeTrue(
     getModule()->features.hasGC(), curr, "i31.new requires gc to be enabled");
-  shouldBeSubTypeOrFirstIsUnreachable(curr->value->type,
-                                      Type::i32,
-                                      curr->value,
-                                      "i31.new's argument should be i32");
+  shouldBeSubType(curr->value->type,
+                  Type::i32,
+                  curr->value,
+                  "i31.new's argument should be i32");
 }
 
 void FunctionValidator::visitI31Get(I31Get* curr) {
   shouldBeTrue(getModule()->features.hasGC(),
                curr,
                "i31.get_s/u requires gc to be enabled");
-  // FIXME: use i31ref here, which is non-nullable, when we support non-
-  // nullability.
-  shouldBeSubTypeOrFirstIsUnreachable(
-    curr->i31->type,
-    Type(HeapType::i31, Nullable),
-    curr->i31,
-    "i31.get_s/u's argument should be i31ref");
+  shouldBeSubType(curr->i31->type,
+                  Type::i31ref,
+                  curr->i31,
+                  "i31.get_s/u's argument should be i31ref");
 }
 
 void FunctionValidator::visitRefTest(RefTest* curr) {
@@ -2251,6 +2259,9 @@ void FunctionValidator::visitRttSub(RttSub* curr) {
                     curr,
                     "rtt.canon has a depth of 1 over the parent");
     }
+    shouldBeTrue(HeapType::isSubType(rtt.heapType, parentRtt.heapType),
+                 curr,
+                 "rtt.sub parent must be a supertype");
   }
 }
 
@@ -2296,6 +2307,14 @@ void FunctionValidator::visitStructGet(StructGet* curr) {
   shouldBeTrue(getModule()->features.hasGC(),
                curr,
                "struct.get requires gc to be enabled");
+  if (curr->ref->type == Type::unreachable) {
+    return;
+  }
+  if (!shouldBeTrue(curr->ref->type.isStruct(),
+                    curr->ref,
+                    "struct.get ref must be a struct")) {
+    return;
+  }
   const auto& fields = curr->ref->type.getHeapType().getStruct().fields;
   shouldBeTrue(curr->index < fields.size(), curr, "bad struct.get field");
   auto field = fields[curr->index];
@@ -2315,14 +2334,22 @@ void FunctionValidator::visitStructSet(StructSet* curr) {
   shouldBeTrue(getModule()->features.hasGC(),
                curr,
                "struct.set requires gc to be enabled");
+  if (curr->ref->type == Type::unreachable) {
+    return;
+  }
+  if (!shouldBeTrue(curr->ref->type.isStruct(),
+                    curr->ref,
+                    "struct.set ref must be a struct")) {
+    return;
+  }
   if (curr->ref->type != Type::unreachable) {
     const auto& fields = curr->ref->type.getHeapType().getStruct().fields;
     shouldBeTrue(curr->index < fields.size(), curr, "bad struct.get field");
     auto& field = fields[curr->index];
-    shouldBeEqual(curr->value->type,
-                  field.type,
-                  curr,
-                  "struct.set must have the proper type");
+    shouldBeSubType(curr->value->type,
+                    field.type,
+                    curr,
+                    "struct.set must have the proper type");
     shouldBeEqual(
       field.mutable_, Mutable, curr, "struct.set field must be mutable");
   }
@@ -2390,10 +2417,11 @@ void FunctionValidator::visitArraySet(ArraySet* curr) {
     return;
   }
   const auto& element = curr->ref->type.getHeapType().getArray().element;
-  shouldBeEqual(curr->value->type,
-                element.type,
-                curr,
-                "array.set must have the proper type");
+  shouldBeSubType(curr->value->type,
+                  element.type,
+                  curr,
+                  "array.set must have the proper type");
+  shouldBeTrue(element.mutable_, curr, "array.set type must be mutable");
 }
 
 void FunctionValidator::visitArrayLen(ArrayLen* curr) {
@@ -2431,25 +2459,24 @@ void FunctionValidator::visitFunction(Function* curr) {
   }
   // if function has no result, it is ignored
   // if body is unreachable, it might be e.g. a return
-  shouldBeSubTypeOrFirstIsUnreachable(
-    curr->body->type,
-    curr->sig.results,
-    curr->body,
-    "function body type must match, if function returns");
+  shouldBeSubType(curr->body->type,
+                  curr->sig.results,
+                  curr->body,
+                  "function body type must match, if function returns");
   for (Type returnType : returnTypes) {
-    shouldBeSubTypeOrFirstIsUnreachable(
-      returnType,
-      curr->sig.results,
-      curr->body,
-      "function result must match, if function has returns");
+    shouldBeSubType(returnType,
+                    curr->sig.results,
+                    curr->body,
+                    "function result must match, if function has returns");
   }
 
-  shouldBeTrue(
-    breakInfos.empty(), curr->body, "all named break targets must exist");
+  assert(breakTypes.empty());
+  assert(delegateTargetNames.empty());
+  assert(rethrowTargetNames.empty());
   returnTypes.clear();
   labelNames.clear();
   // validate optional local names
-  std::set<Name> seen;
+  std::unordered_set<Name> seen;
   for (auto& pair : curr->localNames) {
     Name name = pair.second;
     shouldBeTrue(seen.insert(name).second, name, "local names must be unique");
@@ -2651,7 +2678,7 @@ static void validateExports(Module& module, ValidationInfo& info) {
                         name,
                         "module global exports must be found");
     } else if (exp->kind == ExternalKind::Table) {
-      info.shouldBeTrue(name == Name("0") || name == module.table.name,
+      info.shouldBeTrue(module.getTableOrNull(name),
                         name,
                         "module table exports must be found");
     } else if (exp->kind == ExternalKind::Memory) {
@@ -2692,6 +2719,7 @@ static void validateGlobals(Module& module, ValidationInfo& info) {
         !info.quiet) {
       info.getStream(nullptr) << "(on global " << curr->name << ")\n";
     }
+    FunctionValidator(module, &info).validate(curr->init);
   });
 }
 
@@ -2720,7 +2748,7 @@ static void validateMemory(Module& module, ValidationInfo& info) {
                       "memory is shared, but atomics are disabled");
   }
   for (auto& segment : curr.segments) {
-    Index size = segment.data.size();
+    auto size = segment.data.size();
     if (segment.isPassive) {
       info.shouldBeTrue(module.features.hasBulkMemory(),
                         segment.offset,
@@ -2730,11 +2758,20 @@ static void validateMemory(Module& module, ValidationInfo& info) {
                          segment.offset,
                          "passive segment should not have an offset");
     } else {
-      if (!info.shouldBeEqual(segment.offset->type,
-                              Type(Type::i32),
-                              segment.offset,
-                              "segment offset should be i32")) {
-        continue;
+      if (curr.is64()) {
+        if (!info.shouldBeEqual(segment.offset->type,
+                                Type(Type::i64),
+                                segment.offset,
+                                "segment offset should be i64")) {
+          continue;
+        }
+      } else {
+        if (!info.shouldBeEqual(segment.offset->type,
+                                Type(Type::i32),
+                                segment.offset,
+                                "segment offset should be i32")) {
+          continue;
+        }
       }
       info.shouldBeTrue(checkSegmentOffset(segment.offset,
                                            segment.data.size(),
@@ -2742,12 +2779,13 @@ static void validateMemory(Module& module, ValidationInfo& info) {
                         segment.offset,
                         "memory segment offset should be reasonable");
       if (segment.offset->is<Const>()) {
-        Index start = segment.offset->cast<Const>()->value.geti32();
-        Index end = start + size;
+        auto start = segment.offset->cast<Const>()->value.getUnsigned();
+        auto end = start + size;
         info.shouldBeTrue(end <= curr.initial * Memory::kPageSize,
                           segment.data.size(),
                           "segment size should fit in memory (end)");
       }
+      FunctionValidator(module, &info).validate(segment.offset);
     }
     // If the memory is imported we don't actually know its initial size.
     // Specifically wasm dll's import a zero sized memory which is perfectly
@@ -2760,20 +2798,31 @@ static void validateMemory(Module& module, ValidationInfo& info) {
   }
 }
 
-static void validateTable(Module& module, ValidationInfo& info) {
-  auto& curr = module.table;
-  for (auto& segment : curr.segments) {
-    info.shouldBeEqual(segment.offset->type,
-                       Type(Type::i32),
-                       segment.offset,
-                       "segment offset should be i32");
-    info.shouldBeTrue(
-      checkSegmentOffset(segment.offset,
-                         segment.data.size(),
-                         module.table.initial * Table::kPageSize),
-      segment.offset,
-      "table segment offset should be reasonable");
-    for (auto name : segment.data) {
+static void validateTables(Module& module, ValidationInfo& info) {
+  if (!module.features.hasReferenceTypes()) {
+    info.shouldBeTrue(module.tables.size() <= 1,
+                      "table",
+                      "Only 1 table definition allowed in MVP (requires "
+                      "--enable-reference-types)");
+  }
+
+  for (auto& segment : module.elementSegments) {
+    if (segment->table.is()) {
+      auto table = module.getTableOrNull(segment->table);
+      info.shouldBeTrue(
+        table != nullptr, "elem", "elem segment must have a valid table name");
+      info.shouldBeEqual(segment->offset->type,
+                         Type(Type::i32),
+                         segment->offset,
+                         "elem segment offset should be i32");
+      info.shouldBeTrue(checkSegmentOffset(segment->offset,
+                                           segment->data.size(),
+                                           table->initial * Table::kPageSize),
+                        segment->offset,
+                        "table segment offset should be reasonable");
+      FunctionValidator(module, &info).validate(segment->offset);
+    }
+    for (auto name : segment->data) {
       info.shouldBeTrue(
         module.getFunctionOrNull(name), name, "segment name should be valid");
     }
@@ -2842,14 +2891,14 @@ bool WasmValidator::validate(Module& module, Flags flags) {
   info.quiet = (flags & Quiet) != 0;
   // parallel wasm logic validation
   PassRunner runner(&module);
-  FunctionValidator(&info).run(&runner, &module);
+  FunctionValidator(module, &info).validate(&runner);
   // validate globally
   if (info.validateGlobally) {
     validateImports(module, info);
     validateExports(module, info);
     validateGlobals(module, info);
     validateMemory(module, info);
-    validateTable(module, info);
+    validateTables(module, info);
     validateEvents(module, info);
     validateModule(module, info);
     validateFeatures(module, info);

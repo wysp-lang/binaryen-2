@@ -70,6 +70,9 @@ Name EXPORT("export");
 Name IMPORT("import");
 Name TABLE("table");
 Name ELEM("elem");
+Name DECLARE("declare");
+Name OFFSET("offset");
+Name ITEM("item");
 Name LOCAL("local");
 Name TYPE("type");
 Name REF("ref");
@@ -88,6 +91,7 @@ Name CASE("case");
 Name BR("br");
 Name FUNCREF("funcref");
 Name FAKE_RETURN("fake_return_waka123");
+Name DELEGATE_CALLER_TARGET("delegate_caller_target_waka123");
 Name MUT("mut");
 Name SPECTEST("spectest");
 Name PRINT("print");
@@ -176,9 +180,9 @@ void Block::finalize() {
     type = Type::none;
     return;
   }
+  type = list.back()->type;
   // The default type is what is at the end. Next we need to see if breaks and/
   // or unreachabitily change that.
-  type = list.back()->type;
   if (!name.is()) {
     // Nothing branches here, so this is easy.
     handleUnreachable(this, NoBreak);
@@ -190,13 +194,12 @@ void Block::finalize() {
   Expression* temp = this;
   seeker.walk(temp);
   if (seeker.found) {
-    // Take the branch values into account.
-    if (seeker.valueType != Type::none) {
-      type = Type::getLeastUpperBound(type, seeker.valueType);
-    } else {
-      // No value is sent, but as we have a branch we are not unreachable.
-      type = Type::none;
-    }
+    // Calculate the supertype of the branch types and the flowed-out type. If
+    // there is no supertype among the available types, assume the current type
+    // is already correct. TODO: calculate proper LUBs to compute a new correct
+    // type in this situation.
+    seeker.types.insert(type);
+    Type::ensureSuperType(seeker.types, type);
   } else {
     // There are no branches, so this block may be unreachable.
     handleUnreachable(this, NoBreak);
@@ -227,17 +230,24 @@ void If::finalize(Type type_) {
 }
 
 void If::finalize() {
-  type = ifFalse ? Type::getLeastUpperBound(ifTrue->type, ifFalse->type)
-                 : Type::none;
+  if (ifFalse) {
+    // TODO: Calculate a proper LUB.
+    Type::ensureSuperType(std::array<Type, 2>{{ifTrue->type, ifFalse->type}},
+                          type);
+  } else {
+    type = Type::none;
+  }
   // if the arms return a value, leave it even if the condition
   // is unreachable, we still mark ourselves as having that type, e.g.
   // (if (result i32)
   //  (unreachable)
   //  (i32.const 10)
-  //  (i32.const 20
+  //  (i32.const 20)
   // )
   // otherwise, if the condition is unreachable, so is the if
-  if (type == Type::none && condition->type == Type::unreachable) {
+  if ((type == Type::none && condition->type == Type::unreachable) ||
+      (ifTrue->type == Type::unreachable && ifFalse &&
+       ifFalse->type == Type::unreachable)) {
     type = Type::unreachable;
   }
 }
@@ -494,6 +504,11 @@ void SIMDLoadStoreLane::finalize() {
   if (ptr->type == Type::unreachable || vec->type == Type::unreachable) {
     type = Type::unreachable;
   }
+}
+
+void SIMDWiden::finalize() {
+  assert(vec);
+  type = vec->type == Type::unreachable ? Type::unreachable : Type::v128;
 }
 
 Index SIMDLoadStoreLane::getMemBytes() {
@@ -770,7 +785,9 @@ void Select::finalize() {
       condition->type == Type::unreachable) {
     type = Type::unreachable;
   } else {
-    type = Type::getLeastUpperBound(ifTrue->type, ifFalse->type);
+    // TODO: Calculate a proper LUB.
+    Type::ensureSuperType(std::array<Type, 2>{{ifTrue->type, ifFalse->type}},
+                          type);
   }
 }
 
@@ -796,12 +813,9 @@ void MemoryGrow::finalize() {
 
 void RefNull::finalize(HeapType heapType) { type = Type(heapType, Nullable); }
 
-void RefNull::finalize(Type type_) {
-  type = type_;
-}
+void RefNull::finalize(Type type_) { type = type_; }
 
-void RefNull::finalize() {
-}
+void RefNull::finalize() {}
 
 void RefIs::finalize() {
   if (value->type == Type::unreachable) {
@@ -827,9 +841,16 @@ void RefEq::finalize() {
 }
 
 void Try::finalize() {
-  type = body->type;
+  // If none of the component bodies' type is a supertype of the others, assume
+  // the current type is already correct. TODO: Calculate a proper LUB.
+  std::unordered_set<Type> types{body->type};
   for (auto catchBody : catchBodies) {
-    type = Type::getLeastUpperBound(type, catchBody->type);
+    types.insert(catchBody->type);
+  }
+  if (types.size() == 1 && *types.begin() == Type::unreachable) {
+    type = Type::unreachable;
+  } else {
+    Type::ensureSuperType(types, type);
   }
 }
 
@@ -907,43 +928,38 @@ void RefTest::finalize() {
   }
 }
 
-// Helper to get the cast type for a cast instruction. They all look at the rtt
-// operand's type.
-template<typename T> static Type doGetCastType(T* curr) {
-  if (curr->rtt->type == Type::unreachable) {
-    // We don't have the RTT type, so just return unreachable. The type in this
-    // case should not matter in practice, but it may be seen while debugging.
-    return Type::unreachable;
-  }
-  // TODO: make non-nullable when we support that
-  return Type(curr->rtt->type.getHeapType(), Nullable);
-}
-
-Type RefTest::getCastType() { return doGetCastType(this); }
-
 void RefCast::finalize() {
   if (ref->type == Type::unreachable || rtt->type == Type::unreachable) {
     type = Type::unreachable;
   } else {
-    type = getCastType();
+    // The output of ref.cast may be null if the input is null (in that case the
+    // null is passed through).
+    type = Type(rtt->type.getHeapType(), ref->type.getNullability());
   }
 }
-
-Type RefCast::getCastType() { return doGetCastType(this); }
 
 void BrOn::finalize() {
   if (ref->type == Type::unreachable ||
       (rtt && rtt->type == Type::unreachable)) {
     type = Type::unreachable;
   } else {
-    type = ref->type;
+    if (op == BrOnNull) {
+      // If BrOnNull does not branch, it flows out the existing value as
+      // non-null.
+      type = Type(ref->type.getHeapType(), NonNullable);
+    } else {
+      type = ref->type;
+    }
   }
 }
 
 Type BrOn::getCastType() {
   switch (op) {
+    case BrOnNull:
+      // BrOnNull does not send a value on the branch.
+      return Type::none;
     case BrOnCast:
-      return Type(rtt->type.getHeapType(), Nullable);
+      return Type(rtt->type.getHeapType(), NonNullable);
     case BrOnFunc:
       return Type::funcref;
     case BrOnData:
@@ -975,8 +991,7 @@ void StructNew::finalize() {
   if (handleUnreachableOperands(this)) {
     return;
   }
-  // TODO: make non-nullable when we support that
-  type = Type(rtt->type.getHeapType(), Nullable);
+  type = Type(rtt->type.getHeapType(), NonNullable);
 }
 
 void StructGet::finalize() {
@@ -1001,8 +1016,7 @@ void ArrayNew::finalize() {
     type = Type::unreachable;
     return;
   }
-  // TODO: make non-nullable when we support that
-  type = Type(rtt->type.getHeapType(), Nullable);
+  type = Type(rtt->type.getHeapType(), NonNullable);
 }
 
 void ArrayGet::finalize() {
@@ -1037,8 +1051,7 @@ void RefAs::finalize() {
   }
   switch (op) {
     case RefAsNonNull:
-      // FIXME: when we support non-nullable types, switch to NonNullable
-      type = Type(value->type.getHeapType(), Nullable);
+      type = Type(value->type.getHeapType(), NonNullable);
       break;
     case RefAsFunc:
       type = Type::funcref;
@@ -1148,6 +1161,14 @@ Function* Module::getFunction(Name name) {
   return getModuleElement(functionsMap, name, "getFunction");
 }
 
+Table* Module::getTable(Name name) {
+  return getModuleElement(tablesMap, name, "getTable");
+}
+
+ElementSegment* Module::getElementSegment(Name name) {
+  return getModuleElement(elementSegmentsMap, name, "getElementSegment");
+}
+
 Global* Module::getGlobal(Name name) {
   return getModuleElement(globalsMap, name, "getGlobal");
 }
@@ -1171,6 +1192,14 @@ Export* Module::getExportOrNull(Name name) {
 
 Function* Module::getFunctionOrNull(Name name) {
   return getModuleElementOrNull(functionsMap, name);
+}
+
+Table* Module::getTableOrNull(Name name) {
+  return getModuleElementOrNull(tablesMap, name);
+}
+
+ElementSegment* Module::getElementSegmentOrNull(Name name) {
+  return getModuleElementOrNull(elementSegmentsMap, name);
 }
 
 Global* Module::getGlobalOrNull(Name name) {
@@ -1238,6 +1267,16 @@ Function* Module::addFunction(std::unique_ptr<Function>&& curr) {
     functions, functionsMap, std::move(curr), "addFunction");
 }
 
+Table* Module::addTable(std::unique_ptr<Table>&& curr) {
+  return addModuleElement(tables, tablesMap, std::move(curr), "addTable");
+}
+
+ElementSegment*
+Module::addElementSegment(std::unique_ptr<ElementSegment>&& curr) {
+  return addModuleElement(
+    elementSegments, elementSegmentsMap, std::move(curr), "addElementSegment");
+}
+
 Global* Module::addGlobal(std::unique_ptr<Global>&& curr) {
   return addModuleElement(globals, globalsMap, std::move(curr), "addGlobal");
 }
@@ -1264,6 +1303,12 @@ void Module::removeExport(Name name) {
 }
 void Module::removeFunction(Name name) {
   removeModuleElement(functions, functionsMap, name);
+}
+void Module::removeTable(Name name) {
+  removeModuleElement(tables, tablesMap, name);
+}
+void Module::removeElementSegment(Name name) {
+  removeModuleElement(elementSegments, elementSegmentsMap, name);
 }
 void Module::removeGlobal(Name name) {
   removeModuleElement(globals, globalsMap, name);
@@ -1294,6 +1339,12 @@ void Module::removeExports(std::function<bool(Export*)> pred) {
 void Module::removeFunctions(std::function<bool(Function*)> pred) {
   removeModuleElements(functions, functionsMap, pred);
 }
+void Module::removeTables(std::function<bool(Table*)> pred) {
+  removeModuleElements(tables, tablesMap, pred);
+}
+void Module::removeElementSegments(std::function<bool(ElementSegment*)> pred) {
+  removeModuleElements(elementSegments, elementSegmentsMap, pred);
+}
 void Module::removeGlobals(std::function<bool(Global*)> pred) {
   removeModuleElements(globals, globalsMap, pred);
 }
@@ -1309,6 +1360,14 @@ void Module::updateMaps() {
   exportsMap.clear();
   for (auto& curr : exports) {
     exportsMap[curr->name] = curr.get();
+  }
+  tablesMap.clear();
+  for (auto& curr : tables) {
+    tablesMap[curr->name] = curr.get();
+  }
+  elementSegmentsMap.clear();
+  for (auto& curr : elementSegments) {
+    elementSegmentsMap[curr->name] = curr.get();
   }
   globalsMap.clear();
   for (auto& curr : globals) {

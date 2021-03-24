@@ -51,7 +51,7 @@ int unhex(char c) {
 namespace wasm {
 
 static Name STRUCT("struct"), FIELD("field"), ARRAY("array"), I8("i8"),
-  I16("i16"), RTT("rtt");
+  I16("i16"), RTT("rtt"), DECLARE("declare"), ITEM("item"), OFFSET("offset");
 
 static Address getAddress(const Element* s) { return atoll(s->c_str()); }
 
@@ -351,6 +351,9 @@ SExpressionWasmBuilder::SExpressionWasmBuilder(Module& wasm,
     binaryBuilder.read();
     return;
   }
+
+  preParseHeapTypes(module);
+
   Index implementedFunctions = 0;
   functionCounter = 0;
   for (unsigned j = i; j < module.size(); j++) {
@@ -455,6 +458,19 @@ Name SExpressionWasmBuilder::getFunctionName(Element& s) {
         "unknown function in getFunctionName", s.line, s.col);
     }
     return functionNames[offset];
+  }
+}
+
+Name SExpressionWasmBuilder::getTableName(Element& s) {
+  if (s.dollared()) {
+    return s.str();
+  } else {
+    // index
+    size_t offset = atoi(s.str().c_str());
+    if (offset >= tableNames.size()) {
+      throw ParseException("unknown table in getTableName", s.line, s.col);
+    }
+    return tableNames[offset];
   }
 }
 
@@ -644,11 +660,219 @@ size_t SExpressionWasmBuilder::parseTypeUse(Element& s,
   return parseTypeUse(s, startPos, functionSignature, params);
 }
 
+void SExpressionWasmBuilder::preParseHeapTypes(Element& module) {
+  auto forEachType = [&](auto f) {
+    for (auto* elemPtr : module) {
+      auto& elem = *elemPtr;
+      if (elementStartsWith(elem, TYPE)) {
+        f(elem);
+      }
+    }
+  };
+
+  size_t numTypes = 0;
+  forEachType([&](Element& elem) {
+    // Map type names to indices
+    if (elem[1]->dollared()) {
+      std::string name = elem[1]->c_str();
+      if (!typeIndices.insert({name, numTypes}).second) {
+        throw ParseException("duplicate function type", elem.line, elem.col);
+      }
+    }
+    ++numTypes;
+  });
+
+  TypeBuilder builder(numTypes);
+
+  auto parseRefType = [&](Element& elem) -> Type {
+    // '(' 'ref' 'null'? ht ')'
+    auto nullable =
+      elem[1]->isStr() && *elem[1] == NULL_ ? Nullable : NonNullable;
+    auto& referent = nullable ? *elem[2] : *elem[1];
+    const char* name = referent.c_str();
+    if (referent.dollared()) {
+      return builder.getTempRefType(typeIndices[name], nullable);
+    } else if (String::isNumber(name)) {
+      size_t index = atoi(name);
+      if (index >= numTypes) {
+        throw ParseException("invalid type index", elem.line, elem.col);
+      }
+      return builder.getTempRefType(index, nullable);
+    } else {
+      return Type(stringToHeapType(name), nullable);
+    }
+  };
+
+  auto parseRttType = [&](Element& elem) -> Type {
+    // '(' 'rtt' depth? typeidx ')'
+    uint32_t depth;
+    Element* idx;
+    switch (elem.size()) {
+      default:
+        throw ParseException(
+          "unexpected number of rtt parameters", elem.line, elem.col);
+      case 2:
+        depth = Rtt::NoDepth;
+        idx = elem[1];
+        break;
+      case 3:
+        if (!String::isNumber(elem[1]->c_str())) {
+          throw ParseException(
+            "invalid rtt depth", elem[1]->line, elem[1]->col);
+        }
+        depth = atoi(elem[1]->c_str());
+        idx = elem[2];
+        break;
+    }
+    if (idx->dollared()) {
+      return builder.getTempRttType(typeIndices[idx->c_str()], depth);
+    } else if (String::isNumber(idx->c_str())) {
+      return builder.getTempRttType(atoi(idx->c_str()), depth);
+    } else {
+      throw ParseException("invalid type index", idx->line, idx->col);
+    }
+  };
+
+  auto parseValType = [&](Element& elem) {
+    if (elem.isStr()) {
+      return stringToType(elem.c_str());
+    } else if (*elem[0] == REF) {
+      return parseRefType(elem);
+    } else if (*elem[0] == RTT) {
+      return parseRttType(elem);
+    } else {
+      throw ParseException("unknown valtype kind", elem[0]->line, elem[0]->col);
+    }
+  };
+
+  auto parseParams = [&](Element& elem) {
+    auto it = ++elem.begin();
+    if (it != elem.end() && (*it)->dollared()) {
+      ++it;
+    }
+    std::vector<Type> params;
+    for (auto end = elem.end(); it != end; ++it) {
+      params.push_back(parseValType(**it));
+    }
+    return params;
+  };
+
+  auto parseResults = [&](Element& elem) {
+    std::vector<Type> results;
+    for (auto it = ++elem.begin(); it != elem.end(); ++it) {
+      results.push_back(parseValType(**it));
+    }
+    return results;
+  };
+
+  auto parseSignatureDef = [&](Element& elem) {
+    // '(' 'func' vec(param) vec(result) ')'
+    // param ::= '(' 'param' id? valtype ')'
+    // result ::= '(' 'result' valtype ')'
+    std::vector<Type> params, results;
+    for (auto it = ++elem.begin(), end = elem.end(); it != end; ++it) {
+      Element& curr = **it;
+      if (elementStartsWith(curr, PARAM)) {
+        auto newParams = parseParams(curr);
+        params.insert(params.end(), newParams.begin(), newParams.end());
+      } else if (elementStartsWith(curr, RESULT)) {
+        auto newResults = parseResults(curr);
+        results.insert(results.end(), newResults.begin(), newResults.end());
+      }
+    }
+    return Signature(builder.getTempTupleType(params),
+                     builder.getTempTupleType(results));
+  };
+
+  // Parses a field, and notes the name if one is found.
+  auto parseField = [&](Element* elem, Name& name) {
+    Mutability mutable_ = Immutable;
+    // elem is a list, containing either
+    //   TYPE
+    // or
+    //   (field TYPE)
+    // or
+    //   (field $name TYPE)
+    if (elementStartsWith(elem, FIELD)) {
+      if (elem->size() == 3) {
+        name = (*elem)[1]->str();
+      }
+      elem = (*elem)[elem->size() - 1];
+    }
+    // The element may also be (mut (..)).
+    if (elementStartsWith(elem, MUT)) {
+      mutable_ = Mutable;
+      elem = (*elem)[1];
+    }
+    if (elem->isStr()) {
+      // elem is a simple string name like "i32". It can be a normal wasm
+      // type, or one of the special types only available in fields.
+      if (*elem == I8) {
+        return Field(Field::i8, mutable_);
+      } else if (*elem == I16) {
+        return Field(Field::i16, mutable_);
+      }
+    }
+    // Otherwise it's an arbitrary type.
+    return Field(parseValType(*elem), mutable_);
+  };
+
+  auto parseStructDef = [&](Element& elem, size_t typeIndex) {
+    FieldList fields;
+    for (Index i = 1; i < elem.size(); i++) {
+      Name name;
+      fields.emplace_back(parseField(elem[i], name));
+      if (name.is()) {
+        // Only add the name to the map if it exists.
+        fieldNames[typeIndex][i - 1] = name;
+      }
+    }
+    return Struct(fields);
+  };
+
+  auto parseArrayDef = [&](Element& elem) {
+    Name unused;
+    return Array(parseField(elem[1], unused));
+  };
+
+  size_t index = 0;
+  forEachType([&](Element& elem) {
+    Element& def = elem[1]->dollared() ? *elem[2] : *elem[1];
+    Element& kind = *def[0];
+    if (kind == FUNC) {
+      builder.setHeapType(index++, parseSignatureDef(def));
+    } else if (kind == STRUCT) {
+      builder.setHeapType(index, parseStructDef(def, index));
+      index++;
+    } else if (kind == ARRAY) {
+      builder.setHeapType(index++, parseArrayDef(def));
+    } else {
+      throw ParseException("unknown heaptype kind", kind.line, kind.col);
+    }
+  });
+
+  types = builder.build();
+
+  for (auto& pair : typeIndices) {
+    auto name = pair.first;
+    auto index = pair.second;
+    auto type = types[index];
+    // A type may appear in the type section more than once, but we canonicalize
+    // types internally, so there will be a single name chosen for that type. Do
+    // so determistically.
+    if (wasm.typeNames.count(type) && wasm.typeNames[type].name.str < name) {
+      continue;
+    }
+    auto& currTypeNames = wasm.typeNames[type];
+    currTypeNames.name = name;
+    if (type.isStruct()) {
+      currTypeNames.fieldNames = fieldNames[index];
+    }
+  }
+}
+
 void SExpressionWasmBuilder::preParseFunctionType(Element& s) {
   IString id = s[0]->str();
-  if (id == TYPE) {
-    return parseType(s);
-  }
   if (id != FUNC) {
     return;
   }
@@ -865,12 +1089,10 @@ Type SExpressionWasmBuilder::stringToType(const char* str,
     return Type::eqref;
   }
   if (strncmp(str, "i31ref", 6) == 0 && (prefix || str[6] == 0)) {
-    // FIXME: for now, force all inputs to be nullable
-    return Type(HeapType::BasicHeapType::i31, Nullable);
+    return Type::i31ref;
   }
   if (strncmp(str, "dataref", 7) == 0 && (prefix || str[7] == 0)) {
-    // FIXME: for now, force all inputs to be nullable
-    return Type(HeapType::BasicHeapType::data, Nullable);
+    return Type::dataref;
   }
   if (allowError) {
     return Type::none;
@@ -935,8 +1157,7 @@ Type SExpressionWasmBuilder::elementToType(Element& s) {
       throw ParseException(
         std::string("invalid reference type qualifier"), s.line, s.col);
     }
-    // FIXME: for now, force all inputs to be nullable
-    Nullability nullable = Nullable;
+    Nullability nullable = NonNullable;
     size_t i = 1;
     if (size == 3) {
       nullable = Nullable;
@@ -1228,6 +1449,211 @@ Expression* SExpressionWasmBuilder::makeThenOrElse(Element& s) {
     ret->list.push_back(parseExpression(s[i]));
   }
   ret->finalize();
+  return ret;
+}
+
+static Expression*
+parseConst(cashew::IString s, Type type, MixedArena& allocator) {
+  const char* str = s.str;
+  auto ret = allocator.alloc<Const>();
+  ret->type = type;
+  if (type.isFloat()) {
+    if (s == _INFINITY) {
+      switch (type.getBasic()) {
+        case Type::f32:
+          ret->value = Literal(std::numeric_limits<float>::infinity());
+          break;
+        case Type::f64:
+          ret->value = Literal(std::numeric_limits<double>::infinity());
+          break;
+        default:
+          return nullptr;
+      }
+      // std::cerr << "make constant " << str << " ==> " << ret->value << '\n';
+      return ret;
+    }
+    if (s == NEG_INFINITY) {
+      switch (type.getBasic()) {
+        case Type::f32:
+          ret->value = Literal(-std::numeric_limits<float>::infinity());
+          break;
+        case Type::f64:
+          ret->value = Literal(-std::numeric_limits<double>::infinity());
+          break;
+        default:
+          return nullptr;
+      }
+      // std::cerr << "make constant " << str << " ==> " << ret->value << '\n';
+      return ret;
+    }
+    if (s == _NAN) {
+      switch (type.getBasic()) {
+        case Type::f32:
+          ret->value = Literal(float(std::nan("")));
+          break;
+        case Type::f64:
+          ret->value = Literal(double(std::nan("")));
+          break;
+        default:
+          return nullptr;
+      }
+      // std::cerr << "make constant " << str << " ==> " << ret->value << '\n';
+      return ret;
+    }
+    bool negative = str[0] == '-';
+    const char* positive = negative ? str + 1 : str;
+    if (!negative) {
+      if (positive[0] == '+') {
+        positive++;
+      }
+    }
+    if (positive[0] == 'n' && positive[1] == 'a' && positive[2] == 'n') {
+      const char* modifier = positive[3] == ':' ? positive + 4 : nullptr;
+      if (!(modifier ? positive[4] == '0' && positive[5] == 'x' : 1)) {
+        throw ParseException("bad nan input");
+      }
+      switch (type.getBasic()) {
+        case Type::f32: {
+          uint32_t pattern;
+          if (modifier) {
+            std::istringstream istr(modifier);
+            istr >> std::hex >> pattern;
+            if (istr.fail()) {
+              throw ParseException("invalid f32 format");
+            }
+            pattern |= 0x7f800000U;
+          } else {
+            pattern = 0x7fc00000U;
+          }
+          if (negative) {
+            pattern |= 0x80000000U;
+          }
+          if (!std::isnan(bit_cast<float>(pattern))) {
+            pattern |= 1U;
+          }
+          ret->value = Literal(pattern).castToF32();
+          break;
+        }
+        case Type::f64: {
+          uint64_t pattern;
+          if (modifier) {
+            std::istringstream istr(modifier);
+            istr >> std::hex >> pattern;
+            if (istr.fail()) {
+              throw ParseException("invalid f64 format");
+            }
+            pattern |= 0x7ff0000000000000ULL;
+          } else {
+            pattern = 0x7ff8000000000000UL;
+          }
+          if (negative) {
+            pattern |= 0x8000000000000000ULL;
+          }
+          if (!std::isnan(bit_cast<double>(pattern))) {
+            pattern |= 1ULL;
+          }
+          ret->value = Literal(pattern).castToF64();
+          break;
+        }
+        default:
+          return nullptr;
+      }
+      // std::cerr << "make constant " << str << " ==> " << ret->value << '\n';
+      return ret;
+    }
+    if (s == NEG_NAN) {
+      switch (type.getBasic()) {
+        case Type::f32:
+          ret->value = Literal(float(-std::nan("")));
+          break;
+        case Type::f64:
+          ret->value = Literal(double(-std::nan("")));
+          break;
+        default:
+          return nullptr;
+      }
+      // std::cerr << "make constant " << str << " ==> " << ret->value << '\n';
+      return ret;
+    }
+  }
+  switch (type.getBasic()) {
+    case Type::i32: {
+      if ((str[0] == '0' && str[1] == 'x') ||
+          (str[0] == '-' && str[1] == '0' && str[2] == 'x')) {
+        bool negative = str[0] == '-';
+        if (negative) {
+          str++;
+        }
+        std::istringstream istr(str);
+        uint32_t temp;
+        istr >> std::hex >> temp;
+        if (istr.fail()) {
+          throw ParseException("invalid i32 format");
+        }
+        ret->value = Literal(negative ? -temp : temp);
+      } else {
+        std::istringstream istr(str[0] == '-' ? str + 1 : str);
+        uint32_t temp;
+        istr >> temp;
+        if (istr.fail()) {
+          throw ParseException("invalid i32 format");
+        }
+        ret->value = Literal(str[0] == '-' ? -temp : temp);
+      }
+      break;
+    }
+    case Type::i64: {
+      if ((str[0] == '0' && str[1] == 'x') ||
+          (str[0] == '-' && str[1] == '0' && str[2] == 'x')) {
+        bool negative = str[0] == '-';
+        if (negative) {
+          str++;
+        }
+        std::istringstream istr(str);
+        uint64_t temp;
+        istr >> std::hex >> temp;
+        if (istr.fail()) {
+          throw ParseException("invalid i64 format");
+        }
+        ret->value = Literal(negative ? -temp : temp);
+      } else {
+        std::istringstream istr(str[0] == '-' ? str + 1 : str);
+        uint64_t temp;
+        istr >> temp;
+        if (istr.fail()) {
+          throw ParseException("invalid i64 format");
+        }
+        ret->value = Literal(str[0] == '-' ? -temp : temp);
+      }
+      break;
+    }
+    case Type::f32: {
+      char* end;
+      ret->value = Literal(strtof(str, &end));
+      break;
+    }
+    case Type::f64: {
+      char* end;
+      ret->value = Literal(strtod(str, &end));
+      break;
+    }
+    case Type::v128:
+    case Type::funcref:
+    case Type::externref:
+    case Type::anyref:
+    case Type::eqref:
+    case Type::i31ref:
+    case Type::dataref:
+      WASM_UNREACHABLE("unexpected const type");
+    case Type::none:
+    case Type::unreachable: {
+      return nullptr;
+    }
+  }
+  if (ret->value.type != type) {
+    throw ParseException("parsed type does not match expected type");
+  }
+  // std::cerr << "make constant " << str << " ==> " << ret->value << '\n';
   return ret;
 }
 
@@ -1666,6 +2092,15 @@ SExpressionWasmBuilder::makeSIMDLoadStoreLane(Element& s,
   return ret;
 }
 
+Expression* SExpressionWasmBuilder::makeSIMDWiden(Element& s, SIMDWidenOp op) {
+  auto* ret = allocator.alloc<SIMDWiden>();
+  ret->op = op;
+  ret->index = parseLaneIndex(s[1], 4);
+  ret->vec = parseExpression(s[2]);
+  ret->finalize();
+  return ret;
+}
+
 Expression* SExpressionWasmBuilder::makePrefetch(Element& s, PrefetchOp op) {
   Address offset, align;
   size_t i = parseMemAttributes(s, offset, align, /*defaultAlign*/ 1);
@@ -1819,11 +2254,16 @@ Expression* SExpressionWasmBuilder::makeCall(Element& s, bool isReturn) {
 
 Expression* SExpressionWasmBuilder::makeCallIndirect(Element& s,
                                                      bool isReturn) {
-  if (!wasm.table.exists) {
-    throw ParseException("no table", s.line, s.col);
+  if (wasm.tables.empty()) {
+    throw ParseException("no tables", s.line, s.col);
   }
   Index i = 1;
   auto ret = allocator.alloc<CallIndirect>();
+  if (s[i]->isStr()) {
+    ret->table = s[i++]->str();
+  } else {
+    ret->table = wasm.tables.front()->name;
+  }
   i = parseTypeUse(s, i, ret->sig);
   parseCallOperands(s, i, s.size() - 1, ret);
   ret->target = parseExpression(s[s.size() - 1]);
@@ -1832,7 +2272,7 @@ Expression* SExpressionWasmBuilder::makeCallIndirect(Element& s,
   return ret;
 }
 
-Name SExpressionWasmBuilder::getLabel(Element& s) {
+Name SExpressionWasmBuilder::getLabel(Element& s, LabelType labelType) {
   if (s.dollared()) {
     return nameMapper.sourceToUnique(s.str());
   } else {
@@ -1849,10 +2289,14 @@ Name SExpressionWasmBuilder::getLabel(Element& s) {
       throw ParseException("invalid label", s.line, s.col);
     }
     if (offset == nameMapper.labelStack.size()) {
-      // a break to the function's scope. this means we need an automatic block,
-      // with a name
-      brokeToAutoBlock = true;
-      return FAKE_RETURN;
+      if (labelType == LabelType::Break) {
+        // a break to the function's scope. this means we need an automatic
+        // block, with a name
+        brokeToAutoBlock = true;
+        return FAKE_RETURN;
+      }
+      // This is a delegate that delegates to the caller
+      return DELEGATE_CALLER_TARGET;
     }
     return nameMapper.labelStack[nameMapper.labelStack.size() - 1 - offset];
   }
@@ -1936,7 +2380,7 @@ Expression* SExpressionWasmBuilder::makeRefFunc(Element& s) {
   ret->func = func;
   // To support typed function refs, we give the reference not just a general
   // funcref, but a specific subtype with the actual signature.
-  ret->finalize(Type(HeapType(functionSignatures[func]), Nullable));
+  ret->finalize(Type(HeapType(functionSignatures[func]), NonNullable));
   return ret;
 }
 
@@ -1948,12 +2392,13 @@ Expression* SExpressionWasmBuilder::makeRefEq(Element& s) {
   return ret;
 }
 
-// try-catch-end is written in the folded wast format as
+// try can be either in the form of try-catch or try-delegate.
+// try-catch is written in the folded wast format as
 // (try
 //  (do
 //    ...
 //  )
-//  (catch
+//  (catch $e
 //    ...
 //  )
 //  ...
@@ -1964,6 +2409,14 @@ Expression* SExpressionWasmBuilder::makeRefEq(Element& s) {
 // Any number of catch blocks can exist, including none. Zero or one catch_all
 // block can exist, and if it does, it should be at the end. There should be at
 // least one catch or catch_all body per try.
+//
+// try-delegate is written in the folded format as
+// (try
+//  (do
+//    ...
+//  )
+//  (delegate $label)
+// )
 Expression* SExpressionWasmBuilder::makeTry(Element& s) {
   auto ret = allocator.alloc<Try>();
   Index i = 1;
@@ -1974,7 +2427,7 @@ Expression* SExpressionWasmBuilder::makeTry(Element& s) {
   } else {
     sName = "try";
   }
-  auto label = nameMapper.pushLabelName(sName);
+  ret->name = nameMapper.pushLabelName(sName);
   Type type = parseOptionalResultType(s, i); // signature
 
   if (!elementStartsWith(*s[i], "do")) {
@@ -1985,7 +2438,7 @@ Expression* SExpressionWasmBuilder::makeTry(Element& s) {
 
   while (i < s.size() && elementStartsWith(*s[i], "catch")) {
     Element& inner = *s[i++];
-    if (inner.size() < 3) {
+    if (inner.size() < 2) {
       throw ParseException("invalid catch block", inner.line, inner.col);
     }
     Name event = getEventName(*inner[1]);
@@ -2000,47 +2453,41 @@ Expression* SExpressionWasmBuilder::makeTry(Element& s) {
     ret->catchBodies.push_back(makeMaybeBlock(*s[i++], 1, type));
   }
 
+  // 'delegate' cannot target its own try. So we pop the name here.
+  nameMapper.popLabelName(ret->name);
+
+  if (i < s.size() && elementStartsWith(*s[i], "delegate")) {
+    Element& inner = *s[i++];
+    if (inner.size() != 2) {
+      throw ParseException("invalid delegate", inner.line, inner.col);
+    }
+    ret->delegateTarget = getLabel(*inner[1], LabelType::Exception);
+  }
+
   if (i != s.size()) {
     throw ParseException(
       "there should be at most one catch_all block at the end", s.line, s.col);
   }
-  if (ret->catchBodies.empty()) {
-    throw ParseException("no catch bodies", s.line, s.col);
+  if (ret->catchBodies.empty() && !ret->isDelegate()) {
+    throw ParseException("no catch bodies or delegate", s.line, s.col);
   }
 
   ret->finalize(type);
-  nameMapper.popLabelName(label);
+
   // create a break target if we must
-  if (BranchUtils::BranchSeeker::has(ret, label)) {
+  if (BranchUtils::BranchSeeker::has(ret, ret->name)) {
     auto* block = allocator.alloc<Block>();
-    block->name = label;
+    // We create a different name for the wrapping block, because try's name can
+    // be used by internal delegates
+    block->name = nameMapper.pushLabelName(sName);
+    // For simplicity, try's name can only be targeted by delegates and
+    // rethrows. Make the branches target the new wrapping block instead.
+    BranchUtils::replaceBranchTargets(ret, ret->name, block->name);
     block->list.push_back(ret);
+    nameMapper.popLabelName(block->name);
     block->finalize(type);
     return block;
   }
-  return ret;
-}
-
-Expression*
-SExpressionWasmBuilder::makeTryOrCatchBody(Element& s, Type type, bool isTry) {
-  if (isTry && !elementStartsWith(s, "do")) {
-    throw ParseException("invalid try do clause", s.line, s.col);
-  }
-  if (!isTry && !elementStartsWith(s, "catch") &&
-      !elementStartsWith(s, "catch_all")) {
-    throw ParseException("invalid catch clause", s.line, s.col);
-  }
-  if (s.size() == 1) { // (do) / (catch) / (catch_all) without instructions
-    return makeNop();
-  }
-  auto ret = allocator.alloc<Block>();
-  for (size_t i = 1; i < s.size(); i++) {
-    ret->list.push_back(parseExpression(s[i]));
-  }
-  if (ret->list.size() == 1) {
-    return ret->list[0];
-  }
-  ret->finalize(type);
   return ret;
 }
 
@@ -2061,7 +2508,7 @@ Expression* SExpressionWasmBuilder::makeThrow(Element& s) {
 
 Expression* SExpressionWasmBuilder::makeRethrow(Element& s) {
   auto ret = allocator.alloc<Rethrow>();
-  ret->depth = atoi(s[1]->str().c_str());
+  ret->target = getLabel(*s[1], LabelType::Exception);
   ret->finalize();
   return ret;
 }
@@ -2082,21 +2529,11 @@ Expression* SExpressionWasmBuilder::makeTupleExtract(Element& s) {
 }
 
 Expression* SExpressionWasmBuilder::makeCallRef(Element& s, bool isReturn) {
-  auto ret = allocator.alloc<CallRef>();
-  parseCallOperands(s, 1, s.size() - 1, ret);
-  ret->target = parseExpression(s[s.size() - 1]);
-  ret->isReturn = isReturn;
-  if (!ret->target->type.isRef()) {
-    throw ParseException("Non-reference type for a call_ref", s.line, s.col);
-  }
-  auto heapType = ret->target->type.getHeapType();
-  if (!heapType.isSignature()) {
-    throw ParseException(
-      "Invalid reference type for a call_ref", s.line, s.col);
-  }
-  auto sig = heapType.getSignature();
-  ret->finalize(sig.results);
-  return ret;
+  std::vector<Expression*> operands;
+  parseOperands(s, 1, s.size() - 1, operands);
+  auto* target = parseExpression(s[s.size() - 1]);
+  return ValidatingBuilder(wasm, s.line, s.col)
+    .validateAndMakeCallRef(target, operands, isReturn);
 }
 
 Expression* SExpressionWasmBuilder::makeI31New(Element& s) {
@@ -2115,18 +2552,14 @@ Expression* SExpressionWasmBuilder::makeI31Get(Element& s, bool signed_) {
 }
 
 Expression* SExpressionWasmBuilder::makeRefTest(Element& s) {
-  auto heapType = parseHeapType(*s[1]);
-  auto* ref = parseExpression(*s[2]);
-  auto* rtt = parseExpression(*s[3]);
-  validateHeapTypeUsingChild(rtt, heapType, s);
+  auto* ref = parseExpression(*s[1]);
+  auto* rtt = parseExpression(*s[2]);
   return Builder(wasm).makeRefTest(ref, rtt);
 }
 
 Expression* SExpressionWasmBuilder::makeRefCast(Element& s) {
-  auto heapType = parseHeapType(*s[1]);
-  auto* ref = parseExpression(*s[2]);
-  auto* rtt = parseExpression(*s[3]);
-  validateHeapTypeUsingChild(rtt, heapType, s);
+  auto* ref = parseExpression(*s[1]);
+  auto* rtt = parseExpression(*s[2]);
   return Builder(wasm).makeRefCast(ref, rtt);
 }
 
@@ -2134,17 +2567,11 @@ Expression* SExpressionWasmBuilder::makeBrOn(Element& s, BrOnOp op) {
   auto name = getLabel(*s[1]);
   auto* ref = parseExpression(*s[2]);
   Expression* rtt = nullptr;
-  Builder builder(wasm);
   if (op == BrOnCast) {
     rtt = parseExpression(*s[3]);
-    if (rtt->type == Type::unreachable) {
-      // An unreachable rtt is not supported: the text format does not provide
-      // the type, so if it's unreachable we should not even create a br_on_cast
-      // in such a case, as we'd have no idea what it casts to.
-      return builder.makeSequence(builder.makeDrop(ref), rtt);
-    }
   }
-  return builder.makeBrOn(op, name, ref, rtt);
+  return ValidatingBuilder(wasm, s.line, s.col)
+    .validateAndMakeBrOn(op, name, ref, rtt);
 }
 
 Expression* SExpressionWasmBuilder::makeRttCanon(Element& s) {
@@ -2159,8 +2586,6 @@ Expression* SExpressionWasmBuilder::makeRttSub(Element& s) {
 
 Expression* SExpressionWasmBuilder::makeStructNew(Element& s, bool default_) {
   auto heapType = parseHeapType(*s[1]);
-  auto* rtt = parseExpression(*s[2]);
-  validateHeapTypeUsingChild(rtt, heapType, s);
   auto numOperands = s.size() - 3;
   if (default_ && numOperands > 0) {
     throw ParseException(
@@ -2169,30 +2594,35 @@ Expression* SExpressionWasmBuilder::makeStructNew(Element& s, bool default_) {
   std::vector<Expression*> operands;
   operands.resize(numOperands);
   for (Index i = 0; i < numOperands; i++) {
-    operands[i] = parseExpression(*s[i + 3]);
+    operands[i] = parseExpression(*s[i + 2]);
   }
+  auto* rtt = parseExpression(*s[s.size() - 1]);
+  validateHeapTypeUsingChild(rtt, heapType, s);
   return Builder(wasm).makeStructNew(rtt, operands);
 }
 
-Index SExpressionWasmBuilder::getStructIndex(const HeapType& type, Element& s) {
-  if (s.dollared()) {
-    auto name = s.str();
-    auto struct_ = type.getStruct();
+Index SExpressionWasmBuilder::getStructIndex(Element& type, Element& field) {
+  if (field.dollared()) {
+    auto name = field.str();
+    auto index = typeIndices[type.str().str];
+    auto struct_ = types[index].getStruct();
     auto& fields = struct_.fields;
+    const auto& names = fieldNames[index];
     for (Index i = 0; i < fields.size(); i++) {
-      if (fields[i].name == name) {
+      auto it = names.find(i);
+      if (it != names.end() && it->second == name) {
         return i;
       }
     }
-    throw ParseException("bad struct name", s.line, s.col);
+    throw ParseException("bad struct field name", field.line, field.col);
   }
   // this is a numeric index
-  return atoi(s.c_str());
+  return atoi(field.c_str());
 }
 
 Expression* SExpressionWasmBuilder::makeStructGet(Element& s, bool signed_) {
   auto heapType = parseHeapType(*s[1]);
-  auto index = getStructIndex(heapType, *s[2]);
+  auto index = getStructIndex(*s[1], *s[2]);
   auto type = heapType.getStruct().fields[index].type;
   auto ref = parseExpression(*s[3]);
   validateHeapTypeUsingChild(ref, heapType, s);
@@ -2201,7 +2631,7 @@ Expression* SExpressionWasmBuilder::makeStructGet(Element& s, bool signed_) {
 
 Expression* SExpressionWasmBuilder::makeStructSet(Element& s) {
   auto heapType = parseHeapType(*s[1]);
-  auto index = getStructIndex(heapType, *s[2]);
+  auto index = getStructIndex(*s[1], *s[2]);
   auto ref = parseExpression(*s[3]);
   validateHeapTypeUsingChild(ref, heapType, s);
   auto value = parseExpression(*s[4]);
@@ -2210,13 +2640,14 @@ Expression* SExpressionWasmBuilder::makeStructSet(Element& s) {
 
 Expression* SExpressionWasmBuilder::makeArrayNew(Element& s, bool default_) {
   auto heapType = parseHeapType(*s[1]);
-  auto* rtt = parseExpression(*s[2]);
-  validateHeapTypeUsingChild(rtt, heapType, s);
-  auto* size = parseExpression(*s[3]);
   Expression* init = nullptr;
+  size_t i = 2;
   if (!default_) {
-    init = parseExpression(*s[4]);
+    init = parseExpression(*s[i++]);
   }
+  auto* size = parseExpression(*s[i++]);
+  auto* rtt = parseExpression(*s[i++]);
+  validateHeapTypeUsingChild(rtt, heapType, s);
   return Builder(wasm).makeArrayNew(rtt, size, init);
 }
 
@@ -2371,7 +2802,12 @@ void SExpressionWasmBuilder::parseMemory(Element& s, bool preParseImport) {
       }
       // (memory (data ..)) format
       auto j = parseMemoryIndex(inner, 1);
-      auto offset = allocator.alloc<Const>()->set(Literal(int32_t(0)));
+      auto offset = allocator.alloc<Const>();
+      if (wasm.memory.is64()) {
+        offset->set(Literal(int64_t(0)));
+      } else {
+        offset->set(Literal(int32_t(0)));
+      }
       parseInnerData(inner, j, {}, offset, false);
       wasm.memory.initial = wasm.memory.segments[0].data.size();
       return;
@@ -2397,8 +2833,13 @@ void SExpressionWasmBuilder::parseMemory(Element& s, bool preParseImport) {
     }
     const char* input = curr[j]->c_str();
     auto* offset = allocator.alloc<Const>();
-    offset->type = Type::i32;
-    offset->value = Literal(int32_t(offsetValue));
+    if (wasm.memory.is64()) {
+      offset->type = Type::i64;
+      offset->value = Literal(offsetValue);
+    } else {
+      offset->type = Type::i32;
+      offset->value = Literal(int32_t(offsetValue));
+    }
     if (auto size = strlen(input)) {
       std::vector<char> data;
       stringToBinary(input, size, data);
@@ -2455,17 +2896,21 @@ void SExpressionWasmBuilder::parseExport(Element& s) {
   ex->name = s[1]->str();
   if (s[2]->isList()) {
     auto& inner = *s[2];
-    ex->value = inner[1]->str();
     if (elementStartsWith(inner, FUNC)) {
       ex->kind = ExternalKind::Function;
+      ex->value = getFunctionName(*inner[1]);
     } else if (elementStartsWith(inner, MEMORY)) {
       ex->kind = ExternalKind::Memory;
+      ex->value = inner[1]->str();
     } else if (elementStartsWith(inner, TABLE)) {
       ex->kind = ExternalKind::Table;
+      ex->value = getTableName(*inner[1]);
     } else if (elementStartsWith(inner, GLOBAL)) {
       ex->kind = ExternalKind::Global;
+      ex->value = getGlobalName(*inner[1]);
     } else if (inner[0]->str() == EVENT) {
       ex->kind = ExternalKind::Event;
+      ex->value = getEventName(*inner[1]);
     } else {
       throw ParseException("invalid export", inner.line, inner.col);
     }
@@ -2496,10 +2941,6 @@ void SExpressionWasmBuilder::parseImport(Element& s) {
       wasm.memory.exists = true;
     } else if (elementStartsWith(*s[3], TABLE)) {
       kind = ExternalKind::Table;
-      if (wasm.table.exists) {
-        throw ParseException("more than one table", s[3]->line, s[3]->col);
-      }
-      wasm.table.exists = true;
     } else if (elementStartsWith(*s[3], GLOBAL)) {
       kind = ExternalKind::Global;
     } else if ((*s[3])[0]->str() == EVENT) {
@@ -2581,21 +3022,27 @@ void SExpressionWasmBuilder::parseImport(Element& s) {
     global->mutable_ = mutable_;
     wasm.addGlobal(global.release());
   } else if (kind == ExternalKind::Table) {
-    wasm.table.setName(name, hasExplicitName);
-    wasm.table.module = module;
-    wasm.table.base = base;
+    auto table = make_unique<Table>();
+    table->setName(name, hasExplicitName);
+    table->module = module;
+    table->base = base;
+    tableNames.push_back(name);
+
     if (j < inner.size() - 1) {
       auto initElem = inner[j++];
-      wasm.table.initial = getAddress(initElem);
-      checkAddress(wasm.table.initial, "excessive table init size", initElem);
+      table->initial = getAddress(initElem);
+      checkAddress(table->initial, "excessive table init size", initElem);
     }
     if (j < inner.size() - 1) {
       auto maxElem = inner[j++];
-      wasm.table.max = getAddress(maxElem);
-      checkAddress(wasm.table.max, "excessive table max size", maxElem);
+      table->max = getAddress(maxElem);
+      checkAddress(table->max, "excessive table max size", maxElem);
     } else {
-      wasm.table.max = Table::kUnlimitedSize;
+      table->max = Table::kUnlimitedSize;
     }
+
+    wasm.addTable(std::move(table));
+
     j++; // funcref
     // ends with the table element type
   } else if (kind == ExternalKind::Memory) {
@@ -2719,18 +3166,20 @@ void SExpressionWasmBuilder::parseGlobal(Element& s, bool preParseImport) {
 }
 
 void SExpressionWasmBuilder::parseTable(Element& s, bool preParseImport) {
-  if (wasm.table.exists) {
-    throw ParseException("more than one table", s.line, s.col);
-  }
-  wasm.table.exists = true;
+  std::unique_ptr<Table> table = make_unique<Table>();
   Index i = 1;
   if (i == s.size()) {
     return; // empty table in old notation
   }
   if (s[i]->dollared()) {
-    wasm.table.setExplicitName(s[i++]->str());
+    table->setExplicitName(s[i++]->str());
+  } else {
+    table->name = Name::fromInt(tableCounter++);
   }
+  tableNames.push_back(table->name);
+
   if (i == s.size()) {
+    wasm.addTable(std::move(table));
     return;
   }
   Name importModule, importBase;
@@ -2739,7 +3188,7 @@ void SExpressionWasmBuilder::parseTable(Element& s, bool preParseImport) {
     if (elementStartsWith(inner, EXPORT)) {
       auto ex = make_unique<Export>();
       ex->name = inner[1]->str();
-      ex->value = wasm.table.name;
+      ex->value = table->name;
       ex->kind = ExternalKind::Table;
       if (wasm.getExportOrNull(ex->name)) {
         throw ParseException("duplicate export", inner.line, inner.col);
@@ -2750,26 +3199,37 @@ void SExpressionWasmBuilder::parseTable(Element& s, bool preParseImport) {
       if (!preParseImport) {
         throw ParseException("!preParseImport in table", inner.line, inner.col);
       }
-      wasm.table.module = inner[1]->str();
-      wasm.table.base = inner[2]->str();
+      table->module = inner[1]->str();
+      table->base = inner[2]->str();
       i++;
     } else {
       throw ParseException("invalid table", inner.line, inner.col);
     }
   }
   if (i == s.size()) {
+    wasm.addTable(std::move(table));
     return;
   }
+
+  auto parseTableElem = [&](Table* table, Element& s) {
+    parseElem(s, table);
+    auto it = std::find_if(wasm.elementSegments.begin(),
+                           wasm.elementSegments.end(),
+                           [&](std::unique_ptr<ElementSegment>& segment) {
+                             return segment->table == table->name;
+                           });
+    if (it != wasm.elementSegments.end()) {
+      table->initial = table->max = it->get()->data.size();
+    } else {
+      table->initial = table->max = 0;
+    }
+  };
+
   if (!s[i]->dollared()) {
     if (s[i]->str() == FUNCREF) {
       // (table type (elem ..))
-      parseInnerElem(*s[i + 1]);
-      if (wasm.table.segments.size() > 0) {
-        wasm.table.initial = wasm.table.max =
-          wasm.table.segments[0].data.size();
-      } else {
-        wasm.table.initial = wasm.table.max = 0;
-      }
+      parseTableElem(table.get(), *s[i + 1]);
+      wasm.addTable(std::move(table));
       return;
     }
     // first element isn't dollared, and isn't funcref. this could be old syntax
@@ -2778,47 +3238,117 @@ void SExpressionWasmBuilder::parseTable(Element& s, bool preParseImport) {
     if (s[s.size() - 1]->str() == FUNCREF) {
       // (table initial max? type)
       if (i < s.size() - 1) {
-        wasm.table.initial = atoi(s[i++]->c_str());
+        table->initial = atoi(s[i++]->c_str());
       }
       if (i < s.size() - 1) {
-        wasm.table.max = atoi(s[i++]->c_str());
+        table->max = atoi(s[i++]->c_str());
       }
+      wasm.addTable(std::move(table));
       return;
     }
   }
   // old notation (table func1 func2 ..)
-  parseInnerElem(s, i);
-  if (wasm.table.segments.size() > 0) {
-    wasm.table.initial = wasm.table.max = wasm.table.segments[0].data.size();
-  } else {
-    wasm.table.initial = wasm.table.max = 0;
-  }
+  parseTableElem(table.get(), s);
+  wasm.addTable(std::move(table));
 }
 
-void SExpressionWasmBuilder::parseElem(Element& s) {
+// parses an elem segment
+// elem  ::= (elem (expr) vec(funcidx))
+//         | (elem (offset (expr)) func vec(funcidx))
+//         | (elem (table tableidx) (offset (expr)) func vec(funcidx))
+//         | (elem func vec(funcidx))
+//         | (elem declare func vec(funcidx))
+//
+// abbreviation:
+//   (offset (expr)) ≡ (expr)
+//   (elem (expr) vec(funcidx)) ≡ (elem (table 0) (offset (expr)) func
+//                                vec(funcidx))
+//
+void SExpressionWasmBuilder::parseElem(Element& s, Table* table) {
   Index i = 1;
-  if (!s[i]->isList()) {
-    // the table is named
-    i++;
-  }
-  auto* offset = parseExpression(s[i++]);
-  parseInnerElem(s, i, offset);
-}
+  Name name = Name::fromInt(elemCounter++);
+  bool hasExplicitName = false;
 
-void SExpressionWasmBuilder::parseInnerElem(Element& s,
-                                            Index i,
-                                            Expression* offset) {
-  if (!wasm.table.exists) {
+  if (table) {
+    Expression* offset = allocator.alloc<Const>()->set(Literal(int32_t(0)));
+    auto segment = std::make_unique<ElementSegment>(table->name, offset);
+    segment->setName(name, hasExplicitName);
+    parseElemFinish(s, segment, i);
+    return;
+  }
+
+  if (s[i]->isStr() && s[i]->dollared()) {
+    name = s[i++]->str();
+    hasExplicitName = true;
+  }
+  if (s[i]->isStr() && s[i]->str() == DECLARE) {
+    // We don't store declared segments in the IR
+    return;
+  }
+
+  if (s[i]->isStr() && s[i]->str() == FUNC) {
+    auto segment = std::make_unique<ElementSegment>();
+    segment->setName(name, hasExplicitName);
+    parseElemFinish(s, segment, i + 1);
+    return;
+  }
+
+  // old style refers to the pre-reftypes form of (elem 0? (expr) vec(funcidx))
+  bool oldStyle = true;
+
+  // At this point, we know that we're parsing an active element segment. A
+  // table will be mandatory now.
+  if (wasm.tables.empty()) {
     throw ParseException("elem without table", s.line, s.col);
   }
-  if (!offset) {
-    offset = allocator.alloc<Const>()->set(Literal(int32_t(0)));
+
+  // Old style table index (elem 0 (i32.const 0) ...)
+  if (s[i]->isStr()) {
+    i += 1;
   }
-  Table::Segment segment(offset);
+
+  if (s[i]->isList() && elementStartsWith(s[i], TABLE)) {
+    oldStyle = false;
+    auto& inner = *s[i++];
+    Name tableName = getTableName(*inner[1]);
+    table = wasm.getTable(tableName);
+  }
+
+  Expression* offset = nullptr;
+  if (s[i]->isList()) {
+    auto& inner = *s[i++];
+    if (elementStartsWith(inner, OFFSET)) {
+      offset = parseExpression(inner[1]);
+      oldStyle = false;
+    } else {
+      offset = parseExpression(inner);
+    }
+  }
+
+  if (!oldStyle) {
+    if (s[i]->str() != FUNC) {
+      throw ParseException(
+        "only the abbreviated form of elemList is supported.");
+    }
+    // ignore elemType for now
+    i += 1;
+  }
+
+  if (!table) {
+    table = wasm.tables.front().get();
+  }
+
+  auto segment = std::make_unique<ElementSegment>(table->name, offset);
+  segment->setName(name, hasExplicitName);
+  parseElemFinish(s, segment, i);
+}
+
+ElementSegment* SExpressionWasmBuilder::parseElemFinish(
+  Element& s, std::unique_ptr<ElementSegment>& segment, Index i) {
   for (; i < s.size(); i++) {
-    segment.data.push_back(getFunctionName(*s[i]));
+    segment->data.push_back(getFunctionName(*s[i]));
   }
-  wasm.table.segments.push_back(segment);
+  return wasm.addElementSegment(std::move(segment));
 }
 
 HeapType SExpressionWasmBuilder::parseHeapType(Element& s) {
@@ -2844,79 +3374,7 @@ HeapType SExpressionWasmBuilder::parseHeapType(Element& s) {
       return stringToHeapType(str, /* prefix = */ false);
     }
   }
-  // It's a list.
-  if (*s[0] == FUNC) {
-    std::vector<Type> params;
-    std::vector<Type> results;
-    for (size_t k = 1; k < s.size(); k++) {
-      Element& curr = *s[k];
-      if (elementStartsWith(curr, PARAM)) {
-        auto newParams = parseParamOrLocal(curr);
-        params.insert(params.end(), newParams.begin(), newParams.end());
-      } else if (elementStartsWith(curr, RESULT)) {
-        auto newResults = parseResults(curr);
-        results.insert(results.end(), newResults.begin(), newResults.end());
-      }
-    }
-    return Signature(Type(params), Type(results));
-  }
-  // It's a struct or an array.
-  auto parseField = [&](Element* t) {
-    Mutability mutable_ = Immutable;
-    // t is a list, containing either
-    //   TYPE
-    // or
-    //   (field TYPE)
-    // or
-    //   (field $name TYPE)
-    Name name;
-    if (elementStartsWith(t, FIELD)) {
-      if (t->size() == 3) {
-        name = (*t)[1]->str();
-      }
-      t = (*t)[t->size() - 1];
-    }
-    // The element may also be (mut (..)).
-    if (elementStartsWith(t, MUT)) {
-      mutable_ = Mutable;
-      t = (*t)[1];
-    }
-    if (t->isStr()) {
-      // t is a simple string name like "i32". It can be a normal wasm type, or
-      // one of the special types only available in fields.
-      if (*t == I8) {
-        return Field(Field::i8, mutable_, name);
-      } else if (*t == I16) {
-        return Field(Field::i16, mutable_, name);
-      }
-    }
-    // Otherwise it's an arbitrary type.
-    return Field(elementToType(*t), mutable_, name);
-  };
-  if (elementStartsWith(s, STRUCT)) {
-    FieldList fields;
-    for (size_t k = 1; k < s.size(); k++) {
-      fields.emplace_back(parseField(s[k]));
-    }
-    return Struct(fields);
-  }
-  if (elementStartsWith(s, ARRAY)) {
-    return Array(parseField(s[1]));
-  }
   throw ParseException("invalid heap type", s.line, s.col);
-}
-
-void SExpressionWasmBuilder::parseType(Element& s) {
-  size_t i = 1;
-  if (s[i]->isStr()) {
-    std::string name = s[i]->str().str;
-    if (typeIndices.find(name) != typeIndices.end()) {
-      throw ParseException("duplicate function type", s.line, s.col);
-    }
-    typeIndices[name] = types.size();
-    i++;
-  }
-  types.emplace_back(parseHeapType(*s[i]));
 }
 
 void SExpressionWasmBuilder::parseEvent(Element& s, bool preParseImport) {
@@ -3013,7 +3471,7 @@ void SExpressionWasmBuilder::validateHeapTypeUsingChild(Expression* child,
     return;
   }
   if ((!child->type.isRef() && !child->type.isRtt()) ||
-      child->type.getHeapType() != heapType) {
+      !HeapType::isSubType(child->type.getHeapType(), heapType)) {
     throw ParseException("bad heap type: expected " + heapType.toString() +
                            " but found " + child->type.toString(),
                          s.line,

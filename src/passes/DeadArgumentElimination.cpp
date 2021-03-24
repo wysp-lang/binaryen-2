@@ -284,8 +284,8 @@ struct DAE : public Pass {
         infoMap[curr->value].hasUnseenCalls = true;
       }
     }
-    for (auto& segment : module->table.segments) {
-      for (auto name : segment.data) {
+    for (auto& segment : module->elementSegments) {
+      for (auto name : segment->data) {
         infoMap[name].hasUnseenCalls = true;
       }
     }

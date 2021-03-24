@@ -481,7 +481,7 @@ enum SIMDReplaceOp {
   ReplaceLaneVecI32x4,
   ReplaceLaneVecI64x2,
   ReplaceLaneVecF32x4,
-  ReplaceLaneVecF64x2
+  ReplaceLaneVecF64x2,
 };
 
 enum SIMDShiftOp {
@@ -537,6 +537,11 @@ enum SIMDTernaryOp {
   SignSelectVec64x2
 };
 
+enum SIMDWidenOp {
+  WidenSVecI8x16ToVecI32x4,
+  WidenUVecI8x16ToVecI32x4,
+};
+
 enum PrefetchOp {
   PrefetchTemporal,
   PrefetchNontemporal,
@@ -557,6 +562,7 @@ enum RefAsOp {
 };
 
 enum BrOnOp {
+  BrOnNull,
   BrOnCast,
   BrOnFunc,
   BrOnData,
@@ -624,6 +630,7 @@ public:
     SIMDShiftId,
     SIMDLoadId,
     SIMDLoadStoreLaneId,
+    SIMDWidenId,
     MemoryInitId,
     DataDropId,
     MemoryCopyId,
@@ -829,6 +836,7 @@ public:
   Signature sig;
   ExpressionList operands;
   Expression* target;
+  Name table;
   bool isReturn = false;
 
   void finalize();
@@ -1071,6 +1079,18 @@ public:
   void finalize();
 };
 
+class SIMDWiden : public SpecificExpression<Expression::SIMDWidenId> {
+public:
+  SIMDWiden() = default;
+  SIMDWiden(MixedArena& allocator) {}
+
+  SIMDWidenOp op;
+  uint8_t index;
+  Expression* vec;
+
+  void finalize();
+};
+
 class Prefetch : public SpecificExpression<Expression::PrefetchId> {
 public:
   Prefetch() = default;
@@ -1286,13 +1306,17 @@ class Try : public SpecificExpression<Expression::TryId> {
 public:
   Try(MixedArena& allocator) : catchEvents(allocator), catchBodies(allocator) {}
 
+  Name name; // label that can only be targeted by 'delegate's
   Expression* body;
   ArenaVector<Name> catchEvents;
   ExpressionList catchBodies;
+  Name delegateTarget; // target try's label
 
   bool hasCatchAll() const {
     return catchBodies.size() - catchEvents.size() == 1;
   }
+  bool isCatch() const { return !catchBodies.empty(); }
+  bool isDelegate() const { return delegateTarget.is(); }
   void finalize();
   void finalize(Type type_);
 };
@@ -1311,7 +1335,7 @@ class Rethrow : public SpecificExpression<Expression::RethrowId> {
 public:
   Rethrow(MixedArena& allocator) {}
 
-  Index depth;
+  Name target;
 
   void finalize();
 };
@@ -1373,8 +1397,6 @@ public:
   Expression* rtt;
 
   void finalize();
-
-  Type getCastType();
 };
 
 class RefCast : public SpecificExpression<Expression::RefCastId> {
@@ -1385,8 +1407,6 @@ public:
   Expression* rtt;
 
   void finalize();
-
-  Type getCastType();
 };
 
 class BrOn : public SpecificExpression<Expression::BrOnId> {
@@ -1399,6 +1419,12 @@ public:
 
   // BrOnCast has an rtt that is used in the cast.
   Expression* rtt;
+
+  // TODO: BrOnNull also has an optional extra value in the spec, which we do
+  //       not support. See also the discussion on
+  //       https://github.com/WebAssembly/function-references/issues/45
+  //       - depending on the decision there, we may want to move BrOnNull into
+  //       Break or a new class of its own.
 
   void finalize();
 
@@ -1520,7 +1546,7 @@ public:
 
 // Globals
 
-struct Importable {
+struct Named {
   Name name;
 
   // Explicit names are ones that we read from the input file and
@@ -1529,17 +1555,19 @@ struct Importable {
   // use only and will not be written the name section.
   bool hasExplicitName = false;
 
-  // If these are set, then this is an import, as module.base
-  Name module, base;
-
-  bool imported() const { return module.is(); }
-
   void setName(Name name_, bool hasExplicitName_) {
     name = name_;
     hasExplicitName = hasExplicitName_;
   }
 
   void setExplicitName(Name name_) { setName(name_, true); }
+};
+
+struct Importable : Named {
+  // If these are set, then this is an import, as module.base
+  Name module, base;
+
+  bool imported() const { return module.is(); }
 };
 
 class Function;
@@ -1618,8 +1646,8 @@ public:
   std::unique_ptr<StackIR> stackIR;
 
   // local names. these are optional.
-  std::map<Index, Name> localNames;
-  std::map<Name, Index> localIndices;
+  std::unordered_map<Index, Name> localNames;
+  std::unordered_map<Name, Index> localIndices;
 
   // Source maps debugging info: map expression nodes to their file, line, col.
   struct DebugLocation {
@@ -1690,6 +1718,21 @@ public:
   ExternalKind kind;
 };
 
+class ElementSegment : public Named {
+public:
+  Name table;
+  Expression* offset;
+  std::vector<Name> data;
+
+  ElementSegment() = default;
+  ElementSegment(Name table, Expression* offset)
+    : table(table), offset(offset) {}
+  ElementSegment(Name table, Expression* offset, std::vector<Name>& init)
+    : table(table), offset(offset) {
+    data.swap(init);
+  }
+};
+
 class Table : public Importable {
 public:
   static const Address::address32_t kPageSize = 1;
@@ -1697,32 +1740,14 @@ public:
   // In wasm32/64, the maximum table size is limited by a 32-bit pointer: 4GB
   static const Index kMaxSize = Index(-1);
 
-  struct Segment {
-    Expression* offset;
-    std::vector<Name> data;
-    Segment() = default;
-    Segment(Expression* offset) : offset(offset) {}
-    Segment(Expression* offset, std::vector<Name>& init) : offset(offset) {
-      data.swap(init);
-    }
-  };
-
-  // Currently the wasm object always 'has' one Table. It 'exists' if it has
-  // been defined or imported. The table can exist but be empty and have no
-  // defined initial or max size.
-  bool exists = false;
   Address initial = 0;
   Address max = kMaxSize;
-  std::vector<Segment> segments;
 
-  Table() { name = Name::fromInt(0); }
   bool hasMax() { return max != kUnlimitedSize; }
   void clear() {
-    exists = false;
     name = "";
     initial = 0;
     max = kMaxSize;
-    segments.clear();
   }
 };
 
@@ -1766,7 +1791,6 @@ public:
   Address max = kMaxSize32;
   std::vector<Segment> segments;
 
-  // See comment in Table.
   bool shared = false;
   Type indexType = Type::i32;
 
@@ -1824,8 +1848,9 @@ public:
   std::vector<std::unique_ptr<Function>> functions;
   std::vector<std::unique_ptr<Global>> globals;
   std::vector<std::unique_ptr<Event>> events;
+  std::vector<std::unique_ptr<ElementSegment>> elementSegments;
+  std::vector<std::unique_ptr<Table>> tables;
 
-  Table table;
   Memory memory;
   Name start;
 
@@ -1847,26 +1872,42 @@ public:
   // Module name, if specified. Serves a documentary role only.
   Name name;
 
+  // Optional type name information, used in printing only. Note that Types are
+  // globally interned, but type names are specific to a module.
+  struct TypeNames {
+    // The name of the type.
+    Name name;
+    // For a Struct, names of fields.
+    std::unordered_map<Index, Name> fieldNames;
+  };
+  std::unordered_map<HeapType, TypeNames> typeNames;
+
   MixedArena allocator;
 
 private:
   // TODO: add a build option where Names are just indices, and then these
   // methods are not needed
   // exports map is by the *exported* name, which is unique
-  std::map<Name, Export*> exportsMap;
-  std::map<Name, Function*> functionsMap;
-  std::map<Name, Global*> globalsMap;
-  std::map<Name, Event*> eventsMap;
+  std::unordered_map<Name, Export*> exportsMap;
+  std::unordered_map<Name, Function*> functionsMap;
+  std::unordered_map<Name, Table*> tablesMap;
+  std::unordered_map<Name, ElementSegment*> elementSegmentsMap;
+  std::unordered_map<Name, Global*> globalsMap;
+  std::unordered_map<Name, Event*> eventsMap;
 
 public:
   Module() = default;
 
   Export* getExport(Name name);
   Function* getFunction(Name name);
+  Table* getTable(Name name);
+  ElementSegment* getElementSegment(Name name);
   Global* getGlobal(Name name);
   Event* getEvent(Name name);
 
   Export* getExportOrNull(Name name);
+  Table* getTableOrNull(Name name);
+  ElementSegment* getElementSegmentOrNull(Name name);
   Function* getFunctionOrNull(Name name);
   Global* getGlobalOrNull(Name name);
   Event* getEventOrNull(Name name);
@@ -1878,6 +1919,8 @@ public:
 
   Export* addExport(std::unique_ptr<Export>&& curr);
   Function* addFunction(std::unique_ptr<Function>&& curr);
+  Table* addTable(std::unique_ptr<Table>&& curr);
+  ElementSegment* addElementSegment(std::unique_ptr<ElementSegment>&& curr);
   Global* addGlobal(std::unique_ptr<Global>&& curr);
   Event* addEvent(std::unique_ptr<Event>&& curr);
 
@@ -1885,11 +1928,15 @@ public:
 
   void removeExport(Name name);
   void removeFunction(Name name);
+  void removeTable(Name name);
+  void removeElementSegment(Name name);
   void removeGlobal(Name name);
   void removeEvent(Name name);
 
   void removeExports(std::function<bool(Export*)> pred);
   void removeFunctions(std::function<bool(Function*)> pred);
+  void removeTables(std::function<bool(Table*)> pred);
+  void removeElementSegments(std::function<bool(ElementSegment*)> pred);
   void removeGlobals(std::function<bool(Global*)> pred);
   void removeEvents(std::function<bool(Event*)> pred);
 

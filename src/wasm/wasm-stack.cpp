@@ -48,9 +48,6 @@ void BinaryInstWriter::visitIf(If* curr) {
 }
 
 void BinaryInstWriter::emitIfElse(If* curr) {
-  assert(!breakStack.empty());
-  breakStack.pop_back();
-  breakStack.emplace_back(IMPOSSIBLE_CONTINUE); // TODO same as If
   if (func && !sourceMap) {
     parent.writeExtraDebugLocation(curr, func, BinaryLocations::Else);
   }
@@ -83,10 +80,11 @@ void BinaryInstWriter::visitCall(Call* curr) {
 }
 
 void BinaryInstWriter::visitCallIndirect(CallIndirect* curr) {
+  Index tableIdx = parent.getTableIndex(curr->table);
+
   int8_t op =
     curr->isReturn ? BinaryConsts::RetCallIndirect : BinaryConsts::CallIndirect;
-  o << op << U32LEB(parent.getTypeIndex(curr->sig))
-    << U32LEB(0); // Reserved flags field
+  o << op << U32LEB(parent.getTypeIndex(curr->sig)) << U32LEB(tableIdx);
 }
 
 void BinaryInstWriter::visitLocalGet(LocalGet* curr) {
@@ -692,6 +690,19 @@ void BinaryInstWriter::visitSIMDLoadStoreLane(SIMDLoadStoreLane* curr) {
   assert(curr->align);
   emitMemoryAccess(curr->align, /*(unused) bytes=*/0, curr->offset);
   o << curr->index;
+}
+
+void BinaryInstWriter::visitSIMDWiden(SIMDWiden* curr) {
+  o << int8_t(BinaryConsts::SIMDPrefix);
+  switch (curr->op) {
+    case WidenSVecI8x16ToVecI32x4:
+      o << U32LEB(BinaryConsts::I32x4WidenSI8x16);
+      break;
+    case WidenUVecI8x16ToVecI32x4:
+      o << U32LEB(BinaryConsts::I32x4WidenUI8x16);
+      break;
+  }
+  o << uint8_t(curr->index);
 }
 
 void BinaryInstWriter::visitPrefetch(Prefetch* curr) {
@@ -1893,15 +1904,12 @@ void BinaryInstWriter::visitRefEq(RefEq* curr) {
 }
 
 void BinaryInstWriter::visitTry(Try* curr) {
-  breakStack.emplace_back(IMPOSSIBLE_CONTINUE);
+  breakStack.push_back(curr->name);
   o << int8_t(BinaryConsts::Try);
   emitResultType(curr->type);
 }
 
 void BinaryInstWriter::emitCatch(Try* curr, Index i) {
-  assert(!breakStack.empty());
-  breakStack.pop_back();
-  breakStack.emplace_back(IMPOSSIBLE_CONTINUE);
   if (func && !sourceMap) {
     parent.writeExtraDebugLocation(curr, func, i);
   }
@@ -1910,13 +1918,20 @@ void BinaryInstWriter::emitCatch(Try* curr, Index i) {
 }
 
 void BinaryInstWriter::emitCatchAll(Try* curr) {
-  assert(!breakStack.empty());
-  breakStack.pop_back();
-  breakStack.emplace_back(IMPOSSIBLE_CONTINUE);
   if (func && !sourceMap) {
     parent.writeExtraDebugLocation(curr, func, curr->catchBodies.size());
   }
   o << int8_t(BinaryConsts::CatchAll);
+}
+
+void BinaryInstWriter::emitDelegate(Try* curr) {
+  // The delegate ends the scope in effect, and pops the try's name. Note that
+  // the getBreakIndex is intentionally after that pop, as the delegate cannot
+  // target its own try.
+  assert(!breakStack.empty());
+  breakStack.pop_back();
+  o << int8_t(BinaryConsts::Delegate)
+    << U32LEB(getBreakIndex(curr->delegateTarget));
 }
 
 void BinaryInstWriter::visitThrow(Throw* curr) {
@@ -1924,7 +1939,7 @@ void BinaryInstWriter::visitThrow(Throw* curr) {
 }
 
 void BinaryInstWriter::visitRethrow(Rethrow* curr) {
-  o << int8_t(BinaryConsts::Rethrow) << U32LEB(curr->depth);
+  o << int8_t(BinaryConsts::Rethrow) << U32LEB(getBreakIndex(curr->target));
 }
 
 void BinaryInstWriter::visitNop(Nop* curr) { o << int8_t(BinaryConsts::Nop); }
@@ -1991,19 +2006,21 @@ void BinaryInstWriter::visitRefCast(RefCast* curr) {
 }
 
 void BinaryInstWriter::visitBrOn(BrOn* curr) {
-  o << int8_t(BinaryConsts::GCPrefix);
   switch (curr->op) {
+    case BrOnNull:
+      o << int8_t(BinaryConsts::BrOnNull);
+      break;
     case BrOnCast:
-      o << U32LEB(BinaryConsts::BrOnCast);
+      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::BrOnCast);
       break;
     case BrOnFunc:
-      o << U32LEB(BinaryConsts::BrOnFunc);
+      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::BrOnFunc);
       break;
     case BrOnData:
-      o << U32LEB(BinaryConsts::BrOnData);
+      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::BrOnData);
       break;
     case BrOnI31:
-      o << U32LEB(BinaryConsts::BrOnI31);
+      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::BrOnI31);
       break;
     default:
       WASM_UNREACHABLE("invalid br_on_*");
@@ -2013,12 +2030,12 @@ void BinaryInstWriter::visitBrOn(BrOn* curr) {
 
 void BinaryInstWriter::visitRttCanon(RttCanon* curr) {
   o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::RttCanon);
-  parent.writeHeapType(curr->type.getRtt().heapType);
+  parent.writeIndexedHeapType(curr->type.getRtt().heapType);
 }
 
 void BinaryInstWriter::visitRttSub(RttSub* curr) {
   o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::RttSub);
-  parent.writeHeapType(curr->type.getRtt().heapType);
+  parent.writeIndexedHeapType(curr->type.getRtt().heapType);
 }
 
 void BinaryInstWriter::visitStructNew(StructNew* curr) {
@@ -2028,7 +2045,7 @@ void BinaryInstWriter::visitStructNew(StructNew* curr) {
   } else {
     o << U32LEB(BinaryConsts::StructNewWithRtt);
   }
-  parent.writeHeapType(curr->rtt->type.getHeapType());
+  parent.writeIndexedHeapType(curr->rtt->type.getHeapType());
 }
 
 void BinaryInstWriter::visitStructGet(StructGet* curr) {
@@ -2043,13 +2060,13 @@ void BinaryInstWriter::visitStructGet(StructGet* curr) {
     op = BinaryConsts::StructGetU;
   }
   o << int8_t(BinaryConsts::GCPrefix) << U32LEB(op);
-  parent.writeHeapType(heapType);
+  parent.writeIndexedHeapType(heapType);
   o << U32LEB(curr->index);
 }
 
 void BinaryInstWriter::visitStructSet(StructSet* curr) {
   o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::StructSet);
-  parent.writeHeapType(curr->ref->type.getHeapType());
+  parent.writeIndexedHeapType(curr->ref->type.getHeapType());
   o << U32LEB(curr->index);
 }
 
@@ -2060,7 +2077,7 @@ void BinaryInstWriter::visitArrayNew(ArrayNew* curr) {
   } else {
     o << U32LEB(BinaryConsts::ArrayNewWithRtt);
   }
-  parent.writeHeapType(curr->rtt->type.getHeapType());
+  parent.writeIndexedHeapType(curr->rtt->type.getHeapType());
 }
 
 void BinaryInstWriter::visitArrayGet(ArrayGet* curr) {
@@ -2075,17 +2092,17 @@ void BinaryInstWriter::visitArrayGet(ArrayGet* curr) {
     op = BinaryConsts::ArrayGetU;
   }
   o << int8_t(BinaryConsts::GCPrefix) << U32LEB(op);
-  parent.writeHeapType(heapType);
+  parent.writeIndexedHeapType(heapType);
 }
 
 void BinaryInstWriter::visitArraySet(ArraySet* curr) {
   o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::ArraySet);
-  parent.writeHeapType(curr->ref->type.getHeapType());
+  parent.writeIndexedHeapType(curr->ref->type.getHeapType());
 }
 
 void BinaryInstWriter::visitArrayLen(ArrayLen* curr) {
   o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::ArrayLen);
-  parent.writeHeapType(curr->ref->type.getHeapType());
+  parent.writeIndexedHeapType(curr->ref->type.getHeapType());
 }
 
 void BinaryInstWriter::visitRefAs(RefAs* curr) {
@@ -2094,13 +2111,13 @@ void BinaryInstWriter::visitRefAs(RefAs* curr) {
       o << int8_t(BinaryConsts::RefAsNonNull);
       break;
     case RefAsFunc:
-      o << int8_t(BinaryConsts::GCPrefix) << int8_t(BinaryConsts::RefAsFunc);
+      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::RefAsFunc);
       break;
     case RefAsData:
-      o << int8_t(BinaryConsts::GCPrefix) << int8_t(BinaryConsts::RefAsData);
+      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::RefAsData);
       break;
     case RefAsI31:
-      o << int8_t(BinaryConsts::GCPrefix) << int8_t(BinaryConsts::RefAsI31);
+      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::RefAsI31);
       break;
     default:
       WASM_UNREACHABLE("invalid ref.as_*");
@@ -2149,32 +2166,39 @@ void BinaryInstWriter::mapLocalsAndEmitHeader() {
   }
   for (auto type : func->vars) {
     for (const auto& t : type) {
-      numLocalsByType[t]++;
+      noteLocalType(t);
     }
   }
   countScratchLocals();
-  std::map<Type, size_t> currLocalsByType;
+  std::unordered_map<Type, size_t> currLocalsByType;
   for (Index i = func->getVarIndexBase(); i < func->getNumLocals(); i++) {
     Index j = 0;
     for (const auto& type : func->getLocalType(i)) {
       auto fullIndex = std::make_pair(i, j++);
       Index index = func->getVarIndexBase();
-      for (auto& typeCount : numLocalsByType) {
-        if (type == typeCount.first) {
-          mappedLocals[fullIndex] = index + currLocalsByType[typeCount.first];
+      for (auto& localType : localTypes) {
+        if (type == localType) {
+          mappedLocals[fullIndex] = index + currLocalsByType[localType];
           currLocalsByType[type]++;
           break;
         }
-        index += typeCount.second;
+        index += numLocalsByType.at(localType);
       }
     }
   }
   setScratchLocals();
   o << U32LEB(numLocalsByType.size());
-  for (auto& typeCount : numLocalsByType) {
-    o << U32LEB(typeCount.second);
-    parent.writeType(typeCount.first);
+  for (auto& localType : localTypes) {
+    o << U32LEB(numLocalsByType.at(localType));
+    parent.writeType(localType);
   }
+}
+
+void BinaryInstWriter::noteLocalType(Type type) {
+  if (!numLocalsByType.count(type)) {
+    localTypes.push_back(type);
+  }
+  numLocalsByType[type]++;
 }
 
 void BinaryInstWriter::countScratchLocals() {
@@ -2187,16 +2211,16 @@ void BinaryInstWriter::countScratchLocals() {
     }
   }
   for (auto t : scratchLocals) {
-    numLocalsByType[t.first]++;
+    noteLocalType(t.first);
   }
 }
 
 void BinaryInstWriter::setScratchLocals() {
   Index index = func->getVarIndexBase();
-  for (auto& typeCount : numLocalsByType) {
-    index += typeCount.second;
-    if (scratchLocals.find(typeCount.first) != scratchLocals.end()) {
-      scratchLocals[typeCount.first] = index - 1;
+  for (auto& localType : localTypes) {
+    index += numLocalsByType[localType];
+    if (scratchLocals.find(localType) != scratchLocals.end()) {
+      scratchLocals[localType] = index - 1;
     }
   }
 }
@@ -2209,6 +2233,9 @@ void BinaryInstWriter::emitMemoryAccess(size_t alignment,
 }
 
 int32_t BinaryInstWriter::getBreakIndex(Name name) { // -1 if not found
+  if (name == DELEGATE_CALLER_TARGET) {
+    return breakStack.size();
+  }
   for (int i = breakStack.size() - 1; i >= 0; i--) {
     if (breakStack[i] == name) {
       return breakStack.size() - 1 - i;
@@ -2285,7 +2312,7 @@ void StackIRToBinaryWriter::write() {
     switch (inst->op) {
       case StackInst::TryBegin:
         catchIndexStack.push_back(0);
-        // fallthrough
+        [[fallthrough]];
       case StackInst::Basic:
       case StackInst::BlockBegin:
       case StackInst::IfBegin:
@@ -2295,7 +2322,7 @@ void StackIRToBinaryWriter::write() {
       }
       case StackInst::TryEnd:
         catchIndexStack.pop_back();
-        // fallthrough
+        [[fallthrough]];
       case StackInst::BlockEnd:
       case StackInst::IfEnd:
       case StackInst::LoopEnd: {
@@ -2308,6 +2335,16 @@ void StackIRToBinaryWriter::write() {
       }
       case StackInst::Catch: {
         writer.emitCatch(inst->origin->cast<Try>(), catchIndexStack.back()++);
+        break;
+      }
+      case StackInst::CatchAll: {
+        writer.emitCatchAll(inst->origin->cast<Try>());
+        break;
+      }
+      case StackInst::Delegate: {
+        writer.emitDelegate(inst->origin->cast<Try>());
+        // Delegates end the try, like a TryEnd.
+        catchIndexStack.pop_back();
         break;
       }
       default:

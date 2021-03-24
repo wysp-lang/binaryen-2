@@ -71,6 +71,7 @@ public:
     TryBegin,   // the beginning of a try
     Catch,      // the catch within a try
     CatchAll,   // the catch_all within a try
+    Delegate,   // the delegate within a try
     TryEnd      // the ending of a try
   } op;
 
@@ -109,12 +110,15 @@ public:
   void emitIfElse(If* curr);
   void emitCatch(Try* curr, Index i);
   void emitCatchAll(Try* curr);
+  void emitDelegate(Try* curr);
   // emit an end at the end of a block/loop/if/try
   void emitScopeEnd(Expression* curr);
   // emit an end at the end of a function
   void emitFunctionEnd();
   void emitUnreachable();
   void mapLocalsAndEmitHeader();
+
+  MappedLocals mappedLocals;
 
 private:
   void emitMemoryAccess(size_t alignment, size_t bytes, uint32_t offset);
@@ -128,10 +132,12 @@ private:
 
   std::vector<Name> breakStack;
 
+  // The types of locals in the compact form, in order.
+  std::vector<Type> localTypes;
   // type => number of locals of that type in the compact form
-  std::map<Type, size_t> numLocalsByType;
-  // (local index, tuple index) => binary local index
-  std::map<std::pair<Index, Index>, size_t> mappedLocals;
+  std::unordered_map<Type, size_t> numLocalsByType;
+
+  void noteLocalType(Type type);
 
   // Keeps track of the binary index of the scratch locals used to lower
   // tuple.extract.
@@ -168,6 +174,9 @@ private:
   }
   void emitCatchAll(Try* curr) {
     static_cast<SubType*>(this)->emitCatchAll(curr);
+  }
+  void emitDelegate(Try* curr) {
+    static_cast<SubType*>(this)->emitDelegate(curr);
   }
   void emitScopeEnd(Expression* curr) {
     static_cast<SubType*>(this)->emitScopeEnd(curr);
@@ -343,7 +352,13 @@ template<typename SubType> void BinaryenIRWriter<SubType>::visitTry(Try* curr) {
     emitCatchAll(curr);
     visitPossibleBlockContents(curr->catchBodies.back());
   }
-  emitScopeEnd(curr);
+  if (curr->isDelegate()) {
+    emitDelegate(curr);
+    // Note that when we emit a delegate we do not need to also emit a scope
+    // ending, as the delegate ends the scope.
+  } else {
+    emitScopeEnd(curr);
+  }
   if (curr->type == Type::unreachable) {
     emitUnreachable();
   }
@@ -375,6 +390,7 @@ public:
   void emitIfElse(If* curr) { writer.emitIfElse(curr); }
   void emitCatch(Try* curr, Index i) { writer.emitCatch(curr, i); }
   void emitCatchAll(Try* curr) { writer.emitCatchAll(curr); }
+  void emitDelegate(Try* curr) { writer.emitDelegate(curr); }
   void emitScopeEnd(Expression* curr) { writer.emitScopeEnd(curr); }
   void emitFunctionEnd() {
     if (func->epilogLocation.size()) {
@@ -388,6 +404,8 @@ public:
       parent.writeDebugLocation(curr, func);
     }
   }
+
+  MappedLocals& getMappedLocals() { return writer.mappedLocals; }
 
 private:
   WasmBinaryWriter& parent;
@@ -413,6 +431,9 @@ public:
   }
   void emitCatchAll(Try* curr) {
     stackIR.push_back(makeStackInst(StackInst::CatchAll, curr));
+  }
+  void emitDelegate(Try* curr) {
+    stackIR.push_back(makeStackInst(StackInst::Delegate, curr));
   }
   void emitFunctionEnd() {}
   void emitUnreachable() {
@@ -442,6 +463,8 @@ public:
       func(func) {}
 
   void write();
+
+  MappedLocals& getMappedLocals() { return writer.mappedLocals; }
 
 private:
   BinaryInstWriter writer;

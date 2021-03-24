@@ -141,6 +141,7 @@ function initializeConstants() {
     'Multivalue',
     'GC',
     'Memory64',
+    'TypedFunctionReferences',
     'All'
   ].forEach(name => {
     Module['Features'][name] = Module['_BinaryenFeature' + name]();
@@ -490,6 +491,10 @@ function initializeConstants() {
     'RefIsFunc',
     'RefIsData',
     'RefIsI31',
+    'RefAsNonNull',
+    'RefAsFunc',
+    'RefAsData',
+    'RefAsI31',
   ].forEach(name => {
     Module['Operations'][name] = Module[name] = Module['_Binaryen' + name]();
   });
@@ -576,9 +581,9 @@ function wrapModule(module, self = {}) {
   // 'callIndirect', 'returnCall', 'returnCallIndirect' are deprecated and may
   // be removed in a future release. Please use the the snake_case names
   // instead.
-  self['callIndirect'] = self['call_indirect'] = function(target, operands, params, results) {
+  self['callIndirect'] = self['call_indirect'] = function(table, target, operands, params, results) {
     return preserveStack(() =>
-      Module['_BinaryenCallIndirect'](module, target, i32sToStack(operands), operands.length, params, results)
+      Module['_BinaryenCallIndirect'](module, strToStack(table), target, i32sToStack(operands), operands.length, params, results)
     );
   };
   self['returnCall'] = self['return_call'] = function(name, operands, type) {
@@ -586,9 +591,9 @@ function wrapModule(module, self = {}) {
       Module['_BinaryenReturnCall'](module, strToStack(name), i32sToStack(operands), operands.length, type)
     );
   };
-  self['returnCallIndirect'] = self['return_call_indirect'] = function(target, operands, params, results) {
+  self['returnCallIndirect'] = self['return_call_indirect'] = function(table, target, operands, params, results) {
     return preserveStack(() =>
-      Module['_BinaryenReturnCallIndirect'](module, target, i32sToStack(operands), operands.length, params, results)
+      Module['_BinaryenReturnCallIndirect'](module, strToStack(table), target, i32sToStack(operands), operands.length, params, results)
     );
   };
 
@@ -2117,6 +2122,18 @@ function wrapModule(module, self = {}) {
     'is_i31'(value) {
       return Module['_BinaryenRefIs'](module, Module['RefIsI31'], value);
     },
+    'as_non_null'(value) {
+      return Module['_BinaryenRefAs'](module, Module['RefAsNonNull'], value);
+    },
+    'as_func'(value) {
+      return Module['_BinaryenRefAs'](module, Module['RefAsFunc'], value);
+    },
+    'as_data'(value) {
+      return Module['_BinaryenRefAs'](module, Module['RefAsData'], value);
+    },
+    'as_i31'(value) {
+      return Module['_BinaryenRefAs'](module, Module['RefAsI31'], value);
+    },
     'func'(func, type) {
       return preserveStack(() => Module['_BinaryenRefFunc'](module, strToStack(func), type));
     },
@@ -2147,15 +2164,15 @@ function wrapModule(module, self = {}) {
     }
   };
 
-  self['try'] = function(body, catchEvents, catchBodies) {
+  self['try'] = function(name, body, catchEvents, catchBodies, delegateTarget) {
     return preserveStack(() =>
-      Module['_BinaryenTry'](module, body, i32sToStack(catchEvents.map(strToStack)), catchEvents.length, i32sToStack(catchBodies), catchBodies.length));
+      Module['_BinaryenTry'](module, name ? strToStack(name) : 0, body, i32sToStack(catchEvents.map(strToStack)), catchEvents.length, i32sToStack(catchBodies), catchBodies.length, delegateTarget ? strToStack(delegateTarget) : 0));
   };
   self['throw'] = function(event_, operands) {
     return preserveStack(() => Module['_BinaryenThrow'](module, strToStack(event_), i32sToStack(operands), operands.length));
   };
-  self['rethrow'] = function(depth) {
-    return Module['_BinaryenRethrow'](module, depth);
+  self['rethrow'] = function(target) {
+    return Module['_BinaryenRethrow'](module, strToStack(target));
   };
 
   self['tuple'] = {
@@ -2197,9 +2214,55 @@ function wrapModule(module, self = {}) {
   self['getGlobal'] = function(name) {
     return preserveStack(() => Module['_BinaryenGetGlobal'](module, strToStack(name)));
   };
+  self['addTable'] = function(table, initial, maximum) {
+    return preserveStack(() => Module['_BinaryenAddTable'](module, strToStack(table), initial, maximum));
+  }
+  self['getTable'] = function(name) {
+    return preserveStack(() => Module['_BinaryenGetTable'](module, strToStack(name)));
+  };
+  self['addActiveElementSegment'] = function(table, name, funcNames, offset = self['i32']['const'](0)) {
+    return preserveStack(() => Module['_BinaryenAddActiveElementSegment'](
+      module,
+      strToStack(table),
+      strToStack(name),
+      i32sToStack(funcNames.map(strToStack)),
+      funcNames.length,
+      offset
+    ));
+  };
+  self['addPassiveElementSegment'] = function(name, funcNames) {
+    return preserveStack(() => Module['_BinaryenAddPassiveElementSegment'](
+      module,
+      strToStack(name),
+      i32sToStack(funcNames.map(strToStack)),
+      funcNames.length
+    ));
+  };
+  self['getElementSegment'] = function(name) {
+    return preserveStack(() => Module['_BinaryenGetElementSegment'](module, strToStack(name)));
+  };
+  self['getTableSegments'] = function(table) {
+    var numElementSegments = Module['_BinaryenGetNumElementSegments'](module);
+    var tableName = UTF8ToString(Module['_BinaryenTableGetName'](table));
+    var ret = [];
+    for (var i = 0; i < numElementSegments; i++) {
+      var segment = Module['_BinaryenGetElementSegmentByIndex'](module, i);
+      var elemTableName = UTF8ToString(Module['_BinaryenElementSegmentGetTable'](segment));
+      if (tableName === elemTableName) {
+        ret.push(segment);
+      }
+    }
+    return ret;
+  }
   self['removeGlobal'] = function(name) {
     return preserveStack(() => Module['_BinaryenRemoveGlobal'](module, strToStack(name)));
   }
+  self['removeTable'] = function(name) {
+    return preserveStack(() => Module['_BinaryenRemoveTable'](module, strToStack(name)));
+  };
+  self['removeElementSegment'] = function(name) {
+    return preserveStack(() => Module['_BinaryenRemoveElementSegment'](module, strToStack(name)));
+  };
   self['addEvent'] = function(name, attribute, params, results) {
     return preserveStack(() => Module['_BinaryenAddEvent'](module, strToStack(name), attribute, params, results));
   };
@@ -2252,37 +2315,6 @@ function wrapModule(module, self = {}) {
   };
   self['removeExport'] = function(externalName) {
     return preserveStack(() => Module['_BinaryenRemoveExport'](module, strToStack(externalName)));
-  };
-  self['setFunctionTable'] = function(initial, maximum, funcNames, offset = self['i32']['const'](0)) {
-    return preserveStack(() => {
-      return Module['_BinaryenSetFunctionTable'](module, initial, maximum,
-        i32sToStack(funcNames.map(strToStack)),
-        funcNames.length,
-        offset
-      );
-    });
-  };
-  self['getFunctionTable'] = function() {
-    return {
-      'imported': Boolean(Module['_BinaryenIsFunctionTableImported'](module)),
-      'segments': (function() {
-        const numSegments = Module['_BinaryenGetNumFunctionTableSegments'](module)
-        const arr = new Array(numSegments);
-        for (let i = 0; i !== numSegments; ++i) {
-          const segmentLength = Module['_BinaryenGetFunctionTableSegmentLength'](module, i);
-          const names = new Array(segmentLength);
-          for (let j = 0; j !== segmentLength; ++j) {
-            const ptr = Module['_BinaryenGetFunctionTableSegmentData'](module, i, j);
-            names[j] = UTF8ToString(ptr);
-          }
-          arr[i] = {
-            'offset': Module['_BinaryenGetFunctionTableSegmentOffset'](module, i),
-            'names': names
-          };
-        }
-        return arr;
-      })()
-    };
   };
   self['setMemory'] = function(initial, maximum, exportName, segments = [], shared = false) {
     // segments are assumed to be { passive: bool, offset: expression ref, data: array of 8-bit data }
@@ -2360,8 +2392,20 @@ function wrapModule(module, self = {}) {
   self['getNumGlobals'] = function() {
     return Module['_BinaryenGetNumGlobals'](module);
   };
+  self['getNumTables'] = function() {
+    return Module['_BinaryenGetNumTables'](module);
+  };
+  self['getNumElementSegments'] = function() {
+    return Module['_BinaryenGetNumElementSegments'](module);
+  };
   self['getGlobalByIndex'] = function(index) {
     return Module['_BinaryenGetGlobalByIndex'](module, index);
+  };
+  self['getTableByIndex'] = function(index) {
+    return Module['_BinaryenGetTableByIndex'](module, index);
+  };
+  self['getElementSegmentByIndex'] = function(index) {
+    return Module['_BinaryenGetElementSegmentByIndex'](module, index);
   };
   self['emitText'] = function() {
     const old = out;
@@ -2587,6 +2631,7 @@ Module['getExpressionInfo'] = function(expr) {
         'type': type,
         'isReturn': Boolean(Module['_BinaryenCallIndirectIsReturn'](expr)),
         'target': Module['_BinaryenCallIndirectGetTarget'](expr),
+        'table': Module['_BinaryenCallIndirectGetTable'](expr),
         'operands': getAllNested(expr, Module['_BinaryenCallIndirectGetNumOperands'], Module['_BinaryenCallIndirectGetOperandAt'])
       };
     case Module['LocalGetId']:
@@ -2857,7 +2902,15 @@ Module['getExpressionInfo'] = function(expr) {
       return {
         'id': id,
         'type': type,
+        'op': Module['_BinaryenRefIsGetOp'](expr),
         'value': Module['_BinaryenRefIsGetValue'](expr)
+      };
+    case Module['RefAsId']:
+      return {
+        'id': id,
+        'type': type,
+        'op': Module['_BinaryenRefAsGetOp'](expr),
+        'value': Module['_BinaryenRefAsGetValue'](expr)
       };
     case Module['RefFuncId']:
       return {
@@ -2876,10 +2929,13 @@ Module['getExpressionInfo'] = function(expr) {
       return {
         'id': id,
         'type': type,
+        'name': UTF8ToString(Module['_BinaryenTryGetName'](expr)),
         'body': Module['_BinaryenTryGetBody'](expr),
         'catchEvents': getAllNested(expr, Module['_BinaryenTryGetNumCatchEvents'], Module['_BinaryenTryGetCatchEventAt']),
         'catchBodies': getAllNested(expr, Module['_BinaryenTryGetNumCatchBodies'], Module['_BinaryenTryGetCatchBodyAt']),
-        'hasCatchAll': Module['_BinaryenTryHasCatchAll'](expr)
+        'hasCatchAll': Module['_BinaryenTryHasCatchAll'](expr),
+        'delegateTarget': UTF8ToString(Module['_BinaryenTryGetDelegateTarget'](expr)),
+        'isDelegate': Module['_BinaryenTryIsDelegate'](expr)
       };
     case Module['ThrowId']:
       return {
@@ -2892,7 +2948,7 @@ Module['getExpressionInfo'] = function(expr) {
       return {
         'id': id,
         'type': type,
-        'depth': Module['_BinaryenRethrowGetDepth'](expr)
+        'target': UTF8ToString(Module['_BinaryenRethrowGetTarget'](expr))
       };
     case Module['TupleMakeId']:
       return {
@@ -2972,6 +3028,39 @@ Module['getGlobalInfo'] = function(global) {
     'init': Module['_BinaryenGlobalGetInitExpr'](global)
   };
 };
+
+// Obtains information about a 'Table'
+Module['getTableInfo'] = function(table) {
+  var hasMax = Boolean(Module['_BinaryenTableHasMax'](table));
+  var tableInfo = {
+    'name': UTF8ToString(Module['_BinaryenTableGetName'](table)),
+    'module': UTF8ToString(Module['_BinaryenTableImportGetModule'](table)),
+    'base': UTF8ToString(Module['_BinaryenTableImportGetBase'](table)),
+    'initial': Module['_BinaryenTableGetInitial'](table),
+  }
+
+  if (hasMax) {
+    tableInfo.max = Module['_BinaryenTableGetMax'](table);
+  }
+
+  return tableInfo;
+};
+
+Module['getElementSegmentInfo'] = function(segment) {
+  var segmentLength = Module['_BinaryenElementSegmentGetLength'](segment);
+  var names = new Array(segmentLength);
+  for (let j = 0; j !== segmentLength; ++j) {
+    var ptr = Module['_BinaryenElementSegmentGetData'](segment, j);
+    names[j] = UTF8ToString(ptr);
+  }
+
+  return {
+    'name': UTF8ToString(Module['_BinaryenElementSegmentGetName'](segment)),
+    'table': UTF8ToString(Module['_BinaryenElementSegmentGetTable'](segment)),
+    'offset': Module['_BinaryenElementSegmentGetOffset'](segment),
+    'data': names
+  }
+}
 
 // Obtains information about a 'Event'
 Module['getEventInfo'] = function(event_) {
@@ -3420,6 +3509,12 @@ Module['CallIndirect'] = makeExpressionWrapper({
   },
   'setTarget'(expr, targetExpr) {
     Module['_BinaryenCallIndirectSetTarget'](expr, targetExpr);
+  },
+  'getTable'(expr) {
+    return UTF8ToString(Module['_BinaryenCallIndirectGetTable'](expr));
+  },
+  'setTable'(expr, table) {
+    preserveStack(() => { Module['_BinaryenCallIndirectSetTable'](expr, strToStack(table)) });
   },
   'getNumOperands'(expr) {
     return Module['_BinaryenCallIndirectGetNumOperands'](expr);
@@ -4095,11 +4190,32 @@ Module['MemoryFill'] = makeExpressionWrapper({
 });
 
 Module['RefIs'] = makeExpressionWrapper({
+  'getOp'(expr) {
+    return Module['_BinaryenRefIsGetOp'](expr);
+  },
+  'setOp'(expr, op) {
+    Module['_BinaryenRefIsSetOp'](expr, op);
+  },
   'getValue'(expr) {
     return Module['_BinaryenRefIsGetValue'](expr);
   },
   'setValue'(expr, valueExpr) {
     Module['_BinaryenRefIsSetValue'](expr, valueExpr);
+  }
+});
+
+Module['RefAs'] = makeExpressionWrapper({
+  'getOp'(expr) {
+    return Module['_BinaryenRefAsGetOp'](expr);
+  },
+  'setOp'(expr, op) {
+    Module['_BinaryenRefAsSetOp'](expr, op);
+  },
+  'getValue'(expr) {
+    return Module['_BinaryenRefAsGetValue'](expr);
+  },
+  'setValue'(expr, valueExpr) {
+    Module['_BinaryenRefAsSetValue'](expr, valueExpr);
   }
 });
 
@@ -4128,6 +4244,13 @@ Module['RefEq'] = makeExpressionWrapper({
 });
 
 Module['Try'] = makeExpressionWrapper({
+  'getName'(expr) {
+    const name = Module['_BinaryenTryGetName'](expr);
+    return name ? UTF8ToString(name) : null;
+  },
+  'setName'(expr, name) {
+    preserveStack(() => { Module['_BinaryenTrySetName'](expr, strToStack(name)) });
+  },
   'getBody'(expr) {
     return Module['_BinaryenTryGetBody'](expr);
   },
@@ -4187,6 +4310,16 @@ Module['Try'] = makeExpressionWrapper({
   'hasCatchAll'(expr) {
     return Boolean(Module['_BinaryenTryHasCatchAll'](expr));
   },
+  'getDelegateTarget'(expr) {
+    const name = Module['_BinaryenTryGetDelegateTarget'](expr);
+    return name ? UTF8ToString(name) : null;
+  },
+  'setDelegateTarget'(expr, name) {
+    preserveStack(() => { Module['_BinaryenTrySetDelegateTarget'](expr, strToStack(name)) });
+  },
+  'isDelegate'(expr) {
+    return Boolean(Module['_BinaryenTryIsDelegate'](expr));
+  }
 });
 
 Module['Throw'] = makeExpressionWrapper({
@@ -4223,11 +4356,12 @@ Module['Throw'] = makeExpressionWrapper({
 });
 
 Module['Rethrow'] = makeExpressionWrapper({
-  'getDepth'(expr) {
-    return Module['_BinaryenRethrowGetDepth'](expr);
+  'getTarget'(expr) {
+    const target = Module['_BinaryenRethrowGetTarget'](expr);
+    return target ? UTF8ToString(target) : null;
   },
-  'setDepth'(expr, depthExpr) {
-    Module['_BinaryenRethrowSetDepth'](expr, depthExpr);
+  'setTarget'(expr, target) {
+    preserveStack(() => { Module['_BinaryenRethrowSetTarget'](expr, strToStack(target)) });
   }
 });
 

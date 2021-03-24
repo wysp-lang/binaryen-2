@@ -109,7 +109,9 @@ struct ReFinalize
   // block finalization is O(bad) if we do each block by itself, so do it in
   // bulk, tracking break value types so we just do a linear pass
 
-  std::map<Name, Type> breakValues;
+  // TODO: Switch to std::unordered_set once types are properly canonicalized so
+  // determinism isn't an issue.
+  std::unordered_map<Name, std::set<Type>> breakTypes;
 
 #define DELEGATE(CLASS_TO_VISIT)                                               \
   void visit##CLASS_TO_VISIT(CLASS_TO_VISIT* curr);
@@ -121,6 +123,7 @@ struct ReFinalize
   void visitExport(Export* curr);
   void visitGlobal(Global* curr);
   void visitTable(Table* curr);
+  void visitElementSegment(ElementSegment* curr);
   void visitMemory(Memory* curr);
   void visitEvent(Event* curr);
   void visitModule(Module* curr);
@@ -144,6 +147,7 @@ struct ReFinalizeNode : public OverriddenVisitor<ReFinalizeNode> {
   void visitExport(Export* curr) { WASM_UNREACHABLE("unimp"); }
   void visitGlobal(Global* curr) { WASM_UNREACHABLE("unimp"); }
   void visitTable(Table* curr) { WASM_UNREACHABLE("unimp"); }
+  void visitElementSegment(ElementSegment* curr) { WASM_UNREACHABLE("unimp"); }
   void visitMemory(Memory* curr) { WASM_UNREACHABLE("unimp"); }
   void visitEvent(Event* curr) { WASM_UNREACHABLE("unimp"); }
   void visitModule(Module* curr) { WASM_UNREACHABLE("unimp"); }

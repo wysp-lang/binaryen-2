@@ -540,6 +540,7 @@ struct CostAnalyzer : public OverriddenVisitor<CostAnalyzer, Index> {
   Index visitSIMDShift(SIMDShift* curr) {
     return 1 + visit(curr->vec) + visit(curr->shift);
   }
+  Index visitSIMDWiden(SIMDWiden* curr) { return 1 + visit(curr->vec); }
   Index visitSIMDShuffle(SIMDShuffle* curr) {
     return 1 + visit(curr->left) + visit(curr->right);
   }
@@ -614,7 +615,7 @@ struct CostAnalyzer : public OverriddenVisitor<CostAnalyzer, Index> {
     return 2 + nullCheckCost(curr->ref) + visit(curr->ref) + visit(curr->value);
   }
   Index visitArrayNew(ArrayNew* curr) {
-    return 4 + visit(curr->rtt) + visit(curr->size) + visit(curr->init);
+    return 4 + visit(curr->rtt) + visit(curr->size) + maybeVisit(curr->init);
   }
   Index visitArrayGet(ArrayGet* curr) {
     return 1 + nullCheckCost(curr->ref) + visit(curr->ref) + visit(curr->index);

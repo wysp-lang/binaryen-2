@@ -25,6 +25,7 @@ BinaryenFeatureReferenceTypes: 256
 BinaryenFeatureMultivalue: 512
 BinaryenFeatureGC: 1024
 BinaryenFeatureMemory64: 2048
+BinaryenFeatureTypedFunctionReferences: 4096
 BinaryenFeatureAll: 8191
 (f32.neg
  (f32.const -33.61199951171875)
@@ -38,8 +39,10 @@ BinaryenFeatureAll: 8191
  (memory $0 (shared 1 256))
  (data (i32.const 10) "hello, world")
  (data passive "I am passive")
+ (table $tab 0 100 funcref)
  (table $0 1 1 funcref)
- (elem (i32.const 0) "$kitchen()sinker")
+ (elem $0 (table $0) (i32.const 0) func "$kitchen()sinker")
+ (elem $passive func "$kitchen()sinker")
  (global $a-global i32 (i32.const 7))
  (global $a-mutable-global (mut f32) (f32.const 7.5))
  (event $a-event (attr 0) (param i32))
@@ -1666,7 +1669,7 @@ BinaryenFeatureAll: 8191
       )
       (drop
        (i32.eqz
-        (call_indirect (type $i32_i64_f32_f64_=>_i32)
+        (call_indirect $tab (type $i32_i64_f32_f64_=>_i32)
          (i32.const 13)
          (i64.const 37)
          (f32.const 1.2999999523162842)
@@ -1730,7 +1733,7 @@ BinaryenFeatureAll: 8191
        (f32.const 1.2999999523162842)
        (f64.const 3.7)
       )
-      (return_call_indirect (type $i32_i64_f32_f64_=>_i32)
+      (return_call_indirect $tab (type $i32_i64_f32_f64_=>_i32)
        (i32.const 13)
        (i64.const 37)
        (f32.const 1.2999999523162842)
@@ -1760,6 +1763,41 @@ BinaryenFeatureAll: 8191
         (ref.null eq)
        )
       )
+      (drop
+       (ref.is_func
+        (ref.null any)
+       )
+      )
+      (drop
+       (ref.is_data
+        (ref.null any)
+       )
+      )
+      (drop
+       (ref.is_i31
+        (ref.null any)
+       )
+      )
+      (drop
+       (ref.as_non_null
+        (ref.null any)
+       )
+      )
+      (drop
+       (ref.as_func
+        (ref.null any)
+       )
+      )
+      (drop
+       (ref.as_data
+        (ref.null any)
+       )
+      )
+      (drop
+       (ref.as_i31
+        (ref.null any)
+       )
+      )
       (try
        (do
         (throw $a-event
@@ -1769,6 +1807,21 @@ BinaryenFeatureAll: 8191
        (catch $a-event
         (drop
          (pop i32)
+        )
+       )
+       (catch_all
+        (nop)
+       )
+      )
+      (try $try_outer
+       (do
+        (try
+         (do
+          (throw $a-event
+           (i32.const 0)
+          )
+         )
+         (delegate $try_outer)
         )
        )
        (catch_all
@@ -2410,7 +2463,7 @@ validation: 0
  (data (i32.const 10) "hello, world")
  (data (global.get $a-global) "segment data 2")
  (table $0 1 1 funcref)
- (elem (i32.const 0) $fn0 $fn1 $fn2)
+ (elem $0 (i32.const 0) $fn0 $fn1 $fn2)
  (global $a-global i32 (i32.const 125))
  (export "export0" (func $fn0))
  (export "export1" (func $fn1))

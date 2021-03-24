@@ -329,7 +329,27 @@ enum Section {
   Event = 13
 };
 
-enum SegmentFlag { IsPassive = 0x01, HasMemIndex = 0x02 };
+// A passive segment is a segment that will not be automatically copied into a
+//   memory or table on instantiation, and must instead be applied manually
+//   using the instructions memory.init or table.init.
+// An active segment is equivalent to a passive segment, but with an implicit
+//   memory.init followed by a data.drop (or table.init followed by a elem.drop)
+//   that is prepended to the module's start function.
+// A declarative element segment is not available at runtime but merely serves
+//   to forward-declare references that are formed in code with instructions
+//   like ref.func.
+enum SegmentFlag {
+  // Bit 0: 0 = active, 1 = passive
+  IsPassive = 1 << 0,
+  // Bit 1 if passive: 0 = passive, 1 = declarative
+  IsDeclarative = 1 << 1,
+  // Bit 1 if active: 0 = index 0, 1 = index given
+  HasIndex = 1 << 1,
+  // Table element segments only:
+  // Bit 2: 0 = elemType is funcref and vector of func indexes given
+  //        1 = elemType is given and vector of ref expressions is given
+  UsesExpressions = 1 << 2
+};
 
 enum EncodedType {
   // value_type
@@ -410,7 +430,9 @@ enum Subsection {
   NameMemory = 6,
   NameGlobal = 7,
   NameElem = 8,
-  NameData = 9
+  NameData = 9,
+  // see: https://github.com/WebAssembly/gc/issues/193
+  NameField = 10
 };
 
 } // namespace UserSections
@@ -979,6 +1001,9 @@ enum ASTNodes {
   F32x4DemoteZeroF64x2 = 0x57,
   F64x2PromoteLowF32x4 = 0x69,
 
+  I32x4WidenSI8x16 = 0x67,
+  I32x4WidenUI8x16 = 0x68,
+
   // prefetch opcodes
 
   PrefetchT = 0xc5,
@@ -997,12 +1022,14 @@ enum ASTNodes {
   RefIsNull = 0xd1,
   RefFunc = 0xd2,
   RefAsNonNull = 0xd3,
+  BrOnNull = 0xd4,
 
   // exception handling opcodes
 
   Try = 0x06,
   Catch = 0x07,
-  CatchAll = 0x05,
+  CatchAll = 0x19,
+  Delegate = 0x18,
   Throw = 0x08,
   Rethrow = 0x09,
 
@@ -1063,6 +1090,9 @@ enum FeaturePrefix {
 
 } // namespace BinaryConsts
 
+// (local index in IR, tuple index) => binary local index
+using MappedLocals = std::unordered_map<std::pair<Index, Index>, size_t>;
+
 // Writes out wasm to the binary format
 
 class WasmBinaryWriter {
@@ -1075,6 +1105,8 @@ class WasmBinaryWriter {
     std::unordered_map<Name, Index> functionIndexes;
     std::unordered_map<Name, Index> eventIndexes;
     std::unordered_map<Name, Index> globalIndexes;
+    std::unordered_map<Name, Index> tableIndexes;
+    std::unordered_map<Name, Index> elemIndexes;
 
     BinaryIndexes(Module& wasm) {
       auto addIndexes = [&](auto& source, auto& indexes) {
@@ -1095,6 +1127,12 @@ class WasmBinaryWriter {
       };
       addIndexes(wasm.functions, functionIndexes);
       addIndexes(wasm.events, eventIndexes);
+      addIndexes(wasm.tables, tableIndexes);
+
+      for (auto& curr : wasm.elementSegments) {
+        auto index = elemIndexes.size();
+        elemIndexes[curr->name] = index;
+      }
 
       // Globals may have tuple types in the IR, in which case they lower to
       // multiple globals, one for each tuple element, in the binary. Tuple
@@ -1167,12 +1205,13 @@ public:
   void writeEvents();
 
   uint32_t getFunctionIndex(Name name) const;
+  uint32_t getTableIndex(Name name) const;
   uint32_t getGlobalIndex(Name name) const;
   uint32_t getEventIndex(Name name) const;
   uint32_t getTypeIndex(HeapType type) const;
 
-  void writeFunctionTableDeclaration();
-  void writeTableElements();
+  void writeTableDeclarations();
+  void writeElementSegments();
   void writeNames();
   void writeSourceMapUrl();
   void writeSymbolMap();
@@ -1211,7 +1250,15 @@ public:
   Module* getModule() { return wasm; }
 
   void writeType(Type type);
+
+  // Writes an arbitrary heap type, which may be indexed or one of the
+  // basic types like funcref.
   void writeHeapType(HeapType type);
+  // Writes an indexed heap type. Note that this is encoded differently than a
+  // general heap type because it does not allow negative values for basic heap
+  // types.
+  void writeIndexedHeapType(HeapType type);
+
   void writeField(const Field& field);
 
 private:
@@ -1245,6 +1292,11 @@ private:
   // the function is written out.
   std::vector<Expression*> binaryLocationTrackedExpressionsForFunc;
 
+  // Maps function names to their mapped locals. This is used when we emit the
+  // local names section: we map the locals when writing the function, save that
+  // info here, and then use it when writing the names.
+  std::unordered_map<Name, MappedLocals> funcMappedLocals;
+
   void prepare();
 };
 
@@ -1254,7 +1306,9 @@ class WasmBinaryBuilder {
   const std::vector<char>& input;
   std::istream* sourceMap;
   std::pair<uint32_t, Function::DebugLocation> nextDebugLocation;
+  bool debugInfo = true;
   bool DWARF = false;
+  bool skipFunctionBodies = false;
 
   size_t pos = 0;
   Index startIndex = -1;
@@ -1271,7 +1325,11 @@ public:
     : wasm(wasm), allocator(wasm.allocator), input(input), sourceMap(nullptr),
       nextDebugLocation(0, {0, 0, 0}), debugLocation() {}
 
+  void setDebugInfo(bool value) { debugInfo = value; }
   void setDWARF(bool value) { DWARF = value; }
+  void setSkipFunctionBodies(bool skipFunctionBodies_) {
+    skipFunctionBodies = skipFunctionBodies_;
+  }
   void read();
   void readUserSection(size_t payloadLen);
 
@@ -1294,14 +1352,15 @@ public:
   int64_t getS64LEB();
   uint64_t getUPtrLEB();
 
+  bool getBasicType(int32_t code, Type& out);
+  bool getBasicHeapType(int64_t code, HeapType& out);
   // Read a value and get a type for it.
   Type getType();
   // Get a type given the initial S32LEB has already been read, and is provided.
   Type getType(int initial);
-
   HeapType getHeapType();
-  Mutability getMutability();
-  Field getField();
+  HeapType getIndexedHeapType();
+
   Type getConcreteType();
   Name getInlineString();
   void verifyInt8(int8_t x);
@@ -1315,6 +1374,7 @@ public:
 
   // gets a name in the combined import+defined space
   Name getFunctionName(Index index);
+  Name getTableName(Index index);
   Name getGlobalName(Index index);
   Name getEventName(Index index);
 
@@ -1351,6 +1411,20 @@ public:
   // function to check
   Index endOfFunction = -1;
 
+  // we store tables here before wasm.addTable after we know their names
+  std::vector<std::unique_ptr<Table>> tables;
+  // we store table imports here before wasm.addTableImport after we know
+  // their names
+  std::vector<Table*> tableImports;
+  // at index i we have all references to the table i
+  std::map<Index, std::vector<Expression*>> tableRefs;
+
+  std::map<Index, Name> elemTables;
+
+  // we store elems here after being read from binary, until when we know their
+  // names
+  std::vector<std::unique_ptr<ElementSegment>> elementSegments;
+
   // we store globals here before wasm.addGlobal after we know their names
   std::vector<std::unique_ptr<Global>> globals;
   // we store global imports here before wasm.addGlobalImport after we know
@@ -1381,6 +1455,8 @@ public:
   // the names that breaks target. this lets us know if a block has breaks to it
   // or not.
   std::unordered_set<Name> breakTargetNames;
+  // the names that delegates target.
+  std::unordered_set<Name> exceptionTargetNames;
 
   std::vector<Expression*> expressionStack;
 
@@ -1455,10 +1531,11 @@ public:
   void readDataSegments();
   void readDataCount();
 
+  // A map from elem segment indexes to their entries
   std::map<Index, std::vector<Index>> functionTable;
 
-  void readFunctionTableDeclaration();
-  void readTableElements();
+  void readTableDeclarations();
+  void readElementSegments();
 
   void readEvents();
 
@@ -1484,6 +1561,7 @@ public:
   Expression* getBlockOrSingleton(Type type);
 
   BreakTarget getBreakTarget(int32_t offset);
+  Name getExceptionTargetName(int32_t offset);
 
   void readMemoryAccess(Address& alignment, Address& offset);
 
@@ -1520,6 +1598,7 @@ public:
   bool maybeVisitSIMDShift(Expression*& out, uint32_t code);
   bool maybeVisitSIMDLoad(Expression*& out, uint32_t code);
   bool maybeVisitSIMDLoadStoreLane(Expression*& out, uint32_t code);
+  bool maybeVisitSIMDWiden(Expression*& out, uint32_t code);
   bool maybeVisitPrefetch(Expression*& out, uint32_t code);
   bool maybeVisitMemoryInit(Expression*& out, uint32_t code);
   bool maybeVisitDataDrop(Expression*& out, uint32_t code);

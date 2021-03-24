@@ -85,6 +85,9 @@ switch (op[0]) {
                   case 'i':
                     if (strcmp(op, "br_on_i31") == 0) { return makeBrOn(s, BrOnI31); }
                     goto parse_error;
+                  case 'n':
+                    if (strcmp(op, "br_on_null") == 0) { return makeBrOn(s, BrOnNull); }
+                    goto parse_error;
                   default: goto parse_error;
                 }
               }
@@ -1825,6 +1828,17 @@ switch (op[0]) {
                             goto parse_error;
                           case 'u':
                             if (strcmp(op, "i32x4.widen_high_i16x8_u") == 0) { return makeUnary(s, UnaryOp::WidenHighUVecI16x8ToVecI32x4); }
+                            goto parse_error;
+                          default: goto parse_error;
+                        }
+                      }
+                      case 'i': {
+                        switch (op[18]) {
+                          case 's':
+                            if (strcmp(op, "i32x4.widen_i8x16_s") == 0) { return makeSIMDWiden(s, SIMDWidenOp::WidenSVecI8x16ToVecI32x4); }
+                            goto parse_error;
+                          case 'u':
+                            if (strcmp(op, "i32x4.widen_i8x16_u") == 0) { return makeSIMDWiden(s, SIMDWidenOp::WidenUVecI8x16ToVecI32x4); }
                             goto parse_error;
                           default: goto parse_error;
                         }

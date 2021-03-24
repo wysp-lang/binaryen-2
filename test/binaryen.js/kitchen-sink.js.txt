@@ -41,6 +41,7 @@ Features.ReferenceTypes: 256
 Features.Multivalue: 512
 Features.GC: 1024
 Features.Memory64: 2048
+Features.TypedFunctionReferences: 4096
 Features.All: 8191
 InvalidId: 0
 BlockId: 1
@@ -76,35 +77,35 @@ SIMDShuffleId: 32
 SIMDTernaryId: 33
 SIMDShiftId: 34
 SIMDLoadId: 35
-MemoryInitId: 37
-DataDropId: 38
-MemoryCopyId: 39
-MemoryFillId: 40
-PopId: 41
-RefNullId: 42
-RefIsId: 43
-RefFuncId: 44
-RefEqId: 45
-TryId: 46
-ThrowId: 47
-RethrowId: 48
-TupleMakeId: 49
-TupleExtractId: 50
-I31NewId: 51
-I31GetId: 52
-CallRefId: 53
-RefTestId: 54
-RefCastId: 55
-BrOnId: 56
-RttCanonId: 57
-RttSubId: 58
-StructNewId: 59
-StructGetId: 60
-StructSetId: 61
-ArrayNewId: 62
-ArrayGetId: 63
-ArraySetId: 64
-ArrayLenId: 65
+MemoryInitId: 38
+DataDropId: 39
+MemoryCopyId: 40
+MemoryFillId: 41
+PopId: 42
+RefNullId: 43
+RefIsId: 44
+RefFuncId: 45
+RefEqId: 46
+TryId: 47
+ThrowId: 48
+RethrowId: 49
+TupleMakeId: 50
+TupleExtractId: 51
+I31NewId: 52
+I31GetId: 53
+CallRefId: 54
+RefTestId: 55
+RefCastId: 56
+BrOnId: 57
+RttCanonId: 58
+RttSubId: 59
+StructNewId: 60
+StructGetId: 61
+StructSetId: 62
+ArrayNewId: 63
+ArrayGetId: 64
+ArraySetId: 65
+ArrayLenId: 66
 getExpressionInfo={"id":15,"type":4,"op":6}
 (f32.neg
  (f32.const -33.61199951171875)
@@ -130,8 +131,8 @@ getExpressionInfo(tuple[3])={"id":14,"type":5,"value":3.7}
  (memory $0 (shared 1 256))
  (data (i32.const 10) "hello, world")
  (data passive "I am passive")
- (table $0 1 funcref)
- (elem (i32.const 0) "$kitchen()sinker")
+ (table $t0 1 funcref)
+ (elem $e0 (i32.const 0) "$kitchen()sinker")
  (global $a-global i32 (i32.const 1))
  (event $a-event (attr 0) (param i32))
  (export "kitchen_sinker" (func "$kitchen()sinker"))
@@ -1758,7 +1759,7 @@ getExpressionInfo(tuple[3])={"id":14,"type":5,"value":3.7}
       )
       (drop
        (i32.eqz
-        (call_indirect (type $i32_i64_f32_f64_=>_i32)
+        (call_indirect $t0 (type $i32_i64_f32_f64_=>_i32)
          (i32.const 13)
          (i64.const 37)
          (f32.const 1.2999999523162842)
@@ -1822,7 +1823,7 @@ getExpressionInfo(tuple[3])={"id":14,"type":5,"value":3.7}
        (f32.const 1.2999999523162842)
        (f64.const 3.7)
       )
-      (return_call_indirect (type $i32_i64_f32_f64_=>_i32)
+      (return_call_indirect $t0 (type $i32_i64_f32_f64_=>_i32)
        (i32.const 13)
        (i64.const 37)
        (f32.const 1.2999999523162842)
@@ -1992,8 +1993,8 @@ getExpressionInfo(tuple[3])={"id":14,"type":5,"value":3.7}
  (memory $0 (shared 1 256))
  (data (i32.const 10) "hello, world")
  (data passive "I am passive")
- (table $0 1 funcref)
- (elem (i32.const 0) "$kitchen()sinker")
+ (table $t0 1 funcref)
+ (elem $e0 (i32.const 0) "$kitchen()sinker")
  (global $a-global i32 (i32.const 1))
  (event $a-event (attr 0) (param i32))
  (export "kitchen_sinker" (func "$kitchen()sinker"))
@@ -3620,7 +3621,7 @@ getExpressionInfo(tuple[3])={"id":14,"type":5,"value":3.7}
       )
       (drop
        (i32.eqz
-        (call_indirect (type $i32_i64_f32_f64_=>_i32)
+        (call_indirect $t0 (type $i32_i64_f32_f64_=>_i32)
          (i32.const 13)
          (i64.const 37)
          (f32.const 1.2999999523162842)
@@ -3684,7 +3685,7 @@ getExpressionInfo(tuple[3])={"id":14,"type":5,"value":3.7}
        (f32.const 1.2999999523162842)
        (f64.const 3.7)
       )
-      (return_call_indirect (type $i32_i64_f32_f64_=>_i32)
+      (return_call_indirect $t0 (type $i32_i64_f32_f64_=>_i32)
        (i32.const 13)
        (i64.const 37)
        (f32.const 1.2999999523162842)
@@ -4388,8 +4389,8 @@ sizeof Literal: 24
  (memory $0 1 256)
  (data (i32.const 10) "hello, world")
  (data (global.get $a-global) "segment data 2")
- (table $0 1 funcref)
- (elem (i32.const 0) $fn0 $fn1 $fn2)
+ (table $t0 1 funcref)
+ (elem $e0 (i32.const 0) $fn0 $fn1 $fn2)
  (global $a-global i32 (i32.const 125))
  (global $a-global2 i32 (i32.const 2))
  (global $a-global3 i32 (i32.const 3))

@@ -117,6 +117,7 @@ static Expression* fromABI(Expression* value, Type type, Module* module) {
     }
     case Type::none: {
       value = builder.makeDrop(value);
+      break;
     }
     case Type::unreachable: {
       // can leave it, the call isn't taken anyhow
@@ -172,8 +173,8 @@ struct FuncCastEmulation : public Pass {
     Signature ABIType(Type(std::vector<Type>(numParams, Type::i64)), Type::i64);
     // Add a thunk for each function in the table, and do the call through it.
     std::unordered_map<Name, Name> funcThunks;
-    for (auto& segment : module->table.segments) {
-      for (auto& name : segment.data) {
+    for (auto& segment : module->elementSegments) {
+      for (auto& name : segment->data) {
         auto iter = funcThunks.find(name);
         if (iter == funcThunks.end()) {
           auto thunk = makeThunk(name, module, numParams);
@@ -184,6 +185,7 @@ struct FuncCastEmulation : public Pass {
         }
       }
     }
+
     // update call_indirects
     ParallelFuncCastEmulation(ABIType, numParams).run(runner, module);
   }

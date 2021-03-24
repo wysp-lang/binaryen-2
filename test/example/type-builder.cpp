@@ -70,10 +70,11 @@ void test_builder() {
 void test_canonicalization() {
   std::cout << ";; Test canonicalization\n";
 
-  // (type $struct (struct (field (ref null $sig))))
+  // (type $struct (struct (field (ref null $sig) (ref null $sig))))
   // (type $sig (func))
   HeapType sig = Signature(Type::none, Type::none);
-  HeapType struct_ = Struct({Field(Type(sig, Nullable), Immutable)});
+  HeapType struct_ = Struct({Field(Type(sig, Nullable), Immutable),
+                             Field(Type(sig, Nullable), Immutable)});
 
   TypeBuilder builder(4);
 
@@ -84,8 +85,10 @@ void test_canonicalization() {
   assert(tempSigRef1 != Type(sig, Nullable));
   assert(tempSigRef2 != Type(sig, Nullable));
 
-  builder.setHeapType(0, Struct({Field(tempSigRef1, Immutable)}));
-  builder.setHeapType(1, Struct({Field(tempSigRef2, Immutable)}));
+  builder.setHeapType(
+    0, Struct({Field(tempSigRef1, Immutable), Field(tempSigRef1, Immutable)}));
+  builder.setHeapType(
+    1, Struct({Field(tempSigRef2, Immutable), Field(tempSigRef2, Immutable)}));
   builder.setHeapType(2, Signature(Type::none, Type::none));
   builder.setHeapType(3, Signature(Type::none, Type::none));
 
@@ -102,36 +105,121 @@ void test_recursive() {
 
   {
     // Trivial recursion
-    TypeBuilder builder(1);
-    Type temp = builder.getTempRefType(0, Nullable);
-    builder.setHeapType(0, Signature(Type::none, temp));
-    // std::vector<HeapType> built = builder.build();
+    std::vector<HeapType> built;
+    {
+      TypeBuilder builder(1);
+      Type temp = builder.getTempRefType(0, Nullable);
+      builder.setHeapType(0, Signature(Type::none, temp));
+      built = builder.build();
+    }
+    std::cout << built[0] << "\n\n";
+    assert(built[0] == built[0].getSignature().results.getHeapType());
+    assert(Type(built[0], Nullable) == built[0].getSignature().results);
   }
 
   {
     // Mutual recursion
-    TypeBuilder builder(2);
-    Type temp0 = builder.getTempRefType(0, Nullable);
-    Type temp1 = builder.getTempRefType(1, Nullable);
-    builder.setHeapType(0, Signature(Type::none, temp1));
-    builder.setHeapType(1, Signature(Type::none, temp0));
-    // std::vector<HeapType> built = builder.build();
+    std::vector<HeapType> built;
+    {
+      TypeBuilder builder(2);
+      Type temp0 = builder.getTempRefType(0, Nullable);
+      Type temp1 = builder.getTempRefType(1, Nullable);
+      builder.setHeapType(0, Signature(Type::none, temp1));
+      builder.setHeapType(1, Signature(Type::none, temp0));
+      built = builder.build();
+    }
+    std::cout << built[0] << "\n";
+    std::cout << built[1] << "\n\n";
+    assert(built[0].getSignature().results.getHeapType() == built[1]);
+    assert(built[1].getSignature().results.getHeapType() == built[0]);
+    assert(built[0] == built[1]);
   }
 
   {
     // A longer chain of recursion
-    TypeBuilder builder(5);
-    Type temp0 = builder.getTempRefType(0, Nullable);
-    Type temp1 = builder.getTempRefType(1, Nullable);
-    Type temp2 = builder.getTempRefType(2, Nullable);
-    Type temp3 = builder.getTempRefType(3, Nullable);
-    Type temp4 = builder.getTempRefType(4, Nullable);
-    builder.setHeapType(0, Signature(Type::none, temp1));
-    builder.setHeapType(1, Signature(Type::none, temp2));
-    builder.setHeapType(2, Signature(Type::none, temp3));
-    builder.setHeapType(3, Signature(Type::none, temp4));
-    builder.setHeapType(4, Signature(Type::none, temp0));
-    // std::vector<HeapType> built = builder.build();
+    std::vector<HeapType> built;
+    {
+      TypeBuilder builder(5);
+      Type temp0 = builder.getTempRefType(0, Nullable);
+      Type temp1 = builder.getTempRefType(1, Nullable);
+      Type temp2 = builder.getTempRefType(2, Nullable);
+      Type temp3 = builder.getTempRefType(3, Nullable);
+      Type temp4 = builder.getTempRefType(4, Nullable);
+      builder.setHeapType(0, Signature(Type::none, temp1));
+      builder.setHeapType(1, Signature(Type::none, temp2));
+      builder.setHeapType(2, Signature(Type::none, temp3));
+      builder.setHeapType(3, Signature(Type::none, temp4));
+      builder.setHeapType(4, Signature(Type::none, temp0));
+      built = builder.build();
+    }
+    std::cout << built[0] << "\n";
+    std::cout << built[1] << "\n";
+    std::cout << built[2] << "\n";
+    std::cout << built[3] << "\n";
+    std::cout << built[4] << "\n\n";
+    assert(built[0].getSignature().results.getHeapType() == built[1]);
+    assert(built[1].getSignature().results.getHeapType() == built[2]);
+    assert(built[2].getSignature().results.getHeapType() == built[3]);
+    assert(built[3].getSignature().results.getHeapType() == built[4]);
+    assert(built[4].getSignature().results.getHeapType() == built[0]);
+    assert(built[0] == built[1]);
+    assert(built[1] == built[2]);
+    assert(built[2] == built[3]);
+    assert(built[3] == built[4]);
+  }
+
+  {
+    // Check canonicalization for non-recursive parents and children of
+    // recursive HeapTypes.
+    std::vector<HeapType> built;
+    {
+      TypeBuilder builder(6);
+      Type temp0 = builder.getTempRefType(0, Nullable);
+      Type temp1 = builder.getTempRefType(1, Nullable);
+      Type temp2 = builder.getTempRefType(2, Nullable);
+      Type temp3 = builder.getTempRefType(3, Nullable);
+      Type tuple0_2 = builder.getTempTupleType({temp0, temp2});
+      Type tuple1_3 = builder.getTempTupleType({temp1, temp3});
+      builder.setHeapType(0, Signature(Type::none, tuple0_2));
+      builder.setHeapType(1, Signature(Type::none, tuple1_3));
+      builder.setHeapType(2, Signature());
+      builder.setHeapType(3, Signature());
+      builder.setHeapType(4, Signature(Type::none, temp0));
+      builder.setHeapType(5, Signature(Type::none, temp1));
+      built = builder.build();
+    }
+    std::cout << built[0] << "\n";
+    std::cout << built[1] << "\n";
+    std::cout << built[2] << "\n";
+    std::cout << built[3] << "\n";
+    std::cout << built[4] << "\n";
+    std::cout << built[5] << "\n\n";
+    assert(built[0] == built[1]);
+    assert(built[2] == built[3]);
+    assert(built[4] == built[5]);
+    assert(built[4].getSignature().results.getHeapType() == built[0]);
+    assert(built[5].getSignature().results.getHeapType() == built[1]);
+    assert(built[0].getSignature().results ==
+           Type({Type(built[0], Nullable), Type(built[2], Nullable)}));
+    assert(built[1].getSignature().results ==
+           Type({Type(built[1], Nullable), Type(built[3], Nullable)}));
+  }
+
+  {
+    // Folded and unfolded
+    std::vector<HeapType> built;
+    {
+      TypeBuilder builder(2);
+      Type temp0 = builder.getTempRefType(0, Nullable);
+      builder.setHeapType(0, Signature(Type::none, temp0));
+      builder.setHeapType(1, Signature(Type::none, temp0));
+      built = builder.build();
+    }
+    std::cout << built[0] << "\n";
+    std::cout << built[1] << "\n\n";
+    assert(built[0].getSignature().results.getHeapType() == built[0]);
+    assert(built[1].getSignature().results.getHeapType() == built[0]);
+    assert(built[0] == built[1]);
   }
 }
 

@@ -261,6 +261,8 @@ void test_features() {
   printf("BinaryenFeatureMultivalue: %d\n", BinaryenFeatureMultivalue());
   printf("BinaryenFeatureGC: %d\n", BinaryenFeatureGC());
   printf("BinaryenFeatureMemory64: %d\n", BinaryenFeatureMemory64());
+  printf("BinaryenFeatureTypedFunctionReferences: %d\n",
+         BinaryenFeatureTypedFunctionReferences());
   printf("BinaryenFeatureAll: %d\n", BinaryenFeatureAll());
 }
 
@@ -318,6 +320,8 @@ void test_core() {
   BinaryenAddEvent(
     module, "a-event", 0, BinaryenTypeInt32(), BinaryenTypeNone());
 
+  BinaryenAddTable(module, "tab", 0, 100);
+
   // Exception handling
 
   // (try
@@ -334,8 +338,11 @@ void test_core() {
   BinaryenExpressionRef catchBody =
     BinaryenDrop(module, BinaryenPop(module, BinaryenTypeInt32()));
   BinaryenExpressionRef catchAllBody = BinaryenNop(module);
-  BinaryenExpressionRef catchBodies[] = {catchBody, catchAllBody};
   const char* catchEvents[] = {"a-event"};
+  BinaryenExpressionRef catchBodies[] = {catchBody, catchAllBody};
+  const char* emptyCatchEvents[] = {};
+  BinaryenExpressionRef emptyCatchBodies[] = {};
+  BinaryenExpressionRef nopCatchBody[] = {BinaryenNop(module)};
 
   BinaryenType i32 = BinaryenTypeInt32();
   BinaryenType i64 = BinaryenTypeInt64();
@@ -680,6 +687,7 @@ void test_core() {
     BinaryenUnary(module,
                   BinaryenEqZInt32(), // check the output type of the call node
                   BinaryenCallIndirect(module,
+                                       "tab",
                                        makeInt32(module, 2449),
                                        callOperands4b,
                                        4,
@@ -704,6 +712,7 @@ void test_core() {
     BinaryenReturnCall(
       module, "kitchen()sinker", callOperands4, 4, BinaryenTypeInt32()),
     BinaryenReturnCallIndirect(module,
+                               "tab",
                                makeInt32(module, 2449),
                                callOperands4b,
                                4,
@@ -722,8 +731,55 @@ void test_core() {
     BinaryenRefEq(module,
                   BinaryenRefNull(module, BinaryenTypeEqref()),
                   BinaryenRefNull(module, BinaryenTypeEqref())),
+    BinaryenRefIs(module,
+                  BinaryenRefIsFunc(),
+                  BinaryenRefNull(module, BinaryenTypeAnyref())),
+    BinaryenRefIs(module,
+                  BinaryenRefIsData(),
+                  BinaryenRefNull(module, BinaryenTypeAnyref())),
+    BinaryenRefIs(module,
+                  BinaryenRefIsI31(),
+                  BinaryenRefNull(module, BinaryenTypeAnyref())),
+    BinaryenRefAs(module,
+                  BinaryenRefAsNonNull(),
+                  BinaryenRefNull(module, BinaryenTypeAnyref())),
+    BinaryenRefAs(module,
+                  BinaryenRefAsFunc(),
+                  BinaryenRefNull(module, BinaryenTypeAnyref())),
+    BinaryenRefAs(module,
+                  BinaryenRefAsData(),
+                  BinaryenRefNull(module, BinaryenTypeAnyref())),
+    BinaryenRefAs(module,
+                  BinaryenRefAsI31(),
+                  BinaryenRefNull(module, BinaryenTypeAnyref())),
     // Exception handling
-    BinaryenTry(module, tryBody, catchEvents, 1, catchBodies, 2),
+    BinaryenTry(module, NULL, tryBody, catchEvents, 1, catchBodies, 2, NULL),
+    // (try $try_outer
+    //   (do
+    //     (try
+    //       (do
+    //         (throw $a-event (i32.const 0))
+    //       )
+    //       (delegate $try_outer)
+    //     )
+    //   )
+    //   (catch_all)
+    // )
+    BinaryenTry(module,
+                "try_outer",
+                BinaryenTry(module,
+                            NULL,
+                            tryBody,
+                            emptyCatchEvents,
+                            0,
+                            emptyCatchBodies,
+                            0,
+                            "try_outer"),
+                emptyCatchEvents,
+                0,
+                nopCatchBody,
+                1,
+                NULL),
     // Atomics
     BinaryenAtomicStore(
       module,
@@ -799,12 +855,22 @@ void test_core() {
 
   // Function table. One per module
   const char* funcNames[] = { BinaryenFunctionGetName(sinker) };
-  BinaryenSetFunctionTable(module, 1, 1, funcNames, 1, BinaryenConst(module, BinaryenLiteralInt32(0)));
+  BinaryenAddTable(module, "0", 1, 1);
+  BinaryenAddActiveElementSegment(
+    module,
+    "0",
+    "0",
+    funcNames,
+    1,
+    BinaryenConst(module, BinaryenLiteralInt32(0)));
+  BinaryenAddPassiveElementSegment(module, "passive", funcNames, 1);
+  BinaryenAddPassiveElementSegment(module, "p2", funcNames, 1);
+  BinaryenRemoveElementSegment(module, "p2");
 
   // Memory. One per module
 
   const char* segments[] = { "hello, world", "I am passive" };
-  int8_t segmentPassive[] = { 0, 1 };
+  bool segmentPassive[] = {false, true};
   BinaryenExpressionRef segmentOffsets[] = { BinaryenConst(module, BinaryenLiteralInt32(10)), NULL };
   BinaryenIndex segmentSizes[] = { 12, 12 };
   BinaryenSetMemory(module, 1, 256, "mem", segments, segmentPassive, segmentOffsets, segmentSizes, 2, 1);
@@ -840,6 +906,7 @@ void test_core() {
 void test_unreachable() {
   BinaryenModuleRef module = BinaryenModuleCreate();
   BinaryenExpressionRef body = BinaryenCallIndirect(module,
+                                                    "invalid-table",
                                                     BinaryenUnreachable(module),
                                                     NULL,
                                                     0,
@@ -1300,7 +1367,7 @@ void test_for_each() {
 
     const char* segments[] = { "hello, world", "segment data 2" };
     const uint32_t expected_offsets[] = { 10, 125 };
-    int8_t segmentPassive[] = { 0, 0 };
+    bool segmentPassive[] = {false, false};
     BinaryenIndex segmentSizes[] = { 12, 14 };
 
     BinaryenExpressionRef segmentOffsets[] = {
@@ -1325,14 +1392,15 @@ void test_for_each() {
       BinaryenFunctionGetName(fns[2])
     };
     BinaryenExpressionRef constExprRef = BinaryenConst(module, BinaryenLiteralInt32(0));
-    BinaryenSetFunctionTable(module, 1, 1, funcNames, 3, constExprRef);
-    assert(0 == BinaryenIsFunctionTableImported(module));
-    assert(1 == BinaryenGetNumFunctionTableSegments(module));
-    assert(constExprRef == BinaryenGetFunctionTableSegmentOffset(module, 0));
-    assert(3 == BinaryenGetFunctionTableSegmentLength(module, 0));
-    for (i = 0; i != BinaryenGetFunctionTableSegmentLength(module, 0); ++i)
-    {
-      const char * str = BinaryenGetFunctionTableSegmentData(module, 0, i);
+    BinaryenAddTable(module, "0", 1, 1);
+    BinaryenAddActiveElementSegment(
+      module, "0", "0", funcNames, 3, constExprRef);
+    assert(1 == BinaryenGetNumElementSegments(module));
+    BinaryenElementSegmentRef segment =
+      BinaryenGetElementSegmentByIndex(module, 0);
+    assert(constExprRef == BinaryenElementSegmentGetOffset(segment));
+    for (i = 0; i != BinaryenElementSegmentGetLength(segment); ++i) {
+      const char* str = BinaryenElementSegmentGetData(segment, i);
       assert(0 == strcmp(funcNames[i], str));
     }
   }

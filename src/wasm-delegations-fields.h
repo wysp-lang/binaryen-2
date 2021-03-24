@@ -225,6 +225,7 @@ switch (DELEGATE_ID) {
   case Expression::Id::CallIndirectId: {
     DELEGATE_START(CallIndirect);
     DELEGATE_FIELD_CHILD(CallIndirect, target);
+    DELEGATE_FIELD_NAME(CallIndirect, table);
     DELEGATE_FIELD_CHILD_VECTOR(CallIndirect, operands);
     DELEGATE_FIELD_SIGNATURE(CallIndirect, sig);
     DELEGATE_FIELD_INT(CallIndirect, isReturn);
@@ -386,6 +387,14 @@ switch (DELEGATE_ID) {
     DELEGATE_END(SIMDLoadStoreLane);
     break;
   }
+  case Expression::Id::SIMDWidenId: {
+    DELEGATE_START(SIMDWiden);
+    DELEGATE_FIELD_CHILD(SIMDWiden, vec);
+    DELEGATE_FIELD_INT(SIMDWiden, op);
+    DELEGATE_FIELD_INT(SIMDWiden, index);
+    DELEGATE_END(SIMDWiden);
+    break;
+  }
   case Expression::Id::PrefetchId: {
     DELEGATE_START(Prefetch);
     DELEGATE_FIELD_CHILD(Prefetch, ptr);
@@ -506,8 +515,10 @@ switch (DELEGATE_ID) {
   }
   case Expression::Id::TryId: {
     DELEGATE_START(Try);
+    DELEGATE_FIELD_SCOPE_NAME_USE(Try, delegateTarget);
     DELEGATE_FIELD_CHILD_VECTOR(Try, catchBodies);
     DELEGATE_FIELD_NAME_VECTOR(Try, catchEvents);
+    DELEGATE_FIELD_SCOPE_NAME_DEF(Try, name);
     DELEGATE_FIELD_CHILD(Try, body);
     DELEGATE_END(Try);
     break;
@@ -521,7 +532,7 @@ switch (DELEGATE_ID) {
   }
   case Expression::Id::RethrowId: {
     DELEGATE_START(Rethrow);
-    DELEGATE_FIELD_INT(Rethrow, depth);
+    DELEGATE_FIELD_SCOPE_NAME_USE(Rethrow, target);
     DELEGATE_END(Rethrow);
     break;
   }

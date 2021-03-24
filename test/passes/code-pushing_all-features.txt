@@ -43,16 +43,14 @@
  (func $can-push-past-try
   (local $x i32)
   (block $out
-   (try
+   (try $try
     (do
      (throw $e
       (i32.const 0)
      )
     )
     (catch_all
-     (drop
-      (pop i32)
-     )
+     (nop)
     )
    )
    (drop
@@ -78,7 +76,7 @@
    (local.set $x
     (i32.const 1)
    )
-   (try
+   (try $try
     (do
      (call $foo)
     )
@@ -105,14 +103,14 @@
    (local.set $x
     (i32.const 1)
    )
-   (try
+   (try $l0
     (do
      (throw $e
       (i32.const 0)
      )
     )
     (catch_all
-     (rethrow 0)
+     (rethrow $l0)
     )
    )
    (drop
