@@ -90,6 +90,7 @@ public:
   //   if (x != 0) foo(1 / x);
   //
   // Executing the 1 / x unconditionally could trap.
+  // TODO: reason about br_as_* which are kind of like guarded traps.
   bool implicitTrap = false;
   // An atomic load/store/RMW/Cmpxchg or an operator that has a defined ordering
   // wrt atomics (e.g. memory.grow)
