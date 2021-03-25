@@ -673,8 +673,9 @@ private:
     Index numVars = upToSquared(MAX_VARS);
     for (Index i = 0; i < numVars; i++) {
       auto type = getConcreteType();
-      if (type.isRef() && !type.isNullable()) {
-        // We can't use a nullable type as a var, which is null-initialized.
+      if (!type.isDefaultable()) {
+        // We can't use a nondefaultable type as a var, as those must be
+        // initialized to some default value.
         continue;
       }
       funcContext->typeLocals[type].push_back(params.size() +
@@ -723,7 +724,9 @@ private:
     while (oneIn(3) && !finishedInput) {
       auto& randomElem =
         wasm.elementSegments[upTo(wasm.elementSegments.size())];
-      randomElem->data.push_back(func->name);
+      // FIXME: make the type NonNullable when we support it!
+      auto type = Type(HeapType(func->sig), Nullable);
+      randomElem->data.push_back(builder.makeRefFunc(func->name, type));
     }
     numAddedFunctions++;
     return func;
@@ -1436,11 +1439,13 @@ private:
     bool isReturn;
     while (1) {
       // TODO: handle unreachable
-      targetFn = wasm.getFunction(data[i]);
-      isReturn = type == Type::unreachable && wasm.features.hasTailCall() &&
-                 funcContext->func->sig.results == targetFn->sig.results;
-      if (targetFn->sig.results == type || isReturn) {
-        break;
+      if (auto* get = data[i]->dynCast<RefFunc>()) {
+        targetFn = wasm.getFunction(get->func);
+        isReturn = type == Type::unreachable && wasm.features.hasTailCall() &&
+                   funcContext->func->sig.results == targetFn->sig.results;
+        if (targetFn->sig.results == type || isReturn) {
+          break;
+        }
       }
       i++;
       if (i == data.size()) {
@@ -1490,7 +1495,7 @@ private:
     for (const auto& type : target->sig.params) {
       args.push_back(make(type));
     }
-    auto targetType = Type(HeapType(target->sig), Nullable);
+    auto targetType = Type(HeapType(target->sig), NonNullable);
     // TODO: half the time make a completely random item with that type.
     return builder.makeCallRef(
       builder.makeRefFunc(target->name, targetType), args, type, isReturn);
@@ -2096,9 +2101,7 @@ private:
       }
       // TODO: randomize the order
       for (auto& func : wasm.functions) {
-        // FIXME: RefFunc type should be non-nullable, but we emit nullable
-        //        types for now.
-        if (type == Type(HeapType(func->sig), Nullable)) {
+        if (type == Type(HeapType(func->sig), NonNullable)) {
           return builder.makeRefFunc(func->name, type);
         }
       }
