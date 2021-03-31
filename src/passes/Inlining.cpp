@@ -79,6 +79,7 @@ struct FunctionInfo {
   // See pass.h for how defaults for these options were chosen.
   bool worthInlining(const PassOptions& options) const {
     // Until we have proper support for try-delegate, ignore such functions.
+    // FIXME https://github.com/WebAssembly/binaryen/issues/3634
     if (hasTryDelegate) {
       return false;
     }
