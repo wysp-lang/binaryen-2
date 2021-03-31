@@ -25,20 +25,19 @@ total
  store          : 5       
 =======
  [tables]       : 0       
- [total]        : 558     
- [vars]         : 4       
+ [total]        : 553     
+ [vars]         : 2       
  Binary         : 12      
- Block          : 8       
+ Block          : 7       
  Break          : 3       
- Call           : 3       
+ Call           : 1       
  CallIndirect   : 4       
- Const          : 45      
+ Const          : 46      
  Drop           : 3       
- GlobalGet      : 1       
  GlobalSet      : 1       
  If             : 2       
  Load           : 16      
- LocalGet       : 18      
+ LocalGet       : 16      
  LocalSet       : 7       
  Loop           : 1       
  RefFunc        : 429     
@@ -256,6 +255,7 @@ total
  [imports]      : 3       
  [memory-data]  : 28      
  [table-data]   : 429     
+<<<<<<< HEAD
  [total]        : 120           -4
  [vars]         : 2       
  binary         : 12      
@@ -271,6 +271,25 @@ total
  local.set      : 6             -1
  loop           : 1       
  store          : 5       
+=======
+ [tables]       : 0       
+ [total]        : 549           -4
+ [vars]         : 2       
+ Binary         : 12      
+ Block          : 7       
+ Break          : 3       
+ Call           : 1       
+ CallIndirect   : 4       
+ Const          : 46      
+ Drop           : 3       
+ If             : 2       
+ Load           : 16      
+ LocalGet       : 14            -2
+ LocalSet       : 6             -1
+ Loop           : 1       
+ RefFunc        : 429     
+ Store          : 5       
+>>>>>>> 09cba0fa50b0492ecf7b7886180dbd6c5aa5d04d
 (module
  (type $i32_i32_i32_=>_i32 (func (param i32 i32 i32) (result i32)))
  (type $i32_i32_=>_i32 (func (param i32 i32) (result i32)))
@@ -495,21 +514,19 @@ total
  store          : 5       
 =======
  [tables]       : 0       
- [total]        : 558     
- [vars]         : 4       
+ [total]        : 549     
+ [vars]         : 2       
  Binary         : 12      
- Block          : 8       
+ Block          : 7       
  Break          : 3       
- Call           : 3       
+ Call           : 1       
  CallIndirect   : 4       
- Const          : 45      
+ Const          : 46      
  Drop           : 3       
- GlobalGet      : 1       
- GlobalSet      : 1       
  If             : 2       
  Load           : 16      
- LocalGet       : 18      
- LocalSet       : 7       
+ LocalGet       : 14      
+ LocalSet       : 6       
  Loop           : 1       
  RefFunc        : 429     
  Store          : 5       
