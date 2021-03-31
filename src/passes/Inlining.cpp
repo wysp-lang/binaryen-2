@@ -1,4 +1,3 @@
-#include <wasm-printing.h>
 #define INLINING_DEBUG 1
 /*
  * Copyright 2016 WebAssembly Community Group participants
@@ -407,7 +406,7 @@ static bool doInliningCopy(const InliningAction& action,
   }
   block->list.push_back(contentsBlock);
   block->type = retType;
-  TypeUpdating::handleNonNullableLocals(target, *module);
+  TypeUpdating::handleNonNullableLocals(target, *allocatingModule);
   return true;
 }
 
@@ -480,6 +479,8 @@ struct Scheduler {
             const InliningState& state,
             PassRunner* optimizationRunner)
     : module(module), state(state), optimizationRunner(optimizationRunner) {}
+
+  virtual ~Scheduler() {}
 
   // Schedule and run everything.
   // Returns whether we made any changes.
