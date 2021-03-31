@@ -25,7 +25,7 @@
 
   ;; Arrays
   (type $vector (array (mut f64)))
-  (type $matrix (array (ref $vector)))
+  (type $matrix (array (mut (ref null $vector))))
   (type $bytes (array (mut i8)))
   (type $words (array (mut i32)))
 
@@ -36,6 +36,9 @@
   (global $rttparent (rtt 0 $parent) (rtt.canon $parent))
   (global $rttchild (rtt 1 $child) (rtt.sub $child (global.get $rttparent)))
   (global $rttgrandchild (rtt 2 $grandchild) (rtt.sub $grandchild (global.get $rttchild)))
+
+  (type $nested-child-struct (struct (field (mut (ref $child)))))
+  (type $nested-child-array (array (mut (ref $child))))
 
   (func $structs (param $x (ref $struct.A)) (result (ref $struct.B))
     (local $tA (ref null $struct.A))
@@ -67,8 +70,8 @@
     (drop
       (struct.get_s $struct.B 0 (local.get $tB))
     )
+    ;; immutable fields allow subtyping.
     (drop
-      ;; immutable fields allow subtyping.
       (struct.get $child 0 (ref.null $grandchild))
     )
     (drop
@@ -101,6 +104,13 @@
     (struct.set $struct.C 0
       (ref.null $struct.C)
       (f32.const 100)
+    )
+    ;; values may be subtypes
+    (struct.set $nested-child-struct 0
+      (ref.null $nested-child-struct)
+      (ref.as_non_null
+       (ref.null $grandchild)
+      )
     )
     (drop
       (struct.new_default_with_rtt $struct.A
@@ -145,6 +155,14 @@
       (local.get $x)
       (i32.const 2)
       (f64.const 2.18281828)
+    )
+    ;; values may be subtypes
+    (array.set $nested-child-array
+      (ref.null $nested-child-array)
+      (i32.const 3)
+      (ref.as_non_null
+       (ref.null $grandchild)
+      )
     )
     (drop
       (array.len $vector
@@ -209,7 +227,7 @@
   )
   (func $br_on_X (param $x anyref)
     (local $y anyref)
-    (local $z (ref any))
+    (local $z (ref null any))
     (block $null
       (local.set $z
         (br_on_null $null (local.get $x))
@@ -224,7 +242,7 @@
       )
     )
     (drop
-      (block $data (result dataref)
+      (block $data (result (ref null data))
         (local.set $y
           (br_on_data $data (local.get $x))
         )
@@ -232,7 +250,7 @@
       )
     )
     (drop
-      (block $i31 (result i31ref)
+      (block $i31 (result (ref null i31))
         (local.set $y
           (br_on_i31 $i31 (local.get $x))
         )

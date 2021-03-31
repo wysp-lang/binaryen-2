@@ -48,6 +48,7 @@
 #include "ir/find_all.h"
 #include "ir/literal-utils.h"
 #include "ir/module-utils.h"
+#include "ir/type-updating.h"
 #include "ir/utils.h"
 #include "parsing.h"
 #include "pass.h"
@@ -405,6 +406,7 @@ static bool doInliningCopy(const InliningAction& action,
   }
   block->list.push_back(contentsBlock);
   block->type = retType;
+  TypeUpdating::handleNonNullableLocals(target, *module);
   return true;
 }
 

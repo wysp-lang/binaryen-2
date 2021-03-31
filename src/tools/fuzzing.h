@@ -27,6 +27,7 @@ high chance for set at start of loop
 
 // TODO Generate exception handling instructions
 
+#include "ir/branch-utils.h"
 #include "ir/memory-utils.h"
 #include <ir/find_all.h>
 #include <ir/literal-utils.h>
@@ -425,23 +426,20 @@ private:
 
   // TODO(reference-types): allow the fuzzer to create multiple tables
   void setupTables() {
-    if (wasm.tables.size() > 0) {
-      auto& table = wasm.tables[0];
-      table->initial = table->max = 0;
-
-      auto segment = std::make_unique<ElementSegment>(
-        table->name, builder.makeConst(int32_t(0)));
-      segment->setName(Name::fromInt(0), false);
-      wasm.addElementSegment(std::move(segment));
-    } else {
+    // Ensure an element segment, adding one or even adding a whole table as
+    // needed.
+    if (wasm.tables.empty()) {
       auto table = builder.makeTable(
         Names::getValidTableName(wasm, "fuzzing_table"), 0, 0);
       table->hasExplicitName = true;
-      auto segment = std::make_unique<ElementSegment>(
-        table->name, builder.makeConst(int32_t(0)));
-      segment->setName(Name::fromInt(0), false);
-      wasm.addElementSegment(std::move(segment));
       wasm.addTable(std::move(table));
+    }
+    if (wasm.elementSegments.empty()) {
+      // TODO: use a random table
+      auto segment = std::make_unique<ElementSegment>(
+        wasm.tables[0]->name, builder.makeConst(int32_t(0)));
+      segment->setName(Names::getValidElementSegmentName(wasm, "elem$"), false);
+      wasm.addElementSegment(std::move(segment));
     }
   }
 
@@ -868,39 +866,20 @@ private:
 
       void visitExpression(Expression* curr) {
         // Note all scope names, and fix up all uses.
-
-#define DELEGATE_ID curr->_id
-
-#define DELEGATE_START(id)                                                     \
-  auto* cast = curr->cast<id>();                                               \
-  WASM_UNUSED(cast);
-
-#define DELEGATE_GET_FIELD(id, name) cast->name
-
-#define DELEGATE_FIELD_SCOPE_NAME_DEF(id, name)                                \
-  if (cast->name.is()) {                                                       \
-    if (seen.count(cast->name)) {                                              \
-      replace();                                                               \
-    } else {                                                                   \
-      seen.insert(cast->name);                                                 \
-    }                                                                          \
-  }
-
-#define DELEGATE_FIELD_SCOPE_NAME_USE(id, name) replaceIfInvalid(cast->name);
-
-#define DELEGATE_FIELD_CHILD(id, name)
-#define DELEGATE_FIELD_OPTIONAL_CHILD(id, name)
-#define DELEGATE_FIELD_INT(id, name)
-#define DELEGATE_FIELD_INT_ARRAY(id, name)
-#define DELEGATE_FIELD_LITERAL(id, name)
-#define DELEGATE_FIELD_NAME(id, name)
-#define DELEGATE_FIELD_NAME_VECTOR(id, name)
-#define DELEGATE_FIELD_SCOPE_NAME_USE_VECTOR(id, name)
-#define DELEGATE_FIELD_SIGNATURE(id, name)
-#define DELEGATE_FIELD_TYPE(id, name)
-#define DELEGATE_FIELD_ADDRESS(id, name)
-
-#include "wasm-delegations-fields.h"
+        BranchUtils::operateOnScopeNameDefs(curr, [&](Name& name) {
+          if (name.is()) {
+            if (seen.count(name)) {
+              replace();
+            } else {
+              seen.insert(name);
+            }
+          }
+        });
+        BranchUtils::operateOnScopeNameUses(curr, [&](Name& name) {
+          if (name.is()) {
+            replaceIfInvalid(name);
+          }
+        });
       }
 
       bool replaceIfInvalid(Name target) {
@@ -1483,6 +1462,7 @@ private:
     for (const auto& type : targetFn->sig.params) {
       args.push_back(make(type));
     }
+    // TODO: use a random table
     return builder.makeCallIndirect(
       wasm.tables[0]->name, target, args, targetFn->sig, isReturn);
   }
@@ -1510,7 +1490,7 @@ private:
     for (const auto& type : target->sig.params) {
       args.push_back(make(type));
     }
-    auto targetType = Type(HeapType(target->sig), Nullable);
+    auto targetType = Type(HeapType(target->sig), NonNullable);
     // TODO: half the time make a completely random item with that type.
     return builder.makeCallRef(
       builder.makeRefFunc(target->name, targetType), args, type, isReturn);
@@ -2116,9 +2096,7 @@ private:
       }
       // TODO: randomize the order
       for (auto& func : wasm.functions) {
-        // FIXME: RefFunc type should be non-nullable, but we emit nullable
-        //        types for now.
-        if (type == Type(HeapType(func->sig), Nullable)) {
+        if (type == Type(HeapType(func->sig), NonNullable)) {
           return builder.makeRefFunc(func->name, type);
         }
       }

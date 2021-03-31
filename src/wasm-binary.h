@@ -1250,7 +1250,15 @@ public:
   Module* getModule() { return wasm; }
 
   void writeType(Type type);
+
+  // Writes an arbitrary heap type, which may be indexed or one of the
+  // basic types like funcref.
   void writeHeapType(HeapType type);
+  // Writes an indexed heap type. Note that this is encoded differently than a
+  // general heap type because it does not allow negative values for basic heap
+  // types.
+  void writeIndexedHeapType(HeapType type);
+
   void writeField(const Field& field);
 
 private:
@@ -1298,7 +1306,9 @@ class WasmBinaryBuilder {
   const std::vector<char>& input;
   std::istream* sourceMap;
   std::pair<uint32_t, Function::DebugLocation> nextDebugLocation;
+  bool debugInfo = true;
   bool DWARF = false;
+  bool skipFunctionBodies = false;
 
   size_t pos = 0;
   Index startIndex = -1;
@@ -1315,7 +1325,11 @@ public:
     : wasm(wasm), allocator(wasm.allocator), input(input), sourceMap(nullptr),
       nextDebugLocation(0, {0, 0, 0}), debugLocation() {}
 
+  void setDebugInfo(bool value) { debugInfo = value; }
   void setDWARF(bool value) { DWARF = value; }
+  void setSkipFunctionBodies(bool skipFunctionBodies_) {
+    skipFunctionBodies = skipFunctionBodies_;
+  }
   void read();
   void readUserSection(size_t payloadLen);
 
@@ -1344,8 +1358,9 @@ public:
   Type getType();
   // Get a type given the initial S32LEB has already been read, and is provided.
   Type getType(int initial);
-
   HeapType getHeapType();
+  HeapType getIndexedHeapType();
+
   Type getConcreteType();
   Name getInlineString();
   void verifyInt8(int8_t x);

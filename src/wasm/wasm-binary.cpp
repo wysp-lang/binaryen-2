@@ -19,6 +19,7 @@
 
 #include "ir/module-utils.h"
 #include "ir/table-utils.h"
+#include "ir/type-updating.h"
 #include "support/bits.h"
 #include "support/debug.h"
 #include "wasm-binary.h"
@@ -1185,7 +1186,7 @@ void WasmBinaryWriter::writeType(Type type) {
     } else {
       o << S32LEB(BinaryConsts::EncodedType::rtt);
     }
-    writeHeapType(rtt.heapType);
+    writeIndexedHeapType(rtt.heapType);
     return;
   }
   int ret = 0;
@@ -1265,6 +1266,10 @@ void WasmBinaryWriter::writeHeapType(HeapType type) {
     WASM_UNREACHABLE("TODO: compound GC types");
   }
   o << S64LEB(ret); // TODO: Actually s33
+}
+
+void WasmBinaryWriter::writeIndexedHeapType(HeapType type) {
+  o << U32LEB(getTypeIndex(type));
 }
 
 void WasmBinaryWriter::writeField(const Field& field) {
@@ -1420,7 +1425,11 @@ void WasmBinaryBuilder::readUserSection(size_t payloadLen) {
   }
   payloadLen -= read;
   if (sectionName.equals(BinaryConsts::UserSections::Name)) {
-    readNames(payloadLen);
+    if (debugInfo) {
+      readNames(payloadLen);
+    } else {
+      pos += payloadLen;
+    }
   } else if (sectionName.equals(BinaryConsts::UserSections::TargetFeatures)) {
     readFeatures(payloadLen);
   } else if (sectionName.equals(BinaryConsts::UserSections::Dylink)) {
@@ -1587,12 +1596,10 @@ bool WasmBinaryBuilder::getBasicType(int32_t code, Type& out) {
       out = Type::eqref;
       return true;
     case BinaryConsts::EncodedType::i31ref:
-      // FIXME: for now, force all inputs to be nullable
-      out = Type(HeapType::i31, Nullable);
+      out = Type(HeapType::i31, NonNullable);
       return true;
     case BinaryConsts::EncodedType::dataref:
-      // FIXME: for now, force all inputs to be nullable
-      out = Type(HeapType::data, Nullable);
+      out = Type(HeapType::data, NonNullable);
       return true;
     default:
       return false;
@@ -1639,16 +1646,16 @@ Type WasmBinaryBuilder::getType(int initial) {
     case BinaryConsts::EncodedType::Empty:
       return Type::none;
     case BinaryConsts::EncodedType::nullable:
-    case BinaryConsts::EncodedType::nonnullable:
-      // FIXME: for now, force all inputs to be nullable
       return Type(getHeapType(), Nullable);
+    case BinaryConsts::EncodedType::nonnullable:
+      return Type(getHeapType(), NonNullable);
     case BinaryConsts::EncodedType::rtt_n: {
       auto depth = getU32LEB();
-      auto heapType = getHeapType();
+      auto heapType = getIndexedHeapType();
       return Type(Rtt(depth, heapType));
     }
     case BinaryConsts::EncodedType::rtt: {
-      return Type(Rtt(getHeapType()));
+      return Type(Rtt(getIndexedHeapType()));
     }
     default:
       throwError("invalid wasm type: " + std::to_string(initial));
@@ -1674,6 +1681,14 @@ HeapType WasmBinaryBuilder::getHeapType() {
     throwError("invalid wasm heap type: " + std::to_string(type));
   }
   WASM_UNREACHABLE("unexpected type");
+}
+
+HeapType WasmBinaryBuilder::getIndexedHeapType() {
+  auto index = getU32LEB();
+  if (index >= types.size()) {
+    throwError("invalid heap type index: " + std::to_string(index));
+  }
+  return types[index];
 }
 
 Type WasmBinaryBuilder::getConcreteType() {
@@ -1774,26 +1789,24 @@ void WasmBinaryBuilder::readTypes() {
     switch (typeCode) {
       case BinaryConsts::EncodedType::nullable:
       case BinaryConsts::EncodedType::nonnullable: {
-        // FIXME: for now, force all inputs to be nullable
+        auto nullability = typeCode == BinaryConsts::EncodedType::nullable
+                             ? Nullable
+                             : NonNullable;
         int64_t htCode = getS64LEB(); // TODO: Actually s33
         HeapType ht;
         if (getBasicHeapType(htCode, ht)) {
-          return Type(ht, Nullable);
+          return Type(ht, nullability);
         }
         if (size_t(htCode) >= numTypes) {
           throwError("invalid type index: " + std::to_string(htCode));
         }
-        return builder.getTempRefType(size_t(htCode), Nullable);
+        return builder.getTempRefType(size_t(htCode), nullability);
       }
       case BinaryConsts::EncodedType::rtt_n:
       case BinaryConsts::EncodedType::rtt: {
         auto depth = typeCode == BinaryConsts::EncodedType::rtt ? Rtt::NoDepth
                                                                 : getU32LEB();
-        int64_t htCode = getS64LEB(); // TODO: Actually s33
-        HeapType ht;
-        if (getBasicHeapType(htCode, ht)) {
-          return Type(Rtt(depth, ht));
-        }
+        auto htCode = getU32LEB();
         if (size_t(htCode) >= numTypes) {
           throwError("invalid type index: " + std::to_string(htCode));
         }
@@ -1914,17 +1927,17 @@ void WasmBinaryBuilder::getResizableLimits(Address& initial,
                                            Type& indexType,
                                            Address defaultIfNoMax) {
   auto flags = getU32LEB();
-  initial = getU32LEB();
   bool hasMax = (flags & BinaryConsts::HasMaximum) != 0;
   bool isShared = (flags & BinaryConsts::IsShared) != 0;
   bool is64 = (flags & BinaryConsts::Is64) != 0;
+  initial = is64 ? getU64LEB() : getU32LEB();
   if (isShared && !hasMax) {
     throwError("shared memory must have max size");
   }
   shared = isShared;
   indexType = is64 ? Type::i64 : Type::i32;
   if (hasMax) {
-    max = getU32LEB();
+    max = is64 ? getU64LEB() : getU32LEB();
   } else {
     max = defaultIfNoMax;
   }
@@ -2129,7 +2142,24 @@ void WasmBinaryBuilder::readFunctions() {
       assert(controlFlowStack.empty());
       assert(letStack.empty());
       assert(depth == 0);
-      func->body = getBlockOrSingleton(func->sig.results);
+      // Even if we are skipping function bodies we need to not skip the start
+      // function. That contains important code for wasm-emscripten-finalize in
+      // the form of pthread-related segment initializations. As this is just
+      // one function, it doesn't add significant time, so the optimization of
+      // skipping bodies is still very useful.
+      auto currFunctionIndex = functionImports.size() + functions.size();
+      bool isStart = startIndex == currFunctionIndex;
+      if (!skipFunctionBodies || isStart) {
+        func->body = getBlockOrSingleton(func->sig.results);
+      } else {
+        // When skipping the function body we need to put something valid in
+        // their place so we validate. An unreachable is always acceptable
+        // there.
+        func->body = Builder(wasm).makeUnreachable();
+
+        // Skip reading the contents.
+        pos = endOfFunction;
+      }
       assert(depth == 0);
       assert(breakStack.empty());
       assert(breakTargetNames.empty());
@@ -2143,6 +2173,9 @@ void WasmBinaryBuilder::readFunctions() {
         throwError("binary offset at function exit not at expected location");
       }
     }
+
+    TypeUpdating::handleNonNullableLocals(func, wasm);
+
     std::swap(func->epilogLocation, debugLocation);
     currFunction = nullptr;
     debugLocation.clear();
@@ -6043,8 +6076,8 @@ void WasmBinaryBuilder::visitRefFunc(RefFunc* curr) {
   functionRefs[index].push_back(curr); // we don't know function names yet
   // To support typed function refs, we give the reference not just a general
   // funcref, but a specific subtype with the actual signature.
-  // FIXME: for now, emit a nullable type here
-  curr->finalize(Type(HeapType(getSignatureByFunctionIndex(index)), Nullable));
+  curr->finalize(
+    Type(HeapType(getSignatureByFunctionIndex(index)), NonNullable));
 }
 
 void WasmBinaryBuilder::visitRefEq(RefEq* curr) {
@@ -6359,7 +6392,7 @@ bool WasmBinaryBuilder::maybeVisitRttCanon(Expression*& out, uint32_t code) {
   if (code != BinaryConsts::RttCanon) {
     return false;
   }
-  auto heapType = getHeapType();
+  auto heapType = getIndexedHeapType();
   out = Builder(wasm).makeRttCanon(heapType);
   return true;
 }
@@ -6368,7 +6401,7 @@ bool WasmBinaryBuilder::maybeVisitRttSub(Expression*& out, uint32_t code) {
   if (code != BinaryConsts::RttSub) {
     return false;
   }
-  auto targetHeapType = getHeapType();
+  auto targetHeapType = getIndexedHeapType();
   auto* parent = popNonVoidExpression();
   out = Builder(wasm).makeRttSub(targetHeapType, parent);
   return true;
@@ -6379,7 +6412,7 @@ bool WasmBinaryBuilder::maybeVisitStructNew(Expression*& out, uint32_t code) {
       code != BinaryConsts::StructNewDefaultWithRtt) {
     return false;
   }
-  auto heapType = getHeapType();
+  auto heapType = getIndexedHeapType();
   auto* rtt = popNonVoidExpression();
   validateHeapTypeUsingChild(rtt, heapType);
   std::vector<Expression*> operands;
@@ -6411,7 +6444,7 @@ bool WasmBinaryBuilder::maybeVisitStructGet(Expression*& out, uint32_t code) {
     default:
       return false;
   }
-  auto heapType = getHeapType();
+  auto heapType = getIndexedHeapType();
   curr->index = getU32LEB();
   curr->ref = popNonVoidExpression();
   validateHeapTypeUsingChild(curr->ref, heapType);
@@ -6425,7 +6458,7 @@ bool WasmBinaryBuilder::maybeVisitStructSet(Expression*& out, uint32_t code) {
     return false;
   }
   auto* curr = allocator.alloc<StructSet>();
-  auto heapType = getHeapType();
+  auto heapType = getIndexedHeapType();
   curr->index = getU32LEB();
   curr->value = popNonVoidExpression();
   curr->ref = popNonVoidExpression();
@@ -6440,7 +6473,7 @@ bool WasmBinaryBuilder::maybeVisitArrayNew(Expression*& out, uint32_t code) {
       code != BinaryConsts::ArrayNewDefaultWithRtt) {
     return false;
   }
-  auto heapType = getHeapType();
+  auto heapType = getIndexedHeapType();
   auto* rtt = popNonVoidExpression();
   validateHeapTypeUsingChild(rtt, heapType);
   auto* size = popNonVoidExpression();
@@ -6464,7 +6497,7 @@ bool WasmBinaryBuilder::maybeVisitArrayGet(Expression*& out, uint32_t code) {
     default:
       return false;
   }
-  auto heapType = getHeapType();
+  auto heapType = getIndexedHeapType();
   auto* index = popNonVoidExpression();
   auto* ref = popNonVoidExpression();
   validateHeapTypeUsingChild(ref, heapType);
@@ -6476,7 +6509,7 @@ bool WasmBinaryBuilder::maybeVisitArraySet(Expression*& out, uint32_t code) {
   if (code != BinaryConsts::ArraySet) {
     return false;
   }
-  auto heapType = getHeapType();
+  auto heapType = getIndexedHeapType();
   auto* value = popNonVoidExpression();
   auto* index = popNonVoidExpression();
   auto* ref = popNonVoidExpression();
@@ -6489,7 +6522,7 @@ bool WasmBinaryBuilder::maybeVisitArrayLen(Expression*& out, uint32_t code) {
   if (code != BinaryConsts::ArrayLen) {
     return false;
   }
-  auto heapType = getHeapType();
+  auto heapType = getIndexedHeapType();
   auto* ref = popNonVoidExpression();
   validateHeapTypeUsingChild(ref, heapType);
   out = Builder(wasm).makeArrayLen(ref);
