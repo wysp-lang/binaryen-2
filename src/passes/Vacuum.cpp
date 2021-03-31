@@ -83,20 +83,6 @@ struct Vacuum : public WalkerPass<ExpressionStackWalker<Vacuum>> {
         case Expression::Id::TryId:
           return curr; // not always needed, but handled in visitTry()
 
-        case Expression::Id::BreakId:
-        case Expression::Id::SwitchId:
-        case Expression::Id::BrOnExnId:
-        case Expression::Id::CallId:
-        case Expression::Id::CallIndirectId:
-        case Expression::Id::LocalSetId:
-        case Expression::Id::StoreId:
-        case Expression::Id::ReturnId:
-        case Expression::Id::GlobalSetId:
-        case Expression::Id::MemorySizeId:
-        case Expression::Id::MemoryGrowId:
-        case Expression::Id::UnreachableId:
-          return curr; // always needed
-
         case Expression::Id::LoadId: {
           // it is ok to remove a load if the result is not used, and it has no
           // side effects (the load itself may trap, if we are not ignoring such
@@ -130,7 +116,7 @@ struct Vacuum : public WalkerPass<ExpressionStackWalker<Vacuum>> {
           // binaries have implicit traps
           if (auto* unary = curr->dynCast<Unary>()) {
             EffectAnalyzer tester(getPassOptions(), features);
-            tester.visitUnary(unary);
+            tester.visit(unary);
             if (tester.hasSideEffects()) {
               return curr;
             }
@@ -143,7 +129,7 @@ struct Vacuum : public WalkerPass<ExpressionStackWalker<Vacuum>> {
             }
           } else if (auto* binary = curr->dynCast<Binary>()) {
             EffectAnalyzer tester(getPassOptions(), features);
-            tester.visitBinary(binary);
+            tester.visit(binary);
             if (tester.hasSideEffects()) {
               return curr;
             }

@@ -47,6 +47,7 @@ const char* ReferenceTypesFeature = "reference-types";
 const char* MultivalueFeature = "multivalue";
 const char* GCFeature = "gc";
 const char* Memory64Feature = "memory64";
+const char* TypedFunctionReferencesFeature = "typed-function-references";
 } // namespace UserSections
 } // namespace BinaryConsts
 
@@ -72,6 +73,8 @@ Name TABLE("table");
 Name ELEM("elem");
 Name LOCAL("local");
 Name TYPE("type");
+Name REF("ref");
+Name NULL_("null");
 Name CALL("call");
 Name CALL_INDIRECT("call_indirect");
 Name BLOCK("block");
@@ -154,15 +157,15 @@ const char* getExpressionName(Expression* curr) {
     case Expression::Id::UnreachableId:
       return "unreachable";
     case Expression::Id::AtomicCmpxchgId:
-      return "atomic_cmpxchg";
+      return "atomic.cmpxchg";
     case Expression::Id::AtomicRMWId:
-      return "atomic_rmw";
+      return "atomic.rmw";
     case Expression::Id::AtomicWaitId:
-      return "atomic_wait";
+      return "atomic.wait";
     case Expression::Id::AtomicNotifyId:
-      return "atomic_notify";
+      return "atomic.notify";
     case Expression::Id::AtomicFenceId:
-      return "atomic_fence";
+      return "atomic.fence";
     case Expression::Id::SIMDExtractId:
       return "simd_extract";
     case Expression::Id::SIMDReplaceId:
@@ -178,13 +181,13 @@ const char* getExpressionName(Expression* curr) {
     case Expression::Id::SIMDLoadStoreLaneId:
       return "simd_load_store_lane";
     case Expression::Id::MemoryInitId:
-      return "memory_init";
+      return "memory.init";
     case Expression::Id::DataDropId:
-      return "data_drop";
+      return "data.drop";
     case Expression::Id::MemoryCopyId:
-      return "memory_copy";
+      return "memory.copy";
     case Expression::Id::MemoryFillId:
-      return "memory_fill";
+      return "memory.fill";
     case Expression::Id::PopId:
       return "pop";
     case Expression::Id::RefNullId:
@@ -211,6 +214,8 @@ const char* getExpressionName(Expression* curr) {
       return "i31.new";
     case Expression::Id::I31GetId:
       return "i31.get";
+    case Expression::Id::CallRefId:
+      return "call_ref";
     case Expression::Id::RefTestId:
       return "ref.test";
     case Expression::Id::RefCastId:
@@ -984,7 +989,12 @@ void RefIsNull::finalize() {
   type = Type::i32;
 }
 
-void RefFunc::finalize() { type = Type::funcref; }
+void RefFunc::finalize() {
+  // No-op. We assume that the full proper typed function type has been applied
+  // previously.
+}
+
+void RefFunc::finalize(Type type_) { type = type_; }
 
 void RefEq::finalize() {
   if (left->type == Type::unreachable || right->type == Type::unreachable) {
@@ -1052,6 +1062,21 @@ void I31Get::finalize() {
   } else {
     type = Type::i32;
   }
+}
+
+void CallRef::finalize() {
+  handleUnreachableOperands(this);
+  if (isReturn) {
+    type = Type::unreachable;
+  }
+  if (target->type == Type::unreachable) {
+    type = Type::unreachable;
+  }
+}
+
+void CallRef::finalize(Type type_) {
+  type = type_;
+  finalize();
 }
 
 // TODO (gc): ref.test
@@ -1242,20 +1267,20 @@ Event* Module::addEvent(Event* curr) {
   return addModuleElement(events, eventsMap, curr, "addEvent");
 }
 
-Export* Module::addExport(std::unique_ptr<Export> curr) {
+Export* Module::addExport(std::unique_ptr<Export>&& curr) {
   return addModuleElement(exports, exportsMap, std::move(curr), "addExport");
 }
 
-Function* Module::addFunction(std::unique_ptr<Function> curr) {
+Function* Module::addFunction(std::unique_ptr<Function>&& curr) {
   return addModuleElement(
     functions, functionsMap, std::move(curr), "addFunction");
 }
 
-Global* Module::addGlobal(std::unique_ptr<Global> curr) {
+Global* Module::addGlobal(std::unique_ptr<Global>&& curr) {
   return addModuleElement(globals, globalsMap, std::move(curr), "addGlobal");
 }
 
-Event* Module::addEvent(std::unique_ptr<Event> curr) {
+Event* Module::addEvent(std::unique_ptr<Event>&& curr) {
   return addModuleElement(events, eventsMap, std::move(curr), "addEvent");
 }
 

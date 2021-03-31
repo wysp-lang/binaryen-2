@@ -66,6 +66,7 @@ DELEGATE(TupleMake);
 DELEGATE(TupleExtract);
 DELEGATE(I31New);
 DELEGATE(I31Get);
+DELEGATE(CallRef);
 DELEGATE(RefTest);
 DELEGATE(RefCast);
 DELEGATE(BrOnCast);
@@ -78,3 +79,5 @@ DELEGATE(ArrayNew);
 DELEGATE(ArrayGet);
 DELEGATE(ArraySet);
 DELEGATE(ArrayLen);
+
+#undef DELEGATE

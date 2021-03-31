@@ -383,15 +383,31 @@ bool Type::isRtt() const {
 }
 
 bool Type::operator<(const Type& other) const {
-  return std::lexicographical_compare(begin(),
-                                      end(),
-                                      other.begin(),
-                                      other.end(),
-                                      [](const Type& a, const Type& b) {
-                                        TODO_SINGLE_COMPOUND(a);
-                                        TODO_SINGLE_COMPOUND(b);
-                                        return a.getBasic() < b.getBasic();
-                                      });
+  auto comp = [](const Type& a, const Type& b) {
+    if (a.isBasic() && b.isBasic()) {
+      return a.getBasic() < b.getBasic();
+    }
+    if (a.isBasic()) {
+      return true;
+    }
+    if (b.isBasic()) {
+      return false;
+    }
+    // Both are compound.
+    if (a.isNullable() != b.isNullable()) {
+      return a.isNullable();
+    }
+    auto aHeap = a.getHeapType();
+    auto bHeap = b.getHeapType();
+    if (aHeap.isSignature() && bHeap.isSignature()) {
+      return aHeap.getSignature() < bHeap.getSignature();
+    }
+    TODO_SINGLE_COMPOUND(a);
+    TODO_SINGLE_COMPOUND(b);
+    WASM_UNREACHABLE("unimplemented type comparison");
+  };
+  return std::lexicographical_compare(
+    begin(), end(), other.begin(), other.end(), comp);
 }
 
 unsigned Type::getByteSize() const {
@@ -447,6 +463,14 @@ Type Type::reinterpret() const {
 
 FeatureSet Type::getFeatures() const {
   auto getSingleFeatures = [](Type t) -> FeatureSet {
+    if (t != Type::funcref && t.isFunction()) {
+      // Strictly speaking, typed function references require the typed function
+      // references feature, however, we use these types internally regardless
+      // of the presence of features (in particular, since during load of the
+      // wasm we don't know the features yet, so we apply the more refined
+      // types).
+      return FeatureSet::ReferenceTypes;
+    }
     TODO_SINGLE_COMPOUND(t);
     switch (t.getBasic()) {
       case Type::v128:
@@ -521,8 +545,21 @@ bool Type::isSubType(Type left, Type right) {
     return true;
   }
   if (left.isRef() && right.isRef()) {
-    return right == Type::anyref ||
-           (left == Type::i31ref && right == Type::eqref);
+    // Everything is a subtype of anyref.
+    if (right == Type::anyref) {
+      return true;
+    }
+    // Various things are subtypes of eqref.
+    if ((left == Type::i31ref || left.getHeapType().isArray() ||
+         left.getHeapType().isStruct()) &&
+        right == Type::eqref) {
+      return true;
+    }
+    // All typed function signatures are subtypes of funcref.
+    if (left.getHeapType().isSignature() && right == Type::funcref) {
+      return true;
+    }
+    return false;
   }
   if (left.isTuple() && right.isTuple()) {
     if (left.size() != right.size()) {
@@ -553,6 +590,9 @@ Type Type::getLeastUpperBound(Type a, Type b) {
   }
   if (a.isRef()) {
     if (b.isRef()) {
+      if (a.isFunction() && b.isFunction()) {
+        return Type::funcref;
+      }
       if ((a == Type::i31ref && b == Type::eqref) ||
           (a == Type::eqref && b == Type::i31ref)) {
         return Type::eqref;

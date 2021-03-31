@@ -221,7 +221,7 @@ void WasmBinaryWriter::writeTypes() {
     for (auto& sigType : {sig.params, sig.results}) {
       o << U32LEB(sigType.size());
       for (const auto& type : sigType) {
-        o << binaryType(type);
+        writeType(type);
       }
     }
   }
@@ -250,7 +250,7 @@ void WasmBinaryWriter::writeImports() {
     BYN_TRACE("write one global\n");
     writeImportHeader(global);
     o << U32LEB(int32_t(ExternalKind::Global));
-    o << binaryType(global->type);
+    writeType(global->type);
     o << U32LEB(global->mutable_);
   });
   ModuleUtils::iterImportedEvents(*wasm, [&](Event* event) {
@@ -389,7 +389,7 @@ void WasmBinaryWriter::writeGlobals() {
     BYN_TRACE("write one\n");
     size_t i = 0;
     for (const auto& t : global->type) {
-      o << binaryType(t);
+      writeType(t);
       o << U32LEB(global->mutable_);
       if (global->type.size() == 1) {
         writeExpression(global->init);
@@ -492,7 +492,12 @@ uint32_t WasmBinaryWriter::getEventIndex(Name name) const {
 
 uint32_t WasmBinaryWriter::getTypeIndex(Signature sig) const {
   auto it = typeIndices.find(sig);
-  assert(it != typeIndices.end());
+#ifndef NDEBUG
+  if (it == typeIndices.end()) {
+    std::cout << "Missing signature: " << sig << '\n';
+    assert(0);
+  }
+#endif
   return it->second;
 }
 
@@ -799,6 +804,8 @@ void WasmBinaryWriter::writeFeaturesSection() {
         return BinaryConsts::UserSections::GCFeature;
       case FeatureSet::Memory64:
         return BinaryConsts::UserSections::Memory64Feature;
+      case FeatureSet::TypedFunctionReferences:
+        return BinaryConsts::UserSections::TypedFunctionReferencesFeature;
       default:
         WASM_UNREACHABLE("unexpected feature flag");
     }
@@ -948,6 +955,100 @@ void WasmBinaryWriter::finishUp() {
       o << (uint8_t)buffer.data[i];
     }
   }
+}
+
+void WasmBinaryWriter::writeType(Type type) {
+  if (type.isRef()) {
+    auto heapType = type.getHeapType();
+    // TODO: fully handle non-signature reference types (GC), and in reading
+    if (heapType.isSignature()) {
+      if (type.isNullable()) {
+        o << S32LEB(BinaryConsts::EncodedType::nullable);
+      } else {
+        o << S32LEB(BinaryConsts::EncodedType::nonnullable);
+      }
+      writeHeapType(heapType);
+      return;
+    }
+  }
+  int ret = 0;
+  TODO_SINGLE_COMPOUND(type);
+  switch (type.getBasic()) {
+    // None only used for block signatures. TODO: Separate out?
+    case Type::none:
+      ret = BinaryConsts::EncodedType::Empty;
+      break;
+    case Type::i32:
+      ret = BinaryConsts::EncodedType::i32;
+      break;
+    case Type::i64:
+      ret = BinaryConsts::EncodedType::i64;
+      break;
+    case Type::f32:
+      ret = BinaryConsts::EncodedType::f32;
+      break;
+    case Type::f64:
+      ret = BinaryConsts::EncodedType::f64;
+      break;
+    case Type::v128:
+      ret = BinaryConsts::EncodedType::v128;
+      break;
+    case Type::funcref:
+      ret = BinaryConsts::EncodedType::funcref;
+      break;
+    case Type::externref:
+      ret = BinaryConsts::EncodedType::externref;
+      break;
+    case Type::exnref:
+      ret = BinaryConsts::EncodedType::exnref;
+      break;
+    case Type::anyref:
+      ret = BinaryConsts::EncodedType::anyref;
+      break;
+    case Type::eqref:
+      ret = BinaryConsts::EncodedType::eqref;
+      break;
+    case Type::i31ref:
+      ret = BinaryConsts::EncodedType::i31ref;
+      break;
+    default:
+      WASM_UNREACHABLE("unexpected type");
+  }
+  o << S32LEB(ret);
+}
+
+void WasmBinaryWriter::writeHeapType(HeapType type) {
+  if (type.isSignature()) {
+    auto sig = type.getSignature();
+    o << S32LEB(getTypeIndex(sig));
+    return;
+  }
+  int ret = 0;
+  switch (type.kind) {
+    case HeapType::FuncKind:
+      ret = BinaryConsts::EncodedHeapType::func;
+      break;
+    case HeapType::ExternKind:
+      ret = BinaryConsts::EncodedHeapType::extern_;
+      break;
+    case HeapType::ExnKind:
+      ret = BinaryConsts::EncodedHeapType::exn;
+      break;
+    case HeapType::AnyKind:
+      ret = BinaryConsts::EncodedHeapType::any;
+      break;
+    case HeapType::EqKind:
+      ret = BinaryConsts::EncodedHeapType::eq;
+      break;
+    case HeapType::I31Kind:
+      ret = BinaryConsts::EncodedHeapType::i31;
+      break;
+    case HeapType::SignatureKind:
+    case HeapType::StructKind:
+    case HeapType::ArrayKind:
+      WASM_UNREACHABLE("TODO: compound GC types");
+  }
+  o << S32LEB(ret); // TODO: Actually encoded as s33
 }
 
 // reader
@@ -1253,6 +1354,10 @@ Type WasmBinaryBuilder::getType() {
       return Type::anyref;
     case BinaryConsts::EncodedType::eqref:
       return Type::eqref;
+    case BinaryConsts::EncodedType::nullable:
+      return Type(getHeapType(), /* nullable = */ true);
+    case BinaryConsts::EncodedType::nonnullable:
+      return Type(getHeapType(), /* nullable = */ false);
     case BinaryConsts::EncodedType::i31ref:
       return Type::i31ref;
     default:
@@ -1474,11 +1579,11 @@ void WasmBinaryBuilder::readImports() {
           throwError("invalid function index " + std::to_string(index) + " / " +
                      std::to_string(signatures.size()));
         }
-        auto* curr = builder.makeFunction(name, signatures[index], {});
+        auto curr = builder.makeFunction(name, signatures[index], {});
         curr->module = module;
         curr->base = base;
-        wasm.addFunction(curr);
-        functionImports.push_back(curr);
+        functionImports.push_back(curr.get());
+        wasm.addFunction(std::move(curr));
         break;
       }
       case ExternalKind::Table: {
@@ -1524,15 +1629,15 @@ void WasmBinaryBuilder::readImports() {
         Name name(std::string("gimport$") + std::to_string(globalCounter++));
         auto type = getConcreteType();
         auto mutable_ = getU32LEB();
-        auto* curr =
+        auto curr =
           builder.makeGlobal(name,
                              type,
                              nullptr,
                              mutable_ ? Builder::Mutable : Builder::Immutable);
         curr->module = module;
         curr->base = base;
-        wasm.addGlobal(curr);
-        globalImports.push_back(curr);
+        globalImports.push_back(curr.get());
+        wasm.addGlobal(std::move(curr));
         break;
       }
       case ExternalKind::Event: {
@@ -1543,10 +1648,10 @@ void WasmBinaryBuilder::readImports() {
           throwError("invalid event index " + std::to_string(index) + " / " +
                      std::to_string(signatures.size()));
         }
-        auto* curr = builder.makeEvent(name, attribute, signatures[index]);
+        auto curr = builder.makeEvent(name, attribute, signatures[index]);
         curr->module = module;
         curr->base = base;
-        wasm.addEvent(curr);
+        wasm.addEvent(std::move(curr));
         break;
       }
       default: {
@@ -1579,6 +1684,18 @@ void WasmBinaryBuilder::readFunctionSignatures() {
     }
     functionSignatures.push_back(signatures[index]);
   }
+}
+
+Signature WasmBinaryBuilder::getFunctionSignatureByIndex(Index index) {
+  Signature sig;
+  if (index < functionImports.size()) {
+    return functionImports[index]->sig;
+  }
+  Index adjustedIndex = index - functionImports.size();
+  if (adjustedIndex >= functionSignatures.size()) {
+    throwError("invalid function index");
+  }
+  return functionSignatures[adjustedIndex];
 }
 
 void WasmBinaryBuilder::readFunctions() {
@@ -2065,8 +2182,8 @@ void WasmBinaryBuilder::processNames() {
   for (auto* func : functions) {
     wasm.addFunction(func);
   }
-  for (auto* global : globals) {
-    wasm.addGlobal(global);
+  for (auto& global : globals) {
+    wasm.addGlobal(std::move(global));
   }
 
   // now that we have names, apply things
@@ -2471,6 +2588,9 @@ void WasmBinaryBuilder::readFeatures(size_t payloadLen) {
         wasm.features.setGC();
       } else if (name == BinaryConsts::UserSections::Memory64Feature) {
         wasm.features.setMemory64();
+      } else if (name ==
+                 BinaryConsts::UserSections::TypedFunctionReferencesFeature) {
+        wasm.features.setTypedFunctionReferences();
       }
     }
   }
@@ -2638,6 +2758,16 @@ BinaryConsts::ASTNodes WasmBinaryBuilder::readExpression(Expression*& curr) {
       }
       curr = grow;
       visitMemoryGrow(grow);
+      break;
+    }
+    case BinaryConsts::CallRef:
+      visitCallRef((curr = allocator.alloc<CallRef>())->cast<CallRef>());
+      break;
+    case BinaryConsts::RetCallRef: {
+      auto call = allocator.alloc<CallRef>();
+      call->isReturn = true;
+      curr = call;
+      visitCallRef(call);
       break;
     }
     case BinaryConsts::AtomicPrefix: {
@@ -3042,17 +3172,7 @@ void WasmBinaryBuilder::visitSwitch(Switch* curr) {
 void WasmBinaryBuilder::visitCall(Call* curr) {
   BYN_TRACE("zz node: Call\n");
   auto index = getU32LEB();
-  Signature sig;
-  if (index < functionImports.size()) {
-    auto* import = functionImports[index];
-    sig = import->sig;
-  } else {
-    Index adjustedIndex = index - functionImports.size();
-    if (adjustedIndex >= functionSignatures.size()) {
-      throwError("invalid call index");
-    }
-    sig = functionSignatures[adjustedIndex];
-  }
+  auto sig = getFunctionSignatureByIndex(index);
   auto num = sig.params.size();
   curr->operands.resize(num);
   for (size_t i = 0; i < num; i++) {
@@ -3123,7 +3243,7 @@ void WasmBinaryBuilder::visitGlobalGet(GlobalGet* curr) {
     if (adjustedIndex >= globals.size()) {
       throwError("invalid global index");
     }
-    auto* glob = globals[adjustedIndex];
+    auto& glob = globals[adjustedIndex];
     curr->name = glob->name;
     curr->type = glob->type;
   }
@@ -3161,85 +3281,89 @@ bool WasmBinaryBuilder::maybeVisitLoad(Expression*& out,
                                        uint8_t code,
                                        bool isAtomic) {
   Load* curr;
+  auto allocate = [&]() {
+    curr = allocator.alloc<Load>();
+    // The signed field does not matter in some cases (where the size of the
+    // load is equal to the size of the type, in which case we do not extend),
+    // but give it a default value nonetheless, to make hashing and other code
+    // simpler, so that they do not need to consider whether the sign matters or
+    // not.
+    curr->signed_ = false;
+  };
   if (!isAtomic) {
     switch (code) {
       case BinaryConsts::I32LoadMem8S:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 1;
         curr->type = Type::i32;
         curr->signed_ = true;
         break;
       case BinaryConsts::I32LoadMem8U:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 1;
         curr->type = Type::i32;
-        curr->signed_ = false;
         break;
       case BinaryConsts::I32LoadMem16S:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 2;
         curr->type = Type::i32;
         curr->signed_ = true;
         break;
       case BinaryConsts::I32LoadMem16U:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 2;
         curr->type = Type::i32;
-        curr->signed_ = false;
         break;
       case BinaryConsts::I32LoadMem:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 4;
         curr->type = Type::i32;
         break;
       case BinaryConsts::I64LoadMem8S:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 1;
         curr->type = Type::i64;
         curr->signed_ = true;
         break;
       case BinaryConsts::I64LoadMem8U:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 1;
         curr->type = Type::i64;
-        curr->signed_ = false;
         break;
       case BinaryConsts::I64LoadMem16S:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 2;
         curr->type = Type::i64;
         curr->signed_ = true;
         break;
       case BinaryConsts::I64LoadMem16U:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 2;
         curr->type = Type::i64;
-        curr->signed_ = false;
         break;
       case BinaryConsts::I64LoadMem32S:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 4;
         curr->type = Type::i64;
         curr->signed_ = true;
         break;
       case BinaryConsts::I64LoadMem32U:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 4;
         curr->type = Type::i64;
-        curr->signed_ = false;
         break;
       case BinaryConsts::I64LoadMem:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 8;
         curr->type = Type::i64;
         break;
       case BinaryConsts::F32LoadMem:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 4;
         curr->type = Type::f32;
         break;
       case BinaryConsts::F64LoadMem:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 8;
         curr->type = Type::f64;
         break;
@@ -3250,44 +3374,43 @@ bool WasmBinaryBuilder::maybeVisitLoad(Expression*& out,
   } else {
     switch (code) {
       case BinaryConsts::I32AtomicLoad8U:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 1;
         curr->type = Type::i32;
         break;
       case BinaryConsts::I32AtomicLoad16U:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 2;
         curr->type = Type::i32;
         break;
       case BinaryConsts::I32AtomicLoad:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 4;
         curr->type = Type::i32;
         break;
       case BinaryConsts::I64AtomicLoad8U:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 1;
         curr->type = Type::i64;
         break;
       case BinaryConsts::I64AtomicLoad16U:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 2;
         curr->type = Type::i64;
         break;
       case BinaryConsts::I64AtomicLoad32U:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 4;
         curr->type = Type::i64;
         break;
       case BinaryConsts::I64AtomicLoad:
-        curr = allocator.alloc<Load>();
+        allocate();
         curr->bytes = 8;
         curr->type = Type::i64;
         break;
       default:
         return false;
     }
-    curr->signed_ = false;
     BYN_TRACE("zz node: AtomicLoad\n");
   }
 
@@ -5166,7 +5289,10 @@ void WasmBinaryBuilder::visitRefFunc(RefFunc* curr) {
     throwError("ref.func: invalid call index");
   }
   functionRefs[index].push_back(curr); // we don't know function names yet
-  curr->finalize();
+  // To support typed function refs, we give the reference not just a general
+  // funcref, but a specific subtype with the actual signature.
+  curr->finalize(
+    Type(HeapType(getFunctionSignatureByIndex(index)), /* nullable = */ true));
 }
 
 void WasmBinaryBuilder::visitRefEq(RefEq* curr) {
@@ -5308,6 +5434,26 @@ void WasmBinaryBuilder::visitBrOnExn(BrOnExn* curr) {
   // refinalized without the module.
   curr->sent = event->sig.params;
   curr->finalize();
+}
+
+void WasmBinaryBuilder::visitCallRef(CallRef* curr) {
+  BYN_TRACE("zz node: CallRef\n");
+  curr->target = popNonVoidExpression();
+  auto type = curr->target->type;
+  if (!type.isRef()) {
+    throwError("Non-ref type for a call_ref: " + type.toString());
+  }
+  auto heapType = type.getHeapType();
+  if (!heapType.isSignature()) {
+    throwError("Invalid reference type for a call_ref: " + type.toString());
+  }
+  auto sig = heapType.getSignature();
+  auto num = sig.params.size();
+  curr->operands.resize(num);
+  for (size_t i = 0; i < num; i++) {
+    curr->operands[num - i - 1] = popNonVoidExpression();
+  }
+  curr->finalize(sig.results);
 }
 
 bool WasmBinaryBuilder::maybeVisitI31New(Expression*& out, uint32_t code) {

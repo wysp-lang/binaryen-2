@@ -346,6 +346,10 @@ enum EncodedType {
   anyref = -0x12, // 0x6e
   // comparable reference type
   eqref = -0x13, // 0x6d
+  // nullable typed function reference type, with parameter
+  nullable = -0x14, // 0x6c
+  // non-nullable typed function reference type, with parameter
+  nonnullable = -0x15, // 0x6b
   // integer reference type
   i31ref = -0x16, // 0x6a
   // exception reference type
@@ -386,6 +390,7 @@ extern const char* ReferenceTypesFeature;
 extern const char* MultivalueFeature;
 extern const char* GCFeature;
 extern const char* Memory64Feature;
+extern const char* TypedFunctionReferencesFeature;
 
 enum Subsection {
   NameModule = 0,
@@ -967,6 +972,11 @@ enum ASTNodes {
   Rethrow = 0x09,
   BrOnExn = 0x0a,
 
+  // typed function references opcodes
+
+  CallRef = 0x14,
+  RetCallRef = 0x15,
+
   // gc opcodes
 
   RefEq = 0xd5,
@@ -1008,82 +1018,6 @@ enum FeaturePrefix {
 };
 
 } // namespace BinaryConsts
-
-inline S32LEB binaryType(Type type) {
-  int ret = 0;
-  TODO_SINGLE_COMPOUND(type);
-  switch (type.getBasic()) {
-    // None only used for block signatures. TODO: Separate out?
-    case Type::none:
-      ret = BinaryConsts::EncodedType::Empty;
-      break;
-    case Type::i32:
-      ret = BinaryConsts::EncodedType::i32;
-      break;
-    case Type::i64:
-      ret = BinaryConsts::EncodedType::i64;
-      break;
-    case Type::f32:
-      ret = BinaryConsts::EncodedType::f32;
-      break;
-    case Type::f64:
-      ret = BinaryConsts::EncodedType::f64;
-      break;
-    case Type::v128:
-      ret = BinaryConsts::EncodedType::v128;
-      break;
-    case Type::funcref:
-      ret = BinaryConsts::EncodedType::funcref;
-      break;
-    case Type::externref:
-      ret = BinaryConsts::EncodedType::externref;
-      break;
-    case Type::exnref:
-      ret = BinaryConsts::EncodedType::exnref;
-      break;
-    case Type::anyref:
-      ret = BinaryConsts::EncodedType::anyref;
-      break;
-    case Type::eqref:
-      ret = BinaryConsts::EncodedType::eqref;
-      break;
-    case Type::i31ref:
-      ret = BinaryConsts::EncodedType::i31ref;
-      break;
-    case Type::unreachable:
-      WASM_UNREACHABLE("unexpected type");
-  }
-  return S32LEB(ret);
-}
-
-inline S32LEB binaryHeapType(HeapType type) {
-  int ret = 0;
-  switch (type.kind) {
-    case HeapType::FuncKind:
-      ret = BinaryConsts::EncodedHeapType::func;
-      break;
-    case HeapType::ExternKind:
-      ret = BinaryConsts::EncodedHeapType::extern_;
-      break;
-    case HeapType::ExnKind:
-      ret = BinaryConsts::EncodedHeapType::exn;
-      break;
-    case HeapType::AnyKind:
-      ret = BinaryConsts::EncodedHeapType::any;
-      break;
-    case HeapType::EqKind:
-      ret = BinaryConsts::EncodedHeapType::eq;
-      break;
-    case HeapType::I31Kind:
-      ret = BinaryConsts::EncodedHeapType::i31;
-      break;
-    case HeapType::SignatureKind:
-    case HeapType::StructKind:
-    case HeapType::ArrayKind:
-      WASM_UNREACHABLE("TODO: compound GC types");
-  }
-  return S32LEB(ret); // TODO: Actually encoded as s33
-}
 
 // Writes out wasm to the binary format
 
@@ -1234,6 +1168,9 @@ public:
 
   Module* getModule() { return wasm; }
 
+  void writeType(Type type);
+  void writeHeapType(HeapType type);
+
 private:
   Module* wasm;
   BufferWithRandomAccess& o;
@@ -1342,6 +1279,8 @@ public:
   std::vector<Signature> functionSignatures;
 
   void readFunctionSignatures();
+  Signature getFunctionSignatureByIndex(Index index);
+
   size_t nextLabel;
 
   Name getNextLabel();
@@ -1362,7 +1301,7 @@ public:
   Index endOfFunction = -1;
 
   // we store globals here before wasm.addGlobal after we know their names
-  std::vector<Global*> globals;
+  std::vector<std::unique_ptr<Global>> globals;
   // we store global imports here before wasm.addGlobalImport after we know
   // their names
   std::vector<Global*> globalImports;
@@ -1475,19 +1414,20 @@ public:
   // Gets a block of expressions. If it's just one, return that singleton.
   Expression* getBlockOrSingleton(Type type);
 
+  BreakTarget getBreakTarget(int32_t offset);
+
+  void readMemoryAccess(Address& alignment, Address& offset);
+
   void visitIf(If* curr);
   void visitLoop(Loop* curr);
-  BreakTarget getBreakTarget(int32_t offset);
   void visitBreak(Break* curr, uint8_t code);
   void visitSwitch(Switch* curr);
-
   void visitCall(Call* curr);
   void visitCallIndirect(CallIndirect* curr);
   void visitLocalGet(LocalGet* curr);
   void visitLocalSet(LocalSet* curr, uint8_t code);
   void visitGlobalGet(GlobalGet* curr);
   void visitGlobalSet(GlobalSet* curr);
-  void readMemoryAccess(Address& alignment, Address& offset);
   bool maybeVisitLoad(Expression*& out, uint8_t code, bool isAtomic);
   bool maybeVisitStore(Expression*& out, uint8_t code, bool isAtomic);
   bool maybeVisitNontrappingTrunc(Expression*& out, uint32_t code);
@@ -1544,6 +1484,7 @@ public:
   void visitThrow(Throw* curr);
   void visitRethrow(Rethrow* curr);
   void visitBrOnExn(BrOnExn* curr);
+  void visitCallRef(CallRef* curr);
 
   void throwError(std::string text);
 
