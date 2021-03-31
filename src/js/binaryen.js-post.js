@@ -141,6 +141,7 @@ function initializeConstants() {
     'Multivalue',
     'GC',
     'Memory64',
+    'TypedFunctionReferences',
     'All'
   ].forEach(name => {
     Module['Features'][name] = Module['_BinaryenFeature' + name]();
@@ -2147,15 +2148,15 @@ function wrapModule(module, self = {}) {
     }
   };
 
-  self['try'] = function(body, catchEvents, catchBodies) {
+  self['try'] = function(name, body, catchEvents, catchBodies, delegateTarget) {
     return preserveStack(() =>
-      Module['_BinaryenTry'](module, body, i32sToStack(catchEvents.map(strToStack)), catchEvents.length, i32sToStack(catchBodies), catchBodies.length));
+      Module['_BinaryenTry'](module, name ? strToStack(name) : 0, body, i32sToStack(catchEvents.map(strToStack)), catchEvents.length, i32sToStack(catchBodies), catchBodies.length, delegateTarget ? strToStack(delegateTarget) : 0));
   };
   self['throw'] = function(event_, operands) {
     return preserveStack(() => Module['_BinaryenThrow'](module, strToStack(event_), i32sToStack(operands), operands.length));
   };
-  self['rethrow'] = function(depth) {
-    return Module['_BinaryenRethrow'](module, depth);
+  self['rethrow'] = function(target) {
+    return Module['_BinaryenRethrow'](module, strToStack(target));
   };
 
   self['tuple'] = {
@@ -2897,10 +2898,13 @@ Module['getExpressionInfo'] = function(expr) {
       return {
         'id': id,
         'type': type,
+        'name': UTF8ToString(Module['_BinaryenTryGetName'](expr)),
         'body': Module['_BinaryenTryGetBody'](expr),
         'catchEvents': getAllNested(expr, Module['_BinaryenTryGetNumCatchEvents'], Module['_BinaryenTryGetCatchEventAt']),
         'catchBodies': getAllNested(expr, Module['_BinaryenTryGetNumCatchBodies'], Module['_BinaryenTryGetCatchBodyAt']),
-        'hasCatchAll': Module['_BinaryenTryHasCatchAll'](expr)
+        'hasCatchAll': Module['_BinaryenTryHasCatchAll'](expr),
+        'delegateTarget': UTF8ToString(Module['_BinaryenTryGetDelegateTarget'](expr)),
+        'isDelegate': Module['_BinaryenTryIsDelegate'](expr)
       };
     case Module['ThrowId']:
       return {
@@ -2913,7 +2917,7 @@ Module['getExpressionInfo'] = function(expr) {
       return {
         'id': id,
         'type': type,
-        'depth': Module['_BinaryenRethrowGetDepth'](expr)
+        'target': UTF8ToString(Module['_BinaryenRethrowGetTarget'](expr))
       };
     case Module['TupleMakeId']:
       return {
@@ -4139,6 +4143,12 @@ Module['MemoryFill'] = makeExpressionWrapper({
 });
 
 Module['RefIs'] = makeExpressionWrapper({
+  'getOp'(expr) {
+    return Module['_BinaryenRefIsGetOp'](expr);
+  },
+  'setOp'(expr, op) {
+    Module['_BinaryenRefIsSetOp'](expr, op);
+  },
   'getValue'(expr) {
     return Module['_BinaryenRefIsGetValue'](expr);
   },
@@ -4172,6 +4182,13 @@ Module['RefEq'] = makeExpressionWrapper({
 });
 
 Module['Try'] = makeExpressionWrapper({
+  'getName'(expr) {
+    const name = Module['_BinaryenTryGetName'](expr);
+    return name ? UTF8ToString(name) : null;
+  },
+  'setName'(expr, name) {
+    preserveStack(() => { Module['_BinaryenTrySetName'](expr, strToStack(name)) });
+  },
   'getBody'(expr) {
     return Module['_BinaryenTryGetBody'](expr);
   },
@@ -4231,6 +4248,16 @@ Module['Try'] = makeExpressionWrapper({
   'hasCatchAll'(expr) {
     return Boolean(Module['_BinaryenTryHasCatchAll'](expr));
   },
+  'getDelegateTarget'(expr) {
+    const name = Module['_BinaryenTryGetDelegateTarget'](expr);
+    return name ? UTF8ToString(name) : null;
+  },
+  'setDelegateTarget'(expr, name) {
+    preserveStack(() => { Module['_BinaryenTrySetDelegateTarget'](expr, strToStack(name)) });
+  },
+  'isDelegate'(expr) {
+    return Boolean(Module['_BinaryenTryIsDelegate'](expr));
+  }
 });
 
 Module['Throw'] = makeExpressionWrapper({
@@ -4267,11 +4294,12 @@ Module['Throw'] = makeExpressionWrapper({
 });
 
 Module['Rethrow'] = makeExpressionWrapper({
-  'getDepth'(expr) {
-    return Module['_BinaryenRethrowGetDepth'](expr);
+  'getTarget'(expr) {
+    const target = Module['_BinaryenRethrowGetTarget'](expr);
+    return target ? UTF8ToString(target) : null;
   },
-  'setDepth'(expr, depthExpr) {
-    Module['_BinaryenRethrowSetDepth'](expr, depthExpr);
+  'setTarget'(expr, target) {
+    preserveStack(() => { Module['_BinaryenRethrowSetTarget'](expr, strToStack(target)) });
   }
 });
 

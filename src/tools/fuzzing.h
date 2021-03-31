@@ -1576,6 +1576,10 @@ private:
   }
 
   Expression* makeTupleExtract(Type type) {
+    // Tuples can require locals in binary format conversions.
+    if (!type.isDefaultable()) {
+      return makeTrivial(type);
+    }
     assert(wasm.features.hasMultivalue());
     assert(type.isSingle() && type.isConcrete());
     Type tupleType = getTupleType();
@@ -2120,13 +2124,7 @@ private:
       return builder.makeRefFunc(func->name, type);
     }
     if (type.isRtt()) {
-      Expression* ret = builder.makeRttCanon(type.getHeapType());
-      if (type.getRtt().hasDepth()) {
-        for (Index i = 0; i < type.getRtt().depth; i++) {
-          ret = builder.makeRttSub(type.getHeapType(), ret);
-        }
-      }
-      return ret;
+      return builder.makeRtt(type);
     }
     if (type.isTuple()) {
       std::vector<Expression*> operands;
@@ -3105,9 +3103,9 @@ private:
     size_t maxElements = 2 + upTo(MAX_TUPLE_SIZE - 1);
     for (size_t i = 0; i < maxElements; ++i) {
       auto type = getSingleConcreteType();
-      // Don't add a non-nullable type into a tuple, as currently we can't spill
-      // them into locals (that would require a "let").
-      if (!type.isNullable()) {
+      // Don't add a non-defaultable type into a tuple, as currently we can't
+      // spill them into locals (that would require a "let").
+      if (type.isDefaultable()) {
         elements.push_back(type);
       }
     }

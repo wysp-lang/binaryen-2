@@ -283,6 +283,13 @@
  )
 )
 
+(try (result i32)
+ (do
+  (i32.const 4)
+ )
+ (delegate $try_outer)
+)
+
 # Throw
 (throw $bar
  (i32.const 6)
@@ -290,7 +297,7 @@
 )
 
 # Rethrow
-(rethrow 1)
+(rethrow $l1)
 
 # TupleMake
 (tuple.make

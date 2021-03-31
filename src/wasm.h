@@ -1306,13 +1306,17 @@ class Try : public SpecificExpression<Expression::TryId> {
 public:
   Try(MixedArena& allocator) : catchEvents(allocator), catchBodies(allocator) {}
 
+  Name name; // label that can only be targeted by 'delegate's
   Expression* body;
   ArenaVector<Name> catchEvents;
   ExpressionList catchBodies;
+  Name delegateTarget; // target try's label
 
   bool hasCatchAll() const {
     return catchBodies.size() - catchEvents.size() == 1;
   }
+  bool isCatch() const { return !catchBodies.empty(); }
+  bool isDelegate() const { return delegateTarget.is(); }
   void finalize();
   void finalize(Type type_);
 };
@@ -1331,7 +1335,7 @@ class Rethrow : public SpecificExpression<Expression::RethrowId> {
 public:
   Rethrow(MixedArena& allocator) {}
 
-  Index depth;
+  Name target;
 
   void finalize();
 };
@@ -1786,7 +1790,6 @@ public:
   Address max = kMaxSize32;
   std::vector<Segment> segments;
 
-  // See comment in Table.
   bool shared = false;
   Type indexType = Type::i32;
 
@@ -1867,6 +1870,16 @@ public:
 
   // Module name, if specified. Serves a documentary role only.
   Name name;
+
+  // Optional type name information, used in printing only. Note that Types are
+  // globally interned, but type names are specific to a module.
+  struct TypeNames {
+    // The name of the type.
+    Name name;
+    // For a Struct, names of fields.
+    std::unordered_map<Index, Name> fieldNames;
+  };
+  std::unordered_map<HeapType, TypeNames> typeNames;
 
   MixedArena allocator;
 

@@ -246,6 +246,9 @@ BinaryenFeatures BinaryenFeatureGC(void) {
 BinaryenFeatures BinaryenFeatureMemory64(void) {
   return static_cast<BinaryenFeatures>(FeatureSet::Memory64);
 }
+BinaryenFeatures BinaryenFeatureTypedFunctionReferences(void) {
+  return static_cast<BinaryenFeatures>(FeatureSet::TypedFunctionReferences);
+}
 BinaryenFeatures BinaryenFeatureAll(void) {
   return static_cast<BinaryenFeatures>(FeatureSet::All);
 }
@@ -1210,21 +1213,29 @@ BinaryenExpressionRef BinaryenRefEq(BinaryenModuleRef module,
 }
 
 BinaryenExpressionRef BinaryenTry(BinaryenModuleRef module,
+                                  const char* name,
                                   BinaryenExpressionRef body,
-                                  const char** catchEvents_,
+                                  const char** catchEvents,
                                   BinaryenIndex numCatchEvents,
-                                  BinaryenExpressionRef* catchBodies_,
-                                  BinaryenIndex numCatchBodies) {
-  std::vector<Name> catchEvents;
-  std::vector<Expression*> catchBodies;
+                                  BinaryenExpressionRef* catchBodies,
+                                  BinaryenIndex numCatchBodies,
+                                  const char* delegateTarget) {
+  auto* ret = ((Module*)module)->allocator.alloc<Try>();
+  if (name) {
+    ret->name = name;
+  }
+  ret->body = (Expression*)body;
   for (BinaryenIndex i = 0; i < numCatchEvents; i++) {
-    catchEvents.push_back(catchEvents_[i]);
+    ret->catchEvents.push_back(catchEvents[i]);
   }
   for (BinaryenIndex i = 0; i < numCatchBodies; i++) {
-    catchBodies.push_back((Expression*)catchBodies_[i]);
+    ret->catchBodies.push_back((Expression*)catchBodies[i]);
   }
-  return static_cast<Expression*>(
-    Builder(*(Module*)module).makeTry(body, catchEvents, catchBodies));
+  if (delegateTarget) {
+    ret->delegateTarget = delegateTarget;
+  }
+  ret->finalize();
+  return static_cast<Expression*>(ret);
 }
 
 BinaryenExpressionRef BinaryenThrow(BinaryenModuleRef module,
@@ -1240,8 +1251,9 @@ BinaryenExpressionRef BinaryenThrow(BinaryenModuleRef module,
 }
 
 BinaryenExpressionRef BinaryenRethrow(BinaryenModuleRef module,
-                                      BinaryenIndex depth) {
-  return static_cast<Expression*>(Builder(*(Module*)module).makeRethrow(depth));
+                                      const char* target) {
+  return static_cast<Expression*>(
+    Builder(*(Module*)module).makeRethrow(target));
 }
 
 BinaryenExpressionRef BinaryenI31New(BinaryenModuleRef module,
@@ -2718,6 +2730,16 @@ void BinaryenMemoryFillSetSize(BinaryenExpressionRef expr,
   static_cast<MemoryFill*>(expression)->size = (Expression*)sizeExpr;
 }
 // RefIs
+BinaryenOp BinaryenRefIsGetOp(BinaryenExpressionRef expr) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<RefIs>());
+  return static_cast<RefIs*>(expression)->op;
+}
+void BinaryenRefIsSetOp(BinaryenExpressionRef expr, BinaryenOp op) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<RefIs>());
+  static_cast<RefIs*>(expression)->op = RefIsOp(op);
+}
 BinaryenExpressionRef BinaryenRefIsGetValue(BinaryenExpressionRef expr) {
   auto* expression = (Expression*)expr;
   assert(expression->is<RefIs>());
@@ -2765,6 +2787,16 @@ void BinaryenRefEqSetRight(BinaryenExpressionRef expr,
   static_cast<RefEq*>(expression)->right = (Expression*)right;
 }
 // Try
+const char* BinaryenTryGetName(BinaryenExpressionRef expr) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<Try>());
+  return static_cast<Try*>(expression)->name.c_str();
+}
+void BinaryenTrySetName(BinaryenExpressionRef expr, const char* name) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<Try>());
+  static_cast<Try*>(expression)->name = name;
+}
 BinaryenExpressionRef BinaryenTryGetBody(BinaryenExpressionRef expr) {
   auto* expression = (Expression*)expr;
   assert(expression->is<Try>());
@@ -2873,6 +2905,22 @@ int BinaryenTryHasCatchAll(BinaryenExpressionRef expr) {
   assert(expression->is<Try>());
   return static_cast<Try*>(expression)->hasCatchAll();
 }
+const char* BinaryenTryGetDelegateTarget(BinaryenExpressionRef expr) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<Try>());
+  return static_cast<Try*>(expression)->delegateTarget.c_str();
+}
+void BinaryenTrySetDelegateTarget(BinaryenExpressionRef expr,
+                                  const char* delegateTarget) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<Try>());
+  static_cast<Try*>(expression)->delegateTarget = delegateTarget;
+}
+int BinaryenTryIsDelegate(BinaryenExpressionRef expr) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<Try>());
+  return static_cast<Try*>(expression)->isDelegate();
+}
 // Throw
 const char* BinaryenThrowGetEvent(BinaryenExpressionRef expr) {
   auto* expression = (Expression*)expr;
@@ -2931,15 +2979,15 @@ BinaryenExpressionRef BinaryenThrowRemoveOperandAt(BinaryenExpressionRef expr,
   return static_cast<Throw*>(expression)->operands.removeAt(index);
 }
 // Rethrow
-BinaryenIndex BinaryenRethrowGetDepth(BinaryenExpressionRef expr) {
+const char* BinaryenRethrowGetTarget(BinaryenExpressionRef expr) {
   auto* expression = (Expression*)expr;
   assert(expression->is<Rethrow>());
-  return static_cast<Rethrow*>(expression)->depth;
+  return static_cast<Rethrow*>(expression)->target.c_str();
 }
-void BinaryenRethrowSetDepth(BinaryenExpressionRef expr, BinaryenIndex depth) {
+void BinaryenRethrowSetTarget(BinaryenExpressionRef expr, const char* target) {
   auto* expression = (Expression*)expr;
   assert(expression->is<Rethrow>());
-  static_cast<Rethrow*>(expression)->depth = depth;
+  static_cast<Rethrow*>(expression)->target = target;
 }
 // TupleMake
 BinaryenIndex BinaryenTupleMakeGetNumOperands(BinaryenExpressionRef expr) {
@@ -3875,13 +3923,24 @@ void BinaryenFunctionSetDebugLocation(BinaryenFunctionRef func,
 const char* BinaryenTableGetName(BinaryenTableRef table) {
   return ((Table*)table)->name.c_str();
 }
-int BinaryenTableGetInitial(BinaryenTableRef table) {
+void BinaryenTableSetName(BinaryenTableRef table, const char* name) {
+  ((Table*)table)->name = name;
+}
+BinaryenIndex BinaryenTableGetInitial(BinaryenTableRef table) {
   return ((Table*)table)->initial;
+}
+void BinaryenTableSetInitial(BinaryenTableRef table, BinaryenIndex initial) {
+  ((Table*)table)->initial = initial;
 }
 int BinaryenTableHasMax(BinaryenTableRef table) {
   return ((Table*)table)->hasMax();
 }
-int BinaryenTableGetMax(BinaryenTableRef table) { return ((Table*)table)->max; }
+BinaryenIndex BinaryenTableGetMax(BinaryenTableRef table) {
+  return ((Table*)table)->max;
+}
+void BinaryenTableSetMax(BinaryenTableRef table, BinaryenIndex max) {
+  ((Table*)table)->max = max;
+}
 
 //
 // =========== Global operations ===========

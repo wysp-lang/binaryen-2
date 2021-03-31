@@ -64,6 +64,7 @@ struct FunctionInfo {
   Index size;
   bool hasCalls;
   bool hasLoops;
+  bool hasTryDelegate;
   bool usedGlobally; // in a table or export
 
   FunctionInfo() {
@@ -71,12 +72,16 @@ struct FunctionInfo {
     size = 0;
     hasCalls = false;
     hasLoops = false;
+    hasTryDelegate = false;
     usedGlobally = false;
   }
 
-  // Check if we should inline a function.
+  // See pass.h for how defaults for these options were chosen.
   bool worthInlining(const PassOptions& options) const {
-    // See pass.h for how defaults for these options were chosen.
+    // Until we have proper support for try-delegate, ignore such functions.
+    if (hasTryDelegate) {
+      return false;
+    }
     // If it's small enough that we always want to inline such things, do so.
     if (size <= options.inlining.alwaysInlineMaxSize) {
       return true;
@@ -156,6 +161,12 @@ struct FunctionInfoScanner
     (*infos)[curr->target].refs++;
     // having a call
     (*infos)[getFunction()->name].hasCalls = true;
+  }
+
+  void visitTry(Try* curr) {
+    if (curr->isDelegate()) {
+      (*infos)[getFunction()->name].hasTryDelegate = true;
+    }
   }
 
   void visitRefFunc(RefFunc* curr) {

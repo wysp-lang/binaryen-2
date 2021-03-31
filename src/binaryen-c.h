@@ -159,6 +159,7 @@ BINARYEN_API BinaryenFeatures BinaryenFeatureReferenceTypes(void);
 BINARYEN_API BinaryenFeatures BinaryenFeatureMultivalue(void);
 BINARYEN_API BinaryenFeatures BinaryenFeatureGC(void);
 BINARYEN_API BinaryenFeatures BinaryenFeatureMemory64(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureTypedFunctionReferences(void);
 BINARYEN_API BinaryenFeatures BinaryenFeatureAll(void);
 
 // Modules
@@ -802,20 +803,23 @@ BINARYEN_API BinaryenExpressionRef BinaryenRefFunc(BinaryenModuleRef module,
 BINARYEN_API BinaryenExpressionRef BinaryenRefEq(BinaryenModuleRef module,
                                                  BinaryenExpressionRef left,
                                                  BinaryenExpressionRef right);
+// Try: name can be NULL. delegateTarget should be NULL in try-catch.
 BINARYEN_API BinaryenExpressionRef
 BinaryenTry(BinaryenModuleRef module,
+            const char* name,
             BinaryenExpressionRef body,
             const char** catchEvents,
             BinaryenIndex numCatchEvents,
             BinaryenExpressionRef* catchBodies,
-            BinaryenIndex numCatchBodies);
+            BinaryenIndex numCatchBodies,
+            const char* delegateTarget);
 BINARYEN_API BinaryenExpressionRef
 BinaryenThrow(BinaryenModuleRef module,
               const char* event,
               BinaryenExpressionRef* operands,
               BinaryenIndex numOperands);
 BINARYEN_API BinaryenExpressionRef BinaryenRethrow(BinaryenModuleRef module,
-                                                   BinaryenIndex depth);
+                                                   const char* target);
 BINARYEN_API BinaryenExpressionRef
 BinaryenTupleMake(BinaryenModuleRef module,
                   BinaryenExpressionRef* operands,
@@ -1633,9 +1637,9 @@ BINARYEN_API void BinaryenMemoryInitSetSize(BinaryenExpressionRef expr,
 
 // DataDrop
 
-// Gets the index of the segment being dropped by a `memory.drop` expression.
+// Gets the index of the segment being dropped by a `data.drop` expression.
 BINARYEN_API uint32_t BinaryenDataDropGetSegment(BinaryenExpressionRef expr);
-// Sets the index of the segment being dropped by a `memory.drop` expression.
+// Sets the index of the segment being dropped by a `data.drop` expression.
 BINARYEN_API void BinaryenDataDropSetSegment(BinaryenExpressionRef expr,
                                              uint32_t segmentIndex);
 
@@ -1685,12 +1689,16 @@ BinaryenMemoryFillGetSize(BinaryenExpressionRef expr);
 BINARYEN_API void BinaryenMemoryFillSetSize(BinaryenExpressionRef expr,
                                             BinaryenExpressionRef sizeExpr);
 
-// RefIsNull
+// RefIs
 
-// Gets the value expression tested to be null of a `ref.is_null` expression.
+// Gets the operation performed by a `ref.is_*` expression.
+BINARYEN_API BinaryenOp BinaryenRefIsGetOp(BinaryenExpressionRef expr);
+// Sets the operation performed by a `ref.is_*` expression.
+BINARYEN_API void BinaryenRefIsSetOp(BinaryenExpressionRef expr, BinaryenOp op);
+// Gets the value expression tested by a `ref.is_*` expression.
 BINARYEN_API BinaryenExpressionRef
 BinaryenRefIsGetValue(BinaryenExpressionRef expr);
-// Sets the value expression tested to be null of a `ref.is_null` expression.
+// Sets the value expression tested by a `ref.is_*` expression.
 BINARYEN_API void BinaryenRefIsSetValue(BinaryenExpressionRef expr,
                                         BinaryenExpressionRef valueExpr);
 
@@ -1719,6 +1727,11 @@ BINARYEN_API void BinaryenRefEqSetRight(BinaryenExpressionRef expr,
 
 // Try
 
+// Gets the name (label) of a `try` expression.
+BINARYEN_API const char* BinaryenTryGetName(BinaryenExpressionRef expr);
+// Sets the name (label) of a `try` expression.
+BINARYEN_API void BinaryenTrySetName(BinaryenExpressionRef expr,
+                                     const char* name);
 // Gets the body expression of a `try` expression.
 BINARYEN_API BinaryenExpressionRef
 BinaryenTryGetBody(BinaryenExpressionRef expr);
@@ -1774,8 +1787,16 @@ BINARYEN_API void BinaryenTryInsertCatchBodyAt(BinaryenExpressionRef expr,
 // expression.
 BINARYEN_API BinaryenExpressionRef
 BinaryenTryRemoveCatchBodyAt(BinaryenExpressionRef expr, BinaryenIndex index);
-// Gets whether an `try` expression has a catch_all clause.
+// Gets whether a `try` expression has a catch_all clause.
 BINARYEN_API int BinaryenTryHasCatchAll(BinaryenExpressionRef expr);
+// Gets the target label of a `delegate`.
+BINARYEN_API const char*
+BinaryenTryGetDelegateTarget(BinaryenExpressionRef expr);
+// Sets the target label of a `delegate`.
+BINARYEN_API void BinaryenTrySetDelegateTarget(BinaryenExpressionRef expr,
+                                               const char* delegateTarget);
+// Gets whether a `try` expression is a try-delegate.
+BINARYEN_API int BinaryenTryIsDelegate(BinaryenExpressionRef expr);
 
 // Throw
 
@@ -1813,11 +1834,11 @@ BinaryenThrowRemoveOperandAt(BinaryenExpressionRef expr, BinaryenIndex index);
 
 // Rethrow
 
-// Gets the depth of a `rethrow` expression.
-BINARYEN_API BinaryenIndex BinaryenRethrowGetDepth(BinaryenExpressionRef expr);
-// Sets the exception reference expression of a `rethrow` expression.
-BINARYEN_API void BinaryenRethrowSetDepth(BinaryenExpressionRef expr,
-                                          BinaryenIndex depth);
+// Gets the target catch's corresponding try label of a `rethrow` expression.
+BINARYEN_API const char* BinaryenRethrowGetTarget(BinaryenExpressionRef expr);
+// Sets the target catch's corresponding try label of a `rethrow` expression.
+BINARYEN_API void BinaryenRethrowSetTarget(BinaryenExpressionRef expr,
+                                           const char* target);
 
 // TupleMake
 
@@ -2068,7 +2089,7 @@ BINARYEN_API BinaryenTableRef BinaryenGetTableByIndex(BinaryenModuleRef module,
 
 // Memory. One per module
 
-// Each segment has data in segments, a start offset in segmentOffsets, and a
+// Each memory has data in segments, a start offset in segmentOffsets, and a
 // size in segmentSizes. exportName can be NULL
 BINARYEN_API void BinaryenSetMemory(BinaryenModuleRef module,
                                     BinaryenIndex initial,
@@ -2360,10 +2381,23 @@ BINARYEN_API void BinaryenFunctionSetDebugLocation(BinaryenFunctionRef func,
 // ========== Table Operations ==========
 //
 
+// Gets the name of the specified `Table`.
 BINARYEN_API const char* BinaryenTableGetName(BinaryenTableRef table);
-BINARYEN_API int BinaryenTableGetInitial(BinaryenTableRef table);
+// Sets the name of the specified `Table`.
+BINARYEN_API void BinaryenTableSetName(BinaryenTableRef table,
+                                       const char* name);
+// Gets the initial number of pages of the specified `Table`.
+BINARYEN_API BinaryenIndex BinaryenTableGetInitial(BinaryenTableRef table);
+// Sets the initial number of pages of the specified `Table`.
+BINARYEN_API void BinaryenTableSetInitial(BinaryenTableRef table,
+                                          BinaryenIndex initial);
+// Tests whether the specified `Table` has a maximum number of pages.
 BINARYEN_API int BinaryenTableHasMax(BinaryenTableRef table);
-BINARYEN_API int BinaryenTableGetMax(BinaryenTableRef table);
+// Gets the maximum number of pages of the specified `Table`.
+BINARYEN_API BinaryenIndex BinaryenTableGetMax(BinaryenTableRef table);
+// Sets the maximum number of pages of the specified `Table`.
+BINARYEN_API void BinaryenTableSetMax(BinaryenTableRef table,
+                                      BinaryenIndex max);
 
 //
 // ========== Global Operations ==========

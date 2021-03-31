@@ -1026,7 +1026,8 @@ enum ASTNodes {
 
   Try = 0x06,
   Catch = 0x07,
-  CatchAll = 0x05,
+  CatchAll = 0x19,
+  Delegate = 0x18,
   Throw = 0x08,
   Rethrow = 0x09,
 
@@ -1321,14 +1322,14 @@ public:
   int64_t getS64LEB();
   uint64_t getUPtrLEB();
 
+  bool getBasicType(int32_t code, Type& out);
+  bool getBasicHeapType(int64_t code, HeapType& out);
   // Read a value and get a type for it.
   Type getType();
   // Get a type given the initial S32LEB has already been read, and is provided.
   Type getType(int initial);
 
   HeapType getHeapType();
-  Mutability getMutability();
-  Field getField();
   Type getConcreteType();
   Name getInlineString();
   void verifyInt8(int8_t x);
@@ -1417,6 +1418,8 @@ public:
   // the names that breaks target. this lets us know if a block has breaks to it
   // or not.
   std::unordered_set<Name> breakTargetNames;
+  // the names that delegates target.
+  std::unordered_set<Name> exceptionTargetNames;
 
   std::vector<Expression*> expressionStack;
 
@@ -1521,6 +1524,7 @@ public:
   Expression* getBlockOrSingleton(Type type);
 
   BreakTarget getBreakTarget(int32_t offset);
+  Name getExceptionTargetName(int32_t offset);
 
   void readMemoryAccess(Address& alignment, Address& offset);
 

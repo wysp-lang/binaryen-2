@@ -236,6 +236,8 @@ struct FunctionValidator : public WalkerPass<PostWalker<FunctionValidator>> {
   };
 
   std::unordered_map<Name, BreakInfo> breakInfos;
+  std::unordered_set<Name> delegateTargetNames;
+  std::unordered_set<Name> rethrowTargetNames;
 
   std::set<Type> returnTypes; // types used in returns
 
@@ -276,11 +278,53 @@ public:
   void visitLoop(Loop* curr);
   void visitIf(If* curr);
 
+  static void visitPreTry(FunctionValidator* self, Expression** currp) {
+    auto* curr = (*currp)->cast<Try>();
+    if (curr->name.is()) {
+      self->delegateTargetNames.insert(curr->name);
+    }
+  }
+
+  // We remove try's label before proceeding to verify catch bodies because the
+  // following is a validation failure:
+  // (try $l0
+  //   (do ... )
+  //   (catch $e
+  //     (try
+  //       (do ...)
+  //       (delegate $l0) ;; validation failure
+  //     )
+  //   )
+  // )
+  // Unlike branches, if delegate's target 'catch' is located above the
+  // delegate, it is a validation failure.
+  static void visitPreCatch(FunctionValidator* self, Expression** currp) {
+    auto* curr = (*currp)->cast<Try>();
+    if (curr->name.is()) {
+      self->delegateTargetNames.erase(curr->name);
+      self->rethrowTargetNames.insert(curr->name);
+    }
+  }
+
   // override scan to add a pre and a post check task to all nodes
   static void scan(FunctionValidator* self, Expression** currp) {
+    auto* curr = *currp;
+    // Treat 'Try' specially because we need to run visitPreCatch between the
+    // try body and catch bodies
+    if (curr->is<Try>()) {
+      self->pushTask(doVisitTry, currp);
+      auto& list = curr->cast<Try>()->catchBodies;
+      for (int i = int(list.size()) - 1; i >= 0; i--) {
+        self->pushTask(scan, &list[i]);
+      }
+      self->pushTask(visitPreCatch, currp);
+      self->pushTask(scan, &curr->cast<Try>()->body);
+      self->pushTask(visitPreTry, currp);
+      return;
+    }
+
     PostWalker<FunctionValidator>::scan(self, currp);
 
-    auto* curr = *currp;
     if (curr->is<Block>()) {
       self->pushTask(visitPreBlock, currp);
     }
@@ -334,6 +378,8 @@ public:
   void visitRefIs(RefIs* curr);
   void visitRefFunc(RefFunc* curr);
   void visitRefEq(RefEq* curr);
+  void noteDelegate(Name name, Expression* curr);
+  void noteRethrow(Name name, Expression* curr);
   void visitTry(Try* curr);
   void visitThrow(Throw* curr);
   void visitRethrow(Rethrow* curr);
@@ -620,8 +666,8 @@ void FunctionValidator::validatePoppyBlockElements(Block* curr) {
         !info.quiet) {
       getStream() << "(on index " << i << ":\n"
                   << expr << "\n), required: " << sig.params << ", available: ";
-      if (blockSig.unreachable) {
-        getStream() << "unreachable, ";
+      if (blockSig.kind == StackSignature::Polymorphic) {
+        getStream() << "polymorphic, ";
       }
       getStream() << blockSig.results << "\n";
       return;
@@ -629,16 +675,22 @@ void FunctionValidator::validatePoppyBlockElements(Block* curr) {
     blockSig += sig;
   }
   if (curr->type == Type::unreachable) {
-    shouldBeTrue(blockSig.unreachable,
+    shouldBeTrue(blockSig.kind == StackSignature::Polymorphic,
                  curr,
                  "unreachable block should have unreachable element");
   } else {
-    if (!shouldBeTrue(blockSig.satisfies(Signature(Type::none, curr->type)),
-                      curr,
-                      "block contents should satisfy block type") &&
+    if (!shouldBeTrue(
+          StackSignature::isSubType(
+            blockSig,
+            StackSignature(Type::none, curr->type, StackSignature::Fixed)),
+          curr,
+          "block contents should satisfy block type") &&
         !info.quiet) {
       getStream() << "contents: " << blockSig.results
-                  << (blockSig.unreachable ? " [unreachable]" : "") << "\n"
+                  << (blockSig.kind == StackSignature::Polymorphic
+                        ? " [polymorphic]"
+                        : "")
+                  << "\n"
                   << "expected: " << curr->type << "\n";
     }
   }
@@ -765,6 +817,7 @@ void FunctionValidator::noteBreak(Name name, Type valueType, Expression* curr) {
     }
   }
 }
+
 void FunctionValidator::visitBreak(Break* curr) {
   noteBreak(curr->name, curr->value, curr);
   if (curr->value) {
@@ -2027,10 +2080,27 @@ void FunctionValidator::visitRefEq(RefEq* curr) {
     "ref.eq's right argument should be a subtype of eqref");
 }
 
+void FunctionValidator::noteDelegate(Name name, Expression* curr) {
+  if (name != DELEGATE_CALLER_TARGET) {
+    shouldBeTrue(delegateTargetNames.count(name) != 0,
+                 curr,
+                 "all delegate targets must be valid");
+  }
+}
+
+void FunctionValidator::noteRethrow(Name name, Expression* curr) {
+  shouldBeTrue(rethrowTargetNames.count(name) != 0,
+               curr,
+               "all rethrow targets must be valid");
+}
+
 void FunctionValidator::visitTry(Try* curr) {
   shouldBeTrue(getModule()->features.hasExceptionHandling(),
                curr,
                "try requires exception-handling to be enabled");
+  if (curr->name.is()) {
+    noteLabelName(curr->name);
+  }
   if (curr->type != Type::unreachable) {
     shouldBeSubTypeOrFirstIsUnreachable(
       curr->body->type,
@@ -2059,6 +2129,19 @@ void FunctionValidator::visitTry(Try* curr) {
   shouldBeTrue(curr->catchBodies.size() - curr->catchEvents.size() <= 1,
                curr,
                "the number of catch blocks and events do not match");
+
+  shouldBeFalse(curr->isCatch() && curr->isDelegate(),
+                curr,
+                "try cannot have both catch and delegate at the same time");
+  shouldBeTrue(curr->isCatch() || curr->isDelegate(),
+               curr,
+               "try should have either catches or a delegate");
+
+  if (curr->isDelegate()) {
+    noteDelegate(curr->delegateTarget, curr);
+  }
+
+  rethrowTargetNames.erase(curr->name);
 }
 
 void FunctionValidator::visitThrow(Throw* curr) {
@@ -2102,8 +2185,7 @@ void FunctionValidator::visitRethrow(Rethrow* curr) {
                 Type(Type::unreachable),
                 curr,
                 "rethrow's type must be unreachable");
-  // TODO Validate the depth field. The current LLVM toolchain only generates
-  // depth 0 for C++ support.
+  noteRethrow(curr->target, curr);
 }
 
 void FunctionValidator::visitTupleMake(TupleMake* curr) {
@@ -2416,6 +2498,7 @@ void FunctionValidator::visitArraySet(ArraySet* curr) {
                 element.type,
                 curr,
                 "array.set must have the proper type");
+  shouldBeTrue(element.mutable_, curr, "array.set type must be mutable");
 }
 
 void FunctionValidator::visitArrayLen(ArrayLen* curr) {
@@ -2466,8 +2549,9 @@ void FunctionValidator::visitFunction(Function* curr) {
       "function result must match, if function has returns");
   }
 
-  shouldBeTrue(
-    breakInfos.empty(), curr->body, "all named break targets must exist");
+  assert(breakInfos.empty());
+  assert(delegateTargetNames.empty());
+  assert(rethrowTargetNames.empty());
   returnTypes.clear();
   labelNames.clear();
   // validate optional local names
@@ -2742,7 +2826,7 @@ static void validateMemory(Module& module, ValidationInfo& info) {
                       "memory is shared, but atomics are disabled");
   }
   for (auto& segment : curr.segments) {
-    Index size = segment.data.size();
+    auto size = segment.data.size();
     if (segment.isPassive) {
       info.shouldBeTrue(module.features.hasBulkMemory(),
                         segment.offset,
@@ -2752,11 +2836,20 @@ static void validateMemory(Module& module, ValidationInfo& info) {
                          segment.offset,
                          "passive segment should not have an offset");
     } else {
-      if (!info.shouldBeEqual(segment.offset->type,
-                              Type(Type::i32),
-                              segment.offset,
-                              "segment offset should be i32")) {
-        continue;
+      if (curr.is64()) {
+        if (!info.shouldBeEqual(segment.offset->type,
+                                Type(Type::i64),
+                                segment.offset,
+                                "segment offset should be i64")) {
+          continue;
+        }
+      } else {
+        if (!info.shouldBeEqual(segment.offset->type,
+                                Type(Type::i32),
+                                segment.offset,
+                                "segment offset should be i32")) {
+          continue;
+        }
       }
       info.shouldBeTrue(checkSegmentOffset(segment.offset,
                                            segment.data.size(),
@@ -2764,8 +2857,8 @@ static void validateMemory(Module& module, ValidationInfo& info) {
                         segment.offset,
                         "memory segment offset should be reasonable");
       if (segment.offset->is<Const>()) {
-        Index start = segment.offset->cast<Const>()->value.geti32();
-        Index end = start + size;
+        auto start = segment.offset->cast<Const>()->value.getUnsigned();
+        auto end = start + size;
         info.shouldBeTrue(end <= curr.initial * Memory::kPageSize,
                           segment.data.size(),
                           "segment size should fit in memory (end)");

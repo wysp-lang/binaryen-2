@@ -1359,13 +1359,18 @@ console.log("# RefIs");
 (function testRefIs() {
   const module = new binaryen.Module();
 
+  var op = binaryen.Operations.RefIsNull;
   var value = module.local.get(1, binaryen.externref);
   const theRefIs = binaryen.RefIs(module.ref.is_null(value));
   assert(theRefIs instanceof binaryen.RefIs);
   assert(theRefIs instanceof binaryen.Expression);
+  assert(theRefIs.op === op);
   assert(theRefIs.value === value);
   assert(theRefIs.type === binaryen.i32);
 
+  theRefIs.op = op = binaryen.Operations.RefIsFunc;
+  assert(theRefIs.op === op);
+  theRefIs.op = op = binaryen.Operations.RefIsNull;
   theRefIs.value = value = module.local.get(2, binaryen.externref);
   assert(theRefIs.value === value);
   theRefIs.type = binaryen.f64;
@@ -1469,7 +1474,7 @@ console.log("# Try");
     module.i32.const(2),
     module.i32.const(3)
   ];
-  const theTry = binaryen.Try(module.try(body, ["event1"], catchBodies));
+  const theTry = binaryen.Try(module.try('', body, ["event1"], catchBodies, ''));
   assert(theTry instanceof binaryen.Try);
   assert(theTry instanceof binaryen.Expression);
   assert(theTry.body === body);
@@ -1523,6 +1528,14 @@ console.log("# Try");
   assert(theTry.type === binaryen.i32);
 
   console.log(theTry.toText());
+
+  const tryDelegate = binaryen.Try(module.try('', body, [], [], "try_blah"));
+  assert(tryDelegate.isDelegate() == 1);
+  assert(tryDelegate.getDelegateTarget() == "try_blah");
+  tryDelegate.setDelegateTarget("try_outer");
+  assert(tryDelegate.getDelegateTarget() == "try_outer");
+  console.log(tryDelegate.toText());
+
   module.dispose();
 })();
 
@@ -1577,14 +1590,14 @@ console.log("# Rethrow");
 (function testRethrow() {
   const module = new binaryen.Module();
 
-  const theRethrow = binaryen.Rethrow(module.rethrow(0));
+  const theRethrow = binaryen.Rethrow(module.rethrow("l0"));
   assert(theRethrow instanceof binaryen.Rethrow);
   assert(theRethrow instanceof binaryen.Expression);
-  assert(theRethrow.depth === 0);
+  assert(theRethrow.target === "l0");
   assert(theRethrow.type === binaryen.unreachable);
 
-  theRethrow.depth = 1
-  assert(theRethrow.depth === 1);
+  theRethrow.target = "l1";
+  assert(theRethrow.target === "l1");
   theRethrow.type = binaryen.f64;
   theRethrow.finalize();
   assert(theRethrow.type === binaryen.unreachable);
@@ -1593,7 +1606,7 @@ console.log("# Rethrow");
   assert(
     theRethrow.toText()
     ==
-    "(rethrow 1)\n"
+    "(rethrow $l1)\n"
   );
 
   module.dispose();

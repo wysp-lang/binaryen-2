@@ -25,6 +25,7 @@ BinaryenFeatureReferenceTypes: 256
 BinaryenFeatureMultivalue: 512
 BinaryenFeatureGC: 1024
 BinaryenFeatureMemory64: 2048
+BinaryenFeatureTypedFunctionReferences: 4096
 BinaryenFeatureAll: 8191
 (f32.neg
  (f32.const -33.61199951171875)
@@ -1769,6 +1770,21 @@ BinaryenFeatureAll: 8191
        (catch $a-event
         (drop
          (pop i32)
+        )
+       )
+       (catch_all
+        (nop)
+       )
+      )
+      (try $try_outer
+       (do
+        (try
+         (do
+          (throw $a-event
+           (i32.const 0)
+          )
+         )
+         (delegate $try_outer)
         )
        )
        (catch_all

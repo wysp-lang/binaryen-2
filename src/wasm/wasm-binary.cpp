@@ -685,6 +685,27 @@ void WasmBinaryWriter::writeNames() {
     }
   }
 
+  // type names
+  {
+    std::vector<HeapType> namedTypes;
+    for (auto& kv : typeIndices) {
+      auto type = kv.first;
+      if (wasm->typeNames.count(type)) {
+        namedTypes.push_back(type);
+      }
+    }
+    if (!namedTypes.empty()) {
+      auto substart =
+        startSubsection(BinaryConsts::UserSections::Subsection::NameType);
+      o << U32LEB(namedTypes.size());
+      for (auto type : namedTypes) {
+        o << U32LEB(typeIndices[type]);
+        writeEscapedName(wasm->typeNames[type].name.str);
+      }
+      finishSubsection(substart);
+    }
+  }
+
   // table names
   {
     std::vector<std::pair<Index, Table*>> tablesWithNames;
@@ -1333,7 +1354,7 @@ WasmBinaryBuilder::getByteView(size_t size) {
     throwError("unexpected end of input");
   }
   pos += size;
-  return {&input[pos - size], &input[pos]};
+  return {input.data() + (pos - size), input.data() + pos};
 }
 
 uint8_t WasmBinaryBuilder::getInt8() {
@@ -1444,45 +1465,91 @@ uint64_t WasmBinaryBuilder::getUPtrLEB() {
   return wasm.memory.is64() ? getU64LEB() : getU32LEB();
 }
 
+bool WasmBinaryBuilder::getBasicType(int32_t code, Type& out) {
+  switch (code) {
+    case BinaryConsts::EncodedType::i32:
+      out = Type::i32;
+      return true;
+    case BinaryConsts::EncodedType::i64:
+      out = Type::i64;
+      return true;
+    case BinaryConsts::EncodedType::f32:
+      out = Type::f32;
+      return true;
+    case BinaryConsts::EncodedType::f64:
+      out = Type::f64;
+      return true;
+    case BinaryConsts::EncodedType::v128:
+      out = Type::v128;
+      return true;
+    case BinaryConsts::EncodedType::funcref:
+      out = Type::funcref;
+      return true;
+    case BinaryConsts::EncodedType::externref:
+      out = Type::externref;
+      return true;
+    case BinaryConsts::EncodedType::anyref:
+      out = Type::anyref;
+      return true;
+    case BinaryConsts::EncodedType::eqref:
+      out = Type::eqref;
+      return true;
+    case BinaryConsts::EncodedType::i31ref:
+      // FIXME: for now, force all inputs to be nullable
+      out = Type(HeapType::i31, Nullable);
+      return true;
+    case BinaryConsts::EncodedType::dataref:
+      // FIXME: for now, force all inputs to be nullable
+      out = Type(HeapType::data, Nullable);
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool WasmBinaryBuilder::getBasicHeapType(int64_t code, HeapType& out) {
+  switch (code) {
+    case BinaryConsts::EncodedHeapType::func:
+      out = HeapType::func;
+      return true;
+    case BinaryConsts::EncodedHeapType::extern_:
+      out = HeapType::ext;
+      return true;
+    case BinaryConsts::EncodedHeapType::any:
+      out = HeapType::any;
+      return true;
+    case BinaryConsts::EncodedHeapType::eq:
+      out = HeapType::eq;
+      return true;
+    case BinaryConsts::EncodedHeapType::i31:
+      out = HeapType::i31;
+      return true;
+    case BinaryConsts::EncodedHeapType::data:
+      out = HeapType::data;
+      return true;
+    default:
+      return false;
+  }
+}
+
 Type WasmBinaryBuilder::getType(int initial) {
   // Single value types are negative; signature indices are non-negative
   if (initial >= 0) {
     // TODO: Handle block input types properly.
     return getSignatureByTypeIndex(initial).results;
   }
+  Type type;
+  if (getBasicType(initial, type)) {
+    return type;
+  }
   switch (initial) {
     // None only used for block signatures. TODO: Separate out?
     case BinaryConsts::EncodedType::Empty:
       return Type::none;
-    case BinaryConsts::EncodedType::i32:
-      return Type::i32;
-    case BinaryConsts::EncodedType::i64:
-      return Type::i64;
-    case BinaryConsts::EncodedType::f32:
-      return Type::f32;
-    case BinaryConsts::EncodedType::f64:
-      return Type::f64;
-    case BinaryConsts::EncodedType::v128:
-      return Type::v128;
-    case BinaryConsts::EncodedType::funcref:
-      return Type::funcref;
-    case BinaryConsts::EncodedType::externref:
-      return Type::externref;
-    case BinaryConsts::EncodedType::anyref:
-      return Type::anyref;
-    case BinaryConsts::EncodedType::eqref:
-      return Type::eqref;
     case BinaryConsts::EncodedType::nullable:
-      return Type(getHeapType(), Nullable);
     case BinaryConsts::EncodedType::nonnullable:
       // FIXME: for now, force all inputs to be nullable
       return Type(getHeapType(), Nullable);
-    case BinaryConsts::EncodedType::i31ref:
-      // FIXME: for now, force all inputs to be nullable
-      return Type(HeapType::BasicHeapType::i31, Nullable);
-    case BinaryConsts::EncodedType::dataref:
-      // FIXME: for now, force all inputs to be nullable
-      return Type(HeapType::BasicHeapType::data, Nullable);
     case BinaryConsts::EncodedType::rtt_n: {
       auto depth = getU32LEB();
       auto heapType = getHeapType();
@@ -1508,52 +1575,13 @@ HeapType WasmBinaryBuilder::getHeapType() {
     }
     return types[type];
   }
-  switch (type) {
-    case BinaryConsts::EncodedHeapType::func:
-      return HeapType::func;
-    case BinaryConsts::EncodedHeapType::extern_:
-      return HeapType::ext;
-    case BinaryConsts::EncodedHeapType::any:
-      return HeapType::any;
-    case BinaryConsts::EncodedHeapType::eq:
-      return HeapType::eq;
-    case BinaryConsts::EncodedHeapType::i31:
-      return HeapType::i31;
-    case BinaryConsts::EncodedHeapType::data:
-      return HeapType::data;
-    default:
-      throwError("invalid wasm heap type: " + std::to_string(type));
+  HeapType ht;
+  if (getBasicHeapType(type, ht)) {
+    return ht;
+  } else {
+    throwError("invalid wasm heap type: " + std::to_string(type));
   }
   WASM_UNREACHABLE("unexpected type");
-}
-
-Mutability WasmBinaryBuilder::getMutability() {
-  switch (getU32LEB()) {
-    case 0:
-      return Immutable;
-    case 1:
-      return Mutable;
-    default:
-      throw ParseException("Expected 0 or 1 for mutability");
-  }
-}
-
-Field WasmBinaryBuilder::getField() {
-  // The value may be a general wasm type, or one of the types only possible in
-  // a field.
-  auto initial = getS32LEB();
-  if (initial == BinaryConsts::EncodedType::i8) {
-    auto mutable_ = getMutability();
-    return Field(Field::i8, mutable_);
-  }
-  if (initial == BinaryConsts::EncodedType::i16) {
-    auto mutable_ = getMutability();
-    return Field(Field::i16, mutable_);
-  }
-  // It's a regular wasm value.
-  auto type = getType(initial);
-  auto mutable_ = getMutability();
-  return Field(type, mutable_);
 }
 
 Type WasmBinaryBuilder::getConcreteType() {
@@ -1643,37 +1671,121 @@ void WasmBinaryBuilder::readTypes() {
   BYN_TRACE("== readTypes\n");
   size_t numTypes = getU32LEB();
   BYN_TRACE("num: " << numTypes << std::endl);
+  TypeBuilder builder(numTypes);
+
+  auto makeType = [&](int32_t typeCode) {
+    Type type;
+    if (getBasicType(typeCode, type)) {
+      return type;
+    }
+
+    switch (typeCode) {
+      case BinaryConsts::EncodedType::nullable:
+      case BinaryConsts::EncodedType::nonnullable: {
+        // FIXME: for now, force all inputs to be nullable
+        int64_t htCode = getS64LEB(); // TODO: Actually s33
+        HeapType ht;
+        if (getBasicHeapType(htCode, ht)) {
+          return Type(ht, Nullable);
+        }
+        if (size_t(htCode) >= numTypes) {
+          throwError("invalid type index: " + std::to_string(htCode));
+        }
+        return builder.getTempRefType(size_t(htCode), Nullable);
+      }
+      case BinaryConsts::EncodedType::rtt_n:
+      case BinaryConsts::EncodedType::rtt: {
+        auto depth = typeCode == BinaryConsts::EncodedType::rtt ? Rtt::NoDepth
+                                                                : getU32LEB();
+        int64_t htCode = getS64LEB(); // TODO: Actually s33
+        HeapType ht;
+        if (getBasicHeapType(htCode, ht)) {
+          return Type(Rtt(depth, ht));
+        }
+        if (size_t(htCode) >= numTypes) {
+          throwError("invalid type index: " + std::to_string(htCode));
+        }
+        return builder.getTempRttType(htCode, depth);
+      }
+      default:
+        throwError("unexpected type index: " + std::to_string(typeCode));
+    }
+    WASM_UNREACHABLE("unexpected type");
+  };
+
+  auto readType = [&]() { return makeType(getS32LEB()); };
+
+  auto readSignatureDef = [&]() {
+    std::vector<Type> params;
+    std::vector<Type> results;
+    size_t numParams = getU32LEB();
+    BYN_TRACE("num params: " << numParams << std::endl);
+    for (size_t j = 0; j < numParams; j++) {
+      params.push_back(readType());
+    }
+    auto numResults = getU32LEB();
+    BYN_TRACE("num results: " << numResults << std::endl);
+    for (size_t j = 0; j < numResults; j++) {
+      results.push_back(readType());
+    }
+    return Signature(builder.getTempTupleType(params),
+                     builder.getTempTupleType(results));
+  };
+
+  auto readMutability = [&]() {
+    switch (getU32LEB()) {
+      case 0:
+        return Immutable;
+      case 1:
+        return Mutable;
+      default:
+        throw ParseException("Expected 0 or 1 for mutability");
+    }
+  };
+
+  auto readFieldDef = [&]() {
+    // The value may be a general wasm type, or one of the types only possible
+    // in a field.
+    auto typeCode = getS32LEB();
+    if (typeCode == BinaryConsts::EncodedType::i8) {
+      auto mutable_ = readMutability();
+      return Field(Field::i8, mutable_);
+    }
+    if (typeCode == BinaryConsts::EncodedType::i16) {
+      auto mutable_ = readMutability();
+      return Field(Field::i16, mutable_);
+    }
+    // It's a regular wasm value.
+    auto type = makeType(typeCode);
+    auto mutable_ = readMutability();
+    return Field(type, mutable_);
+  };
+
+  auto readStructDef = [&]() {
+    FieldList fields;
+    size_t numFields = getU32LEB();
+    BYN_TRACE("num fields: " << numFields << std::endl);
+    for (size_t j = 0; j < numFields; j++) {
+      fields.push_back(readFieldDef());
+    }
+    return Struct(std::move(fields));
+  };
+
   for (size_t i = 0; i < numTypes; i++) {
     BYN_TRACE("read one\n");
     auto form = getS32LEB();
     if (form == BinaryConsts::EncodedType::Func) {
-      std::vector<Type> params;
-      std::vector<Type> results;
-      size_t numParams = getU32LEB();
-      BYN_TRACE("num params: " << numParams << std::endl);
-      for (size_t j = 0; j < numParams; j++) {
-        params.push_back(getConcreteType());
-      }
-      auto numResults = getU32LEB();
-      BYN_TRACE("num results: " << numResults << std::endl);
-      for (size_t j = 0; j < numResults; j++) {
-        results.push_back(getConcreteType());
-      }
-      types.emplace_back(Signature(Type(params), Type(results)));
+      builder.setHeapType(i, readSignatureDef());
     } else if (form == BinaryConsts::EncodedType::Struct) {
-      FieldList fields;
-      size_t numFields = getU32LEB();
-      BYN_TRACE("num fields: " << numFields << std::endl);
-      for (size_t j = 0; j < numFields; j++) {
-        fields.push_back(getField());
-      }
-      types.emplace_back(Struct(fields));
+      builder.setHeapType(i, readStructDef());
     } else if (form == BinaryConsts::EncodedType::Array) {
-      types.emplace_back(Array(getField()));
+      builder.setHeapType(i, Array(readFieldDef()));
     } else {
       throwError("bad type form " + std::to_string(form));
     }
   }
+
+  types = builder.build();
 }
 
 Name WasmBinaryBuilder::getFunctionName(Index index) {
@@ -1918,7 +2030,9 @@ void WasmBinaryBuilder::readFunctions() {
       debugLocation.clear();
       willBeIgnored = false;
       // process body
-      assert(breakTargetNames.size() == 0);
+      assert(breakStack.empty());
+      assert(breakTargetNames.empty());
+      assert(exceptionTargetNames.empty());
       assert(breakStack.empty());
       assert(expressionStack.empty());
       assert(controlFlowStack.empty());
@@ -1926,8 +2040,9 @@ void WasmBinaryBuilder::readFunctions() {
       assert(depth == 0);
       func->body = getBlockOrSingleton(func->sig.results);
       assert(depth == 0);
-      assert(breakStack.size() == 0);
-      assert(breakTargetNames.size() == 0);
+      assert(breakStack.empty());
+      assert(breakTargetNames.empty());
+      assert(exceptionTargetNames.empty());
       if (!expressionStack.empty()) {
         throwError("stack not empty on function exit");
       }
@@ -2210,7 +2325,8 @@ void WasmBinaryBuilder::processExpressions() {
       }
       auto peek = input[pos];
       if (peek == BinaryConsts::End || peek == BinaryConsts::Else ||
-          peek == BinaryConsts::Catch || peek == BinaryConsts::CatchAll) {
+          peek == BinaryConsts::Catch || peek == BinaryConsts::CatchAll ||
+          peek == BinaryConsts::Delegate) {
         BYN_TRACE("== processExpressions finished with unreachable"
                   << std::endl);
         lastSeparator = BinaryConsts::ASTNodes(peek);
@@ -2624,6 +2740,27 @@ Name WasmBinaryBuilder::escape(Name name) {
   return escaped;
 }
 
+// Performs necessary processing of names from the name section before using
+// them. Specifically it escapes and deduplicates them.
+class NameProcessor {
+public:
+  Name process(Name name) {
+    return deduplicate(WasmBinaryBuilder::escape(name));
+  }
+
+private:
+  std::unordered_set<Name> usedNames;
+
+  Name deduplicate(Name base) {
+    Name name = base;
+    // De-duplicate names by appending .1, .2, etc.
+    for (int i = 1; !usedNames.insert(name).second; ++i) {
+      name = std::string(base.str) + std::string(".") + std::to_string(i);
+    }
+    return name;
+  }
+};
+
 void WasmBinaryBuilder::readNames(size_t payloadLen) {
   BYN_TRACE("== readNames\n");
   auto sectionPos = pos;
@@ -2636,16 +2773,11 @@ void WasmBinaryBuilder::readNames(size_t payloadLen) {
     } else if (nameType ==
                BinaryConsts::UserSections::Subsection::NameFunction) {
       auto num = getU32LEB();
-      std::unordered_set<Name> usedNames;
+      NameProcessor processor;
       for (size_t i = 0; i < num; i++) {
         auto index = getU32LEB();
         auto rawName = getInlineString();
-        auto name = escape(rawName);
-        // De-duplicate names by appending .1, .2, etc.
-        for (int i = 1; !usedNames.insert(name).second; ++i) {
-          name = std::string(escape(rawName).str) + std::string(".") +
-                 std::to_string(i);
-        }
+        auto name = processor.process(rawName);
         auto numFunctionImports = functionImports.size();
         if (index < numFunctionImports) {
           functionImports[index]->setExplicitName(name);
@@ -2675,19 +2807,14 @@ void WasmBinaryBuilder::readNames(size_t payloadLen) {
             << std::to_string(funcIndex) << std::endl;
         }
         auto numLocals = getU32LEB();
-        std::unordered_set<Name> usedNames;
+        NameProcessor processor;
         for (size_t j = 0; j < numLocals; j++) {
           auto localIndex = getU32LEB();
           auto rawLocalName = getInlineString();
           if (!func) {
             continue; // read and discard in case of prior error
           }
-          auto localName = escape(rawLocalName);
-          // De-duplicate names by appending .1, .2, etc.
-          for (int i = 1; !usedNames.insert(localName).second; ++i) {
-            localName = std::string(escape(rawLocalName).str) +
-                        std::string(".") + std::to_string(i);
-          }
+          auto localName = processor.process(rawLocalName);
           if (localIndex < func->getNumLocals()) {
             func->localNames[localIndex] = localName;
           } else {
@@ -2699,19 +2826,29 @@ void WasmBinaryBuilder::readNames(size_t payloadLen) {
           }
         }
       }
-    } else if (nameType == BinaryConsts::UserSections::Subsection::NameTable) {
+    } else if (nameType == BinaryConsts::UserSections::Subsection::NameType) {
       auto num = getU32LEB();
+      NameProcessor processor;
       for (size_t i = 0; i < num; i++) {
-        std::unordered_set<Name> usedNames;
         auto index = getU32LEB();
         auto rawName = getInlineString();
-        auto name = escape(rawName);
-        // De-duplicate names by appending .1, .2, etc.
-        for (int i = 1; !usedNames.insert(name).second; ++i) {
-          name = std::string(escape(rawName).str) + std::string(".") +
-                 std::to_string(i);
+        auto name = processor.process(rawName);
+        if (index < types.size()) {
+          wasm.typeNames[types[index]].name = name;
+        } else {
+          std::cerr << "warning: type index out of bounds in name section, "
+                       "type subsection: "
+                    << std::string(rawName.str) << " at index "
+                    << std::to_string(index) << std::endl;
         }
-
+      }
+    } else if (nameType == BinaryConsts::UserSections::Subsection::NameTable) {
+      auto num = getU32LEB();
+      NameProcessor processor;
+      for (size_t i = 0; i < num; i++) {
+        auto index = getU32LEB();
+        auto rawName = getInlineString();
+        auto name = processor.process(rawName);
         auto numTableImports = tableImports.size();
         if (index < numTableImports) {
           tableImports[index]->setExplicitName(name);
@@ -2754,16 +2891,11 @@ void WasmBinaryBuilder::readNames(size_t payloadLen) {
       }
     } else if (nameType == BinaryConsts::UserSections::Subsection::NameGlobal) {
       auto num = getU32LEB();
-      std::unordered_set<Name> usedNames;
+      NameProcessor processor;
       for (size_t i = 0; i < num; i++) {
         auto index = getU32LEB();
         auto rawName = getInlineString();
-        auto name = escape(rawName);
-        // De-duplicate names by appending .1, .2, etc.
-        for (int i = 1; !usedNames.insert(name).second; ++i) {
-          name = std::string(escape(rawName).str) + std::string(".") +
-                 std::to_string(i);
-        }
+        auto name = processor.process(rawName);
         auto numGlobalImports = globalImports.size();
         if (index < numGlobalImports) {
           globalImports[index]->setExplicitName(name);
@@ -2963,16 +3095,13 @@ BinaryConsts::ASTNodes WasmBinaryBuilder::readExpression(Expression*& curr) {
       }
       break;
     case BinaryConsts::Else:
-    case BinaryConsts::Catch: {
+    case BinaryConsts::Catch:
+    case BinaryConsts::CatchAll: {
       curr = nullptr;
       if (DWARF && currFunction) {
         assert(!controlFlowStack.empty());
         auto currControlFlow = controlFlowStack.back();
         BinaryLocation delimiterId;
-        // Else and CatchAll have the same binary ID, so differentiate them
-        // using the control flow stack.
-        static_assert(BinaryConsts::CatchAll == BinaryConsts::Else,
-                      "Else and CatchAll should have identical codes");
         if (currControlFlow->is<If>()) {
           delimiterId = BinaryLocations::Else;
         } else {
@@ -2984,6 +3113,14 @@ BinaryConsts::ASTNodes WasmBinaryBuilder::readExpression(Expression*& curr) {
         }
         currFunction->delimiterLocations[currControlFlow][delimiterId] =
           startPos - codeSectionLocation;
+      }
+      break;
+    }
+    case BinaryConsts::Delegate: {
+      curr = nullptr;
+      if (DWARF && currFunction) {
+        assert(!controlFlowStack.empty());
+        controlFlowStack.pop_back();
       }
       break;
     }
@@ -3376,7 +3513,8 @@ Expression* WasmBinaryBuilder::getBlockOrSingleton(Type type) {
   block->name = label;
   block->finalize(type);
   // maybe we don't need a block here?
-  if (breakTargetNames.find(block->name) == breakTargetNames.end()) {
+  if (breakTargetNames.find(block->name) == breakTargetNames.end() &&
+      exceptionTargetNames.find(block->name) == exceptionTargetNames.end()) {
     block->name = Name();
     if (block->list.size() == 1) {
       return block->list[0];
@@ -3450,6 +3588,28 @@ WasmBinaryBuilder::getBreakTarget(int32_t offset) {
     breakTargetNames.insert(ret.name);
   }
   return ret;
+}
+
+Name WasmBinaryBuilder::getExceptionTargetName(int32_t offset) {
+  BYN_TRACE("getExceptionTarget " << offset << std::endl);
+  // We always start parsing a function by creating a block label and pushing it
+  // in breakStack in getBlockOrSingleton, so if a 'delegate''s target is that
+  // block, it does not mean it targets that block; it throws to the caller.
+  if (breakStack.size() - 1 == size_t(offset)) {
+    return DELEGATE_CALLER_TARGET;
+  }
+  size_t index = breakStack.size() - 1 - offset;
+  if (index > breakStack.size()) {
+    throwError("bad try index (high)");
+  }
+  BYN_TRACE("exception target " << breakStack[index].name << std::endl);
+  auto& ret = breakStack[index];
+  // if the delegate/rethrow is in literally unreachable code, then we will not
+  // emit it anyhow, so do not note that the target has a reference to it
+  if (!willBeIgnored) {
+    exceptionTargetNames.insert(ret.name);
+  }
+  return ret.name;
 }
 
 void WasmBinaryBuilder::visitBreak(Break* curr, uint8_t code) {
@@ -5746,58 +5906,13 @@ void WasmBinaryBuilder::visitTryOrTryInBlock(Expression*& out) {
   curr->type = getType();
   curr->body = getBlockOrSingleton(curr->type);
   if (lastSeparator != BinaryConsts::Catch &&
-      lastSeparator != BinaryConsts::CatchAll) {
+      lastSeparator != BinaryConsts::CatchAll &&
+      lastSeparator != BinaryConsts::Delegate) {
     throwError("No catch instruction within a try scope");
   }
 
-  // For simplicity, we create an inner block within the catch body too, but the
-  // one within the 'catch' *must* be omitted when we write out the binary back
-  // later, because the 'catch' instruction pushes a value onto the stack and
-  // the inner block does not support block input parameters without multivalue
-  // support.
-  // try
-  //   ...
-  // catch    ;; Pushes a value onto the stack
-  //   block  ;; Inner block. Should be deleted when writing binary!
-  //     use the pushed value
-  //   end
-  // end
-  //
-  // But when input binary code is like
-  // try
-  //   ...
-  // catch
-  //   br 0
-  // end
-  //
-  // 'br 0' accidentally happens to target the inner block, creating code like
-  // this in Binaryen IR, making the inner block not deletable, resulting in a
-  // validation error:
-  // (try
-  //   ...
-  //   (catch
-  //     (block $label0 ;; Cannot be deleted, because there's a branch to this
-  //       ...
-  //       (br $label0)
-  //     )
-  //   )
-  // )
-  //
-  // When this happens, we fix this by creating a block that wraps the whole
-  // try-catch, and making the branches target that block instead, like this:
-  // (block $label  ;; New enclosing block, new target for the branch
-  //   (try
-  //     ...
-  //     (catch
-  //       (block   ;; Now this can be deleted when writing binary
-  //         ...
-  //         (br $label0)
-  //       )
-  //     )
-  //   )
-  // )
-
   Builder builder(wasm);
+  // A nameless label shared by all catch body blocks
   Name catchLabel = getNextLabel();
   breakStack.push_back({catchLabel, curr->type});
 
@@ -5839,8 +5954,82 @@ void WasmBinaryBuilder::visitTryOrTryInBlock(Expression*& out) {
       readCatchBody(Type::none);
     }
   }
+  breakStack.pop_back();
+
+  if (lastSeparator == BinaryConsts::Delegate) {
+    curr->delegateTarget = getExceptionTargetName(getU32LEB());
+  }
+
+  // For simplicity, we ensure that try's labels can only be targeted by
+  // delegates and rethrows, and delegates/rethrows can only target try's
+  // labels. (If they target blocks or loops, it is a validation failure.)
+  // Because we create an inner block within each try and catch body, if any
+  // delegate/rethrow targets those inner blocks, we should make them target the
+  // try's label instead.
+  curr->name = getNextLabel();
+  if (auto* block = curr->body->dynCast<Block>()) {
+    if (block->name.is()) {
+      if (exceptionTargetNames.find(block->name) !=
+          exceptionTargetNames.end()) {
+        BranchUtils::replaceExceptionTargets(block, block->name, curr->name);
+        exceptionTargetNames.erase(block->name);
+      }
+    }
+  }
+  if (exceptionTargetNames.find(catchLabel) != exceptionTargetNames.end()) {
+    for (auto* catchBody : curr->catchBodies) {
+      BranchUtils::replaceExceptionTargets(catchBody, catchLabel, curr->name);
+    }
+    exceptionTargetNames.erase(catchLabel);
+  }
   curr->finalize(curr->type);
 
+  // For simplicity, we create an inner block within the catch body too, but the
+  // one within the 'catch' *must* be omitted when we write out the binary back
+  // later, because the 'catch' instruction pushes a value onto the stack and
+  // the inner block does not support block input parameters without multivalue
+  // support.
+  // try
+  //   ...
+  // catch $e   ;; Pushes value(s) onto the stack
+  //   block  ;; Inner block. Should be deleted when writing binary!
+  //     use the pushed value
+  //   end
+  // end
+  //
+  // But when input binary code is like
+  // try
+  //   ...
+  // catch $e
+  //   br 0
+  // end
+  //
+  // 'br 0' accidentally happens to target the inner block, creating code like
+  // this in Binaryen IR, making the inner block not deletable, resulting in a
+  // validation error:
+  // (try
+  //   ...
+  //   (catch $e
+  //     (block $label0 ;; Cannot be deleted, because there's a branch to this
+  //       ...
+  //       (br $label0)
+  //     )
+  //   )
+  // )
+  //
+  // When this happens, we fix this by creating a block that wraps the whole
+  // try-catch, and making the branches target that block instead, like this:
+  // (block $label  ;; New enclosing block, new target for the branch
+  //   (try
+  //     ...
+  //     (catch $e
+  //       (block   ;; Now this can be deleted when writing binary
+  //         ...
+  //         (br $label0)
+  //       )
+  //     )
+  //   )
+  // )
   if (breakTargetNames.find(catchLabel) == breakTargetNames.end()) {
     out = curr;
   } else {
@@ -5848,7 +6037,6 @@ void WasmBinaryBuilder::visitTryOrTryInBlock(Expression*& out) {
     auto* block = builder.makeBlock(catchLabel, curr);
     out = block;
   }
-  breakStack.pop_back();
   breakTargetNames.erase(catchLabel);
 }
 
@@ -5870,7 +6058,9 @@ void WasmBinaryBuilder::visitThrow(Throw* curr) {
 
 void WasmBinaryBuilder::visitRethrow(Rethrow* curr) {
   BYN_TRACE("zz node: Rethrow\n");
-  curr->depth = getU32LEB();
+  curr->target = getExceptionTargetName(getU32LEB());
+  // This special target is valid only for delegates
+  assert(curr->target != DELEGATE_CALLER_TARGET);
   curr->finalize();
 }
 

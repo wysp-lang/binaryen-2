@@ -515,8 +515,10 @@ switch (DELEGATE_ID) {
   }
   case Expression::Id::TryId: {
     DELEGATE_START(Try);
+    DELEGATE_FIELD_SCOPE_NAME_USE(Try, delegateTarget);
     DELEGATE_FIELD_CHILD_VECTOR(Try, catchBodies);
     DELEGATE_FIELD_NAME_VECTOR(Try, catchEvents);
+    DELEGATE_FIELD_SCOPE_NAME_DEF(Try, name);
     DELEGATE_FIELD_CHILD(Try, body);
     DELEGATE_END(Try);
     break;
@@ -530,7 +532,7 @@ switch (DELEGATE_ID) {
   }
   case Expression::Id::RethrowId: {
     DELEGATE_START(Rethrow);
-    DELEGATE_FIELD_INT(Rethrow, depth);
+    DELEGATE_FIELD_SCOPE_NAME_USE(Rethrow, target);
     DELEGATE_END(Rethrow);
     break;
   }

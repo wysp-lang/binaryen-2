@@ -80,19 +80,6 @@
 #include "wasm-builder.h"
 #include "wasm.h"
 
-namespace std {
-
-// Used in ModuleSplitter::shareImportableItems
-template<> struct hash<pair<wasm::ExternalKind, wasm::Name>> {
-  size_t operator()(const pair<wasm::ExternalKind, wasm::Name>& p) const {
-    auto digest = wasm::hash(p.first);
-    wasm::rehash(digest, p.second);
-    return digest;
-  }
-};
-
-} // namespace std
-
 namespace wasm {
 
 namespace ModuleSplitting {
@@ -156,6 +143,7 @@ Expression* TableSlotManager::Slot::makeExpr(Module& module) {
 
 void TableSlotManager::addSlot(Name func, Slot slot) {
   auto it = funcIndices.insert(std::make_pair(func, slot));
+  WASM_UNUSED(it);
   assert(it.second && "Function already has multiple table slots");
 }
 

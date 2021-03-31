@@ -137,7 +137,6 @@ public:
   bool isRef() const;
   bool isFunction() const;
   bool isData() const;
-  bool isException() const;
   bool isNullable() const;
   bool isRtt() const;
   bool isStruct() const;
@@ -172,7 +171,7 @@ public:
   bool operator!=(const Type& other) const { return id != other.id; }
   bool operator!=(const BasicType& other) const { return id != other; }
 
-  // Order types by some notion of simplicity
+  // Order types by some notion of simplicity.
   bool operator<(const Type& other) const;
 
   // Returns the type size in bytes. Only single types are supported.
@@ -184,6 +183,10 @@ public:
 
   // Returns the feature set required to use this type.
   FeatureSet getFeatures() const;
+
+  // Returns the tuple, assuming that this is a tuple type. Note that it is
+  // normally simpler to use operator[] and size() on the Type directly.
+  const Tuple& getTuple() const;
 
   // Gets the heap type corresponding to this type, assuming that it is a
   // reference or Rtt type.
@@ -215,8 +218,11 @@ public:
 
   std::string toString() const;
 
-  struct Iterator
-    : std::iterator<std::random_access_iterator_tag, Type, long, Type*, Type&> {
+  struct Iterator : std::iterator<std::random_access_iterator_tag,
+                                  Type,
+                                  long,
+                                  Type*,
+                                  const Type&> {
     const Type* parent;
     size_t index;
     Iterator(const Type* parent, size_t index) : parent(parent), index(index) {}
@@ -265,22 +271,14 @@ public:
 
   Iterator begin() const { return Iterator(this, 0); }
   Iterator end() const;
+  std::reverse_iterator<Iterator> rbegin() const {
+    return std::make_reverse_iterator(end());
+  }
+  std::reverse_iterator<Iterator> rend() const {
+    return std::make_reverse_iterator(begin());
+  }
   size_t size() const { return end() - begin(); }
   const Type& operator[](size_t i) const;
-};
-
-// Wrapper type for formatting types as "(param i32 i64 f32)"
-struct ParamType {
-  Type type;
-  ParamType(Type type) : type(type) {}
-  std::string toString() const;
-};
-
-// Wrapper type for formatting types as "(result i32 i64 f32)"
-struct ResultType {
-  Type type;
-  ResultType(Type type) : type(type) {}
-  std::string toString() const;
 };
 
 class HeapType {
@@ -306,6 +304,9 @@ public:
 
   // But converting raw TypeID is more dangerous, so make it explicit
   explicit HeapType(TypeID id) : id(id) {}
+
+  // Choose an arbitrary heap type as the default.
+  constexpr HeapType() : HeapType(func) {}
 
   HeapType(Signature signature);
   HeapType(const Struct& struct_);
@@ -338,8 +339,12 @@ public:
   bool operator!=(const HeapType& other) const { return id != other.id; }
   bool operator!=(const BasicHeapType& other) const { return id != other; }
 
+  // Order heap types by some notion of simplicity.
   bool operator<(const HeapType& other) const;
   std::string toString() const;
+
+  // Returns true if left is a subtype of right. Subtype includes itself.
+  static bool isSubType(HeapType left, HeapType right);
 };
 
 typedef std::vector<Type> TypeList;
@@ -354,7 +359,6 @@ struct Tuple {
   Tuple(TypeList&& types) : types(std::move(types)) { validate(); }
   bool operator==(const Tuple& other) const { return types == other.types; }
   bool operator!=(const Tuple& other) const { return !(*this == other); }
-  bool operator<(const Tuple& other) const { return types < other.types; }
   std::string toString() const;
 
   // Prevent accidental copies
@@ -391,12 +395,11 @@ struct Field {
     i16,
   } packedType; // applicable iff type=i32
   Mutability mutable_;
-  Name name;
 
-  Field(Type type, Mutability mutable_, Name name = Name())
-    : type(type), packedType(not_packed), mutable_(mutable_), name(name) {}
-  Field(PackedType packedType, Mutability mutable_, Name name = Name())
-    : type(Type::i32), packedType(packedType), mutable_(mutable_), name(name) {}
+  Field(Type type, Mutability mutable_)
+    : type(type), packedType(not_packed), mutable_(mutable_) {}
+  Field(PackedType packedType, Mutability mutable_)
+    : type(Type::i32), packedType(packedType), mutable_(mutable_) {}
 
   constexpr bool isPacked() const {
     if (packedType != not_packed) {
@@ -407,13 +410,10 @@ struct Field {
   }
 
   bool operator==(const Field& other) const {
-    // Note that the name is not checked here - it is pure metadata for printing
-    // purposes only.
     return type == other.type && packedType == other.packedType &&
            mutable_ == other.mutable_;
   }
   bool operator!=(const Field& other) const { return !(*this == other); }
-  bool operator<(const Field& other) const;
   std::string toString() const;
 };
 
@@ -428,7 +428,6 @@ struct Struct {
   Struct(FieldList&& fields) : fields(std::move(fields)) {}
   bool operator==(const Struct& other) const { return fields == other.fields; }
   bool operator!=(const Struct& other) const { return !(*this == other); }
-  bool operator<(const Struct& other) const { return fields < other.fields; }
   std::string toString() const;
 
   // Prevent accidental copies
@@ -441,7 +440,6 @@ struct Array {
   Array(Field element) : element(element) {}
   bool operator==(const Array& other) const { return element == other.element; }
   bool operator!=(const Array& other) const { return !(*this == other); }
-  bool operator<(const Array& other) const { return element < other.element; }
   std::string toString() const;
 };
 
@@ -456,8 +454,7 @@ struct Rtt {
     return depth == other.depth && heapType == other.heapType;
   }
   bool operator!=(const Rtt& other) const { return !(*this == other); }
-  bool operator<(const Rtt& other) const;
-  bool hasDepth() { return depth != uint32_t(NoDepth); }
+  bool hasDepth() const { return depth != uint32_t(NoDepth); }
   std::string toString() const;
 };
 
@@ -498,14 +495,12 @@ struct TypeBuilder {
 };
 
 std::ostream& operator<<(std::ostream&, Type);
-std::ostream& operator<<(std::ostream&, ParamType);
-std::ostream& operator<<(std::ostream&, ResultType);
+std::ostream& operator<<(std::ostream&, HeapType);
 std::ostream& operator<<(std::ostream&, Tuple);
 std::ostream& operator<<(std::ostream&, Signature);
 std::ostream& operator<<(std::ostream&, Field);
 std::ostream& operator<<(std::ostream&, Struct);
 std::ostream& operator<<(std::ostream&, Array);
-std::ostream& operator<<(std::ostream&, HeapType);
 std::ostream& operator<<(std::ostream&, Rtt);
 
 } // namespace wasm

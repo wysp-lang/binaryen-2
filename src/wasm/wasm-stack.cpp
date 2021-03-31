@@ -1904,7 +1904,7 @@ void BinaryInstWriter::visitRefEq(RefEq* curr) {
 }
 
 void BinaryInstWriter::visitTry(Try* curr) {
-  breakStack.emplace_back(IMPOSSIBLE_CONTINUE);
+  breakStack.push_back(curr->name);
   o << int8_t(BinaryConsts::Try);
   emitResultType(curr->type);
 }
@@ -1924,12 +1924,22 @@ void BinaryInstWriter::emitCatchAll(Try* curr) {
   o << int8_t(BinaryConsts::CatchAll);
 }
 
+void BinaryInstWriter::emitDelegate(Try* curr) {
+  // The delegate ends the scope in effect, and pops the try's name. Note that
+  // the getBreakIndex is intentionally after that pop, as the delegate cannot
+  // target its own try.
+  assert(!breakStack.empty());
+  breakStack.pop_back();
+  o << int8_t(BinaryConsts::Delegate)
+    << U32LEB(getBreakIndex(curr->delegateTarget));
+}
+
 void BinaryInstWriter::visitThrow(Throw* curr) {
   o << int8_t(BinaryConsts::Throw) << U32LEB(parent.getEventIndex(curr->event));
 }
 
 void BinaryInstWriter::visitRethrow(Rethrow* curr) {
-  o << int8_t(BinaryConsts::Rethrow) << U32LEB(curr->depth);
+  o << int8_t(BinaryConsts::Rethrow) << U32LEB(getBreakIndex(curr->target));
 }
 
 void BinaryInstWriter::visitNop(Nop* curr) { o << int8_t(BinaryConsts::Nop); }
@@ -2216,6 +2226,9 @@ void BinaryInstWriter::emitMemoryAccess(size_t alignment,
 }
 
 int32_t BinaryInstWriter::getBreakIndex(Name name) { // -1 if not found
+  if (name == DELEGATE_CALLER_TARGET) {
+    return breakStack.size();
+  }
   for (int i = breakStack.size() - 1; i >= 0; i--) {
     if (breakStack[i] == name) {
       return breakStack.size() - 1 - i;
@@ -2292,7 +2305,7 @@ void StackIRToBinaryWriter::write() {
     switch (inst->op) {
       case StackInst::TryBegin:
         catchIndexStack.push_back(0);
-        // fallthrough
+        [[fallthrough]];
       case StackInst::Basic:
       case StackInst::BlockBegin:
       case StackInst::IfBegin:
@@ -2302,7 +2315,7 @@ void StackIRToBinaryWriter::write() {
       }
       case StackInst::TryEnd:
         catchIndexStack.pop_back();
-        // fallthrough
+        [[fallthrough]];
       case StackInst::BlockEnd:
       case StackInst::IfEnd:
       case StackInst::LoopEnd: {
@@ -2319,6 +2332,12 @@ void StackIRToBinaryWriter::write() {
       }
       case StackInst::CatchAll: {
         writer.emitCatchAll(inst->origin->cast<Try>());
+        break;
+      }
+      case StackInst::Delegate: {
+        writer.emitDelegate(inst->origin->cast<Try>());
+        // Delegates end the try, like a TryEnd.
+        catchIndexStack.pop_back();
         break;
       }
       default:
