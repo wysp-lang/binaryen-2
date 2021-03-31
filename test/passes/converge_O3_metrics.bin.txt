@@ -6,6 +6,7 @@ total
  [imports]      : 3       
  [memory-data]  : 28      
  [table-data]   : 429     
+<<<<<<< HEAD
  [total]        : 124     
  [vars]         : 2       
  binary         : 12      
@@ -22,6 +23,26 @@ total
  local.set      : 7       
  loop           : 1       
  store          : 5       
+=======
+ [tables]       : 0       
+ [total]        : 129     
+ [vars]         : 4       
+ Binary         : 12      
+ Block          : 8       
+ Break          : 3       
+ Call           : 3       
+ CallIndirect   : 4       
+ Const          : 45      
+ Drop           : 3       
+ GlobalGet      : 1       
+ GlobalSet      : 1       
+ If             : 2       
+ Load           : 16      
+ LocalGet       : 18      
+ LocalSet       : 7       
+ Loop           : 1       
+ Store          : 5       
+>>>>>>> 3da8b08ecd57f5662bebc69ea73bf59e1928341e
 (module
  (type $i32_i32_i32_=>_i32 (func (param i32 i32 i32) (result i32)))
  (type $i32_i32_=>_i32 (func (param i32 i32) (result i32)))
@@ -455,6 +476,7 @@ total
  [imports]      : 3       
  [memory-data]  : 28      
  [table-data]   : 429     
+<<<<<<< HEAD
  [total]        : 120     
  [vars]         : 2       
  binary         : 12      
@@ -470,6 +492,26 @@ total
  local.set      : 6       
  loop           : 1       
  store          : 5       
+=======
+ [tables]       : 0       
+ [total]        : 129     
+ [vars]         : 4       
+ Binary         : 12      
+ Block          : 8       
+ Break          : 3       
+ Call           : 3       
+ CallIndirect   : 4       
+ Const          : 45      
+ Drop           : 3       
+ GlobalGet      : 1       
+ GlobalSet      : 1       
+ If             : 2       
+ Load           : 16      
+ LocalGet       : 18      
+ LocalSet       : 7       
+ Loop           : 1       
+ Store          : 5       
+>>>>>>> 3da8b08ecd57f5662bebc69ea73bf59e1928341e
 (module
  (type $i32_i32_i32_=>_i32 (func (param i32 i32 i32) (result i32)))
  (type $i32_i32_=>_i32 (func (param i32 i32) (result i32)))

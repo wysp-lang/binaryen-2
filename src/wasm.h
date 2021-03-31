@@ -481,7 +481,7 @@ enum SIMDReplaceOp {
   ReplaceLaneVecI32x4,
   ReplaceLaneVecI64x2,
   ReplaceLaneVecF32x4,
-  ReplaceLaneVecF64x2
+  ReplaceLaneVecF64x2,
 };
 
 enum SIMDShiftOp {
@@ -537,9 +537,36 @@ enum SIMDTernaryOp {
   SignSelectVec64x2
 };
 
+enum SIMDWidenOp {
+  WidenSVecI8x16ToVecI32x4,
+  WidenUVecI8x16ToVecI32x4,
+};
+
 enum PrefetchOp {
   PrefetchTemporal,
   PrefetchNontemporal,
+};
+
+enum RefIsOp {
+  RefIsNull,
+  RefIsFunc,
+  RefIsData,
+  RefIsI31,
+};
+
+enum RefAsOp {
+  RefAsNonNull,
+  RefAsFunc,
+  RefAsData,
+  RefAsI31,
+};
+
+enum BrOnOp {
+  BrOnNull,
+  BrOnCast,
+  BrOnFunc,
+  BrOnData,
+  BrOnI31,
 };
 
 //
@@ -603,13 +630,14 @@ public:
     SIMDShiftId,
     SIMDLoadId,
     SIMDLoadStoreLaneId,
+    SIMDWidenId,
     MemoryInitId,
     DataDropId,
     MemoryCopyId,
     MemoryFillId,
     PopId,
     RefNullId,
-    RefIsNullId,
+    RefIsId,
     RefFuncId,
     RefEqId,
     TryId,
@@ -622,7 +650,7 @@ public:
     CallRefId,
     RefTestId,
     RefCastId,
-    BrOnCastId,
+    BrOnId,
     RttCanonId,
     RttSubId,
     StructNewId,
@@ -632,6 +660,7 @@ public:
     ArrayGetId,
     ArraySetId,
     ArrayLenId,
+    RefAsId,
     NumExpressionIds
   };
   Id _id;
@@ -807,6 +836,7 @@ public:
   Signature sig;
   ExpressionList operands;
   Expression* target;
+  Name table;
   bool isReturn = false;
 
   void finalize();
@@ -1049,6 +1079,18 @@ public:
   void finalize();
 };
 
+class SIMDWiden : public SpecificExpression<Expression::SIMDWidenId> {
+public:
+  SIMDWiden() = default;
+  SIMDWiden(MixedArena& allocator) {}
+
+  SIMDWidenOp op;
+  uint8_t index;
+  Expression* vec;
+
+  void finalize();
+};
+
 class Prefetch : public SpecificExpression<Expression::PrefetchId> {
 public:
   Prefetch() = default;
@@ -1228,9 +1270,12 @@ public:
   void finalize(Type type);
 };
 
-class RefIsNull : public SpecificExpression<Expression::RefIsNullId> {
+class RefIs : public SpecificExpression<Expression::RefIsId> {
 public:
-  RefIsNull(MixedArena& allocator) {}
+  RefIs(MixedArena& allocator) {}
+
+  // RefIs can represent ref.is_null, ref.is_func, ref.is_data, and ref.is_i31.
+  RefIsOp op;
 
   Expression* value;
 
@@ -1364,16 +1409,22 @@ public:
   Type getCastType();
 };
 
-class BrOnCast : public SpecificExpression<Expression::BrOnCastId> {
+class BrOn : public SpecificExpression<Expression::BrOnId> {
 public:
-  BrOnCast(MixedArena& allocator) {}
+  BrOn(MixedArena& allocator) {}
 
+  BrOnOp op;
   Name name;
-  // The cast type cannot be inferred from rtt if rtt is unreachable, so we must
-  // store it explicitly.
-  Type castType;
   Expression* ref;
+
+  // BrOnCast has an rtt that is used in the cast.
   Expression* rtt;
+
+  // TODO: BrOnNull also has an optional extra value in the spec, which we do
+  //       not support. See also the discussion on
+  //       https://github.com/WebAssembly/function-references/issues/45
+  //       - depending on the decision there, we may want to move BrOnNull into
+  //       Break or a new class of its own.
 
   void finalize();
 
@@ -1482,6 +1533,17 @@ public:
   void finalize();
 };
 
+class RefAs : public SpecificExpression<Expression::RefAsId> {
+public:
+  RefAs(MixedArena& allocator) {}
+
+  RefAsOp op;
+
+  Expression* value;
+
+  void finalize();
+};
+
 // Globals
 
 struct Importable {
@@ -1582,8 +1644,8 @@ public:
   std::unique_ptr<StackIR> stackIR;
 
   // local names. these are optional.
-  std::map<Index, Name> localNames;
-  std::map<Name, Index> localIndices;
+  std::unordered_map<Index, Name> localNames;
+  std::unordered_map<Name, Index> localIndices;
 
   // Source maps debugging info: map expression nodes to their file, line, col.
   struct DebugLocation {
@@ -1671,18 +1733,12 @@ public:
     }
   };
 
-  // Currently the wasm object always 'has' one Table. It 'exists' if it has
-  // been defined or imported. The table can exist but be empty and have no
-  // defined initial or max size.
-  bool exists = false;
   Address initial = 0;
   Address max = kMaxSize;
   std::vector<Segment> segments;
 
-  Table() { name = Name::fromInt(0); }
   bool hasMax() { return max != kUnlimitedSize; }
   void clear() {
-    exists = false;
     name = "";
     initial = 0;
     max = kMaxSize;
@@ -1789,7 +1845,8 @@ public:
   std::vector<std::unique_ptr<Global>> globals;
   std::vector<std::unique_ptr<Event>> events;
 
-  Table table;
+  std::vector<std::unique_ptr<Table>> tables;
+
   Memory memory;
   Name start;
 
@@ -1817,20 +1874,23 @@ private:
   // TODO: add a build option where Names are just indices, and then these
   // methods are not needed
   // exports map is by the *exported* name, which is unique
-  std::map<Name, Export*> exportsMap;
-  std::map<Name, Function*> functionsMap;
-  std::map<Name, Global*> globalsMap;
-  std::map<Name, Event*> eventsMap;
+  std::unordered_map<Name, Export*> exportsMap;
+  std::unordered_map<Name, Function*> functionsMap;
+  std::unordered_map<Name, Table*> tablesMap;
+  std::unordered_map<Name, Global*> globalsMap;
+  std::unordered_map<Name, Event*> eventsMap;
 
 public:
   Module() = default;
 
   Export* getExport(Name name);
   Function* getFunction(Name name);
+  Table* getTable(Name name);
   Global* getGlobal(Name name);
   Event* getEvent(Name name);
 
   Export* getExportOrNull(Name name);
+  Table* getTableOrNull(Name name);
   Function* getFunctionOrNull(Name name);
   Global* getGlobalOrNull(Name name);
   Event* getEventOrNull(Name name);
@@ -1842,6 +1902,7 @@ public:
 
   Export* addExport(std::unique_ptr<Export>&& curr);
   Function* addFunction(std::unique_ptr<Function>&& curr);
+  Table* addTable(std::unique_ptr<Table>&& curr);
   Global* addGlobal(std::unique_ptr<Global>&& curr);
   Event* addEvent(std::unique_ptr<Event>&& curr);
 
@@ -1849,11 +1910,13 @@ public:
 
   void removeExport(Name name);
   void removeFunction(Name name);
+  void removeTable(Name name);
   void removeGlobal(Name name);
   void removeEvent(Name name);
 
   void removeExports(std::function<bool(Export*)> pred);
   void removeFunctions(std::function<bool(Function*)> pred);
+  void removeTables(std::function<bool(Table*)> pred);
   void removeGlobals(std::function<bool(Global*)> pred);
   void removeEvents(std::function<bool(Event*)> pred);
 

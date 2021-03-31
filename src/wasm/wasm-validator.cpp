@@ -331,7 +331,7 @@ public:
   void visitMemorySize(MemorySize* curr);
   void visitMemoryGrow(MemoryGrow* curr);
   void visitRefNull(RefNull* curr);
-  void visitRefIsNull(RefIsNull* curr);
+  void visitRefIs(RefIs* curr);
   void visitRefFunc(RefFunc* curr);
   void visitRefEq(RefEq* curr);
   void visitTry(Try* curr);
@@ -344,7 +344,7 @@ public:
   void visitI31Get(I31Get* curr);
   void visitRefTest(RefTest* curr);
   void visitRefCast(RefCast* curr);
-  void visitBrOnCast(BrOnCast* curr);
+  void visitBrOn(BrOn* curr);
   void visitRttCanon(RttCanon* curr);
   void visitRttSub(RttSub* curr);
   void visitStructNew(StructNew* curr);
@@ -809,6 +809,12 @@ void FunctionValidator::visitCallIndirect(CallIndirect* curr) {
                                     Type(Type::i32),
                                     curr,
                                     "indirect call target must be an i32");
+
+  if (curr->target->type != Type::unreachable) {
+    auto* table = getModule()->getTableOrNull(curr->table);
+    shouldBeTrue(!!table, curr, "call-indirect table must exist");
+  }
+
   validateCallParamsAndResult(curr, curr->sig);
 }
 
@@ -1981,14 +1987,14 @@ void FunctionValidator::visitRefNull(RefNull* curr) {
     curr->type.isNullable(), curr, "ref.null types must be nullable");
 }
 
-void FunctionValidator::visitRefIsNull(RefIsNull* curr) {
+void FunctionValidator::visitRefIs(RefIs* curr) {
   shouldBeTrue(getModule()->features.hasReferenceTypes(),
                curr,
-               "ref.is_null requires reference-types to be enabled");
+               "ref.is_* requires reference-types to be enabled");
   shouldBeTrue(curr->value->type == Type::unreachable ||
                  curr->value->type.isRef(),
                curr->value,
-               "ref.is_null's argument should be a reference type");
+               "ref.is_*'s argument should be a reference type");
 }
 
 void FunctionValidator::visitRefFunc(RefFunc* curr) {
@@ -2207,7 +2213,7 @@ void FunctionValidator::visitRefCast(RefCast* curr) {
   }
 }
 
-void FunctionValidator::visitBrOnCast(BrOnCast* curr) {
+void FunctionValidator::visitBrOn(BrOn* curr) {
   shouldBeTrue(getModule()->features.hasGC(),
                curr,
                "br_on_cast requires gc to be enabled");
@@ -2215,14 +2221,16 @@ void FunctionValidator::visitBrOnCast(BrOnCast* curr) {
     shouldBeTrue(
       curr->ref->type.isRef(), curr, "br_on_cast ref must have ref type");
   }
-  if (curr->rtt->type != Type::unreachable) {
+  if (curr->op == BrOnCast) {
+    // Note that an unreachable rtt is not supported: the text and binary
+    // formats do not provide the type, so if it's unreachable we should not
+    // even create a br_on_cast in such a case, as we'd have no idea what it
+    // casts to.
     shouldBeTrue(
       curr->rtt->type.isRtt(), curr, "br_on_cast rtt must have rtt type");
-    shouldBeEqual(curr->rtt->type.getHeapType(),
-                  curr->castType.getHeapType(),
-                  curr,
-                  "br_on_cast rtt must have the proper heap type");
-    noteBreak(curr->name, curr->castType, curr);
+    noteBreak(curr->name, curr->getCastType(), curr);
+  } else {
+    shouldBeTrue(curr->rtt == nullptr, curr, "non-cast BrOn must not have rtt");
   }
 }
 
@@ -2294,6 +2302,14 @@ void FunctionValidator::visitStructGet(StructGet* curr) {
   shouldBeTrue(getModule()->features.hasGC(),
                curr,
                "struct.get requires gc to be enabled");
+  if (curr->ref->type == Type::unreachable) {
+    return;
+  }
+  if (!shouldBeTrue(curr->ref->type.isStruct(),
+                    curr->ref,
+                    "struct.get ref must be a struct")) {
+    return;
+  }
   const auto& fields = curr->ref->type.getHeapType().getStruct().fields;
   shouldBeTrue(curr->index < fields.size(), curr, "bad struct.get field");
   auto field = fields[curr->index];
@@ -2313,6 +2329,14 @@ void FunctionValidator::visitStructSet(StructSet* curr) {
   shouldBeTrue(getModule()->features.hasGC(),
                curr,
                "struct.set requires gc to be enabled");
+  if (curr->ref->type == Type::unreachable) {
+    return;
+  }
+  if (!shouldBeTrue(curr->ref->type.isStruct(),
+                    curr->ref,
+                    "struct.set ref must be a struct")) {
+    return;
+  }
   if (curr->ref->type != Type::unreachable) {
     const auto& fields = curr->ref->type.getHeapType().getStruct().fields;
     shouldBeTrue(curr->index < fields.size(), curr, "bad struct.get field");
@@ -2447,7 +2471,7 @@ void FunctionValidator::visitFunction(Function* curr) {
   returnTypes.clear();
   labelNames.clear();
   // validate optional local names
-  std::set<Name> seen;
+  std::unordered_set<Name> seen;
   for (auto& pair : curr->localNames) {
     Name name = pair.second;
     shouldBeTrue(seen.insert(name).second, name, "local names must be unique");
@@ -2649,7 +2673,7 @@ static void validateExports(Module& module, ValidationInfo& info) {
                         name,
                         "module global exports must be found");
     } else if (exp->kind == ExternalKind::Table) {
-      info.shouldBeTrue(name == Name("0") || name == module.table.name,
+      info.shouldBeTrue(module.getTableOrNull(name),
                         name,
                         "module table exports must be found");
     } else if (exp->kind == ExternalKind::Memory) {
@@ -2758,22 +2782,28 @@ static void validateMemory(Module& module, ValidationInfo& info) {
   }
 }
 
-static void validateTable(Module& module, ValidationInfo& info) {
-  auto& curr = module.table;
-  for (auto& segment : curr.segments) {
-    info.shouldBeEqual(segment.offset->type,
-                       Type(Type::i32),
-                       segment.offset,
-                       "segment offset should be i32");
-    info.shouldBeTrue(
-      checkSegmentOffset(segment.offset,
-                         segment.data.size(),
-                         module.table.initial * Table::kPageSize),
-      segment.offset,
-      "table segment offset should be reasonable");
-    for (auto name : segment.data) {
-      info.shouldBeTrue(
-        module.getFunctionOrNull(name), name, "segment name should be valid");
+static void validateTables(Module& module, ValidationInfo& info) {
+  if (!module.features.hasReferenceTypes()) {
+    info.shouldBeTrue(module.tables.size() <= 1,
+                      "table",
+                      "Only 1 table definition allowed in MVP (requires "
+                      "--enable-reference-types)");
+  }
+  for (auto& curr : module.tables) {
+    for (auto& segment : curr->segments) {
+      info.shouldBeEqual(segment.offset->type,
+                         Type(Type::i32),
+                         segment.offset,
+                         "segment offset should be i32");
+      info.shouldBeTrue(checkSegmentOffset(segment.offset,
+                                           segment.data.size(),
+                                           curr->initial * Table::kPageSize),
+                        segment.offset,
+                        "table segment offset should be reasonable");
+      for (auto name : segment.data) {
+        info.shouldBeTrue(
+          module.getFunctionOrNull(name), name, "segment name should be valid");
+      }
     }
   }
 }
@@ -2847,7 +2877,7 @@ bool WasmValidator::validate(Module& module, Flags flags) {
     validateExports(module, info);
     validateGlobals(module, info);
     validateMemory(module, info);
-    validateTable(module, info);
+    validateTables(module, info);
     validateEvents(module, info);
     validateModule(module, info);
     validateFeatures(module, info);

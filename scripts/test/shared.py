@@ -466,7 +466,7 @@ def binary_format_check(wast, verify_final_result=True, wasm_as_args=['-g'],
     subprocess.check_call(cmd, stdout=subprocess.PIPE)
     assert os.path.exists('a.wasm')
 
-    cmd = WASM_DIS + ['a.wasm', '-o', 'ab.wast']
+    cmd = WASM_DIS + ['a.wasm', '-o', 'ab.wast', '-all']
     print('            ', ' '.join(cmd))
     if os.path.exists('ab.wast'):
         os.unlink('ab.wast')
@@ -492,19 +492,8 @@ def minify_check(wast, verify_final_result=True):
     cmd = WASM_OPT + [wast, '--print-minified', '-all']
     print('      ', ' '.join(cmd))
     subprocess.check_call(cmd, stdout=open('a.wast', 'w'), stderr=subprocess.PIPE)
-    assert os.path.exists('a.wast')
-    subprocess.check_call(WASM_OPT + ['a.wast', '--print-minified', '-all'],
-                          stdout=open('b.wast', 'w'), stderr=subprocess.PIPE)
-    assert os.path.exists('b.wast')
-    if verify_final_result:
-        expected = open('a.wast').read()
-        actual = open('b.wast').read()
-        if actual != expected:
-            fail(actual, expected)
-    if os.path.exists('a.wast'):
-        os.unlink('a.wast')
-    if os.path.exists('b.wast'):
-        os.unlink('b.wast')
+    subprocess.check_call(WASM_OPT + ['a.wast', '-all'],
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
 # run a check with BINARYEN_PASS_DEBUG set, to do full validation

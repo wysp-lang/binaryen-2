@@ -2,7 +2,12 @@
  (type $struct (struct (mut i32)))
  (type $extendedstruct (struct i32 f64))
  (type $bytes (array (mut i8)))
+
+ (type $void_func (func))
+ (type $int_func (func (result i32)))
+
  (import "fuzzing-support" "log-i32" (func $log (param i32)))
+
  (func "structs"
   (local $x (ref null $struct))
   (local $y (ref null $struct))
@@ -147,9 +152,9 @@
      (block $extendedblock (result (ref $extendedstruct))
       (drop
        ;; second, try to cast our simple $struct to what it is, which will work
-       (br_on_cast $block $struct
+       (br_on_cast $block
         ;; first, try to cast our simple $struct to an extended, which will fail
-        (br_on_cast $extendedblock $extendedstruct
+        (br_on_cast $extendedblock
          (local.get $any) (rtt.canon $extendedstruct)
         )
         (rtt.canon $struct)
@@ -168,7 +173,7 @@
    (block $never (result (ref $extendedstruct))
     ;; an untaken br_on_cast, with unreachable rtt - so we cannot use the
     ;; RTT in binaryen IR to find the cast type.
-    (br_on_cast $never $extendedstruct (ref.null $struct) (unreachable))
+    (br_on_cast $never (ref.null $struct) (unreachable))
     (unreachable)
    )
   )
@@ -183,5 +188,42 @@
     (rtt.canon $struct)
    )
   )
+ )
+ (func "br_on_data" (param $x anyref)
+  (local $y anyref)
+  (drop
+   (block $data (result dataref)
+    (local.set $y
+     (br_on_data $data (local.get $x))
+    )
+    (call $log (i32.const 1))
+    (ref.null data)
+   )
+  )
+ )
+ (func $a-void-func
+  (call $log (i32.const 1337))
+ )
+ (func "$rtt-and-cast-on-func"
+  (call $log (i32.const 0))
+  (drop
+   (rtt.canon $void_func)
+  )
+  (call $log (i32.const 1))
+  (drop
+   (rtt.canon $int_func)
+  )
+  (call $log (i32.const 2))
+  ;; a valid cast
+  (call_ref
+   (ref.cast $void_func (ref.func $a-void-func) (rtt.canon $void_func))
+  )
+  (call $log (i32.const 3))
+  ;; an invalid cast
+  (drop (call_ref
+   (ref.cast $int_func (ref.func $a-void-func) (rtt.canon $int_func))
+  ))
+  ;; will never be reached
+  (call $log (i32.const 4))
  )
 )

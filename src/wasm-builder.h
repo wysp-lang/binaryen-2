@@ -78,6 +78,16 @@ public:
     return func;
   }
 
+  static std::unique_ptr<Table>
+  makeTable(Name name, Address initial = 0, Address max = Table::kMaxSize) {
+    auto table = std::make_unique<Table>();
+    table->name = name;
+    table->initial = initial;
+    table->max = max;
+
+    return table;
+  }
+
   static std::unique_ptr<Export>
   makeExport(Name name, Name value, ExternalKind kind) {
     auto export_ = std::make_unique<Export>();
@@ -244,11 +254,13 @@ public:
     return call;
   }
   template<typename T>
-  CallIndirect* makeCallIndirect(Expression* target,
+  CallIndirect* makeCallIndirect(const Name table,
+                                 Expression* target,
                                  const T& args,
                                  Signature sig,
                                  bool isReturn = false) {
     auto* call = wasm.allocator.alloc<CallIndirect>();
+    call->table = table;
     call->sig = sig;
     call->type = sig.results;
     call->target = target;
@@ -605,8 +617,9 @@ public:
     ret->finalize(type);
     return ret;
   }
-  RefIsNull* makeRefIsNull(Expression* value) {
-    auto* ret = wasm.allocator.alloc<RefIsNull>();
+  RefIs* makeRefIs(RefIsOp op, Expression* value) {
+    auto* ret = wasm.allocator.alloc<RefIs>();
+    ret->op = op;
     ret->value = value;
     ret->finalize();
     return ret;
@@ -708,11 +721,11 @@ public:
     ret->finalize();
     return ret;
   }
-  BrOnCast*
-  makeBrOnCast(Name name, HeapType heapType, Expression* ref, Expression* rtt) {
-    auto* ret = wasm.allocator.alloc<BrOnCast>();
+  BrOn*
+  makeBrOn(BrOnOp op, Name name, Expression* ref, Expression* rtt = nullptr) {
+    auto* ret = wasm.allocator.alloc<BrOn>();
+    ret->op = op;
     ret->name = name;
-    ret->castType = Type(heapType, Nullable);
     ret->ref = ref;
     ret->rtt = rtt;
     ret->finalize();
@@ -792,6 +805,13 @@ public:
   ArrayLen* makeArrayLen(Expression* ref) {
     auto* ret = wasm.allocator.alloc<ArrayLen>();
     ret->ref = ref;
+    ret->finalize();
+    return ret;
+  }
+  RefAs* makeRefAs(RefAsOp op, Expression* value) {
+    auto* ret = wasm.allocator.alloc<RefAs>();
+    ret->op = op;
+    ret->value = value;
     ret->finalize();
     return ret;
   }

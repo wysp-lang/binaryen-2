@@ -157,6 +157,10 @@ public:
 template<typename SubType>
 class ExpressionRunner : public OverriddenVisitor<SubType, Flow> {
 protected:
+  // Optional module context to search for globals and called functions. NULL if
+  // we are not interested in any context.
+  Module* module = nullptr;
+
   // Maximum depth before giving up.
   Index maxDepth;
   Index depth = 0;
@@ -183,9 +187,11 @@ public:
   // Indicates no limit of maxDepth or maxLoopIterations.
   static const Index NO_LIMIT = 0;
 
-  ExpressionRunner(Index maxDepth = NO_LIMIT,
+  ExpressionRunner(Module* module = nullptr,
+                   Index maxDepth = NO_LIMIT,
                    Index maxLoopIterations = NO_LIMIT)
-    : maxDepth(maxDepth), maxLoopIterations(maxLoopIterations) {}
+    : module(module), maxDepth(maxDepth), maxLoopIterations(maxLoopIterations) {
+  }
 
   Flow visit(Expression* curr) {
     depth++;
@@ -209,6 +215,9 @@ public:
     depth--;
     return ret;
   }
+
+  // Gets the module this runner is operating on.
+  Module* getModule() { return module; }
 
   Flow visitBlock(Block* curr) {
     NOTE_ENTER("Block");
@@ -1132,6 +1141,7 @@ public:
     }
     WASM_UNREACHABLE("invalid op");
   }
+  Flow visitSIMDWiden(SIMDWiden* curr) { WASM_UNREACHABLE("unimp"); }
   Flow visitSelect(Select* curr) {
     NOTE_ENTER("Select");
     Flow ifTrue = visit(curr->ifTrue);
@@ -1306,15 +1316,27 @@ public:
     NOTE_ENTER("RefNull");
     return Literal::makeNull(curr->type);
   }
-  Flow visitRefIsNull(RefIsNull* curr) {
-    NOTE_ENTER("RefIsNull");
+  Flow visitRefIs(RefIs* curr) {
+    NOTE_ENTER("RefIs");
     Flow flow = visit(curr->value);
     if (flow.breaking()) {
       return flow;
     }
     const auto& value = flow.getSingleValue();
     NOTE_EVAL1(value);
-    return Literal(value.isNull());
+    switch (curr->op) {
+      case RefIsNull:
+        return Literal(value.isNull());
+      case RefIsFunc:
+        return Literal(!value.isNull() && value.type.isFunction());
+      case RefIsData:
+        return Literal(!value.isNull() && value.isData());
+      case RefIsI31:
+        return Literal(!value.isNull() &&
+                       value.type.getHeapType() == HeapType::i31);
+      default:
+        WASM_UNREACHABLE("unimplemented ref.is_*");
+    }
   }
   Flow visitRefFunc(RefFunc* curr) {
     NOTE_ENTER("RefFunc");
@@ -1413,23 +1435,37 @@ public:
       cast.outcome = cast.Null;
       return cast;
     }
-    // The input may not be a struct or an array; for example it could be an
+    // The input may not be GC data or a function; for example it could be an
     // anyref of null (already handled above) or anything else (handled here,
     // but this is for future use as atm the binaryen interpreter cannot
     // represent external references).
-    if (!cast.originalRef.isGCData()) {
+    if (!cast.originalRef.isData() && !cast.originalRef.isFunction()) {
       cast.outcome = cast.Failure;
       return cast;
     }
-    auto gcData = cast.originalRef.getGCData();
-    auto refRtt = gcData->rtt;
-    auto intendedRtt = rtt.getSingleValue();
-    if (!refRtt.isSubRtt(intendedRtt)) {
+    Literal seenRtt;
+    Literal intendedRtt = rtt.getSingleValue();
+    if (cast.originalRef.isFunction()) {
+      // Function casts are simple in that they have no RTT hierarchies; instead
+      // each reference has the canonical RTT for the signature.
+      // We must have a module in order to perform the cast, to get the type.
+      assert(module);
+      auto* func = module->getFunction(cast.originalRef.getFunc());
+      seenRtt = Literal(Type(Rtt(0, func->sig)));
+      cast.castRef =
+        Literal(func->name, Type(intendedRtt.type.getHeapType(), Nullable));
+    } else {
+      // GC data store an RTT in each instance.
+      assert(cast.originalRef.isData());
+      auto gcData = cast.originalRef.getGCData();
+      seenRtt = gcData->rtt;
+      cast.castRef =
+        Literal(gcData, Type(intendedRtt.type.getHeapType(), Nullable));
+    }
+    if (!seenRtt.isSubRtt(intendedRtt)) {
       cast.outcome = cast.Failure;
     } else {
       cast.outcome = cast.Success;
-      cast.castRef =
-        Literal(gcData, Type(intendedRtt.type.getHeapType(), Nullable));
     }
     return cast;
   }
@@ -1457,17 +1493,60 @@ public:
     assert(cast.outcome == cast.Success);
     return cast.castRef;
   }
-  Flow visitBrOnCast(BrOnCast* curr) {
-    NOTE_ENTER("BrOnCast");
-    auto cast = doCast(curr);
-    if (cast.outcome == cast.Break) {
-      return cast.breaking;
+  Flow visitBrOn(BrOn* curr) {
+    NOTE_ENTER("BrOn");
+    // BrOnCast uses the casting infrastructure, so handle it first.
+    if (curr->op == BrOnCast) {
+      auto cast = doCast(curr);
+      if (cast.outcome == cast.Break) {
+        return cast.breaking;
+      }
+      if (cast.outcome == cast.Null || cast.outcome == cast.Failure) {
+        return cast.originalRef;
+      }
+      assert(cast.outcome == cast.Success);
+      return Flow(curr->name, cast.castRef);
     }
-    if (cast.outcome == cast.Null || cast.outcome == cast.Failure) {
-      return cast.originalRef;
+    // The others do a simpler check for the type.
+    Flow flow = visit(curr->ref);
+    if (flow.breaking()) {
+      return flow;
     }
-    assert(cast.outcome == cast.Success);
-    return Flow(curr->name, cast.castRef);
+    const auto& value = flow.getSingleValue();
+    NOTE_EVAL1(value);
+    if (curr->op == BrOnNull) {
+      // Unlike the others, BrOnNull does not propagate the value if it takes
+      // the branch.
+      if (value.isNull()) {
+        return Flow(curr->name);
+      }
+      // If the branch is not taken, we return the non-null value.
+      return {value};
+    }
+    if (value.isNull()) {
+      return {value};
+    }
+    switch (curr->op) {
+      case BrOnFunc:
+        if (!value.type.isFunction()) {
+          return {value};
+        }
+        break;
+      case BrOnData:
+        if (!value.isData()) {
+          return {value};
+        }
+        break;
+      case BrOnI31:
+        if (value.type.getHeapType() != HeapType::i31) {
+          return {value};
+        }
+        break;
+      default:
+        WASM_UNREACHABLE("invalid br_on_*");
+    }
+    // No problems: take the branch.
+    return Flow(curr->name, value);
   }
   Flow visitRttCanon(RttCanon* curr) { return Literal(curr->type); }
   Flow visitRttSub(RttSub* curr) {
@@ -1623,6 +1702,41 @@ public:
     }
     return Literal(int32_t(data->values.size()));
   }
+  Flow visitRefAs(RefAs* curr) {
+    NOTE_ENTER("RefAs");
+    Flow flow = visit(curr->value);
+    if (flow.breaking()) {
+      return flow;
+    }
+    const auto& value = flow.getSingleValue();
+    NOTE_EVAL1(value);
+    if (value.isNull()) {
+      trap("null ref");
+    }
+    switch (curr->op) {
+      case RefAsNonNull:
+        // We've already checked for a null.
+        break;
+      case RefAsFunc:
+        if (value.type.isFunction()) {
+          trap("not a func");
+        }
+        break;
+      case RefAsData:
+        if (value.isData()) {
+          trap("not a data");
+        }
+        break;
+      case RefAsI31:
+        if (value.type.getHeapType() != HeapType::i31) {
+          trap("not an i31");
+        }
+        break;
+      default:
+        WASM_UNREACHABLE("unimplemented ref.is_*");
+    }
+    return value;
+  }
 
   virtual void trap(const char* why) { WASM_UNREACHABLE("unimp"); }
 
@@ -1697,10 +1811,6 @@ public:
   static const Index NO_LIMIT = 0;
 
 protected:
-  // Optional module context to search for globals and called functions. NULL if
-  // we are not interested in any context.
-  Module* module = nullptr;
-
   // Flags indicating special requirements. See FlagValues.
   Flags flags = FlagValues::DEFAULT;
 
@@ -1717,11 +1827,8 @@ public:
                            Flags flags,
                            Index maxDepth,
                            Index maxLoopIterations)
-    : ExpressionRunner<SubType>(maxDepth, maxLoopIterations), module(module),
+    : ExpressionRunner<SubType>(module, maxDepth, maxLoopIterations),
       flags(flags) {}
-
-  // Gets the module this runner is operating on.
-  Module* getModule() { return module; }
 
   // Sets a known local value to use.
   void setLocalValue(Index index, Literals& values) {
@@ -1767,8 +1874,8 @@ public:
   Flow visitGlobalGet(GlobalGet* curr) {
     NOTE_ENTER("GlobalGet");
     NOTE_NAME(curr->name);
-    if (module != nullptr) {
-      auto* global = module->getGlobal(curr->name);
+    if (this->module != nullptr) {
+      auto* global = this->module->getGlobal(curr->name);
       // Check if the global has an immutable value anyway
       if (!global->imported() && !global->mutable_) {
         return ExpressionRunner<SubType>::visit(global->init);
@@ -1784,10 +1891,11 @@ public:
   Flow visitGlobalSet(GlobalSet* curr) {
     NOTE_ENTER("GlobalSet");
     NOTE_NAME(curr->name);
-    if (!(flags & FlagValues::PRESERVE_SIDEEFFECTS) && module != nullptr) {
+    if (!(flags & FlagValues::PRESERVE_SIDEEFFECTS) &&
+        this->module != nullptr) {
       // If we are evaluating and not replacing the expression, remember the
       // constant value set, if any, for subsequent gets.
-      auto* global = module->getGlobal(curr->name);
+      auto* global = this->module->getGlobal(curr->name);
       assert(global->mutable_);
       auto setFlow = ExpressionRunner<SubType>::visit(curr->value);
       if (!setFlow.breaking()) {
@@ -1804,8 +1912,8 @@ public:
     // when replacing as long as the function does not have any side effects.
     // Might yield something useful for simple functions like `clamp`, sometimes
     // even if arguments are only partially constant or not constant at all.
-    if ((flags & FlagValues::TRAVERSE_CALLS) != 0 && module != nullptr) {
-      auto* func = module->getFunction(curr->target);
+    if ((flags & FlagValues::TRAVERSE_CALLS) != 0 && this->module != nullptr) {
+      auto* func = this->module->getFunction(curr->target);
       if (!func->imported()) {
         if (func->sig.results.isConcrete()) {
           auto numOperands = curr->operands.size();
@@ -1932,7 +2040,8 @@ class InitializerExpressionRunner
 
 public:
   InitializerExpressionRunner(GlobalManager& globals, Index maxDepth)
-    : ExpressionRunner<InitializerExpressionRunner<GlobalManager>>(maxDepth),
+    : ExpressionRunner<InitializerExpressionRunner<GlobalManager>>(nullptr,
+                                                                   maxDepth),
       globals(globals) {}
 
   Flow visitGlobalGet(GlobalGet* curr) { return Flow(globals[curr->name]); }
@@ -1960,7 +2069,8 @@ public:
     virtual void init(Module& wasm, SubType& instance) {}
     virtual void importGlobals(GlobalManager& globals, Module& wasm) = 0;
     virtual Literals callImport(Function* import, LiteralList& arguments) = 0;
-    virtual Literals callTable(Index index,
+    virtual Literals callTable(Name tableName,
+                               Index index,
                                Signature sig,
                                LiteralList& arguments,
                                Type result,
@@ -2111,7 +2221,7 @@ public:
       WASM_UNREACHABLE("unimp");
     }
 
-    virtual void tableStore(Address addr, Name entry) {
+    virtual void tableStore(Name tableName, Address addr, Name entry) {
       WASM_UNREACHABLE("unimp");
     }
   };
@@ -2198,17 +2308,20 @@ private:
   std::unordered_set<size_t> droppedSegments;
 
   void initializeTableContents() {
-    for (auto& segment : wasm.table.segments) {
-      Address offset =
-        (uint32_t)InitializerExpressionRunner<GlobalManager>(globals, maxDepth)
-          .visit(segment.offset)
-          .getSingleValue()
-          .geti32();
-      if (offset + segment.data.size() > wasm.table.initial) {
-        externalInterface->trap("invalid offset when initializing table");
-      }
-      for (size_t i = 0; i != segment.data.size(); ++i) {
-        externalInterface->tableStore(offset + i, segment.data[i]);
+    for (auto& table : wasm.tables) {
+      for (auto& segment : table->segments) {
+        Address offset = (uint32_t)InitializerExpressionRunner<GlobalManager>(
+                           globals, maxDepth)
+                           .visit(segment.offset)
+                           .getSingleValue()
+                           .geti32();
+        if (offset + segment.data.size() > table->initial) {
+          externalInterface->trap("invalid offset when initializing table");
+        }
+        for (size_t i = 0; i != segment.data.size(); ++i) {
+          externalInterface->tableStore(
+            table->name, offset + i, segment.data[i]);
+        }
       }
     }
   }
@@ -2293,8 +2406,8 @@ private:
     RuntimeExpressionRunner(ModuleInstanceBase& instance,
                             FunctionScope& scope,
                             Index maxDepth)
-      : ExpressionRunner<RuntimeExpressionRunner>(maxDepth), instance(instance),
-        scope(scope) {}
+      : ExpressionRunner<RuntimeExpressionRunner>(&instance.wasm, maxDepth),
+        instance(instance), scope(scope) {}
 
     Flow visitCall(Call* curr) {
       NOTE_ENTER("Call");
@@ -2334,7 +2447,7 @@ private:
       Index index = target.getSingleValue().geti32();
       Type type = curr->isReturn ? scope.function->sig.results : curr->type;
       Flow ret = instance.externalInterface->callTable(
-        index, curr->sig, arguments, type, *instance.self());
+        curr->table, index, curr->sig, arguments, type, *instance.self());
       // TODO: make this a proper tail call (return first)
       if (curr->isReturn) {
         ret.breakTo = RETURN_FLOW;

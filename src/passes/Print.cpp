@@ -240,9 +240,15 @@ struct PrintExpressionContents
   : public OverriddenVisitor<PrintExpressionContents> {
   Function* currFunction = nullptr;
   std::ostream& o;
+  FeatureSet features;
+
+  PrintExpressionContents(Function* currFunction,
+                          FeatureSet features,
+                          std::ostream& o)
+    : currFunction(currFunction), o(o), features(features) {}
 
   PrintExpressionContents(Function* currFunction, std::ostream& o)
-    : currFunction(currFunction), o(o) {}
+    : currFunction(currFunction), o(o), features(FeatureSet::All) {}
 
   void visitBlock(Block* curr) {
     printMedium(o, "block");
@@ -297,10 +303,18 @@ struct PrintExpressionContents
   }
   void visitCallIndirect(CallIndirect* curr) {
     if (curr->isReturn) {
-      printMedium(o, "return_call_indirect (type ");
+      printMedium(o, "return_call_indirect ");
     } else {
-      printMedium(o, "call_indirect (type ");
+      printMedium(o, "call_indirect ");
     }
+
+    if (features.hasReferenceTypes()) {
+      printName(curr->table, o);
+      o << ' ';
+    }
+
+    o << '(';
+    printMinor(o, "type ");
     printHeapTypeName(o, curr->sig);
     o << ')';
   }
@@ -670,6 +684,19 @@ struct PrintExpressionContents
       o << " align=" << curr->align;
     }
     o << " " << int(curr->index);
+  }
+  void visitSIMDWiden(SIMDWiden* curr) {
+    prepareColor(o);
+    switch (curr->op) {
+      case WidenSVecI8x16ToVecI32x4:
+        o << "i32x4.widen_i8x16_s ";
+        break;
+      case WidenUVecI8x16ToVecI32x4:
+        o << "i32x4.widen_i8x16_u ";
+        break;
+    }
+    restoreNormalColor(o);
+    o << int(curr->index);
   }
   void visitPrefetch(Prefetch* curr) {
     prepareColor(o);
@@ -1712,7 +1739,24 @@ struct PrintExpressionContents
     printMedium(o, "ref.null ");
     printHeapTypeName(o, curr->type.getHeapType());
   }
-  void visitRefIsNull(RefIsNull* curr) { printMedium(o, "ref.is_null"); }
+  void visitRefIs(RefIs* curr) {
+    switch (curr->op) {
+      case RefIsNull:
+        printMedium(o, "ref.is_null");
+        break;
+      case RefIsFunc:
+        printMedium(o, "ref.is_func");
+        break;
+      case RefIsData:
+        printMedium(o, "ref.is_data");
+        break;
+      case RefIsI31:
+        printMedium(o, "ref.is_i31");
+        break;
+      default:
+        WASM_UNREACHABLE("unimplemented ref.is_*");
+    }
+  }
   void visitRefFunc(RefFunc* curr) {
     printMedium(o, "ref.func ");
     printName(curr->func, o);
@@ -1766,11 +1810,27 @@ struct PrintExpressionContents
     printMedium(o, "ref.cast ");
     printHeapTypeName(o, curr->getCastType().getHeapType());
   }
-  void visitBrOnCast(BrOnCast* curr) {
-    printMedium(o, "br_on_cast ");
+  void visitBrOn(BrOn* curr) {
+    switch (curr->op) {
+      case BrOnNull:
+        printMedium(o, "br_on_null ");
+        break;
+      case BrOnCast:
+        printMedium(o, "br_on_cast ");
+        break;
+      case BrOnFunc:
+        printMedium(o, "br_on_func ");
+        break;
+      case BrOnData:
+        printMedium(o, "br_on_data ");
+        break;
+      case BrOnI31:
+        printMedium(o, "br_on_i31 ");
+        break;
+      default:
+        WASM_UNREACHABLE("invalid ref.is_*");
+    }
     printName(curr->name, o);
-    o << " ";
-    printHeapTypeName(o, curr->getCastType().getHeapType());
   }
   void visitRttCanon(RttCanon* curr) {
     printMedium(o, "rtt.canon ");
@@ -1788,7 +1848,18 @@ struct PrintExpressionContents
     o << "with_rtt ";
     printHeapTypeName(o, curr->rtt->type.getHeapType());
   }
+  void printUnreachableReplacement() {
+    // If we cannot print a valid unreachable instruction (say, a struct.get,
+    // where if the ref is unreachable, we don't know what heap type to print),
+    // then print the children in a block, which is good enough as this
+    // instruction is never reached anyhow.
+    printMedium(o, "block ");
+  }
   void visitStructGet(StructGet* curr) {
+    if (curr->ref->type == Type::unreachable) {
+      printUnreachableReplacement();
+      return;
+    }
     const auto& field =
       curr->ref->type.getHeapType().getStruct().fields[curr->index];
     if (field.type == Type::i32 && field.packedType != Field::not_packed) {
@@ -1805,6 +1876,10 @@ struct PrintExpressionContents
     o << curr->index;
   }
   void visitStructSet(StructSet* curr) {
+    if (curr->ref->type == Type::unreachable) {
+      printUnreachableReplacement();
+      return;
+    }
     printMedium(o, "struct.set ");
     printHeapTypeName(o, curr->ref->type.getHeapType());
     o << ' ';
@@ -1839,6 +1914,24 @@ struct PrintExpressionContents
     printMedium(o, "array.len ");
     printHeapTypeName(o, curr->ref->type.getHeapType());
   }
+  void visitRefAs(RefAs* curr) {
+    switch (curr->op) {
+      case RefAsNonNull:
+        printMedium(o, "ref.as_non_null");
+        break;
+      case RefAsFunc:
+        printMedium(o, "ref.as_func");
+        break;
+      case RefAsData:
+        printMedium(o, "ref.as_data");
+        break;
+      case RefAsI31:
+        printMedium(o, "ref.as_i31");
+        break;
+      default:
+        WASM_UNREACHABLE("invalid ref.is_*");
+    }
+  }
 };
 
 // Prints an expression in s-expr format, including both the
@@ -1851,8 +1944,8 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   const char* maybeSpace;
   const char* maybeNewLine;
 
-  bool full = false; // whether to not elide nodes in output when possible
-                     // (like implicit blocks) and to emit types
+  bool full = false;    // whether to not elide nodes in output when possible
+                        // (like implicit blocks) and to emit types
   bool stackIR = false; // whether to print stack IR if it is present
                         // (if false, and Stack IR is there, we just
                         // note it exists)
@@ -1914,6 +2007,15 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
         restoreNormalColor(o);
         doIndent(o, indent);
       }
+    }
+  }
+
+  void printExpressionContents(Expression* curr) {
+    if (currModule) {
+      PrintExpressionContents(currFunction, currModule->features, o)
+        .visit(curr);
+    } else {
+      PrintExpressionContents(currFunction, o).visit(curr);
     }
   }
 
@@ -1988,7 +2090,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
         o << "[" << curr->type << "] ";
       }
       o << '(';
-      PrintExpressionContents(currFunction, o).visit(curr);
+      printExpressionContents(curr);
       incIndent();
       if (curr->list.size() > 0 && curr->list[0]->is<Block>()) {
         // recurse into the first element
@@ -2030,7 +2132,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitIf(If* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->condition);
     maybePrintImplicitBlock(curr->ifTrue, false);
@@ -2048,7 +2150,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitLoop(Loop* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     maybePrintImplicitBlock(curr->body, true);
     decIndent();
@@ -2061,7 +2163,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitBreak(Break* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     if (curr->condition) {
       incIndent();
     } else {
@@ -2082,7 +2184,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitSwitch(Switch* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     if (curr->value && !curr->value->is<Nop>()) {
       printFullLine(curr->value);
@@ -2105,12 +2207,12 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
 
   void visitCall(Call* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     printCallOperands(curr);
   }
   void visitCallIndirect(CallIndirect* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     for (auto operand : curr->operands) {
       printFullLine(operand);
@@ -2120,38 +2222,38 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitLocalGet(LocalGet* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     o << ')';
   }
   void visitLocalSet(LocalSet* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->value);
     decIndent();
   }
   void visitGlobalGet(GlobalGet* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     o << ')';
   }
   void visitGlobalSet(GlobalSet* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->value);
     decIndent();
   }
   void visitLoad(Load* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->ptr);
     decIndent();
   }
   void visitStore(Store* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->ptr);
     printFullLine(curr->value);
@@ -2159,7 +2261,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitAtomicRMW(AtomicRMW* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->ptr);
     printFullLine(curr->value);
@@ -2167,7 +2269,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitAtomicCmpxchg(AtomicCmpxchg* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->ptr);
     printFullLine(curr->expected);
@@ -2176,7 +2278,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitAtomicWait(AtomicWait* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     restoreNormalColor(o);
     incIndent();
     printFullLine(curr->ptr);
@@ -2186,7 +2288,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitAtomicNotify(AtomicNotify* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->ptr);
     printFullLine(curr->notifyCount);
@@ -2194,19 +2296,19 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitAtomicFence(AtomicFence* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     o << ')';
   }
   void visitSIMDExtract(SIMDExtract* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->vec);
     decIndent();
   }
   void visitSIMDReplace(SIMDReplace* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->vec);
     printFullLine(curr->value);
@@ -2214,7 +2316,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitSIMDShuffle(SIMDShuffle* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->left);
     printFullLine(curr->right);
@@ -2222,7 +2324,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitSIMDTernary(SIMDTernary* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->a);
     printFullLine(curr->b);
@@ -2231,7 +2333,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitSIMDShift(SIMDShift* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->vec);
     printFullLine(curr->shift);
@@ -2239,29 +2341,36 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitSIMDLoad(SIMDLoad* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->ptr);
     decIndent();
   }
   void visitSIMDLoadStoreLane(SIMDLoadStoreLane* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->ptr);
     printFullLine(curr->vec);
     decIndent();
   }
+  void visitSIMDWiden(SIMDWiden* curr) {
+    o << '(';
+    printExpressionContents(curr);
+    incIndent();
+    printFullLine(curr->vec);
+    decIndent();
+  }
   void visitPrefetch(Prefetch* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->ptr);
     decIndent();
   }
   void visitMemoryInit(MemoryInit* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->dest);
     printFullLine(curr->offset);
@@ -2270,12 +2379,12 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitDataDrop(DataDrop* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     o << ')';
   }
   void visitMemoryCopy(MemoryCopy* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->dest);
     printFullLine(curr->source);
@@ -2284,7 +2393,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitMemoryFill(MemoryFill* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->dest);
     printFullLine(curr->value);
@@ -2293,19 +2402,19 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitConst(Const* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     o << ')';
   }
   void visitUnary(Unary* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->value);
     decIndent();
   }
   void visitBinary(Binary* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->left);
     printFullLine(curr->right);
@@ -2313,7 +2422,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitSelect(Select* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->ifTrue);
     printFullLine(curr->ifFalse);
@@ -2322,14 +2431,14 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitDrop(Drop* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->value);
     decIndent();
   }
   void visitReturn(Return* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     if (!curr->value) {
       // avoid a new line just for the parens
       o << ')';
@@ -2341,36 +2450,36 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitMemorySize(MemorySize* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     o << ')';
   }
   void visitMemoryGrow(MemoryGrow* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->delta);
     decIndent();
   }
   void visitRefNull(RefNull* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     o << ')';
   }
-  void visitRefIsNull(RefIsNull* curr) {
+  void visitRefIs(RefIs* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->value);
     decIndent();
   }
   void visitRefFunc(RefFunc* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     o << ')';
   }
   void visitRefEq(RefEq* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->left);
     printFullLine(curr->right);
@@ -2389,10 +2498,11 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   // nested depths of instructions within.
   void visitTry(Try* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     doIndent(o, indent);
-    o << "(do";
+    o << '(';
+    printMedium(o, "do");
     incIndent();
     maybePrintImplicitBlock(curr->body, true);
     decIndent();
@@ -2400,7 +2510,8 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
     for (size_t i = 0; i < curr->catchEvents.size(); i++) {
       doIndent(o, indent);
       printDebugDelimiterLocation(curr, i);
-      o << "(catch ";
+      o << '(';
+      printMedium(o, "catch ");
       printName(curr->catchEvents[i], o);
       incIndent();
       maybePrintImplicitBlock(curr->catchBodies[i], true);
@@ -2423,7 +2534,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitThrow(Throw* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     for (auto operand : curr->operands) {
       printFullLine(operand);
@@ -2432,27 +2543,27 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitRethrow(Rethrow* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     o << ')';
   }
   void visitNop(Nop* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     o << ')';
   }
   void visitUnreachable(Unreachable* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     o << ')';
   }
   void visitPop(Pop* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     o << ')';
   }
   void visitTupleMake(TupleMake* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     for (auto operand : curr->operands) {
       printFullLine(operand);
@@ -2461,28 +2572,28 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitTupleExtract(TupleExtract* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->tuple);
     decIndent();
   }
   void visitI31New(I31New* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->value);
     decIndent();
   }
   void visitI31Get(I31Get* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->i31);
     decIndent();
   }
   void visitCallRef(CallRef* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     for (auto operand : curr->operands) {
       printFullLine(operand);
@@ -2492,7 +2603,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitRefTest(RefTest* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->ref);
     printFullLine(curr->rtt);
@@ -2500,35 +2611,37 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitRefCast(RefCast* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->ref);
     printFullLine(curr->rtt);
     decIndent();
   }
-  void visitBrOnCast(BrOnCast* curr) {
+  void visitBrOn(BrOn* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->ref);
-    printFullLine(curr->rtt);
+    if (curr->rtt) {
+      printFullLine(curr->rtt);
+    }
     decIndent();
   }
   void visitRttCanon(RttCanon* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     o << ')';
   }
   void visitRttSub(RttSub* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->parent);
     decIndent();
   }
   void visitStructNew(StructNew* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->rtt);
     for (auto& operand : curr->operands) {
@@ -2538,14 +2651,14 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitStructGet(StructGet* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->ref);
     decIndent();
   }
   void visitStructSet(StructSet* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->ref);
     printFullLine(curr->value);
@@ -2553,7 +2666,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitArrayNew(ArrayNew* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->rtt);
     printFullLine(curr->size);
@@ -2564,7 +2677,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitArrayGet(ArrayGet* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->ref);
     printFullLine(curr->index);
@@ -2572,7 +2685,7 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitArraySet(ArraySet* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->ref);
     printFullLine(curr->index);
@@ -2581,9 +2694,16 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
   }
   void visitArrayLen(ArrayLen* curr) {
     o << '(';
-    PrintExpressionContents(currFunction, o).visit(curr);
+    printExpressionContents(curr);
     incIndent();
     printFullLine(curr->ref);
+    decIndent();
+  }
+  void visitRefAs(RefAs* curr) {
+    o << '(';
+    printExpressionContents(curr);
+    incIndent();
+    printFullLine(curr->value);
     decIndent();
   }
   // Module-level visitors
@@ -2850,14 +2970,11 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
     o << " funcref)";
   }
   void visitTable(Table* curr) {
-    if (!curr->exists) {
-      return;
-    }
     if (curr->imported()) {
       doIndent(o, indent);
       o << '(';
       emitImportHeader(curr);
-      printTableHeader(&currModule->table);
+      printTableHeader(curr);
       o << ')' << maybeNewLine;
     } else {
       doIndent(o, indent);
@@ -2871,8 +2988,23 @@ struct PrintSExpression : public OverriddenVisitor<PrintSExpression> {
       }
       doIndent(o, indent);
       o << '(';
-      printMajor(o, "elem ");
+      printMedium(o, "elem ");
+
+      // TODO(reference-types): check for old-style based on the complete spec
+      if (currModule->tables.size() > 1) {
+        // tableuse
+        o << '(';
+        printMedium(o, "table ");
+        printName(curr->name, o);
+        o << ") ";
+      }
+
       visit(segment.offset);
+
+      if (currModule->tables.size() > 1) {
+        o << " func";
+      }
+
       for (auto name : segment.data) {
         o << ' ';
         printName(name, o);
@@ -3161,30 +3293,35 @@ static std::ostream& printExpression(Expression* expression,
 static std::ostream&
 printStackInst(StackInst* inst, std::ostream& o, Function* func) {
   switch (inst->op) {
-    case StackInst::Basic: {
-      PrintExpressionContents(func, o).visit(inst->origin);
-      break;
-    }
+    case StackInst::Basic:
     case StackInst::BlockBegin:
     case StackInst::IfBegin:
     case StackInst::LoopBegin:
     case StackInst::TryBegin: {
-      o << getExpressionName(inst->origin);
+      PrintExpressionContents(func, o).visit(inst->origin);
       break;
     }
     case StackInst::BlockEnd:
     case StackInst::IfEnd:
     case StackInst::LoopEnd:
     case StackInst::TryEnd: {
-      o << "end (" << inst->type << ')';
+      printMedium(o, "end");
+      o << " ;; type: ";
+      printTypeName(o, inst->type);
       break;
     }
     case StackInst::IfElse: {
-      o << "else";
+      printMedium(o, "else");
       break;
     }
     case StackInst::Catch: {
-      o << "catch";
+      // Because StackInst does not have info on which catch within a try this
+      // is, we can't print the event name.
+      printMedium(o, "catch");
+      break;
+    }
+    case StackInst::CatchAll: {
+      printMedium(o, "catch_all");
       break;
     }
     default:
@@ -3201,6 +3338,9 @@ printStackIR(StackIR* ir, std::ostream& o, Function* func) {
       o << ' ';
     }
   };
+
+  // Stack to track indices of catches within a try
+  SmallVector<Index, 4> catchIndexStack;
   for (Index i = 0; i < (*ir).size(); i++) {
     auto* inst = (*ir)[i];
     if (!inst) {
@@ -3214,38 +3354,52 @@ printStackIR(StackIR* ir, std::ostream& o, Function* func) {
         if (inst->origin->is<Pop>()) {
           break;
         }
+
         PrintExpressionContents(func, o).visit(inst->origin);
         break;
       }
+      case StackInst::TryBegin:
+        catchIndexStack.push_back(0);
+        // fallthrough
       case StackInst::BlockBegin:
       case StackInst::IfBegin:
-      case StackInst::LoopBegin:
-      case StackInst::TryBegin: {
+      case StackInst::LoopBegin: {
         doIndent();
         PrintExpressionContents(func, o).visit(inst->origin);
         indent++;
         break;
       }
+      case StackInst::TryEnd:
+        catchIndexStack.pop_back();
+        // fallthrough
       case StackInst::BlockEnd:
       case StackInst::IfEnd:
-      case StackInst::LoopEnd:
-      case StackInst::TryEnd: {
+      case StackInst::LoopEnd: {
         indent--;
         doIndent();
-        o << "end";
+        printMedium(o, "end");
         break;
       }
       case StackInst::IfElse: {
         indent--;
         doIndent();
-        o << "else";
+        printMedium(o, "else");
         indent++;
         break;
       }
       case StackInst::Catch: {
         indent--;
         doIndent();
-        o << "catch";
+        printMedium(o, "catch ");
+        Try* curr = inst->origin->cast<Try>();
+        printName(curr->catchEvents[catchIndexStack.back()++], o);
+        indent++;
+        break;
+      }
+      case StackInst::CatchAll: {
+        indent--;
+        doIndent();
+        printMedium(o, "catch_all");
         indent++;
         break;
       }

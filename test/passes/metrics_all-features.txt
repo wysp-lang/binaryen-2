@@ -6,13 +6,14 @@ total
  [imports]      : 0       
  [memory-data]  : 9       
  [table-data]   : 3       
+ [tables]       : 1       
  [total]        : 27      
  [vars]         : 1       
- binary         : 1       
- block          : 1       
- const          : 15      
- drop           : 6       
- if             : 4       
+ Binary         : 1       
+ Block          : 1       
+ Const          : 15      
+ Drop           : 6       
+ If             : 4       
 (module
  (type $i32_=>_none (func (param i32)))
  (type $i32_i32_=>_none (func (param i32 i32)))
@@ -69,6 +70,7 @@ total
  [funcs]        : 0       
  [globals]      : 0       
  [imports]      : 0       
+ [tables]       : 0       
  [total]        : 0       
  [vars]         : 0       
 (module

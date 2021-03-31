@@ -458,6 +458,19 @@ Name SExpressionWasmBuilder::getFunctionName(Element& s) {
   }
 }
 
+Name SExpressionWasmBuilder::getTableName(Element& s) {
+  if (s.dollared()) {
+    return s.str();
+  } else {
+    // index
+    size_t offset = atoi(s.str().c_str());
+    if (offset >= tableNames.size()) {
+      throw ParseException("unknown table in getTableName", s.line, s.col);
+    }
+    return tableNames[offset];
+  }
+}
+
 Name SExpressionWasmBuilder::getGlobalName(Element& s) {
   if (s.dollared()) {
     return s.str();
@@ -1666,6 +1679,15 @@ SExpressionWasmBuilder::makeSIMDLoadStoreLane(Element& s,
   return ret;
 }
 
+Expression* SExpressionWasmBuilder::makeSIMDWiden(Element& s, SIMDWidenOp op) {
+  auto* ret = allocator.alloc<SIMDWiden>();
+  ret->op = op;
+  ret->index = parseLaneIndex(s[1], 4);
+  ret->vec = parseExpression(s[2]);
+  ret->finalize();
+  return ret;
+}
+
 Expression* SExpressionWasmBuilder::makePrefetch(Element& s, PrefetchOp op) {
   Address offset, align;
   size_t i = parseMemAttributes(s, offset, align, /*defaultAlign*/ 1);
@@ -1819,11 +1841,16 @@ Expression* SExpressionWasmBuilder::makeCall(Element& s, bool isReturn) {
 
 Expression* SExpressionWasmBuilder::makeCallIndirect(Element& s,
                                                      bool isReturn) {
-  if (!wasm.table.exists) {
-    throw ParseException("no table", s.line, s.col);
+  if (wasm.tables.empty()) {
+    throw ParseException("no tables", s.line, s.col);
   }
   Index i = 1;
   auto ret = allocator.alloc<CallIndirect>();
+  if (s[i]->isStr()) {
+    ret->table = s[i++]->str();
+  } else {
+    ret->table = wasm.tables.front()->name;
+  }
   i = parseTypeUse(s, i, ret->sig);
   parseCallOperands(s, i, s.size() - 1, ret);
   ret->target = parseExpression(s[s.size() - 1]);
@@ -1922,8 +1949,9 @@ Expression* SExpressionWasmBuilder::makeRefNull(Element& s) {
   return ret;
 }
 
-Expression* SExpressionWasmBuilder::makeRefIsNull(Element& s) {
-  auto ret = allocator.alloc<RefIsNull>();
+Expression* SExpressionWasmBuilder::makeRefIs(Element& s, RefIsOp op) {
+  auto ret = allocator.alloc<RefIs>();
+  ret->op = op;
   ret->value = parseExpression(s[1]);
   ret->finalize();
   return ret;
@@ -2129,13 +2157,21 @@ Expression* SExpressionWasmBuilder::makeRefCast(Element& s) {
   return Builder(wasm).makeRefCast(ref, rtt);
 }
 
-Expression* SExpressionWasmBuilder::makeBrOnCast(Element& s) {
+Expression* SExpressionWasmBuilder::makeBrOn(Element& s, BrOnOp op) {
   auto name = getLabel(*s[1]);
-  auto heapType = parseHeapType(*s[2]);
-  auto* ref = parseExpression(*s[3]);
-  auto* rtt = parseExpression(*s[4]);
-  validateHeapTypeUsingChild(rtt, heapType, s);
-  return Builder(wasm).makeBrOnCast(name, heapType, ref, rtt);
+  auto* ref = parseExpression(*s[2]);
+  Expression* rtt = nullptr;
+  Builder builder(wasm);
+  if (op == BrOnCast) {
+    rtt = parseExpression(*s[3]);
+    if (rtt->type == Type::unreachable) {
+      // An unreachable rtt is not supported: the text format does not provide
+      // the type, so if it's unreachable we should not even create a br_on_cast
+      // in such a case, as we'd have no idea what it casts to.
+      return builder.makeSequence(builder.makeDrop(ref), rtt);
+    }
+  }
+  return builder.makeBrOn(op, name, ref, rtt);
 }
 
 Expression* SExpressionWasmBuilder::makeRttCanon(Element& s) {
@@ -2233,6 +2269,10 @@ Expression* SExpressionWasmBuilder::makeArrayLen(Element& s) {
   auto ref = parseExpression(*s[2]);
   validateHeapTypeUsingChild(ref, heapType, s);
   return Builder(wasm).makeArrayLen(ref);
+}
+
+Expression* SExpressionWasmBuilder::makeRefAs(Element& s, RefAsOp op) {
+  return Builder(wasm).makeRefAs(op, parseExpression(s[1]));
 }
 
 // converts an s-expression string representing binary data into an output
@@ -2442,17 +2482,21 @@ void SExpressionWasmBuilder::parseExport(Element& s) {
   ex->name = s[1]->str();
   if (s[2]->isList()) {
     auto& inner = *s[2];
-    ex->value = inner[1]->str();
     if (elementStartsWith(inner, FUNC)) {
       ex->kind = ExternalKind::Function;
+      ex->value = getFunctionName(*inner[1]);
     } else if (elementStartsWith(inner, MEMORY)) {
       ex->kind = ExternalKind::Memory;
+      ex->value = inner[1]->str();
     } else if (elementStartsWith(inner, TABLE)) {
       ex->kind = ExternalKind::Table;
+      ex->value = getTableName(*inner[1]);
     } else if (elementStartsWith(inner, GLOBAL)) {
       ex->kind = ExternalKind::Global;
+      ex->value = getGlobalName(*inner[1]);
     } else if (inner[0]->str() == EVENT) {
       ex->kind = ExternalKind::Event;
+      ex->value = getEventName(*inner[1]);
     } else {
       throw ParseException("invalid export", inner.line, inner.col);
     }
@@ -2483,10 +2527,6 @@ void SExpressionWasmBuilder::parseImport(Element& s) {
       wasm.memory.exists = true;
     } else if (elementStartsWith(*s[3], TABLE)) {
       kind = ExternalKind::Table;
-      if (wasm.table.exists) {
-        throw ParseException("more than one table", s[3]->line, s[3]->col);
-      }
-      wasm.table.exists = true;
     } else if (elementStartsWith(*s[3], GLOBAL)) {
       kind = ExternalKind::Global;
     } else if ((*s[3])[0]->str() == EVENT) {
@@ -2568,21 +2608,27 @@ void SExpressionWasmBuilder::parseImport(Element& s) {
     global->mutable_ = mutable_;
     wasm.addGlobal(global.release());
   } else if (kind == ExternalKind::Table) {
-    wasm.table.setName(name, hasExplicitName);
-    wasm.table.module = module;
-    wasm.table.base = base;
+    auto table = make_unique<Table>();
+    table->setName(name, hasExplicitName);
+    table->module = module;
+    table->base = base;
+    tableNames.push_back(name);
+
     if (j < inner.size() - 1) {
       auto initElem = inner[j++];
-      wasm.table.initial = getAddress(initElem);
-      checkAddress(wasm.table.initial, "excessive table init size", initElem);
+      table->initial = getAddress(initElem);
+      checkAddress(table->initial, "excessive table init size", initElem);
     }
     if (j < inner.size() - 1) {
       auto maxElem = inner[j++];
-      wasm.table.max = getAddress(maxElem);
-      checkAddress(wasm.table.max, "excessive table max size", maxElem);
+      table->max = getAddress(maxElem);
+      checkAddress(table->max, "excessive table max size", maxElem);
     } else {
-      wasm.table.max = Table::kUnlimitedSize;
+      table->max = Table::kUnlimitedSize;
     }
+
+    wasm.addTable(std::move(table));
+
     j++; // funcref
     // ends with the table element type
   } else if (kind == ExternalKind::Memory) {
@@ -2706,18 +2752,20 @@ void SExpressionWasmBuilder::parseGlobal(Element& s, bool preParseImport) {
 }
 
 void SExpressionWasmBuilder::parseTable(Element& s, bool preParseImport) {
-  if (wasm.table.exists) {
-    throw ParseException("more than one table", s.line, s.col);
-  }
-  wasm.table.exists = true;
+  std::unique_ptr<Table> table = make_unique<Table>();
   Index i = 1;
   if (i == s.size()) {
     return; // empty table in old notation
   }
   if (s[i]->dollared()) {
-    wasm.table.setExplicitName(s[i++]->str());
+    table->setExplicitName(s[i++]->str());
+  } else {
+    table->name = Name::fromInt(tableCounter++);
   }
+  tableNames.push_back(table->name);
+
   if (i == s.size()) {
+    wasm.addTable(std::move(table));
     return;
   }
   Name importModule, importBase;
@@ -2726,7 +2774,7 @@ void SExpressionWasmBuilder::parseTable(Element& s, bool preParseImport) {
     if (elementStartsWith(inner, EXPORT)) {
       auto ex = make_unique<Export>();
       ex->name = inner[1]->str();
-      ex->value = wasm.table.name;
+      ex->value = table->name;
       ex->kind = ExternalKind::Table;
       if (wasm.getExportOrNull(ex->name)) {
         throw ParseException("duplicate export", inner.line, inner.col);
@@ -2737,26 +2785,27 @@ void SExpressionWasmBuilder::parseTable(Element& s, bool preParseImport) {
       if (!preParseImport) {
         throw ParseException("!preParseImport in table", inner.line, inner.col);
       }
-      wasm.table.module = inner[1]->str();
-      wasm.table.base = inner[2]->str();
+      table->module = inner[1]->str();
+      table->base = inner[2]->str();
       i++;
     } else {
       throw ParseException("invalid table", inner.line, inner.col);
     }
   }
   if (i == s.size()) {
+    wasm.addTable(std::move(table));
     return;
   }
   if (!s[i]->dollared()) {
     if (s[i]->str() == FUNCREF) {
       // (table type (elem ..))
-      parseInnerElem(*s[i + 1]);
-      if (wasm.table.segments.size() > 0) {
-        wasm.table.initial = wasm.table.max =
-          wasm.table.segments[0].data.size();
+      parseInnerElem(table.get(), *s[i + 1]);
+      if (table->segments.size() > 0) {
+        table->initial = table->max = table->segments[0].data.size();
       } else {
-        wasm.table.initial = wasm.table.max = 0;
+        table->initial = table->max = 0;
       }
+      wasm.addTable(std::move(table));
       return;
     }
     // first element isn't dollared, and isn't funcref. this could be old syntax
@@ -2765,39 +2814,87 @@ void SExpressionWasmBuilder::parseTable(Element& s, bool preParseImport) {
     if (s[s.size() - 1]->str() == FUNCREF) {
       // (table initial max? type)
       if (i < s.size() - 1) {
-        wasm.table.initial = atoi(s[i++]->c_str());
+        table->initial = atoi(s[i++]->c_str());
       }
       if (i < s.size() - 1) {
-        wasm.table.max = atoi(s[i++]->c_str());
+        table->max = atoi(s[i++]->c_str());
       }
+      wasm.addTable(std::move(table));
       return;
     }
   }
   // old notation (table func1 func2 ..)
-  parseInnerElem(s, i);
-  if (wasm.table.segments.size() > 0) {
-    wasm.table.initial = wasm.table.max = wasm.table.segments[0].data.size();
+  parseInnerElem(table.get(), s, i);
+  if (table->segments.size() > 0) {
+    table->initial = table->max = table->segments[0].data.size();
   } else {
-    wasm.table.initial = wasm.table.max = 0;
+    table->initial = table->max = 0;
   }
+
+  wasm.addTable(std::move(table));
 }
 
+// parses an elem segment
+// elem  ::= (elem (expr) vec(funcidx))
+//         | (elem (offset (expr)) func vec(funcidx))
+//         | (elem (table tableidx) (offset (expr)) func vec(funcidx))
+//
+// abbreviation:
+//   (offset (expr)) ≡ (expr)
+//   (elem (expr) vec(funcidx)) ≡ (elem (table 0) (offset (expr)) func
+//                                vec(funcidx))
+//
 void SExpressionWasmBuilder::parseElem(Element& s) {
   Index i = 1;
+  Table* table = nullptr;
+  Expression* offset = nullptr;
+
   if (!s[i]->isList()) {
-    // the table is named
-    i++;
+    // optional segment id OR 'declare' OR start of elemList
+    i += 1;
   }
-  auto* offset = parseExpression(s[i++]);
-  parseInnerElem(s, i, offset);
+
+  // old style refers to the pre-reftypes form of (elem (expr) vec(funcidx))
+  bool oldStyle = true;
+
+  while (1) {
+    auto& inner = *s[i++];
+    if (elementStartsWith(inner, TABLE)) {
+      oldStyle = false;
+      Name tableName = getTableName(*inner[1]);
+      table = wasm.getTable(tableName);
+    } else {
+      if (elementStartsWith(inner, "offset")) {
+        offset = parseExpression(inner[1]);
+      } else {
+        offset = parseExpression(inner);
+      }
+      break;
+    }
+  }
+
+  if (!oldStyle) {
+    if (strcmp(s[i]->c_str(), "func") != 0) {
+      throw ParseException(
+        "only the abbreviated form of elemList is supported.");
+    }
+    // ignore elemType for now
+    i += 1;
+  }
+
+  if (wasm.tables.empty()) {
+    throw ParseException("elem without table", s.line, s.col);
+  } else if (!table) {
+    table = wasm.tables[0].get();
+  }
+
+  parseInnerElem(table, s, i, offset);
 }
 
-void SExpressionWasmBuilder::parseInnerElem(Element& s,
+void SExpressionWasmBuilder::parseInnerElem(Table* table,
+                                            Element& s,
                                             Index i,
                                             Expression* offset) {
-  if (!wasm.table.exists) {
-    throw ParseException("elem without table", s.line, s.col);
-  }
   if (!offset) {
     offset = allocator.alloc<Const>()->set(Literal(int32_t(0)));
   }
@@ -2805,7 +2902,7 @@ void SExpressionWasmBuilder::parseInnerElem(Element& s,
   for (; i < s.size(); i++) {
     segment.data.push_back(getFunctionName(*s[i]));
   }
-  wasm.table.segments.push_back(segment);
+  table->segments.push_back(segment);
 }
 
 HeapType SExpressionWasmBuilder::parseHeapType(Element& s) {

@@ -337,13 +337,13 @@ private:
             options.push_back(Type::externref);
             if (wasm.features.hasGC()) {
               options.push_back(Type::eqref);
-              options.push_back(Type::i31ref);
+              // TODO: i31ref, dataref, etc.
             }
           }
           break;
         case Type::eqref:
           if (wasm.features.hasGC()) {
-            options.push_back(Type::i31ref);
+            // TODO: i31ref, dataref, etc.
           }
           break;
         default:
@@ -423,10 +423,19 @@ private:
     }
   }
 
+  // TODO(reference-types): allow the fuzzer to create multiple tables
   void setupTable() {
-    wasm.table.exists = true;
-    wasm.table.initial = wasm.table.max = 0;
-    wasm.table.segments.emplace_back(builder.makeConst(int32_t(0)));
+    if (wasm.tables.size() > 0) {
+      auto& table = wasm.tables[0];
+      table->initial = table->max = 0;
+      table->segments.emplace_back(builder.makeConst(int32_t(0)));
+    } else {
+      auto table = builder.makeTable(
+        Names::getValidTableName(wasm, "fuzzing_table"), 0, 0);
+      table->hasExplicitName = true;
+      table->segments.emplace_back(builder.makeConst(int32_t(0)));
+      wasm.addTable(std::move(table));
+    }
   }
 
   std::map<Type, std::vector<Name>> globalsByType;
@@ -522,26 +531,27 @@ private:
   }
 
   void finalizeTable() {
-    for (auto& segment : wasm.table.segments) {
-      // If the offset is a global that was imported (which is ok) but no
-      // longer is (not ok) we need to change that.
-      if (auto* offset = segment.offset->dynCast<GlobalGet>()) {
-        if (!wasm.getGlobal(offset->name)->imported()) {
-          // TODO: the segments must not overlap...
-          segment.offset =
-            builder.makeConst(Literal::makeFromInt32(0, Type::i32));
+    for (auto& table : wasm.tables) {
+      for (auto& segment : table->segments) {
+        // If the offset is a global that was imported (which is ok) but no
+        // longer is (not ok) we need to change that.
+        if (auto* offset = segment.offset->dynCast<GlobalGet>()) {
+          if (!wasm.getGlobal(offset->name)->imported()) {
+            // TODO: the segments must not overlap...
+            segment.offset =
+              builder.makeConst(Literal::makeFromInt32(0, Type::i32));
+          }
         }
+        Address maxOffset = segment.data.size();
+        if (auto* offset = segment.offset->dynCast<Const>()) {
+          maxOffset = maxOffset + offset->value.getInteger();
+        }
+        table->initial = std::max(table->initial, maxOffset);
       }
-      Address maxOffset = segment.data.size();
-      if (auto* offset = segment.offset->dynCast<Const>()) {
-        maxOffset = maxOffset + offset->value.getInteger();
-      }
-      wasm.table.initial = std::max(wasm.table.initial, maxOffset);
+      table->max = oneIn(2) ? Address(Table::kUnlimitedSize) : table->initial;
+      // Avoid an imported table (which the fuzz harness would need to handle).
+      table->module = table->base = Name();
     }
-    wasm.table.max =
-      oneIn(2) ? Address(Table::kUnlimitedSize) : wasm.table.initial;
-    // Avoid an imported table (which the fuzz harness would need to handle).
-    wasm.table.module = wasm.table.base = Name();
   }
 
   Name HANG_LIMIT_GLOBAL;
@@ -705,7 +715,7 @@ private:
     }
     // add some to the table
     while (oneIn(3) && !finishedInput) {
-      wasm.table.segments[0].data.push_back(func->name);
+      wasm.tables[0]->segments[0].data.push_back(func->name);
     }
     numAddedFunctions++;
     return func;
@@ -721,6 +731,14 @@ private:
     // recursion limit
     func->body =
       builder.makeSequence(makeHangLimitCheck(), func->body, func->sig.results);
+  }
+
+  // Recombination and mutation can replace a node with another node of the same
+  // type, but should not do so for certain types that are dangerous. For
+  // example, it would be bad to add an RTT in a tuple, as that would force us
+  // to use temporary locals for the tuple, but RTTs are not defaultable.
+  bool canBeArbitrarilyReplaced(Expression* curr) {
+    return curr->type.isDefaultable();
   }
 
   void recombine(Function* func) {
@@ -776,7 +794,7 @@ private:
         : wasm(wasm), scanner(scanner), parent(parent) {}
 
       void visitExpression(Expression* curr) {
-        if (parent.oneIn(10)) {
+        if (parent.oneIn(10) && parent.canBeArbitrarilyReplaced(curr)) {
           // Replace it!
           auto& candidates = scanner.exprsByType[curr->type];
           assert(!candidates.empty()); // this expression itself must be there
@@ -803,7 +821,7 @@ private:
         : wasm(wasm), parent(parent) {}
 
       void visitExpression(Expression* curr) {
-        if (parent.oneIn(10)) {
+        if (parent.oneIn(10) && parent.canBeArbitrarilyReplaced(curr)) {
           // For constants, perform only a small tweaking in some cases.
           if (auto* c = curr->dynCast<Const>()) {
             if (parent.oneIn(2)) {
@@ -827,7 +845,8 @@ private:
   // Fix up changes that may have broken validation - types are correct in our
   // modding, but not necessarily labels.
   void fixLabels(Function* func) {
-    struct Fixer : public ControlFlowWalker<Fixer> {
+    struct Fixer
+      : public ControlFlowWalker<Fixer, UnifiedExpressionVisitor<Fixer>> {
       Module& wasm;
       TranslateToFuzzReader& parent;
 
@@ -837,36 +856,42 @@ private:
       // Track seen names to find duplication, which is invalid.
       std::set<Name> seen;
 
-      void visitBlock(Block* curr) {
-        if (curr->name.is()) {
-          if (seen.count(curr->name)) {
-            replace();
-          } else {
-            seen.insert(curr->name);
-          }
-        }
-      }
+      void visitExpression(Expression* curr) {
+        // Note all scope names, and fix up all uses.
 
-      void visitLoop(Loop* curr) {
-        if (curr->name.is()) {
-          if (seen.count(curr->name)) {
-            replace();
-          } else {
-            seen.insert(curr->name);
-          }
-        }
-      }
+#define DELEGATE_ID curr->_id
 
-      void visitSwitch(Switch* curr) {
-        for (auto name : curr->targets) {
-          if (replaceIfInvalid(name)) {
-            return;
-          }
-        }
-        replaceIfInvalid(curr->default_);
-      }
+#define DELEGATE_START(id)                                                     \
+  auto* cast = curr->cast<id>();                                               \
+  WASM_UNUSED(cast);
 
-      void visitBreak(Break* curr) { replaceIfInvalid(curr->name); }
+#define DELEGATE_GET_FIELD(id, name) cast->name
+
+#define DELEGATE_FIELD_SCOPE_NAME_DEF(id, name)                                \
+  if (cast->name.is()) {                                                       \
+    if (seen.count(cast->name)) {                                              \
+      replace();                                                               \
+    } else {                                                                   \
+      seen.insert(cast->name);                                                 \
+    }                                                                          \
+  }
+
+#define DELEGATE_FIELD_SCOPE_NAME_USE(id, name) replaceIfInvalid(cast->name);
+
+#define DELEGATE_FIELD_CHILD(id, name)
+#define DELEGATE_FIELD_OPTIONAL_CHILD(id, name)
+#define DELEGATE_FIELD_INT(id, name)
+#define DELEGATE_FIELD_INT_ARRAY(id, name)
+#define DELEGATE_FIELD_LITERAL(id, name)
+#define DELEGATE_FIELD_NAME(id, name)
+#define DELEGATE_FIELD_NAME_VECTOR(id, name)
+#define DELEGATE_FIELD_SCOPE_NAME_USE_VECTOR(id, name)
+#define DELEGATE_FIELD_SIGNATURE(id, name)
+#define DELEGATE_FIELD_TYPE(id, name)
+#define DELEGATE_FIELD_ADDRESS(id, name)
+
+#include "wasm-delegations-fields.h"
+      }
 
       bool replaceIfInvalid(Name target) {
         if (!hasBreakTarget(target)) {
@@ -1098,7 +1123,7 @@ private:
              &Self::makeSelect)
         .add(FeatureSet::Multivalue, &Self::makeTupleExtract);
     }
-    if (type.isSingle() && !type.isRef()) {
+    if (type.isSingle() && !type.isRef() && !type.isRtt()) {
       options.add(FeatureSet::MVP, {&Self::makeLoad, Important});
       options.add(FeatureSet::SIMD, &Self::makeSIMD);
     }
@@ -1108,8 +1133,8 @@ private:
     if (type == Type::i32) {
       options.add(FeatureSet::ReferenceTypes, &Self::makeRefIsNull);
       options.add(FeatureSet::ReferenceTypes | FeatureSet::GC,
-                  &Self::makeRefEq,
-                  &Self::makeI31Get);
+                  &Self::makeRefEq);
+      //  TODO: makeI31Get
     }
     if (type.isTuple()) {
       options.add(FeatureSet::Multivalue, &Self::makeTupleMake);
@@ -1410,7 +1435,7 @@ private:
   }
 
   Expression* makeCallIndirect(Type type) {
-    auto& data = wasm.table.segments[0].data;
+    auto& data = wasm.tables[0]->segments[0].data;
     if (data.empty()) {
       return make(type);
     }
@@ -1447,7 +1472,8 @@ private:
     for (const auto& type : targetFn->sig.params) {
       args.push_back(make(type));
     }
-    return builder.makeCallIndirect(target, args, targetFn->sig, isReturn);
+    return builder.makeCallIndirect(
+      wasm.tables[0]->name, target, args, targetFn->sig, isReturn);
   }
 
   Expression* makeCallRef(Type type) {
@@ -2093,6 +2119,15 @@ private:
         builder.makeUnreachable()));
       return builder.makeRefFunc(func->name, type);
     }
+    if (type.isRtt()) {
+      Expression* ret = builder.makeRttCanon(type.getHeapType());
+      if (type.getRtt().hasDepth()) {
+        for (Index i = 0; i < type.getRtt().depth; i++) {
+          ret = builder.makeRttSub(type.getHeapType(), ret);
+        }
+      }
+      return ret;
+    }
     if (type.isTuple()) {
       std::vector<Expression*> operands;
       for (const auto& t : type) {
@@ -2119,11 +2154,10 @@ private:
       // give up
       return makeTrivial(type);
     }
-    // There's no unary ops for reference types
-    if (type.isRef()) {
+    // There are no unary ops for reference or RTT types.
+    if (type.isRef() || type.isRtt()) {
       return makeTrivial(type);
     }
-
     switch (type.getBasic()) {
       case Type::i32: {
         auto singleConcreteType = getSingleConcreteType();
@@ -2345,11 +2379,10 @@ private:
       // give up
       return makeTrivial(type);
     }
-    // There's no binary ops for reference types
-    if (type.isRef()) {
+    // There are no binary ops for reference or RTT types.
+    if (type.isRef() || type.isRtt()) {
       return makeTrivial(type);
     }
-
     switch (type.getBasic()) {
       case Type::i32: {
         switch (upTo(4)) {
@@ -2943,10 +2976,11 @@ private:
     WASM_UNREACHABLE("invalid value");
   }
 
+  // TODO: support other RefIs variants, and rename this
   Expression* makeRefIsNull(Type type) {
     assert(type == Type::i32);
     assert(wasm.features.hasReferenceTypes());
-    return builder.makeRefIsNull(make(getReferenceType()));
+    return builder.makeRefIs(RefIsNull, make(getReferenceType()));
   }
 
   Expression* makeRefEq(Type type) {
@@ -3034,10 +3068,9 @@ private:
         .add(FeatureSet::ReferenceTypes, Type::funcref, Type::externref)
         .add(FeatureSet::ReferenceTypes | FeatureSet::GC,
              Type::anyref,
-             Type::eqref,
-             Type::i31ref));
+             Type::eqref));
     // TODO: emit typed function references types
-    // TODO: dataref
+    // TODO: i31ref, dataref
   }
 
   Type getSingleConcreteType() { return pick(getSingleConcreteTypes()); }
@@ -3048,16 +3081,16 @@ private:
         .add(FeatureSet::ReferenceTypes, Type::funcref, Type::externref)
         .add(FeatureSet::ReferenceTypes | FeatureSet::GC,
              Type::anyref,
-             Type::eqref,
-             Type::i31ref));
-    // TODO: dataref
+             Type::eqref));
+    // TODO: i31ref, dataref
   }
 
   Type getReferenceType() { return pick(getReferenceTypes()); }
 
   std::vector<Type> getEqReferenceTypes() {
     return items(FeatureOptions<Type>().add(
-      FeatureSet::ReferenceTypes | FeatureSet::GC, Type::eqref, Type::i31ref));
+      FeatureSet::ReferenceTypes | FeatureSet::GC, Type::eqref));
+    // TODO: i31ref, dataref
   }
 
   Type getEqReferenceType() { return pick(getEqReferenceTypes()); }
