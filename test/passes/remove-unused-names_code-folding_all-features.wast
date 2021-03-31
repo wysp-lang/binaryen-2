@@ -1192,15 +1192,15 @@
     )
   )
 
-  (func $exnref_pop-test (local $exn exnref)
+  (event $e-i32 (attr 0) (param i32))
+  (func $pop-test
     (try
       (do
         (try
           (do)
-          (catch
-            ;; Expressions containing (pop exnref) should NOT be taken out and
-            ;; folded.
-            (local.set $exn (pop exnref))
+          (catch $e-i32
+            ;; Expressions containing a pop should NOT be taken out and folded.
+            (drop (pop i32))
             (drop (i32.const 111))
             (drop (i32.const 222))
             (drop (i32.const 333))
@@ -1208,8 +1208,8 @@
           )
         )
       )
-      (catch
-        (local.set $exn (pop exnref))
+      (catch $e-i32
+        (drop (pop i32))
         (drop (i32.const 111))
         (drop (i32.const 222))
         (drop (i32.const 333))
@@ -1218,35 +1218,8 @@
     )
   )
 
-  (event $e (attr 0)) ;; exception with no param
-  (func $br_on_exn-target-block (local $exn exnref)
-    ;; Here this block $x is targeted by br_on_exn, so code folding out of this
-    ;; block should NOT happen.
-    (block $x
-      (if (i32.const 0)
-        (block
-          (drop (i32.const 1))
-          (drop (i32.const 2))
-          (br $x)
-        )
-      )
-      (if (i32.const 0)
-        (block
-          (drop (i32.const 1))
-          (drop (i32.const 2))
-          (br $x)
-        )
-      )
-      (drop (br_on_exn $x $e (local.get $exn)))
-      ;; no fallthrough, another thing to merge
-      (drop (i32.const 1))
-      (drop (i32.const 2))
-      (br $x)
-    )
-  )
-
   (func $foo)
-  (func $try-call-optimize-terminating-tails (result exnref)
+  (func $try-call-optimize-terminating-tails (result i32)
     (try
       (do
         ;; Expressions that can throw should NOT be taken out of 'try' scope.
@@ -1254,21 +1227,20 @@
         (call $foo)
         (call $foo)
         (call $foo)
-        (return (ref.null exn))
+        (return (i32.const 0))
       )
-      (catch
-        (drop (pop exnref))
+      (catch_all
         (call $foo)
         (call $foo)
         (call $foo)
         (call $foo)
-        (return (ref.null exn))
+        (return (i32.const 0))
       )
     )
-    (ref.null exn)
+    (i32.const 0)
   )
 
-  (func $try-call-optimize-expression-tails (local $exn exnref)
+  (func $try-call-optimize-expression-tails
     (block $x
       (try
         (do
@@ -1278,8 +1250,7 @@
           (call $foo)
           (br $x)
         )
-        (catch
-          (local.set $exn (pop exnref))
+        (catch_all
           (call $foo)
           (call $foo)
           (call $foo)

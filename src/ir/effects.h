@@ -84,14 +84,16 @@ public:
   // wrt atomics (e.g. memory.grow)
   bool isAtomic = false;
   bool throws = false;
-  // The nested depth of try. If an instruction that may throw is inside an
-  // inner try, we don't mark it as 'throws', because it will be caught by an
-  // inner catch.
+  // The nested depth of try-catch_all. If an instruction that may throw is
+  // inside an inner try-catch_all, we don't mark it as 'throws', because it
+  // will be caught by an inner catch_all. We only count 'try's with a
+  // 'catch_all' because instructions within a 'try' without a 'catch_all' can
+  // still throw outside of the try.
   size_t tryDepth = 0;
   // The nested depth of catch. This is necessary to track danglng pops.
   size_t catchDepth = 0;
-  // If this expression contains 'exnref.pop's that are not enclosed in 'catch'
-  // body. For example, (drop (exnref.pop)) should set this to true.
+  // If this expression contains 'pop's that are not enclosed in 'catch' body.
+  // For example, (drop (pop i32)) should set this to true.
   bool danglingPop = false;
 
   // Helper functions to check for various effect types
@@ -258,7 +260,10 @@ private:
       if (curr->is<Try>()) {
         self->pushTask(doVisitTry, currp);
         self->pushTask(doEndCatch, currp);
-        self->pushTask(scan, &curr->cast<Try>()->catchBody);
+        auto& catchBodies = curr->cast<Try>()->catchBodies;
+        for (int i = int(catchBodies.size()) - 1; i >= 0; i--) {
+          self->pushTask(scan, &catchBodies[i]);
+        }
         self->pushTask(doStartCatch, currp);
         self->pushTask(scan, &curr->cast<Try>()->body);
         self->pushTask(doStartTry, currp);
@@ -269,12 +274,22 @@ private:
     }
 
     static void doStartTry(InternalAnalyzer* self, Expression** currp) {
-      self->parent.tryDepth++;
+      Try* curr = (*currp)->cast<Try>();
+      // We only count 'try's with a 'catch_all' because instructions within a
+      // 'try' without a 'catch_all' can still throw outside of the try.
+      if (curr->hasCatchAll()) {
+        self->parent.tryDepth++;
+      }
     }
 
     static void doStartCatch(InternalAnalyzer* self, Expression** currp) {
-      assert(self->parent.tryDepth > 0 && "try depth cannot be negative");
-      self->parent.tryDepth--;
+      Try* curr = (*currp)->cast<Try>();
+      // We only count 'try's with a 'catch_all' because instructions within a
+      // 'try' without a 'catch_all' can still throw outside of the try.
+      if (curr->hasCatchAll()) {
+        assert(self->parent.tryDepth > 0 && "try depth cannot be negative");
+        self->parent.tryDepth--;
+      }
       self->parent.catchDepth++;
     }
 
@@ -415,6 +430,11 @@ private:
       }
       parent.implicitTrap = true;
     }
+    void visitPrefetch(Prefetch* curr) {
+      // Do not reorder with respect to other memory ops
+      parent.writesMemory = true;
+      parent.readsMemory = true;
+    }
     void visitMemoryInit(MemoryInit* curr) {
       parent.writesMemory = true;
       parent.implicitTrap = true;
@@ -515,12 +535,7 @@ private:
       if (parent.tryDepth == 0) {
         parent.throws = true;
       }
-      // rethrow traps when the arg is null
-      parent.implicitTrap = true;
-    }
-    void visitBrOnExn(BrOnExn* curr) {
-      parent.breakTargets.insert(curr->name);
-      // br_on_exn traps when the arg is null
+      // traps when the arg is null
       parent.implicitTrap = true;
     }
     void visitNop(Nop* curr) {}
@@ -545,39 +560,43 @@ private:
       // traps when the arg is null
       parent.implicitTrap = true;
     }
-    void visitRefTest(RefTest* curr) {
-      WASM_UNREACHABLE("TODO (gc): ref.test");
-    }
+    void visitRefTest(RefTest* curr) {}
     void visitRefCast(RefCast* curr) {
-      WASM_UNREACHABLE("TODO (gc): ref.cast");
+      // Traps if the ref is not null and it has an invalid rtt.
+      parent.implicitTrap = true;
     }
     void visitBrOnCast(BrOnCast* curr) {
-      WASM_UNREACHABLE("TODO (gc): br_on_cast");
+      parent.breakTargets.insert(curr->name);
     }
-    void visitRttCanon(RttCanon* curr) {
-      WASM_UNREACHABLE("TODO (gc): rtt.canon");
-    }
-    void visitRttSub(RttSub* curr) { WASM_UNREACHABLE("TODO (gc): rtt.sub"); }
-    void visitStructNew(StructNew* curr) {
-      WASM_UNREACHABLE("TODO (gc): struct.new");
-    }
+    void visitRttCanon(RttCanon* curr) {}
+    void visitRttSub(RttSub* curr) {}
+    void visitStructNew(StructNew* curr) {}
     void visitStructGet(StructGet* curr) {
-      WASM_UNREACHABLE("TODO (gc): struct.get");
+      // traps when the arg is null
+      if (curr->ref->type.isNullable()) {
+        parent.implicitTrap = true;
+      }
     }
     void visitStructSet(StructSet* curr) {
-      WASM_UNREACHABLE("TODO (gc): struct.set");
+      // traps when the arg is null
+      if (curr->ref->type.isNullable()) {
+        parent.implicitTrap = true;
+      }
     }
-    void visitArrayNew(ArrayNew* curr) {
-      WASM_UNREACHABLE("TODO (gc): array.new");
-    }
+    void visitArrayNew(ArrayNew* curr) {}
     void visitArrayGet(ArrayGet* curr) {
-      WASM_UNREACHABLE("TODO (gc): array.get");
+      // traps when the arg is null or the index out of bounds
+      parent.implicitTrap = true;
     }
     void visitArraySet(ArraySet* curr) {
-      WASM_UNREACHABLE("TODO (gc): array.set");
+      // traps when the arg is null or the index out of bounds
+      parent.implicitTrap = true;
     }
     void visitArrayLen(ArrayLen* curr) {
-      WASM_UNREACHABLE("TODO (gc): array.len");
+      // traps when the arg is null
+      if (curr->ref->type.isNullable()) {
+        parent.implicitTrap = true;
+      }
     }
   };
 

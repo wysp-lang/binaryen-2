@@ -16,13 +16,13 @@
   // 7
   // BinaryenTypeExternref: 8
   // 8
-  // BinaryenTypeExnref: 9
+  // BinaryenTypeAnyref: 9
   // 9
-  // BinaryenTypeAnyref: 10
+  // BinaryenTypeEqref: 10
   // 10
-  // BinaryenTypeEqref: 11
+  // BinaryenTypeI31ref: 11
   // 11
-  // BinaryenTypeI31ref: 12
+  // BinaryenTypeDataref: 12
   // 12
   // BinaryenTypeAuto: -1
   // 2,2
@@ -65,30 +65,29 @@ ReturnId: 19
 MemorySizeId: 20
 MemoryGrowId: 21
 NopId: 22
-UnreachableId: 23
-AtomicCmpxchgId: 25
-AtomicRMWId: 24
-AtomicWaitId: 26
-AtomicNotifyId: 27
-SIMDExtractId: 29
-SIMDReplaceId: 30
-SIMDShuffleId: 31
-SIMDTernaryId: 32
-SIMDShiftId: 33
-SIMDLoadId: 34
-MemoryInitId: 36
-DataDropId: 37
-MemoryCopyId: 38
-MemoryFillId: 39
-PopId: 40
-RefNullId: 41
-RefIsNullId: 42
-RefFuncId: 43
-RefEqId: 44
-TryId: 45
-ThrowId: 46
-RethrowId: 47
-BrOnExnId: 48
+UnreachableId: 24
+AtomicCmpxchgId: 26
+AtomicRMWId: 25
+AtomicWaitId: 27
+AtomicNotifyId: 28
+SIMDExtractId: 30
+SIMDReplaceId: 31
+SIMDShuffleId: 32
+SIMDTernaryId: 33
+SIMDShiftId: 34
+SIMDLoadId: 35
+MemoryInitId: 37
+DataDropId: 38
+MemoryCopyId: 39
+MemoryFillId: 40
+PopId: 41
+RefNullId: 42
+RefIsNullId: 43
+RefFuncId: 44
+RefEqId: 45
+TryId: 46
+ThrowId: 47
+RethrowId: 48
 TupleMakeId: 49
 TupleExtractId: 50
 I31NewId: 51
@@ -142,7 +141,6 @@ getExpressionInfo(tuple[3])={"id":14,"type":5,"value":3.7}
  (start $starter)
  (func "$kitchen()sinker" (param $0 i32) (param $1 i64) (param $2 f32) (param $3 f64) (result i32)
   (local $4 i32)
-  (local $5 exnref)
   (block $the-body (result i32)
    (block $the-nothing
     (drop
@@ -479,16 +477,6 @@ getExpressionInfo(tuple[3])={"id":14,"type":5,"value":3.7}
       )
       (drop
        (i64x2.neg
-        (v128.const i32x4 0x04030201 0x08070605 0x0c0b0a09 0x100f0e0d)
-       )
-      )
-      (drop
-       (i64x2.any_true
-        (v128.const i32x4 0x04030201 0x08070605 0x0c0b0a09 0x100f0e0d)
-       )
-      )
-      (drop
-       (i64x2.all_true
         (v128.const i32x4 0x04030201 0x08070605 0x0c0b0a09 0x100f0e0d)
        )
       )
@@ -1875,18 +1863,9 @@ getExpressionInfo(tuple[3])={"id":14,"type":5,"value":3.7}
          (i32.const 0)
         )
        )
-       (catch
-        (local.set $5
-         (pop exnref)
-        )
+       (catch $a-event
         (drop
-         (block $try-block (result i32)
-          (rethrow
-           (br_on_exn $try-block $a-event
-            (local.get $5)
-           )
-          )
-         )
+         (pop i32)
         )
        )
       )
@@ -1950,9 +1929,6 @@ getExpressionInfo(tuple[3])={"id":14,"type":5,"value":3.7}
        (pop externref)
       )
       (drop
-       (pop exnref)
-      )
-      (drop
        (pop anyref)
       )
       (drop
@@ -1960,6 +1936,9 @@ getExpressionInfo(tuple[3])={"id":14,"type":5,"value":3.7}
       )
       (drop
        (pop i31ref)
+      )
+      (drop
+       (pop dataref)
       )
       (drop
        (memory.size)
@@ -2024,7 +2003,6 @@ getExpressionInfo(tuple[3])={"id":14,"type":5,"value":3.7}
  (start $starter)
  (func "$kitchen()sinker" (param $0 i32) (param $1 i64) (param $2 f32) (param $3 f64) (result i32)
   (local $4 i32)
-  (local $5 exnref)
   (block $the-body (result i32)
    (block $the-nothing
     (drop
@@ -2361,16 +2339,6 @@ getExpressionInfo(tuple[3])={"id":14,"type":5,"value":3.7}
       )
       (drop
        (i64x2.neg
-        (v128.const i32x4 0x04030201 0x08070605 0x0c0b0a09 0x100f0e0d)
-       )
-      )
-      (drop
-       (i64x2.any_true
-        (v128.const i32x4 0x04030201 0x08070605 0x0c0b0a09 0x100f0e0d)
-       )
-      )
-      (drop
-       (i64x2.all_true
         (v128.const i32x4 0x04030201 0x08070605 0x0c0b0a09 0x100f0e0d)
        )
       )
@@ -3757,18 +3725,9 @@ getExpressionInfo(tuple[3])={"id":14,"type":5,"value":3.7}
          (i32.const 0)
         )
        )
-       (catch
-        (local.set $5
-         (pop exnref)
-        )
+       (catch $a-event
         (drop
-         (block $try-block (result i32)
-          (rethrow
-           (br_on_exn $try-block $a-event
-            (local.get $5)
-           )
-          )
-         )
+         (pop i32)
         )
        )
       )
@@ -3832,9 +3791,6 @@ getExpressionInfo(tuple[3])={"id":14,"type":5,"value":3.7}
        (pop externref)
       )
       (drop
-       (pop exnref)
-      )
-      (drop
        (pop anyref)
       )
       (drop
@@ -3842,6 +3798,9 @@ getExpressionInfo(tuple[3])={"id":14,"type":5,"value":3.7}
       )
       (drop
        (pop i31ref)
+      )
+      (drop
+       (pop dataref)
       )
       (drop
        (memory.size)
@@ -4391,8 +4350,8 @@ module loaded from binary form:
 )
 
 [wasm-validator error in function func] local.set's value type must be correct, on 
-[none] (local.set $0
- [i64] (i64.const 1234)
+(local.set $0
+ (i64.const 1234)
 )
 validation: 0
 test_parsing text:
@@ -4432,6 +4391,8 @@ sizeof Literal: 24
  (table $0 1 funcref)
  (elem (i32.const 0) $fn0 $fn1 $fn2)
  (global $a-global i32 (i32.const 125))
+ (global $a-global2 i32 (i32.const 2))
+ (global $a-global3 i32 (i32.const 3))
  (export "export0" (func $fn0))
  (export "export1" (func $fn1))
  (export "export2" (func $fn2))

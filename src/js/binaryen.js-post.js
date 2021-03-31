@@ -35,10 +35,10 @@ function initializeConstants() {
     ['v128', 'Vec128'],
     ['funcref', 'Funcref'],
     ['externref', 'Externref'],
-    ['exnref', 'Exnref'],
     ['anyref', 'Anyref'],
     ['eqref', 'Eqref'],
     ['i31ref', 'I31ref'],
+    ['dataref', 'Dataref'],
     ['unreachable', 'Unreachable'],
     ['auto', 'Auto']
   ].forEach(entry => {
@@ -93,7 +93,6 @@ function initializeConstants() {
     'Try',
     'Throw',
     'Rethrow',
-    'BrOnExn',
     'TupleMake',
     'TupleExtract',
     'Pop',
@@ -416,8 +415,6 @@ function initializeConstants() {
     'MaxSVecI32x4',
     'MaxUVecI32x4',
     'NegVecI64x2',
-    'AnyTrueVecI64x2',
-    'AllTrueVecI64x2',
     'ShlVecI64x2',
     'ShrSVecI64x2',
     'ShrUVecI64x2',
@@ -1828,12 +1825,6 @@ function wrapModule(module, self = {}) {
     'neg'(value) {
       return Module['_BinaryenUnary'](module, Module['NegVecI64x2'], value);
     },
-    'any_true'(value) {
-      return Module['_BinaryenUnary'](module, Module['AnyTrueVecI64x2'], value);
-    },
-    'all_true'(value) {
-      return Module['_BinaryenUnary'](module, Module['AllTrueVecI64x2'], value);
-    },
     'shl'(vec, shift) {
       return Module['_BinaryenSIMDShift'](module, Module['ShlVecI64x2'], vec, shift);
     },
@@ -2082,12 +2073,6 @@ function wrapModule(module, self = {}) {
     }
   };
 
-  self['exnref'] = {
-    'pop'() {
-      return Module['_BinaryenPop'](module, Module['exnref']);
-    }
-  };
-
   self['anyref'] = {
     'pop'() {
       return Module['_BinaryenPop'](module, Module['anyref']);
@@ -2103,6 +2088,12 @@ function wrapModule(module, self = {}) {
   self['i31ref'] = {
     'pop'() {
       return Module['_BinaryenPop'](module, Module['i31ref']);
+    }
+  };
+
+  self['dataref'] = {
+    'pop'() {
+      return Module['_BinaryenPop'](module, Module['dataref']);
     }
   };
 
@@ -2143,17 +2134,15 @@ function wrapModule(module, self = {}) {
     }
   };
 
-  self['try'] = function(body, catchBody) {
-    return Module['_BinaryenTry'](module, body, catchBody);
+  self['try'] = function(body, catchEvents, catchBodies) {
+    return preserveStack(() =>
+      Module['_BinaryenTry'](module, body, i32sToStack(catchEvents.map(strToStack)), catchEvents.length, i32sToStack(catchBodies), catchBodies.length));
   };
   self['throw'] = function(event_, operands) {
     return preserveStack(() => Module['_BinaryenThrow'](module, strToStack(event_), i32sToStack(operands), operands.length));
   };
-  self['rethrow'] = function(exnref) {
-    return Module['_BinaryenRethrow'](module, exnref);
-  };
-  self['br_on_exn'] = function(label, event_, exnref) {
-    return preserveStack(() => Module['_BinaryenBrOnExn'](module, strToStack(label), strToStack(event_), exnref));
+  self['rethrow'] = function(depth) {
+    return Module['_BinaryenRethrow'](module, depth);
   };
 
   self['tuple'] = {
@@ -2340,18 +2329,27 @@ function wrapModule(module, self = {}) {
       Module['_BinaryenAddCustomSection'](module, strToStack(name), i8sToStack(contents), contents.length)
     );
   };
+  self['getExport'] = function(externalName) {
+    return preserveStack(() => Module['_BinaryenGetExport'](module, strToStack(externalName)));
+  };
   self['getNumExports'] = function() {
     return Module['_BinaryenGetNumExports'](module);
-  }
-  self['getExportByIndex'] = function(id) {
-    return Module['_BinaryenGetExportByIndex'](module, id);
-  }
+  };
+  self['getExportByIndex'] = function(index) {
+    return Module['_BinaryenGetExportByIndex'](module, index);
+  };
   self['getNumFunctions'] = function() {
     return Module['_BinaryenGetNumFunctions'](module);
-  }
-  self['getFunctionByIndex'] = function(id) {
-    return Module['_BinaryenGetFunctionByIndex'](module, id);
-  }
+  };
+  self['getFunctionByIndex'] = function(index) {
+    return Module['_BinaryenGetFunctionByIndex'](module, index);
+  };
+  self['getNumGlobals'] = function() {
+    return Module['_BinaryenGetNumGlobals'](module);
+  };
+  self['getGlobalByIndex'] = function(index) {
+    return Module['_BinaryenGetGlobalByIndex'](module, index);
+  };
   self['emitText'] = function() {
     const old = out;
     let ret = '';
@@ -2488,6 +2486,23 @@ function getAllNested(ref, numFn, getFn) {
   const ret = new Array(num);
   for (let i = 0; i < num; ++i) ret[i] = getFn(ref, i);
   return ret;
+}
+
+function setAllNested(ref, values, numFn, setFn, appendFn, removeFn) {
+  const num = values.length;
+  let prevNum = numFn(ref);
+  let index = 0;
+  while (index < num) {
+    if (index < prevNum) {
+      setFn(ref, index, values[index]);
+    } else {
+      appendFn(ref, values[index]);
+    }
+    ++index;
+  }
+  while (prevNum > index) {
+    removeFn(ref, --prevNum);
+  }
 }
 
 // Gets the specific id of an 'Expression'
@@ -2849,7 +2864,9 @@ Module['getExpressionInfo'] = function(expr) {
         'id': id,
         'type': type,
         'body': Module['_BinaryenTryGetBody'](expr),
-        'catchBody': Module['_BinaryenTryGetCatchBody'](expr)
+        'catchEvents': getAllNested(expr, Module['_BinaryenTryGetNumCatchEvents'], Module['_BinaryenTryGetCatchEventAt']),
+        'catchBodies': getAllNested(expr, Module['_BinaryenTryGetNumCatchBodies'], Module['_BinaryenTryGetCatchBodyAt']),
+        'hasCatchAll': Module['_BinaryenTryHasCatchAll'](expr)
       };
     case Module['ThrowId']:
       return {
@@ -2862,15 +2879,7 @@ Module['getExpressionInfo'] = function(expr) {
       return {
         'id': id,
         'type': type,
-        'exnref': Module['_BinaryenRethrowGetExnref'](expr)
-      };
-    case Module['BrOnExnId']:
-      return {
-        'id': id,
-        'type': type,
-        'name': UTF8ToString(Module['_BinaryenBrOnExnGetName'](expr)),
-        'event': UTF8ToString(Module['_BinaryenBrOnExnGetEvent'](expr)),
-        'exnref': Module['_BinaryenBrOnExnGetExnref'](expr)
+        'depth': Module['_BinaryenRethrowGetDepth'](expr)
       };
     case Module['TupleMakeId']:
       return {
@@ -3224,29 +3233,10 @@ Module['Block'] = makeExpressionWrapper({
     return Module['_BinaryenBlockGetNumChildren'](expr);
   },
   'getChildren'(expr) {
-    const numChildren = Module['_BinaryenBlockGetNumChildren'](expr);
-    const children = new Array(numChildren);
-    let index = 0;
-    while (index < numChildren) {
-      children[index] = Module['_BinaryenBlockGetChildAt'](expr, index++);
-    }
-    return children;
+    return getAllNested(expr, Module['_BinaryenBlockGetNumChildren'], Module['_BinaryenBlockGetChildAt']);
   },
   'setChildren'(expr, children) {
-    const numChildren = children.length;
-    let prevNumChildren = Module['_BinaryenBlockGetNumChildren'](expr);
-    let index = 0;
-    while (index < numChildren) {
-      if (index < prevNumChildren) {
-        Module['_BinaryenBlockSetChildAt'](expr, index, children[index]);
-      } else {
-        Module['_BinaryenBlockAppendChild'](expr, children[index]);
-      }
-      ++index;
-    }
-    while (prevNumChildren > index) {
-      Module['_BinaryenBlockRemoveChildAt'](expr, --prevNumChildren);
-    }
+    setAllNested(expr, children, Module['_BinaryenBlockGetNumChildren'], Module['_BinaryenBlockSetChildAt'], Module['_BinaryenBlockAppendChild'], Module['_BinaryenBlockRemoveChildAt']);
   },
   'getChildAt'(expr, index) {
     return Module['_BinaryenBlockGetChildAt'](expr, index);
@@ -3329,31 +3319,12 @@ Module['Switch'] = makeExpressionWrapper({
     return Module['_BinaryenSwitchGetNumNames'](expr);
   },
   'getNames'(expr) {
-    const numNames = Module['_BinaryenSwitchGetNumNames'](expr);
-    const names = new Array(numNames);
-    let index = 0;
-    while (index < numNames) {
-      names[index] = UTF8ToString(Module['_BinaryenSwitchGetNameAt'](expr, index++));
-    }
-    return names;
+    return getAllNested(expr, Module['_BinaryenSwitchGetNumNames'], Module['_BinaryenSwitchGetNameAt']).map(p => UTF8ToString(p));
   },
   'setNames'(expr, names) {
-    const numNames = names.length;
-    let prevNumNames = Module['_BinaryenSwitchGetNumNames'](expr);
-    let index = 0;
-    while (index < numNames) {
-      preserveStack(() => {
-        if (index < prevNumNames) {
-          Module['_BinaryenSwitchSetNameAt'](expr, index, strToStack(names[index]));
-        } else {
-          Module['_BinaryenSwitchAppendName'](expr, strToStack(names[index]));
-        }
-      });
-      ++index;
-    }
-    while (prevNumNames > index) {
-      Module['_BinaryenSwitchRemoveNameAt'](expr, --prevNumNames);
-    }
+    preserveStack(() => {
+      setAllNested(expr, names.map(strToStack), Module['_BinaryenSwitchGetNumNames'], Module['_BinaryenSwitchSetNameAt'], Module['_BinaryenSwitchAppendName'], Module['_BinaryenSwitchRemoveNameAt']);
+    });
   },
   'getDefaultName'(expr) {
     const name = Module['_BinaryenSwitchGetDefaultName'](expr);
@@ -3402,29 +3373,10 @@ Module['Call'] = makeExpressionWrapper({
     return Module['_BinaryenCallGetNumOperands'](expr);
   },
   'getOperands'(expr) {
-    const numOperands = Module['_BinaryenCallGetNumOperands'](expr);
-    const operands = new Array(numOperands);
-    let index = 0;
-    while (index < numOperands) {
-      operands[index] = Module['_BinaryenCallGetOperandAt'](expr, index++);
-    }
-    return operands;
+    return getAllNested(expr, Module['_BinaryenCallGetNumOperands'], Module['_BinaryenCallGetOperandAt']);
   },
   'setOperands'(expr, operands) {
-    const numOperands = operands.length;
-    let prevNumOperands = Module['_BinaryenCallGetNumOperands'](expr);
-    let index = 0;
-    while (index < numOperands) {
-      if (index < prevNumOperands) {
-        Module['_BinaryenCallSetOperandAt'](expr, index, operands[index]);
-      } else {
-        Module['_BinaryenCallAppendOperand'](expr, operands[index]);
-      }
-      ++index;
-    }
-    while (prevNumOperands > index) {
-      Module['_BinaryenCallRemoveOperandAt'](expr, --prevNumOperands);
-    }
+    setAllNested(expr, operands, Module['_BinaryenCallGetNumOperands'], Module['_BinaryenCallSetOperandAt'], Module['_BinaryenCallAppendOperand'], Module['_BinaryenCallRemoveOperandAt']);
   },
   'getOperandAt'(expr, index) {
     return Module['_BinaryenCallGetOperandAt'](expr, index);
@@ -3460,29 +3412,10 @@ Module['CallIndirect'] = makeExpressionWrapper({
     return Module['_BinaryenCallIndirectGetNumOperands'](expr);
   },
   'getOperands'(expr) {
-    const numOperands = Module['_BinaryenCallIndirectGetNumOperands'](expr);
-    const operands = new Array(numOperands);
-    let index = 0;
-    while (index < numOperands) {
-      operands[index] = Module['_BinaryenCallIndirectGetOperandAt'](expr, index++);
-    }
-    return operands;
+    return getAllNested(expr, Module['_BinaryenCallIndirectGetNumOperands'], Module['_BinaryenCallIndirectGetOperandAt']);
   },
   'setOperands'(expr, operands) {
-    const numOperands = operands.length;
-    let prevNumOperands = Module['_BinaryenCallIndirectGetNumOperands'](expr);
-    let index = 0;
-    while (index < numOperands) {
-      if (index < prevNumOperands) {
-        Module['_BinaryenCallIndirectSetOperandAt'](expr, index, operands[index]);
-      } else {
-        Module['_BinaryenCallIndirectAppendOperand'](expr, operands[index]);
-      }
-      ++index;
-    }
-    while (prevNumOperands > index) {
-      Module['_BinaryenCallIndirectRemoveOperandAt'](expr, --prevNumOperands);
-    }
+    setAllNested(expr, operands, Module['_BinaryenCallIndirectGetNumOperands'], Module['_BinaryenCallIndirectSetOperandAt'], Module['_BinaryenCallIndirectAppendOperand'], Module['_BinaryenCallIndirectRemoveOperandAt']);
   },
   'getOperandAt'(expr, index) {
     return Module['_BinaryenCallIndirectGetOperandAt'](expr, index);
@@ -4188,12 +4121,59 @@ Module['Try'] = makeExpressionWrapper({
   'setBody'(expr, bodyExpr) {
     Module['_BinaryenTrySetBody'](expr, bodyExpr);
   },
-  'getCatchBody'(expr) {
-    return Module['_BinaryenTryGetCatchBody'](expr);
+  'getNumCatchEvents'(expr) {
+    return Module['_BinaryenTryGetNumCatchEvents'](expr);
   },
-  'setCatchBody'(expr, catchBodyExpr) {
-    Module['_BinaryenTrySetCatchBody'](expr, catchBodyExpr);
-  }
+  'getCatchEvents'(expr) {
+    return getAllNested(expr, Module['_BinaryenTryGetNumCatchEvents'], Module['_BinaryenTryGetCatchEventAt']).map(p => UTF8ToString(p));
+  },
+  'setCatchEvents'(expr, catchEvents) {
+    preserveStack(() => {
+      setAllNested(expr, catchEvents.map(strToStack), Module['_BinaryenTryGetNumCatchEvents'], Module['_BinaryenTrySetCatchEventAt'], Module['_BinaryenTryAppendCatchEvent'], Module['_BinaryenTryRemoveCatchEventAt']);
+    });
+  },
+  'getCatchEventAt'(expr, index) {
+    return UTF8ToString(Module['_BinaryenTryGetCatchEventAt'](expr, index));
+  },
+  'setCatchEventAt'(expr, index, catchEvent) {
+    preserveStack(() => { Module['_BinaryenTrySetCatchEventAt'](expr, index, strToStack(catchEvent)) });
+  },
+  'appendCatchEvent'(expr, catchEvent) {
+    preserveStack(() => Module['_BinaryenTryAppendCatchEvent'](expr, strToStack(catchEvent)));
+  },
+  'insertCatchEventAt'(expr, index, catchEvent) {
+    preserveStack(() => { Module['_BinaryenTryInsertCatchEventAt'](expr, index, strToStack(catchEvent)) });
+  },
+  'removeCatchEventAt'(expr, index) {
+    return UTF8ToString(Module['_BinaryenTryRemoveCatchEventAt'](expr, index));
+  },
+  'getNumCatchBodies'(expr) {
+    return Module['_BinaryenTryGetNumCatchBodies'](expr);
+  },
+  'getCatchBodies'(expr) {
+    return getAllNested(expr, Module['_BinaryenTryGetNumCatchBodies'], Module['_BinaryenTryGetCatchBodyAt']);
+  },
+  'setCatchBodies'(expr, catchBodies) {
+    setAllNested(expr, catchBodies, Module['_BinaryenTryGetNumCatchBodies'], Module['_BinaryenTrySetCatchBodyAt'], Module['_BinaryenTryAppendCatchBody'], Module['_BinaryenTryRemoveCatchBodyAt']);
+  },
+  'getCatchBodyAt'(expr, index) {
+    return Module['_BinaryenTryGetCatchBodyAt'](expr, index);
+  },
+  'setCatchBodyAt'(expr, index, catchExpr) {
+    Module['_BinaryenTrySetCatchBodyAt'](expr, index, catchExpr);
+  },
+  'appendCatchBody'(expr, catchExpr) {
+    return Module['_BinaryenTryAppendCatchBody'](expr, catchExpr);
+  },
+  'insertCatchBodyAt'(expr, index, catchExpr) {
+    Module['_BinaryenTryInsertCatchBodyAt'](expr, index, catchExpr);
+  },
+  'removeCatchBodyAt'(expr, index) {
+    return Module['_BinaryenTryRemoveCatchBodyAt'](expr, index);
+  },
+  'hasCatchAll'(expr) {
+    return Boolean(Module['_BinaryenTryHasCatchAll'](expr));
+  },
 });
 
 Module['Throw'] = makeExpressionWrapper({
@@ -4207,29 +4187,10 @@ Module['Throw'] = makeExpressionWrapper({
     return Module['_BinaryenThrowGetNumOperands'](expr);
   },
   'getOperands'(expr) {
-    const numOperands = Module['_BinaryenThrowGetNumOperands'](expr);
-    const operands = new Array(numOperands);
-    let index = 0;
-    while (index < numOperands) {
-      operands[index] = Module['_BinaryenThrowGetOperandAt'](expr, index++);
-    }
-    return operands;
+    return getAllNested(expr, Module['_BinaryenThrowGetNumOperands'], Module['_BinaryenThrowGetOperandAt']);
   },
   'setOperands'(expr, operands) {
-    const numOperands = operands.length;
-    let prevNumOperands = Module['_BinaryenThrowGetNumOperands'](expr);
-    let index = 0;
-    while (index < numOperands) {
-      if (index < prevNumOperands) {
-        Module['_BinaryenThrowSetOperandAt'](expr, index, operands[index]);
-      } else {
-        Module['_BinaryenThrowAppendOperand'](expr, operands[index]);
-      }
-      ++index;
-    }
-    while (prevNumOperands > index) {
-      Module['_BinaryenThrowRemoveOperandAt'](expr, --prevNumOperands);
-    }
+    setAllNested(expr, operands, Module['_BinaryenThrowGetNumOperands'], Module['_BinaryenThrowSetOperandAt'], Module['_BinaryenThrowAppendOperand'], Module['_BinaryenThrowRemoveOperandAt']);
   },
   'getOperandAt'(expr, index) {
     return Module['_BinaryenThrowGetOperandAt'](expr, index);
@@ -4249,32 +4210,11 @@ Module['Throw'] = makeExpressionWrapper({
 });
 
 Module['Rethrow'] = makeExpressionWrapper({
-  'getExnref'(expr) {
-    return Module['_BinaryenRethrowGetExnref'](expr);
+  'getDepth'(expr) {
+    return Module['_BinaryenRethrowGetDepth'](expr);
   },
-  'setExnref'(expr, exnrefExpr) {
-    Module['_BinaryenRethrowSetExnref'](expr, exnrefExpr);
-  }
-});
-
-Module['BrOnExn'] = makeExpressionWrapper({
-  'getEvent'(expr) {
-    return UTF8ToString(Module['_BinaryenBrOnExnGetEvent'](expr));
-  },
-  'setEvent'(expr, eventName) {
-    preserveStack(() => { Module['_BinaryenBrOnExnSetEvent'](expr, strToStack(eventName)) });
-  },
-  'getName'(expr) {
-    return UTF8ToString(Module['_BinaryenBrOnExnGetName'](expr));
-  },
-  'setName'(expr, name) {
-    preserveStack(() => { Module['_BinaryenBrOnExnSetName'](expr, strToStack(name)) });
-  },
-  'getExnref'(expr) {
-    return Module['_BinaryenBrOnExnGetExnref'](expr);
-  },
-  'setExnref'(expr, exnrefExpr) {
-    Module['_BinaryenBrOnExnSetExnref'](expr, exnrefExpr);
+  'setDepth'(expr, depthExpr) {
+    Module['_BinaryenRethrowSetDepth'](expr, depthExpr);
   }
 });
 
@@ -4283,29 +4223,10 @@ Module['TupleMake'] = makeExpressionWrapper({
     return Module['_BinaryenTupleMakeGetNumOperands'](expr);
   },
   'getOperands'(expr) {
-    const numOperands = Module['_BinaryenTupleMakeGetNumOperands'](expr);
-    const operands = new Array(numOperands);
-    let index = 0;
-    while (index < numOperands) {
-      operands[index] = Module['_BinaryenTupleMakeGetOperandAt'](expr, index++);
-    }
-    return operands;
+    return getAllNested(expr, Module['_BinaryenTupleMakeGetNumOperands'], Module['_BinaryenTupleMakeGetOperandAt']);
   },
   'setOperands'(expr, operands) {
-    const numOperands = operands.length;
-    let prevNumOperands = Module['_BinaryenTupleMakeGetNumOperands'](expr);
-    let index = 0;
-    while (index < numOperands) {
-      if (index < prevNumOperands) {
-        Module['_BinaryenTupleMakeSetOperandAt'](expr, index, operands[index]);
-      } else {
-        Module['_BinaryenTupleMakeAppendOperand'](expr, operands[index]);
-      }
-      ++index;
-    }
-    while (prevNumOperands > index) {
-      Module['_BinaryenTupleMakeRemoveOperandAt'](expr, --prevNumOperands);
-    }
+    setAllNested(expr, operands, Module['_BinaryenTupleMakeGetNumOperands'], Module['_BinaryenTupleMakeSetOperandAt'], Module['_BinaryenTupleMakeAppendOperand'], Module['_BinaryenTupleMakeRemoveOperandAt']);
   },
   'getOperandAt'(expr, index) {
     return Module['_BinaryenTupleMakeGetOperandAt'](expr, index);

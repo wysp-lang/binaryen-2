@@ -1,5 +1,7 @@
-cmake_minimum_required(VERSION 3.1.3)
-project(binaryen LANGUAGES C CXX VERSION 98)
+# Version set according the the cmake versions available in Ubuntu/Bionic:
+# https://packages.ubuntu.com/bionic/cmake
+cmake_minimum_required(VERSION 3.10.2)
+project(binaryen LANGUAGES C CXX VERSION 99)
 include(GNUInstallDirs)
 
 # The C++ standard whose features are required to build Binaryen.
@@ -36,41 +38,41 @@ configure_file(config.h.in config.h)
 
 # Support functionality.
 
-function(ADD_COMPILE_FLAG value)
+function(add_compile_flag value)
   message(STATUS "Building with ${value}")
-  FOREACH(variable CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
+  foreach(variable CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
     set(${variable} "${${variable}} ${value}" PARENT_SCOPE)
-  ENDFOREACH(variable)
+  endforeach(variable)
 endfunction()
 
-function(ADD_CXX_FLAG value)
+function(add_cxx_flag value)
   message(STATUS "Building with ${value}")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${value}" PARENT_SCOPE)
 endfunction()
 
-function(ADD_DEBUG_COMPILE_FLAG value)
+function(add_debug_compile_flag value)
   if("${CMAKE_BUILD_TYPE}" MATCHES "Debug")
     message(STATUS "Building with ${value}")
   endif()
-  FOREACH(variable CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_DEBUG)
+  foreach(variable CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_DEBUG)
     set(${variable} "${${variable}} ${value}" PARENT_SCOPE)
-  ENDFOREACH(variable)
+  endforeach(variable)
 endfunction()
 
-function(ADD_NONDEBUG_COMPILE_FLAG value)
+function(add_nondebug_compile_flag value)
   if(NOT "${CMAKE_BUILD_TYPE}" MATCHES "Debug")
     message(STATUS "Building with ${value}")
   endif()
-  FOREACH(variable CMAKE_C_FLAGS_RELEASE CMAKE_CXX_FLAGS_RELEASE CMAKE_C_FLAGS_RELWITHDEBINFO CMAKE_CXX_FLAGS_RELWITHDEBINFO CMAKE_C_FLAGS_MINSIZEREL CMAKE_CXX_FLAGS_MINSIZEREL)
+  foreach(variable CMAKE_C_FLAGS_RELEASE CMAKE_CXX_FLAGS_RELEASE CMAKE_C_FLAGS_RELWITHDEBINFO CMAKE_CXX_FLAGS_RELWITHDEBINFO CMAKE_C_FLAGS_MINSIZEREL CMAKE_CXX_FLAGS_MINSIZEREL)
     set(${variable} "${${variable}} ${value}" PARENT_SCOPE)
-  ENDFOREACH(variable)
+  endforeach(variable)
 endfunction()
 
-function(ADD_LINK_FLAG value)
+function(add_link_flag value)
   message(STATUS "Linking with ${value}")
-  FOREACH(variable CMAKE_EXE_LINKER_FLAGS)
+  foreach(variable CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS)
     set(${variable} "${${variable}} ${value}" PARENT_SCOPE)
-  ENDFOREACH(variable)
+  endforeach(variable)
 endfunction()
 
 function(binaryen_setup_rpath name)
@@ -78,7 +80,7 @@ function(binaryen_setup_rpath name)
     return()
   endif()
 
-  if (APPLE)
+  if(APPLE)
     set(_install_name_dir INSTALL_NAME_DIR "@rpath")
     set(_install_rpath "@loader_path/../lib")
   elseif(UNIX)
@@ -100,13 +102,13 @@ endfunction()
 # Options
 
 option(BUILD_STATIC_LIB "Build as a static library" OFF)
-if (MSVC)
+if(MSVC)
   # We don't have dllexport declarations set up for windows yet.
   set(BUILD_STATIC_LIB ON)
 endif()
 
 # For now, don't include full DWARF support in JS builds, for size.
-if (NOT EMSCRIPTEN)
+if(NOT EMSCRIPTEN)
   option(BUILD_LLVM_DWARF "Enable full DWARF support" ON)
 
   if(BUILD_LLVM_DWARF)
@@ -129,11 +131,22 @@ endif()
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 # Force output to bin/ and lib/. This is to suppress CMake multigenerator output paths and avoid bin/Debug, bin/Release/ and so on, which is CMake default.
-FOREACH(SUFFIX "_DEBUG" "_RELEASE" "_RELWITHDEBINFO" "_MINSIZEREL" "")
+foreach(SUFFIX "_DEBUG" "_RELEASE" "_RELWITHDEBINFO" "_MINSIZEREL" "")
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY${SUFFIX} "${PROJECT_BINARY_DIR}/bin")
   set(CMAKE_LIBRARY_OUTPUT_DIRECTORY${SUFFIX} "${PROJECT_BINARY_DIR}/lib")
   set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY${SUFFIX} "${PROJECT_BINARY_DIR}/lib")
-ENDFOREACH()
+endforeach()
+
+option(BYN_ENABLE_LTO "Build with LTO" Off)
+if(BYN_ENABLE_LTO)
+  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "ThinLTO is only supported by clang")
+  endif()
+  if(NOT APPLE)
+    add_link_flag("-fuse-ld=lld")
+  endif()
+  add_compile_flag("-flto=thin")
+endif()
 
 if(MSVC)
   if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "19.0") # VS2013 and older explicitly need /arch:sse2 set, VS2015 no longer has that option, but always enabled.
@@ -291,9 +304,9 @@ set(binaryen_objs
     $<TARGET_OBJECTS:cfg>
     $<TARGET_OBJECTS:support>)
 
-IF(BUILD_LLVM_DWARF)
+if(BUILD_LLVM_DWARF)
   SET(binaryen_objs ${binaryen_objs} $<TARGET_OBJECTS:llvm_dwarf>)
-ENDIF()
+endif()
 
 # Sources.
 
@@ -315,7 +328,7 @@ install(TARGETS binaryen
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
-install(FILES src/binaryen-c.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(FILES src/binaryen-c.h src/wasm-delegations.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 function(binaryen_add_executable name sources)
   add_executable(${name} ${sources})
@@ -394,3 +407,5 @@ if(EMSCRIPTEN)
   set_property(TARGET binaryen_js PROPERTY CXX_STANDARD_REQUIRED ON)
   install(TARGETS binaryen_js DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
+
+configure_file(scripts/binaryen-lit.in ${CMAKE_BINARY_DIR}/bin/binaryen-lit @ONLY)

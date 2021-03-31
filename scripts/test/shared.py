@@ -191,7 +191,7 @@ NATIVECC = (os.environ.get('CC') or which('mingw32-gcc') or
             which('gcc') or which('clang'))
 NATIVEXX = (os.environ.get('CXX') or which('mingw32-g++') or
             which('g++') or which('clang++'))
-NODEJS = os.getenv('NODE', which('nodejs') or which('node'))
+NODEJS = os.getenv('NODE', which('node') or which('nodejs'))
 MOZJS = which('mozjs') or which('spidermonkey')
 V8 = which('v8') or which('d8')
 
@@ -366,15 +366,16 @@ def get_test_dir(name):
     return os.path.join(options.binaryen_test, name)
 
 
-def get_tests(test_dir, extensions=[]):
+def get_tests(test_dir, extensions=[], recursive=False):
     """Returns the list of test files in a given directory. 'extensions' is a
     list of file extensions. If 'extensions' is empty, returns all files.
     """
     tests = []
+    star = '**/*' if recursive else '*'
     if not extensions:
-        tests += glob.glob(os.path.join(test_dir, '*'))
+        tests += glob.glob(os.path.join(test_dir, star), recursive=True)
     for ext in extensions:
-        tests += glob.glob(os.path.join(test_dir, '*' + ext))
+        tests += glob.glob(os.path.join(test_dir, star + ext), recursive=True)
     if options.test_name_filter:
         tests = fnmatch.filter(tests, options.test_name_filter)
     return sorted(tests)

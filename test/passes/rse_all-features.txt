@@ -481,10 +481,7 @@
    (do
     (nop)
    )
-   (catch
-    (drop
-     (pop exnref)
-    )
+   (catch_all
     (local.set $x
      (i32.const 1)
     )
@@ -505,10 +502,8 @@
      (i32.const 1)
     )
    )
-   (catch
-    (drop
-     (pop exnref)
-    )
+   (catch_all
+    (nop)
    )
   )
   (local.set $x
@@ -523,10 +518,7 @@
      (i32.const 0)
     )
    )
-   (catch
-    (drop
-     (pop exnref)
-    )
+   (catch_all
     (local.set $x
      (i32.const 1)
     )
@@ -548,10 +540,8 @@
      (i32.const 1)
     )
    )
-   (catch
-    (drop
-     (pop exnref)
-    )
+   (catch_all
+    (nop)
    )
   )
   (local.set $x
@@ -567,17 +557,15 @@
     )
     (call $foo)
    )
-   (catch
-    (drop
-     (pop exnref)
-    )
+   (catch_all
+    (nop)
    )
   )
   (drop
    (i32.const 1)
   )
  )
- (func $nested-try
+ (func $nested-try1
   (local $x i32)
   (try
    (do
@@ -587,23 +575,73 @@
        (i32.const 0)
       )
      )
-     (catch
-      (rethrow
-       (pop exnref)
-      )
+     (catch_all
+      (rethrow 0)
      )
     )
    )
-   (catch
-    (drop
-     (pop exnref)
-    )
+   (catch_all
     (local.set $x
      (i32.const 1)
     )
    )
   )
   (drop
+   (i32.const 1)
+  )
+ )
+ (func $nested-try2
+  (local $x i32)
+  (try
+   (do
+    (try
+     (do
+      (throw $e
+       (i32.const 0)
+      )
+     )
+     (catch_all
+      (local.set $x
+       (i32.const 1)
+      )
+      (rethrow 0)
+     )
+    )
+   )
+   (catch_all
+    (nop)
+   )
+  )
+  (drop
+   (i32.const 1)
+  )
+ )
+ (func $nested-try3
+  (local $x i32)
+  (try
+   (do
+    (try
+     (do
+      (throw $e
+       (i32.const 0)
+      )
+     )
+     (catch $e
+      (drop
+       (pop i32)
+      )
+      (local.set $x
+       (i32.const 1)
+      )
+      (rethrow 0)
+     )
+    )
+   )
+   (catch_all
+    (nop)
+   )
+  )
+  (local.set $x
    (i32.const 1)
   )
  )

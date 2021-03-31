@@ -112,6 +112,7 @@ void ReFinalize::visitSIMDLoad(SIMDLoad* curr) { curr->finalize(); }
 void ReFinalize::visitSIMDLoadStoreLane(SIMDLoadStoreLane* curr) {
   curr->finalize();
 }
+void ReFinalize::visitPrefetch(Prefetch* curr) { curr->finalize(); }
 void ReFinalize::visitMemoryInit(MemoryInit* curr) { curr->finalize(); }
 void ReFinalize::visitDataDrop(DataDrop* curr) { curr->finalize(); }
 void ReFinalize::visitMemoryCopy(MemoryCopy* curr) { curr->finalize(); }
@@ -135,14 +136,6 @@ void ReFinalize::visitRefEq(RefEq* curr) { curr->finalize(); }
 void ReFinalize::visitTry(Try* curr) { curr->finalize(); }
 void ReFinalize::visitThrow(Throw* curr) { curr->finalize(); }
 void ReFinalize::visitRethrow(Rethrow* curr) { curr->finalize(); }
-void ReFinalize::visitBrOnExn(BrOnExn* curr) {
-  curr->finalize();
-  if (curr->exnref->type == Type::unreachable) {
-    replaceUntaken(curr->exnref, nullptr);
-  } else {
-    updateBreakValueType(curr->name, curr->sent);
-  }
-}
 void ReFinalize::visitNop(Nop* curr) { curr->finalize(); }
 void ReFinalize::visitUnreachable(Unreachable* curr) { curr->finalize(); }
 void ReFinalize::visitPop(Pop* curr) { curr->finalize(); }
@@ -155,7 +148,11 @@ void ReFinalize::visitRefTest(RefTest* curr) { curr->finalize(); }
 void ReFinalize::visitRefCast(RefCast* curr) { curr->finalize(); }
 void ReFinalize::visitBrOnCast(BrOnCast* curr) {
   curr->finalize();
-  WASM_UNREACHABLE("TODO (gc): br_on_cast");
+  if (curr->type == Type::unreachable) {
+    replaceUntaken(curr->ref, nullptr);
+  } else {
+    updateBreakValueType(curr->name, curr->getCastType());
+  }
 }
 void ReFinalize::visitRttCanon(RttCanon* curr) { curr->finalize(); }
 void ReFinalize::visitRttSub(RttSub* curr) { curr->finalize(); }

@@ -146,10 +146,6 @@ struct SimplifyLocals
         self->unoptimizableBlocks.insert(target);
       }
       // TODO: we could use this info to stop gathering data on these blocks
-    } else if (auto* br = curr->dynCast<BrOnExn>()) {
-      // We cannot optimize the block this targets to have a return value, as
-      // the br_on_exn doesn't support a change to the block's type
-      self->unoptimizableBlocks.insert(br->name);
     }
     self->sinkables.clear();
   }
@@ -425,8 +421,8 @@ struct SimplifyLocals
     if (set->isTee()) {
       return false;
     }
-    // We cannot move expressions containing exnref.pops that are not enclosed
-    // in 'catch', because 'exnref.pop' should follow right after 'catch'.
+    // We cannot move expressions containing pops that are not enclosed in
+    // 'catch', because 'pop' should follow right after 'catch'.
     FeatureSet features = this->getModule()->features;
     if (features.hasExceptionHandling() &&
         EffectAnalyzer(this->getPassOptions(), features, set->value)

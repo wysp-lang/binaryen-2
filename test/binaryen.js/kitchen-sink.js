@@ -74,9 +74,6 @@ function test_types() {
   console.log("  // BinaryenTypeExternref: " + binaryen.externref);
   console.log("  //", binaryen.expandType(binaryen.externref).join(","));
 
-  console.log("  // BinaryenTypeExnref: " + binaryen.exnref);
-  console.log("  //", binaryen.expandType(binaryen.exnref).join(","));
-
   console.log("  // BinaryenTypeAnyref: " + binaryen.anyref);
   console.log("  //", binaryen.expandType(binaryen.anyref).join(","));
 
@@ -85,6 +82,9 @@ function test_types() {
 
   console.log("  // BinaryenTypeI31ref: " + binaryen.i31ref);
   console.log("  //", binaryen.expandType(binaryen.i31ref).join(","));
+
+  console.log("  // BinaryenTypeDataref: " + binaryen.dataref);
+  console.log("  //", binaryen.expandType(binaryen.dataref).join(","));
 
   console.log("  // BinaryenTypeAuto: " + binaryen.auto);
 
@@ -164,7 +164,6 @@ function test_ids() {
   console.log("TryId: " + binaryen.TryId);
   console.log("ThrowId: " + binaryen.ThrowId);
   console.log("RethrowId: " + binaryen.RethrowId);
-  console.log("BrOnExnId: " + binaryen.BrOnExnId);
   console.log("TupleMakeId: " + binaryen.TupleMakeId);
   console.log("TupleExtractId: " + binaryen.TupleExtractId);
   console.log("I31NewId: " + binaryen.I31NewId);
@@ -281,8 +280,6 @@ function test_core() {
     module.i32x4.all_true(module.v128.const(v128_bytes)),
     module.i32x4.bitmask(module.v128.const(v128_bytes)),
     module.i64x2.neg(module.v128.const(v128_bytes)),
-    module.i64x2.any_true(module.v128.const(v128_bytes)),
-    module.i64x2.all_true(module.v128.const(v128_bytes)),
     module.f32x4.abs(module.v128.const(v128_bytes)),
     module.f32x4.neg(module.v128.const(v128_bytes)),
     module.f32x4.sqrt(module.v128.const(v128_bytes)),
@@ -549,18 +546,8 @@ function test_core() {
     // Exception handling
     module.try(
       module.throw("a-event", [module.i32.const(0)]),
-      module.block(null, [
-        module.local.set(5, module.exnref.pop()),
-        module.drop(
-          module.block("try-block", [
-            module.rethrow(
-              module.br_on_exn("try-block", "a-event",
-                module.local.get(5, binaryen.exnref)),
-            )
-          ], binaryen.i32)
-        )
-      ]
-      )
+      ["a-event"],
+      [module.drop(module.i32.pop())]
     ),
 
     // Atomics
@@ -603,10 +590,10 @@ function test_core() {
     module.v128.pop(),
     module.funcref.pop(),
     module.externref.pop(),
-    module.exnref.pop(),
     module.anyref.pop(),
     module.eqref.pop(),
     module.i31ref.pop(),
+    module.dataref.pop(),
 
     // Memory
     module.memory.size(),
@@ -654,7 +641,7 @@ function test_core() {
   var body = module.block("the-body", [ nothing, makeInt32(42) ]);
 
   // Create the function
-  var sinker = module.addFunction("kitchen()sinker", iIfF, binaryen.i32, [ binaryen.i32, binaryen.exnref ], body);
+  var sinker = module.addFunction("kitchen()sinker", iIfF, binaryen.i32, [ binaryen.i32 ], body);
 
   // Create a global
   var initExpr = module.i32.const(1);
@@ -1035,7 +1022,16 @@ function test_for_each() {
   var expected_data = ["hello, world", "segment data 2"];
   var expected_passive = [false, false];
 
-  var global = module.addGlobal("a-global", binaryen.i32, false, module.i32.const(expected_offsets[1]))
+  var glos = [
+    module.addGlobal("a-global", binaryen.i32, false, module.i32.const(expected_offsets[1])),
+    module.addGlobal("a-global2", binaryen.i32, false, module.i32.const(2)),
+    module.addGlobal("a-global3", binaryen.i32, false, module.i32.const(3))
+  ];
+
+  for (i = 0; i < module.getNumGlobals(); i++) {
+    assert(module.getGlobalByIndex(i) === glos[i]);
+  }
+
   module.setMemory(1, 256, "mem", [
     {
       passive: expected_passive[0],

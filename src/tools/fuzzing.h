@@ -327,28 +327,28 @@ private:
     }
     SmallVector<Type, 2> options;
     options.push_back(type); // includes itself
-    TODO_SINGLE_COMPOUND(type);
-    switch (type.getBasic()) {
-      case Type::anyref:
-        if (wasm.features.hasReferenceTypes()) {
-          options.push_back(Type::funcref);
-          options.push_back(Type::externref);
-          if (wasm.features.hasExceptionHandling()) {
-            options.push_back(Type::exnref);
+    // TODO: interesting uses of typed function types
+    // TODO: interesting subtypes of compound types
+    if (type.isBasic()) {
+      switch (type.getBasic()) {
+        case Type::anyref:
+          if (wasm.features.hasReferenceTypes()) {
+            options.push_back(Type::funcref);
+            options.push_back(Type::externref);
+            if (wasm.features.hasGC()) {
+              options.push_back(Type::eqref);
+              options.push_back(Type::i31ref);
+            }
           }
+          break;
+        case Type::eqref:
           if (wasm.features.hasGC()) {
-            options.push_back(Type::eqref);
             options.push_back(Type::i31ref);
           }
-        }
-        break;
-      case Type::eqref:
-        if (wasm.features.hasGC()) {
-          options.push_back(Type::i31ref);
-        }
-        break;
-      default:
-        break;
+          break;
+        default:
+          break;
+      }
     }
     return pick(options);
   }
@@ -868,8 +868,6 @@ private:
 
       void visitBreak(Break* curr) { replaceIfInvalid(curr->name); }
 
-      void visitBrOnExn(BrOnExn* curr) { replaceIfInvalid(curr->name); }
-
       bool replaceIfInvalid(Name target) {
         if (!hasBreakTarget(target)) {
           // There is no valid parent, replace with something trivially safe.
@@ -1120,6 +1118,7 @@ private:
       options.add(FeatureSet::ReferenceTypes | FeatureSet::GC,
                   &Self::makeI31New);
     }
+    // TODO: struct.get and other GC things
     return (this->*pick(options))(type);
   }
 
@@ -1474,7 +1473,7 @@ private:
     for (const auto& type : target->sig.params) {
       args.push_back(make(type));
     }
-    auto targetType = Type(HeapType(target->sig), /* nullable = */ true);
+    auto targetType = Type(HeapType(target->sig), Nullable);
     // TODO: half the time make a completely random item with that type.
     return builder.makeCallRef(
       builder.makeRefFunc(target->name, targetType), args, type, isReturn);
@@ -1644,10 +1643,10 @@ private:
       }
       case Type::funcref:
       case Type::externref:
-      case Type::exnref:
       case Type::anyref:
       case Type::eqref:
       case Type::i31ref:
+      case Type::dataref:
       case Type::none:
       case Type::unreachable:
         WASM_UNREACHABLE("invalid type");
@@ -1750,10 +1749,10 @@ private:
       }
       case Type::funcref:
       case Type::externref:
-      case Type::exnref:
       case Type::anyref:
       case Type::eqref:
       case Type::i31ref:
+      case Type::dataref:
       case Type::none:
       case Type::unreachable:
         WASM_UNREACHABLE("invalid type");
@@ -1886,10 +1885,10 @@ private:
           case Type::v128:
           case Type::funcref:
           case Type::externref:
-          case Type::exnref:
           case Type::anyref:
           case Type::eqref:
           case Type::i31ref:
+          case Type::dataref:
           case Type::none:
           case Type::unreachable:
             WASM_UNREACHABLE("invalid type");
@@ -1933,10 +1932,10 @@ private:
           case Type::v128:
           case Type::funcref:
           case Type::externref:
-          case Type::exnref:
           case Type::anyref:
           case Type::eqref:
           case Type::i31ref:
+          case Type::dataref:
           case Type::none:
           case Type::unreachable:
             WASM_UNREACHABLE("unexpected type");
@@ -2005,10 +2004,10 @@ private:
           case Type::v128:
           case Type::funcref:
           case Type::externref:
-          case Type::exnref:
           case Type::anyref:
           case Type::eqref:
           case Type::i31ref:
+          case Type::dataref:
           case Type::none:
           case Type::unreachable:
             WASM_UNREACHABLE("unexpected type");
@@ -2034,10 +2033,10 @@ private:
           case Type::v128:
           case Type::funcref:
           case Type::externref:
-          case Type::exnref:
           case Type::anyref:
           case Type::eqref:
           case Type::i31ref:
+          case Type::dataref:
           case Type::none:
           case Type::unreachable:
             WASM_UNREACHABLE("unexpected type");
@@ -2062,7 +2061,7 @@ private:
         if (!wasm.functions.empty() && !oneIn(wasm.functions.size())) {
           target = pick(wasm.functions).get();
         }
-        auto type = Type(HeapType(target->sig), /* nullable = */ true);
+        auto type = Type(HeapType(target->sig), Nullable);
         return builder.makeRefFunc(target->name, type);
       }
       if (type == Type::i31ref) {
@@ -2071,11 +2070,14 @@ private:
       if (oneIn(2) && type.isNullable()) {
         return builder.makeRefNull(type);
       }
+      if (type == Type::dataref) {
+        WASM_UNREACHABLE("TODO: dataref");
+      }
       // TODO: randomize the order
       for (auto& func : wasm.functions) {
         // FIXME: RefFunc type should be non-nullable, but we emit nullable
         //        types for now.
-        if (type == Type(HeapType(func->sig), /* nullable = */ true)) {
+        if (type == Type(HeapType(func->sig), Nullable)) {
           return builder.makeRefFunc(func->name, type);
         }
       }
@@ -2164,17 +2166,15 @@ private:
                                     AnyTrueVecI16x8,
                                     AllTrueVecI16x8,
                                     AnyTrueVecI32x4,
-                                    AllTrueVecI32x4,
-                                    AnyTrueVecI64x2,
-                                    AllTrueVecI64x2),
+                                    AllTrueVecI32x4),
                                make(Type::v128)});
           }
           case Type::funcref:
           case Type::externref:
-          case Type::exnref:
           case Type::anyref:
           case Type::eqref:
           case Type::i31ref:
+          case Type::dataref:
             return makeTrivial(type);
           case Type::none:
           case Type::unreachable:
@@ -2319,10 +2319,10 @@ private:
       }
       case Type::funcref:
       case Type::externref:
-      case Type::exnref:
       case Type::anyref:
       case Type::eqref:
       case Type::i31ref:
+      case Type::dataref:
       case Type::none:
       case Type::unreachable:
         WASM_UNREACHABLE("unexpected type");
@@ -2561,10 +2561,10 @@ private:
       }
       case Type::funcref:
       case Type::externref:
-      case Type::exnref:
       case Type::anyref:
       case Type::eqref:
       case Type::i31ref:
+      case Type::dataref:
       case Type::none:
       case Type::unreachable:
         WASM_UNREACHABLE("unexpected type");
@@ -2768,10 +2768,10 @@ private:
       case Type::v128:
       case Type::funcref:
       case Type::externref:
-      case Type::exnref:
       case Type::anyref:
       case Type::eqref:
       case Type::i31ref:
+      case Type::dataref:
       case Type::none:
       case Type::unreachable:
         WASM_UNREACHABLE("unexpected type");
@@ -3032,13 +3032,12 @@ private:
         .add(FeatureSet::MVP, Type::i32, Type::i64, Type::f32, Type::f64)
         .add(FeatureSet::SIMD, Type::v128)
         .add(FeatureSet::ReferenceTypes, Type::funcref, Type::externref)
-        .add(FeatureSet::ReferenceTypes | FeatureSet::ExceptionHandling,
-             Type::exnref)
         .add(FeatureSet::ReferenceTypes | FeatureSet::GC,
              Type::anyref,
              Type::eqref,
              Type::i31ref));
     // TODO: emit typed function references types
+    // TODO: dataref
   }
 
   Type getSingleConcreteType() { return pick(getSingleConcreteTypes()); }
@@ -3047,12 +3046,11 @@ private:
     return items(
       FeatureOptions<Type>()
         .add(FeatureSet::ReferenceTypes, Type::funcref, Type::externref)
-        .add(FeatureSet::ReferenceTypes | FeatureSet::ExceptionHandling,
-             Type::exnref)
         .add(FeatureSet::ReferenceTypes | FeatureSet::GC,
              Type::anyref,
              Type::eqref,
              Type::i31ref));
+    // TODO: dataref
   }
 
   Type getReferenceType() { return pick(getReferenceTypes()); }
@@ -3120,9 +3118,7 @@ private:
       loggableTypes = items(
         FeatureOptions<Type>()
           .add(FeatureSet::MVP, Type::i32, Type::i64, Type::f32, Type::f64)
-          .add(FeatureSet::SIMD, Type::v128)
-          .add(FeatureSet::ReferenceTypes | FeatureSet::ExceptionHandling,
-               Type::exnref));
+          .add(FeatureSet::SIMD, Type::v128));
     }
     return loggableTypes;
   }

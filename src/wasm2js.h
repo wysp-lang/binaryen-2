@@ -404,7 +404,7 @@ Ref Wasm2JSBuilder::processWasm(Module* wasm, Name funcName) {
 
 #ifndef NDEBUG
   if (!WasmValidator().validate(*wasm)) {
-    WasmPrinter::printModule(wasm);
+    std::cout << *wasm << '\n';
     Fatal() << "error in validating wasm2js output";
   }
 #endif
@@ -1984,6 +1984,7 @@ Ref Wasm2JSBuilder::processFunctionBody(Module* m,
     }
 
     Ref visitNop(Nop* curr) { return ValueBuilder::makeToplevel(); }
+    Ref visitPrefetch(Prefetch* curr) { return ValueBuilder::makeToplevel(); }
 
     Ref visitUnreachable(Unreachable* curr) {
       return ValueBuilder::makeCall(ABORT_FUNC);
@@ -2171,10 +2172,6 @@ Ref Wasm2JSBuilder::processFunctionBody(Module* m,
       WASM_UNREACHABLE("unimp");
     }
     Ref visitRethrow(Rethrow* curr) {
-      unimplemented(curr);
-      WASM_UNREACHABLE("unimp");
-    }
-    Ref visitBrOnExn(BrOnExn* curr) {
       unimplemented(curr);
       WASM_UNREACHABLE("unimp");
     }

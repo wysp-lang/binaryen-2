@@ -1,4 +1,6 @@
 (module
+  (event $e (attr 0) (param i32))
+
   (func $test
     (local $x i32)
     (local $y i64)
@@ -6,7 +8,6 @@
     (local $w f64)
     (local $F funcref)
     (local $X externref)
-    (local $E exnref)
     (local $S v128)
 
     (drop (local.get $x))
@@ -15,7 +16,6 @@
     (drop (local.get $w))
     (drop (local.get $F))
     (drop (local.get $X))
-    (drop (local.get $E))
 
     (drop (local.get $x))
     (drop (local.get $y))
@@ -23,7 +23,6 @@
     (drop (local.get $w))
     (drop (local.get $F))
     (drop (local.get $X))
-    (drop (local.get $E))
 
     (local.set $x (i32.const 1))
     (local.set $y (i64.const 2))
@@ -31,7 +30,6 @@
     (local.set $w (f64.const 4.321))
     (local.set $F (ref.func $test))
     (local.set $X (local.get $X))
-    (local.set $E (local.get $E))
 
     (local.set $x (i32.const 11))
     (local.set $y (i64.const 22))
@@ -39,25 +37,12 @@
     (local.set $w (f64.const 44.321))
     (local.set $F (local.get $F))
     (local.set $X (local.get $X))
-    (local.set $E (local.get $E))
 
     ;; Pop instructions should not be instrumented
     (try
       (do)
-      (catch
-        (local.set $F (pop funcref))
-      )
-    )
-    (try
-      (do)
-      (catch
-        (local.set $X (pop externref))
-      )
-    )
-    (try
-      (do)
-      (catch
-        (local.set $E (pop exnref))
+      (catch $e
+        (local.set $x (pop i32))
       )
     )
 

@@ -42,7 +42,7 @@ def get_changelog_version():
 def run_help_tests():
     print('[ checking --help is useful... ]\n')
 
-    not_executable_suffix = ['.txt', '.js', '.ilk', '.pdb', '.dll', '.wasm', '.manifest']
+    not_executable_suffix = ['.txt', '.js', '.ilk', '.pdb', '.dll', '.wasm', '.manifest', 'binaryen-lit']
     bin_files = [os.path.join(shared.options.binaryen_bin, f) for f in os.listdir(shared.options.binaryen_bin)]
     executables = [f for f in bin_files if os.path.isfile(f) and not any(f.endswith(s) for s in not_executable_suffix)]
     executables = sorted(executables)
@@ -159,8 +159,8 @@ def run_wasm_reduce_tests():
     for t in shared.get_tests(shared.get_test_dir('reduce'), ['.wast']):
         print('..', os.path.basename(t))
         # convert to wasm
-        support.run_command(shared.WASM_AS + [t, '-o', 'a.wasm'])
-        support.run_command(shared.WASM_REDUCE + ['a.wasm', '--command=%s b.wasm --fuzz-exec --detect-features ' % shared.WASM_OPT[0], '-t', 'b.wasm', '-w', 'c.wasm', '--timeout=4'])
+        support.run_command(shared.WASM_AS + [t, '-o', 'a.wasm', '-all'])
+        support.run_command(shared.WASM_REDUCE + ['a.wasm', '--command=%s b.wasm --fuzz-exec -all ' % shared.WASM_OPT[0], '-t', 'b.wasm', '-w', 'c.wasm', '--timeout=4'])
         expected = t + '.txt'
         support.run_command(shared.WASM_DIS + ['c.wasm', '-o', 'a.wat'])
         with open('a.wat') as seen:
@@ -329,10 +329,10 @@ def run_unittest():
 
 
 def run_lit():
-    lit_script = os.path.join(shared.options.binaryen_root, 'scripts', 'lit_wrapper.py')
-    lit_cfg = os.path.join(shared.options.binaryen_build, 'test', 'lit')
+    lit_script = os.path.join(shared.options.binaryen_bin, 'binaryen-lit')
+    lit_tests = os.path.join(shared.options.binaryen_root, 'test', 'lit')
     # lit expects to be run as its own executable
-    cmd = [sys.executable, lit_script, lit_cfg, '-vv']
+    cmd = [sys.executable, lit_script, lit_tests, '-vv']
     result = subprocess.run(cmd)
     if result.returncode != 0:
         shared.num_failures += 1

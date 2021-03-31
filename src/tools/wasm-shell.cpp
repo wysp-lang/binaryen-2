@@ -28,7 +28,6 @@
 #include "support/command-line.h"
 #include "support/file.h"
 #include "wasm-interpreter.h"
-#include "wasm-printing.h"
 #include "wasm-s-parser.h"
 #include "wasm-validator.h"
 
@@ -209,7 +208,7 @@ static void run_asserts(Name moduleName,
       } catch (const TrapException&) {
         trapped = true;
       } catch (const WasmException& e) {
-        std::cout << "[exception thrown: " << e.exn << "]" << std::endl;
+        std::cout << "[exception thrown: " << e << "]" << std::endl;
         trapped = true;
       }
       if (id == ASSERT_RETURN) {
@@ -311,7 +310,7 @@ int main(int argc, const char* argv[]) {
         modules[moduleName]->features = FeatureSet::All;
         bool valid = WasmValidator().validate(*modules[moduleName]);
         if (!valid) {
-          WasmPrinter::printModule(modules[moduleName].get());
+          std::cout << *modules[moduleName] << '\n';
           Fatal() << "module failed to validate, see above";
         }
         run_asserts(moduleName,

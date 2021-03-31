@@ -30,7 +30,10 @@
 namespace wasm {
 
 class Literals;
-struct ExceptionPackage;
+struct GCData;
+// Subclass the vector type so that this is not easily confused with a vector of
+// types (which could be confusing on the Literal constructor).
+struct RttSupers : std::vector<Type> {};
 
 class Literal {
   // store only integers, whose bits are deterministic. floats
@@ -41,8 +44,24 @@ class Literal {
     uint8_t v128[16];
     // funcref function name. `isNull()` indicates a `null` value.
     Name func;
-    // exnref package. `nullptr` indicates a `null` value.
-    std::unique_ptr<ExceptionPackage> exn;
+    // A reference to GC data, either a Struct or an Array. For both of those
+    // we store the referred data as a Literals object (which is natural for an
+    // Array, and for a Struct, is just the fields in order). The type is used
+    // to indicate whether this is a Struct or an Array, and of what type.
+    std::shared_ptr<GCData> gcData;
+    // RTT values are "structural" in that the MVP doc says that multiple
+    // invocations of ref.canon return things that are observably identical, and
+    // the same is true for ref.sub. That is, what matters is the types; there
+    // is no unique identifier created in each ref.canon/sub. To track the
+    // types, we maintain a simple vector of the supertypes. Thus, an rtt.canon
+    // of type A will have an empty vector; an rtt.sub of type B of that initial
+    // canon would have a vector of size 1 containing A; a subsequent rtt.sub
+    // would have A, B, and so forth.
+    // (This encoding is very inefficient and not at all what a production VM
+    // would do, but it is simple.)
+    // The unique_ptr here is to avoid increasing the size of the union as well
+    // as the Literal class itself.
+    std::unique_ptr<RttSupers> rttSupers;
     // TODO: Literals of type `externref` can only be `null` currently but we
     // will need to represent extern values eventually, to
     // 1) run the spec tests and fuzzer with reference types enabled and
@@ -55,7 +74,7 @@ public:
 
   Literal() : v128(), type(Type::none) {}
   explicit Literal(Type type);
-  explicit Literal(Type::BasicID typeId) : Literal(Type(typeId)) {}
+  explicit Literal(Type::BasicType type) : Literal(Type(type)) {}
   explicit Literal(int32_t init) : i32(init), type(Type::i32) {}
   explicit Literal(uint32_t init) : i32(init), type(Type::i32) {}
   explicit Literal(int64_t init) : i64(init), type(Type::i64) {}
@@ -72,15 +91,11 @@ public:
   explicit Literal(const std::array<Literal, 4>&);
   explicit Literal(const std::array<Literal, 2>&);
   explicit Literal(Name func, Type type) : func(func), type(type) {}
-  explicit Literal(std::unique_ptr<ExceptionPackage>&& exn)
-    : exn(std::move(exn)), type(Type::exnref) {}
+  explicit Literal(std::shared_ptr<GCData> gcData, Type type);
+  explicit Literal(std::unique_ptr<RttSupers>&& rttSupers, Type type);
   Literal(const Literal& other);
   Literal& operator=(const Literal& other);
-  ~Literal() {
-    if (type.isException()) {
-      exn.~unique_ptr();
-    }
-  }
+  ~Literal();
 
   bool isConcrete() const { return type != Type::none; }
   bool isNone() const { return type == Type::none; }
@@ -89,8 +104,8 @@ public:
       if (type.isFunction()) {
         return func.isNull();
       }
-      if (type.isException()) {
-        return !exn;
+      if (isGCData()) {
+        return !gcData;
       }
       return true;
     }
@@ -156,6 +171,7 @@ public:
         WASM_UNREACHABLE("unexpected type");
     }
   }
+  bool isGCData() const { return type.isStruct() || type.isArray(); }
 
   static Literals makeZeros(Type type);
   static Literals makeOnes(Type type);
@@ -236,9 +252,6 @@ public:
   static Literal makeFunc(Name func, Type type = Type::funcref) {
     return Literal(func, type);
   }
-  static Literal makeExn(std::unique_ptr<ExceptionPackage>&& exn) {
-    return Literal(std::move(exn));
-  }
   static Literal makeI31(int32_t value) {
     auto lit = Literal(Type::i31ref);
     lit.i32 = value & 0x7fffffff;
@@ -255,7 +268,7 @@ public:
     return i32;
   }
   int32_t geti31(bool signed_ = true) const {
-    assert(type == Type::i31ref);
+    assert(type.getHeapType() == HeapType::i31);
     return signed_ ? (i32 << 1) >> 1 : i32;
   }
   int64_t geti64() const {
@@ -275,7 +288,8 @@ public:
     assert(type.isFunction() && !func.isNull());
     return func;
   }
-  ExceptionPackage getExceptionPackage() const;
+  std::shared_ptr<GCData> getGCData() const;
+  const RttSupers& getRttSupers() const;
 
   // careful!
   int32_t* geti32Ptr() {
@@ -465,6 +479,7 @@ public:
   Literal leUI32x4(const Literal& other) const;
   Literal geSI32x4(const Literal& other) const;
   Literal geUI32x4(const Literal& other) const;
+  Literal eqI64x2(const Literal& other) const;
   Literal eqF32x4(const Literal& other) const;
   Literal neF32x4(const Literal& other) const;
   Literal ltF32x4(const Literal& other) const;
@@ -549,8 +564,6 @@ public:
   Literal extMulLowUI32x4(const Literal& other) const;
   Literal extMulHighUI32x4(const Literal& other) const;
   Literal negI64x2() const;
-  Literal anyTrueI64x2() const;
-  Literal allTrueI64x2() const;
   Literal shlI64x2(const Literal& other) const;
   Literal shrSI64x2(const Literal& other) const;
   Literal shrUI64x2(const Literal& other) const;
@@ -613,6 +626,11 @@ public:
   Literal widenHighUToVecI32x4() const;
   Literal swizzleVec8x16(const Literal& other) const;
 
+  // Checks if an RTT value is a sub-rtt of another, that is, whether GC data
+  // with this object's RTT can be successfuly cast using the other RTT
+  // according to the wasm rules for that.
+  bool isSubRtt(const Literal& other) const;
+
 private:
   Literal addSatSI8(const Literal& other) const;
   Literal addSatUI8(const Literal& other) const;
@@ -639,7 +657,9 @@ public:
       assert(lit.isConcrete());
     }
 #endif
-  };
+  }
+  Literals(size_t initialSize) : SmallVector(initialSize) {}
+
   Type getType() {
     std::vector<Type> types;
     for (auto& val : *this) {
@@ -651,22 +671,16 @@ public:
   bool isConcrete() { return size() != 0; }
 };
 
-// A struct for a thrown exception, which includes a tag (event) and thrown
-// values
-struct ExceptionPackage {
-  Name event;
-  Literals values;
-  bool operator==(const ExceptionPackage& other) const {
-    return event == other.event && values == other.values;
-  }
-  bool operator!=(const ExceptionPackage& other) const {
-    return !(*this == other);
-  }
-};
-
 std::ostream& operator<<(std::ostream& o, wasm::Literal literal);
 std::ostream& operator<<(std::ostream& o, wasm::Literals literals);
-std::ostream& operator<<(std::ostream& o, const ExceptionPackage& exn);
+
+// A GC Struct or Array is a set of values with a run-time type saying what it
+// is.
+struct GCData {
+  Literal rtt;
+  Literals values;
+  GCData(Literal rtt, Literals values) : rtt(rtt), values(values) {}
+};
 
 } // namespace wasm
 
@@ -681,12 +695,6 @@ template<> struct hash<wasm::Literal> {
       }
       if (a.type.isFunction()) {
         wasm::rehash(digest, a.getFunc());
-        return digest;
-      }
-      if (a.type.isException()) {
-        auto exn = a.getExceptionPackage();
-        wasm::rehash(digest, exn.event);
-        wasm::rehash(digest, exn.values);
         return digest;
       }
       // other non-null reference type literals cannot represent concrete
@@ -716,9 +724,9 @@ template<> struct hash<wasm::Literal> {
           return digest;
         case wasm::Type::funcref:
         case wasm::Type::externref:
-        case wasm::Type::exnref:
         case wasm::Type::anyref:
         case wasm::Type::eqref:
+        case wasm::Type::dataref:
           return hashRef();
         case wasm::Type::i31ref:
           wasm::rehash(digest, a.geti31(true));
@@ -730,7 +738,12 @@ template<> struct hash<wasm::Literal> {
     } else if (a.type.isRef()) {
       return hashRef();
     } else if (a.type.isRtt()) {
-      WASM_UNREACHABLE("TODO: rtt literals");
+      const auto& supers = a.getRttSupers();
+      wasm::rehash(digest, supers.size());
+      for (auto super : supers) {
+        wasm::rehash(digest, super.getID());
+      }
+      return digest;
     }
     WASM_UNREACHABLE("unexpected type");
   }
@@ -766,10 +779,10 @@ template<> struct less<wasm::Literal> {
         return memcmp(a.getv128Ptr(), b.getv128Ptr(), 16) < 0;
       case wasm::Type::funcref:
       case wasm::Type::externref:
-      case wasm::Type::exnref:
       case wasm::Type::anyref:
       case wasm::Type::eqref:
       case wasm::Type::i31ref:
+      case wasm::Type::dataref:
       case wasm::Type::none:
       case wasm::Type::unreachable:
         return false;

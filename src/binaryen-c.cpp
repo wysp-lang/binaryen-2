@@ -29,7 +29,6 @@
 #include "wasm-binary.h"
 #include "wasm-builder.h"
 #include "wasm-interpreter.h"
-#include "wasm-printing.h"
 #include "wasm-s-parser.h"
 #include "wasm-validator.h"
 #include "wasm.h"
@@ -72,13 +71,14 @@ BinaryenLiteral toBinaryenLiteral(Literal x) {
       ret.func = x.isNull() ? nullptr : x.getFunc().c_str();
       break;
     case Type::externref:
-    case Type::exnref:
     case Type::anyref:
     case Type::eqref:
       assert(x.isNull() && "unexpected non-null reference type literal");
       break;
     case Type::i31ref:
       WASM_UNREACHABLE("TODO: i31ref");
+    case Type::dataref:
+      WASM_UNREACHABLE("TODO: dataref");
     case Type::none:
     case Type::unreachable:
       WASM_UNREACHABLE("unexpected type");
@@ -101,12 +101,13 @@ Literal fromBinaryenLiteral(BinaryenLiteral x) {
     case Type::funcref:
       return Literal::makeFunc(x.func);
     case Type::externref:
-    case Type::exnref:
     case Type::anyref:
     case Type::eqref:
       return Literal::makeNull(Type(x.type));
     case Type::i31ref:
       WASM_UNREACHABLE("TODO: i31ref");
+    case Type::dataref:
+      WASM_UNREACHABLE("TODO: dataref");
     case Type::none:
     case Type::unreachable:
       WASM_UNREACHABLE("unexpected type");
@@ -140,10 +141,10 @@ BinaryenType BinaryenTypeFloat64(void) { return Type::f64; }
 BinaryenType BinaryenTypeVec128(void) { return Type::v128; }
 BinaryenType BinaryenTypeFuncref(void) { return Type::funcref; }
 BinaryenType BinaryenTypeExternref(void) { return Type::externref; }
-BinaryenType BinaryenTypeExnref(void) { return Type::exnref; }
 BinaryenType BinaryenTypeAnyref(void) { return Type::anyref; }
 BinaryenType BinaryenTypeEqref(void) { return Type::eqref; }
 BinaryenType BinaryenTypeI31ref(void) { return Type::i31ref; }
+BinaryenType BinaryenTypeDataref(void) { return Type::dataref; }
 BinaryenType BinaryenTypeUnreachable(void) { return Type::unreachable; }
 BinaryenType BinaryenTypeAuto(void) { return uintptr_t(-1); }
 
@@ -581,8 +582,6 @@ BinaryenOp BinaryenDotSVecI16x8ToVecI32x4(void) {
   return DotSVecI16x8ToVecI32x4;
 }
 BinaryenOp BinaryenNegVecI64x2(void) { return NegVecI64x2; }
-BinaryenOp BinaryenAnyTrueVecI64x2(void) { return AnyTrueVecI64x2; }
-BinaryenOp BinaryenAllTrueVecI64x2(void) { return AllTrueVecI64x2; }
 BinaryenOp BinaryenShlVecI64x2(void) { return ShlVecI64x2; }
 BinaryenOp BinaryenShrSVecI64x2(void) { return ShrSVecI64x2; }
 BinaryenOp BinaryenShrUVecI64x2(void) { return ShrUVecI64x2; }
@@ -1203,10 +1202,20 @@ BinaryenExpressionRef BinaryenRefEq(BinaryenModuleRef module,
 
 BinaryenExpressionRef BinaryenTry(BinaryenModuleRef module,
                                   BinaryenExpressionRef body,
-                                  BinaryenExpressionRef catchBody) {
+                                  const char** catchEvents_,
+                                  BinaryenIndex numCatchEvents,
+                                  BinaryenExpressionRef* catchBodies_,
+                                  BinaryenIndex numCatchBodies) {
+  std::vector<Name> catchEvents;
+  std::vector<Expression*> catchBodies;
+  for (BinaryenIndex i = 0; i < numCatchEvents; i++) {
+    catchEvents.push_back(catchEvents_[i]);
+  }
+  for (BinaryenIndex i = 0; i < numCatchBodies; i++) {
+    catchBodies.push_back((Expression*)catchBodies_[i]);
+  }
   return static_cast<Expression*>(
-    Builder(*(Module*)module)
-      .makeTry((Expression*)body, (Expression*)catchBody));
+    Builder(*(Module*)module).makeTry(body, catchEvents, catchBodies));
 }
 
 BinaryenExpressionRef BinaryenThrow(BinaryenModuleRef module,
@@ -1222,20 +1231,8 @@ BinaryenExpressionRef BinaryenThrow(BinaryenModuleRef module,
 }
 
 BinaryenExpressionRef BinaryenRethrow(BinaryenModuleRef module,
-                                      BinaryenExpressionRef exnref) {
-  return static_cast<Expression*>(
-    Builder(*(Module*)module).makeRethrow((Expression*)exnref));
-}
-
-BinaryenExpressionRef BinaryenBrOnExn(BinaryenModuleRef module,
-                                      const char* name,
-                                      const char* eventName,
-                                      BinaryenExpressionRef exnref) {
-  auto* wasm = (Module*)module;
-  auto* event = wasm->getEventOrNull(eventName);
-  assert(event && "br_on_exn's event must exist");
-  return static_cast<Expression*>(
-    Builder(*wasm).makeBrOnExn(name, event, (Expression*)exnref));
+                                      BinaryenIndex depth) {
+  return static_cast<Expression*>(Builder(*(Module*)module).makeRethrow(depth));
 }
 
 BinaryenExpressionRef BinaryenI31New(BinaryenModuleRef module,
@@ -1276,8 +1273,7 @@ void BinaryenExpressionSetType(BinaryenExpressionRef expr, BinaryenType type) {
   ((Expression*)expr)->type = Type(type);
 }
 void BinaryenExpressionPrint(BinaryenExpressionRef expr) {
-  WasmPrinter::printExpression((Expression*)expr, std::cout);
-  std::cout << '\n';
+  std::cout << *(Expression*)expr << '\n';
 }
 void BinaryenExpressionFinalize(BinaryenExpressionRef expr) {
   ReFinalizeNode().visit((Expression*)expr);
@@ -2759,17 +2755,101 @@ void BinaryenTrySetBody(BinaryenExpressionRef expr,
   assert(bodyExpr);
   static_cast<Try*>(expression)->body = (Expression*)bodyExpr;
 }
-BinaryenExpressionRef BinaryenTryGetCatchBody(BinaryenExpressionRef expr) {
+BinaryenIndex BinaryenTryGetNumCatchEvents(BinaryenExpressionRef expr) {
   auto* expression = (Expression*)expr;
   assert(expression->is<Try>());
-  return static_cast<Try*>(expression)->catchBody;
+  return static_cast<Try*>(expression)->catchEvents.size();
 }
-void BinaryenTrySetCatchBody(BinaryenExpressionRef expr,
-                             BinaryenExpressionRef catchBodyExpr) {
+BinaryenIndex BinaryenTryGetNumCatchBodies(BinaryenExpressionRef expr) {
   auto* expression = (Expression*)expr;
   assert(expression->is<Try>());
-  assert(catchBodyExpr);
-  static_cast<Try*>(expression)->catchBody = (Expression*)catchBodyExpr;
+  return static_cast<Try*>(expression)->catchBodies.size();
+}
+const char* BinaryenTryGetCatchEventAt(BinaryenExpressionRef expr,
+                                       BinaryenIndex index) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<Try>());
+  assert(index < static_cast<Try*>(expression)->catchEvents.size());
+  return static_cast<Try*>(expression)->catchEvents[index].c_str();
+}
+void BinaryenTrySetCatchEventAt(BinaryenExpressionRef expr,
+                                BinaryenIndex index,
+                                const char* catchEvent) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<Try>());
+  assert(index < static_cast<Try*>(expression)->catchEvents.size());
+  assert(catchEvent);
+  static_cast<Try*>(expression)->catchEvents[index] = catchEvent;
+}
+BinaryenIndex BinaryenTryAppendCatchEvent(BinaryenExpressionRef expr,
+                                          const char* catchEvent) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<Try>());
+  assert(catchEvent);
+  auto& list = static_cast<Try*>(expression)->catchEvents;
+  auto index = list.size();
+  list.push_back(catchEvent);
+  return index;
+}
+void BinaryenTryInsertCatchEventAt(BinaryenExpressionRef expr,
+                                   BinaryenIndex index,
+                                   const char* catchEvent) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<Try>());
+  assert(catchEvent);
+  static_cast<Try*>(expression)->catchEvents.insertAt(index, catchEvent);
+}
+const char* BinaryenTryRemoveCatchEventAt(BinaryenExpressionRef expr,
+                                          BinaryenIndex index) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<Try>());
+  return static_cast<Try*>(expression)->catchEvents.removeAt(index).c_str();
+}
+BinaryenExpressionRef BinaryenTryGetCatchBodyAt(BinaryenExpressionRef expr,
+                                                BinaryenIndex index) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<Try>());
+  assert(index < static_cast<Try*>(expression)->catchBodies.size());
+  return static_cast<Try*>(expression)->catchBodies[index];
+}
+void BinaryenTrySetCatchBodyAt(BinaryenExpressionRef expr,
+                               BinaryenIndex index,
+                               BinaryenExpressionRef catchExpr) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<Try>());
+  assert(index < static_cast<Try*>(expression)->catchBodies.size());
+  assert(catchExpr);
+  static_cast<Try*>(expression)->catchBodies[index] = (Expression*)catchExpr;
+}
+BinaryenIndex BinaryenTryAppendCatchBody(BinaryenExpressionRef expr,
+                                         BinaryenExpressionRef catchExpr) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<Try>());
+  assert(catchExpr);
+  auto& list = static_cast<Try*>(expression)->catchBodies;
+  auto index = list.size();
+  list.push_back((Expression*)catchExpr);
+  return index;
+}
+void BinaryenTryInsertCatchBodyAt(BinaryenExpressionRef expr,
+                                  BinaryenIndex index,
+                                  BinaryenExpressionRef catchExpr) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<Try>());
+  assert(catchExpr);
+  static_cast<Try*>(expression)
+    ->catchBodies.insertAt(index, (Expression*)catchExpr);
+}
+BinaryenExpressionRef BinaryenTryRemoveCatchBodyAt(BinaryenExpressionRef expr,
+                                                   BinaryenIndex index) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<Try>());
+  return static_cast<Try*>(expression)->catchBodies.removeAt(index);
+}
+int BinaryenTryHasCatchAll(BinaryenExpressionRef expr) {
+  auto* expression = (Expression*)expr;
+  assert(expression->is<Try>());
+  return static_cast<Try*>(expression)->hasCatchAll();
 }
 // Throw
 const char* BinaryenThrowGetEvent(BinaryenExpressionRef expr) {
@@ -2829,51 +2909,15 @@ BinaryenExpressionRef BinaryenThrowRemoveOperandAt(BinaryenExpressionRef expr,
   return static_cast<Throw*>(expression)->operands.removeAt(index);
 }
 // Rethrow
-BinaryenExpressionRef BinaryenRethrowGetExnref(BinaryenExpressionRef expr) {
+BinaryenIndex BinaryenRethrowGetDepth(BinaryenExpressionRef expr) {
   auto* expression = (Expression*)expr;
   assert(expression->is<Rethrow>());
-  return static_cast<Rethrow*>(expression)->exnref;
+  return static_cast<Rethrow*>(expression)->depth;
 }
-void BinaryenRethrowSetExnref(BinaryenExpressionRef expr,
-                              BinaryenExpressionRef exnrefExpr) {
+void BinaryenRethrowSetDepth(BinaryenExpressionRef expr, BinaryenIndex depth) {
   auto* expression = (Expression*)expr;
   assert(expression->is<Rethrow>());
-  assert(exnrefExpr);
-  static_cast<Rethrow*>(expression)->exnref = (Expression*)exnrefExpr;
-}
-// BrOnExn
-const char* BinaryenBrOnExnGetEvent(BinaryenExpressionRef expr) {
-  auto* expression = (Expression*)expr;
-  assert(expression->is<BrOnExn>());
-  return static_cast<BrOnExn*>(expression)->event.c_str();
-}
-void BinaryenBrOnExnSetEvent(BinaryenExpressionRef expr,
-                             const char* eventName) {
-  auto* expression = (Expression*)expr;
-  assert(expression->is<BrOnExn>());
-  static_cast<BrOnExn*>(expression)->event = eventName;
-}
-const char* BinaryenBrOnExnGetName(BinaryenExpressionRef expr) {
-  auto* expression = (Expression*)expr;
-  assert(expression->is<BrOnExn>());
-  return static_cast<BrOnExn*>(expression)->name.c_str();
-}
-void BinaryenBrOnExnSetName(BinaryenExpressionRef expr, const char* name) {
-  auto* expression = (Expression*)expr;
-  assert(expression->is<BrOnExn>());
-  static_cast<BrOnExn*>(expression)->name = name;
-}
-BinaryenExpressionRef BinaryenBrOnExnGetExnref(BinaryenExpressionRef expr) {
-  auto* expression = (Expression*)expr;
-  assert(expression->is<BrOnExn>());
-  return static_cast<BrOnExn*>(expression)->exnref;
-}
-void BinaryenBrOnExnSetExnref(BinaryenExpressionRef expr,
-                              BinaryenExpressionRef exnrefExpr) {
-  auto* expression = (Expression*)expr;
-  assert(expression->is<BrOnExn>());
-  assert(exnrefExpr);
-  static_cast<BrOnExn*>(expression)->exnref = (Expression*)exnrefExpr;
+  static_cast<Rethrow*>(expression)->depth = depth;
 }
 // TupleMake
 BinaryenIndex BinaryenTupleMakeGetNumOperands(BinaryenExpressionRef expr) {
@@ -3013,21 +3057,21 @@ BinaryenFunctionRef BinaryenAddFunction(BinaryenModuleRef module,
 }
 BinaryenFunctionRef BinaryenGetFunction(BinaryenModuleRef module,
                                         const char* name) {
-  return ((Module*)module)->getFunction(name);
+  return ((Module*)module)->getFunctionOrNull(name);
 }
 void BinaryenRemoveFunction(BinaryenModuleRef module, const char* name) {
   ((Module*)module)->removeFunction(name);
 }
-uint32_t BinaryenGetNumFunctions(BinaryenModuleRef module) {
+BinaryenIndex BinaryenGetNumFunctions(BinaryenModuleRef module) {
   return ((Module*)module)->functions.size();
 }
 BinaryenFunctionRef BinaryenGetFunctionByIndex(BinaryenModuleRef module,
-                                               BinaryenIndex id) {
+                                               BinaryenIndex index) {
   const auto& functions = ((Module*)module)->functions;
-  if (functions.size() <= id) {
-    Fatal() << "invalid function id.";
+  if (functions.size() <= index) {
+    Fatal() << "invalid function index.";
   }
-  return functions[id].get();
+  return functions[index].get();
 }
 
 // Globals
@@ -3047,10 +3091,21 @@ BinaryenGlobalRef BinaryenAddGlobal(BinaryenModuleRef module,
 }
 BinaryenGlobalRef BinaryenGetGlobal(BinaryenModuleRef module,
                                     const char* name) {
-  return ((Module*)module)->getGlobal(name);
+  return ((Module*)module)->getGlobalOrNull(name);
 }
 void BinaryenRemoveGlobal(BinaryenModuleRef module, const char* name) {
   ((Module*)module)->removeGlobal(name);
+}
+BinaryenIndex BinaryenGetNumGlobals(BinaryenModuleRef module) {
+  return ((Module*)module)->globals.size();
+}
+BinaryenGlobalRef BinaryenGetGlobalByIndex(BinaryenModuleRef module,
+                                           BinaryenIndex index) {
+  const auto& globals = ((Module*)module)->globals;
+  if (globals.size() <= index) {
+    Fatal() << "invalid global index.";
+  }
+  return globals[index].get();
 }
 
 // Events
@@ -3069,7 +3124,7 @@ BinaryenEventRef BinaryenAddEvent(BinaryenModuleRef module,
 }
 
 BinaryenEventRef BinaryenGetEvent(BinaryenModuleRef module, const char* name) {
-  return ((Module*)module)->getEvent(name);
+  return ((Module*)module)->getEventOrNull(name);
 }
 void BinaryenRemoveEvent(BinaryenModuleRef module, const char* name) {
   ((Module*)module)->removeEvent(name);
@@ -3194,8 +3249,23 @@ BinaryenExportRef BinaryenAddEventExport(BinaryenModuleRef module,
   ((Module*)module)->addExport(ret);
   return ret;
 }
+BinaryenExportRef BinaryenGetExport(BinaryenModuleRef module,
+                                    const char* externalName) {
+  return ((Module*)module)->getExportOrNull(externalName);
+}
 void BinaryenRemoveExport(BinaryenModuleRef module, const char* externalName) {
   ((Module*)module)->removeExport(externalName);
+}
+BinaryenIndex BinaryenGetNumExports(BinaryenModuleRef module) {
+  return ((Module*)module)->exports.size();
+}
+BinaryenExportRef BinaryenGetExportByIndex(BinaryenModuleRef module,
+                                           BinaryenIndex index) {
+  const auto& exports = ((Module*)module)->exports;
+  if (exports.size() <= index) {
+    Fatal() << "invalid export index.";
+  }
+  return exports[index].get();
 }
 
 // Function table. One per module
@@ -3276,7 +3346,8 @@ void BinaryenSetMemory(BinaryenModuleRef module,
     wasm->addExport(memoryExport.release());
   }
   for (BinaryenIndex i = 0; i < numSegments; i++) {
-    wasm->memory.segments.emplace_back(segmentPassive[i],
+    wasm->memory.segments.emplace_back(Name(),
+                                       segmentPassive[i],
                                        (Expression*)segmentOffsets[i],
                                        segments[i],
                                        segmentSizes[i]);
@@ -3382,7 +3453,7 @@ BinaryenModuleRef BinaryenModuleParse(const char* text) {
 }
 
 void BinaryenModulePrint(BinaryenModuleRef module) {
-  WasmPrinter::printModule((Module*)module);
+  std::cout << *(Module*)module;
 }
 
 void BinaryenModulePrintAsmjs(BinaryenModuleRef module) {
@@ -3546,7 +3617,7 @@ size_t BinaryenModuleWriteText(BinaryenModuleRef module,
   // use a stringstream as an std::ostream. Extract the std::string
   // representation, and then store in the output.
   std::stringstream ss;
-  WasmPrinter::printModule((Module*)module, ss);
+  ss << *(Module*)module;
 
   const auto temp = ss.str();
   const auto ctemp = temp.c_str();
@@ -3591,7 +3662,7 @@ BinaryenModuleAllocateAndWrite(BinaryenModuleRef module,
 
 char* BinaryenModuleAllocateAndWriteText(BinaryenModuleRef module) {
   std::stringstream ss;
-  WasmPrinter::printModule((Module*)module, ss);
+  ss << *(Module*)module;
 
   const std::string out = ss.str();
   const int len = out.length() + 1;
@@ -3812,17 +3883,6 @@ const char* BinaryenExportGetName(BinaryenExportRef export_) {
 }
 const char* BinaryenExportGetValue(BinaryenExportRef export_) {
   return ((Export*)export_)->value.c_str();
-}
-uint32_t BinaryenGetNumExports(BinaryenModuleRef module) {
-  return ((Module*)module)->exports.size();
-}
-BinaryenExportRef BinaryenGetExportByIndex(BinaryenModuleRef module,
-                                           BinaryenIndex id) {
-  const auto& exports = ((Module*)module)->exports;
-  if (exports.size() <= id) {
-    Fatal() << "invalid export id.";
-  }
-  return exports[id].get();
 }
 
 //

@@ -86,6 +86,10 @@ void dumpDWARF(const Module& wasm) {
   info.context->dump(llvm::outs(), options);
 }
 
+bool shouldPreserveDWARF(PassOptions& options, Module& wasm) {
+  return options.debugInfo && hasDWARFSections(wasm);
+}
+
 //
 // Big picture: We use a DWARFContext to read data, then DWARFYAML support
 // code to write it. That is not the main LLVM Dwarf code used for writing
@@ -361,7 +365,7 @@ struct AddrExprMap {
   // bloat the common case which is represented in the earlier maps.
   struct DelimiterInfo {
     Expression* expr;
-    BinaryLocations::DelimiterId id;
+    size_t id;
   };
   std::unordered_map<BinaryLocation, DelimiterInfo> delimiterMap;
 
@@ -414,8 +418,7 @@ private:
     for (Index i = 0; i < delimiter.size(); i++) {
       if (delimiter[i] != 0) {
         assert(delimiterMap.count(delimiter[i]) == 0);
-        delimiterMap[delimiter[i]] =
-          DelimiterInfo{expr, BinaryLocations::DelimiterId(i)};
+        delimiterMap[delimiter[i]] = DelimiterInfo{expr, i};
       }
     }
   }
@@ -635,6 +638,17 @@ struct LocationUpdater {
   }
 };
 
+// A tombstone value is a value that is placed where something used to exist,
+// but no longer does, like a reference to a function that was DCE'd out during
+// linking. In theory the value can be any invalid location, and tools will
+// basically ignore it.
+// Earlier LLVM used to use 0 there, and newer versions use -1 or -2 depending
+// on the DWARF section. For now, support them all, but TODO stop supporting 0,
+// as there are apparently some possible corner cases where 0 is a valid value.
+static bool isTombstone(uint32_t x) {
+  return x == 0 || x == uint32_t(-1) || x == uint32_t(-2);
+}
+
 // Update debug lines, and update the locationUpdater with debug line offset
 // changes so we can update offsets into the debug line section.
 static void updateDebugLines(llvm::DWARFYAML::Data& data,
@@ -656,7 +670,7 @@ static void updateDebugLines(llvm::DWARFYAML::Data& data,
         omittingRange = false;
       }
       if (state.update(opcode, table)) {
-        if (state.addr == 0) {
+        if (isTombstone(state.addr)) {
           omittingRange = true;
         }
         if (omittingRange) {
@@ -901,14 +915,14 @@ static void updateRanges(llvm::DWARFYAML::Data& yaml,
     // If this is an end marker (0, 0), or an invalid range (0, x) or (x, 0)
     // then just emit it as it is - either to mark the end, or to mark an
     // invalid entry.
-    if (oldStart == 0 || oldEnd == 0) {
+    if (isTombstone(oldStart) || isTombstone(oldEnd)) {
       newStart = oldStart;
       newEnd = oldEnd;
     } else {
       // This was a valid entry; update it.
       newStart = locationUpdater.getNewStart(oldStart);
       newEnd = locationUpdater.getNewEnd(oldEnd);
-      if (newStart == 0 || newEnd == 0) {
+      if (isTombstone(newStart) || isTombstone(newEnd)) {
         // This part of the range no longer has a mapping, so we must skip it.
         // Don't use (0, 0) as that would be an end marker; emit something
         // invalid for the debugger to ignore.
@@ -935,7 +949,7 @@ static bool isNewBaseLoc(const llvm::DWARFYAML::Loc& loc) {
 }
 
 static bool isEndMarkerLoc(const llvm::DWARFYAML::Loc& loc) {
-  return loc.Start == 0 && loc.End == 0;
+  return isTombstone(loc.Start) && isTombstone(loc.End);
 }
 
 // Update the .debug_loc section.
@@ -1080,6 +1094,8 @@ void dumpDWARF(const Module& wasm) {
 void writeDWARFSections(Module& wasm, const BinaryLocations& newLocations) {
   std::cerr << "warning: no DWARF updating support present\n";
 }
+
+bool shouldPreserveDWARF(PassOptions& options, Module& wasm) { return false; }
 
 #endif // BUILD_LLVM_DWARF
 

@@ -19,6 +19,7 @@
     (local $local_anyref anyref)
     (local $local_eqref eqref)
     (local $local_i31ref i31ref)
+    (local $local_dataref dataref)
 
     ;; Test types for local.get/set
     (local.set $local_anyref (local.get $local_anyref))
@@ -67,5 +68,12 @@
     ;; Test i31.get_s/u
     (local.set $local_i32 (i31.get_s (local.get $local_i31ref)))
     (local.set $local_i32 (i31.get_u (local.get $local_i31ref)))
+  )
+
+  (func $test-variants
+    (local $local_i31refnull (ref null i31))
+    (local $local_i31refnonnull (ref i31))
+    (local $local_datarefnull (ref null data))
+    (local $local_datarefnonnull (ref data))
   )
 )

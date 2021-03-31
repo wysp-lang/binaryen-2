@@ -338,6 +338,8 @@ enum EncodedType {
   f32 = -0x3,  // 0x7d
   f64 = -0x4,  // 0x7c
   v128 = -0x5, // 0x7b
+  i8 = -0x6,   // 0x7a
+  i16 = -0x7,  // 0x79
   // function reference type
   funcref = -0x10, // 0x70
   // opaque host reference type
@@ -352,10 +354,15 @@ enum EncodedType {
   nonnullable = -0x15, // 0x6b
   // integer reference type
   i31ref = -0x16, // 0x6a
-  // exception reference type
-  exnref = -0x18, // 0x68
+  // run-time type info type, with depth index n
+  rtt_n = -0x17, // 0x69
+  // run-time type info type, without depth index n
+  rtt = -0x18,     // 0x68
+  dataref = -0x19, // 0x67
   // func_type form
-  Func = -0x20, // 0x60
+  Func = -0x20,   // 0x60
+  Struct = -0x21, // 0x5f
+  Array = -0x22,  // 0x5e
   // block_type
   Empty = -0x40 // 0x40
 };
@@ -365,8 +372,8 @@ enum EncodedHeapType {
   extern_ = -0x11, // 0x6f
   any = -0x12,     // 0x6e
   eq = -0x13,      // 0x6d
-  i31 = -0x17,     // 0x69, != i31ref
-  exn = -0x18,     // 0x68
+  i31 = -0x16,     // 0x6a
+  data = -0x19,    // 0x67
 };
 
 namespace UserSections {
@@ -774,6 +781,7 @@ enum ASTNodes {
   I32x4LeU = 0x3e,
   I32x4GeS = 0x3f,
   I32x4GeU = 0x40,
+  I64x2Eq = 0xc0,
   F32x4Eq = 0x41,
   F32x4Ne = 0x42,
   F32x4Lt = 0x43,
@@ -793,6 +801,11 @@ enum ASTNodes {
   V128Or = 0x50,
   V128Xor = 0x51,
   V128Bitselect = 0x52,
+
+  V8x16SignSelect = 0x7d,
+  V16x8SignSelect = 0x7e,
+  V32x4SignSelect = 0x7f,
+  V64x2SignSelect = 0x94,
 
   V128Load8Lane = 0x58,
   V128Load16Lane = 0x59,
@@ -877,9 +890,12 @@ enum ASTNodes {
   I32x4MaxU = 0xb9,
   I32x4DotSVecI16x8 = 0xba,
 
+  I64x2Bitmask = 0xc4,
+  I64x2WidenLowSI32x4 = 0xc7,
+  I64x2WidenHighSI32x4 = 0xc8,
+  I64x2WidenLowUI32x4 = 0xc9,
+  I64x2WidenHighUI32x4 = 0xca,
   I64x2Neg = 0xc1,
-  I64x2AnyTrue = 0xc2,
-  I64x2AllTrue = 0xc3,
   I64x2Shl = 0xcb,
   I64x2ShrS = 0xcc,
   I64x2ShrU = 0xcd,
@@ -920,6 +936,11 @@ enum ASTNodes {
   F64x2PMin = 0xf6,
   F64x2PMax = 0xf7,
 
+  I16x8ExtAddPairWiseSI8x16 = 0xc2,
+  I16x8ExtAddPairWiseUI8x16 = 0xc3,
+  I32x4ExtAddPairWiseSI16x8 = 0xa5,
+  I32x4ExtAddPairWiseUI16x8 = 0xa6,
+
   I32x4TruncSatSF32x4 = 0xf8,
   I32x4TruncSatUF32x4 = 0xf9,
   F32x4ConvertSI32x4 = 0xfa,
@@ -951,6 +972,18 @@ enum ASTNodes {
   I64x2ExtMulLowUI32x4 = 0xd6,
   I64x2ExtMulHighUI32x4 = 0xd7,
 
+  F64x2ConvertLowSI32x4 = 0x53,
+  F64x2ConvertLowUI32x4 = 0x54,
+  I32x4TruncSatZeroSF64x2 = 0x55,
+  I32x4TruncSatZeroUF64x2 = 0x56,
+  F32x4DemoteZeroF64x2 = 0x57,
+  F64x2PromoteLowF32x4 = 0x69,
+
+  // prefetch opcodes
+
+  PrefetchT = 0xc5,
+  PrefetchNT = 0xc6,
+
   // bulk memory opcodes
 
   MemoryInit = 0x08,
@@ -968,14 +1001,15 @@ enum ASTNodes {
 
   Try = 0x06,
   Catch = 0x07,
+  CatchAll = 0x05,
   Throw = 0x08,
   Rethrow = 0x09,
-  BrOnExn = 0x0a,
 
   // typed function references opcodes
 
   CallRef = 0x14,
   RetCallRef = 0x15,
+  Let = 0x17,
 
   // gc opcodes
 
@@ -1125,7 +1159,7 @@ public:
   uint32_t getFunctionIndex(Name name) const;
   uint32_t getGlobalIndex(Name name) const;
   uint32_t getEventIndex(Name name) const;
-  uint32_t getTypeIndex(Signature sig) const;
+  uint32_t getTypeIndex(HeapType type) const;
 
   void writeFunctionTableDeclaration();
   void writeTableElements();
@@ -1143,9 +1177,7 @@ public:
   void writeDebugLocation(const Function::DebugLocation& loc);
   void writeDebugLocation(Expression* curr, Function* func);
   void writeDebugLocationEnd(Expression* curr, Function* func);
-  void writeExtraDebugLocation(Expression* curr,
-                               Function* func,
-                               BinaryLocations::DelimiterId id);
+  void writeExtraDebugLocation(Expression* curr, Function* func, size_t id);
 
   // helpers
   void writeInlineString(const char* name);
@@ -1170,13 +1202,14 @@ public:
 
   void writeType(Type type);
   void writeHeapType(HeapType type);
+  void writeField(const Field& field);
 
 private:
   Module* wasm;
   BufferWithRandomAccess& o;
   BinaryIndexes indexes;
-  std::unordered_map<Signature, Index> typeIndices;
-  std::vector<Signature> types;
+  std::unordered_map<HeapType, Index> typeIndices;
+  std::vector<HeapType> types;
 
   bool debugInfo = true;
   std::ostream* sourceMap = nullptr;
@@ -1220,8 +1253,8 @@ class WasmBinaryBuilder {
 
   std::set<BinaryConsts::Section> seenSections;
 
-  // All signatures present in the type section
-  std::vector<Signature> signatures;
+  // All types defined in the type section
+  std::vector<HeapType> types;
 
 public:
   WasmBinaryBuilder(Module& wasm, const std::vector<char>& input)
@@ -1249,19 +1282,25 @@ public:
   int32_t getS32LEB();
   int64_t getS64LEB();
   uint64_t getUPtrLEB();
+
+  // Read a value and get a type for it.
   Type getType();
+  // Get a type given the initial S32LEB has already been read, and is provided.
+  Type getType(int initial);
+
   HeapType getHeapType();
+  Mutability getMutability();
+  Field getField();
   Type getConcreteType();
   Name getInlineString();
   void verifyInt8(int8_t x);
   void verifyInt16(int16_t x);
   void verifyInt32(int32_t x);
   void verifyInt64(int64_t x);
-  void ungetInt8();
   void readHeader();
   void readStart();
   void readMemory();
-  void readSignatures();
+  void readTypes();
 
   // gets a name in the combined import+defined space
   Name getFunctionName(Index index);
@@ -1279,7 +1318,8 @@ public:
   std::vector<Signature> functionSignatures;
 
   void readFunctionSignatures();
-  Signature getFunctionSignatureByIndex(Index index);
+  Signature getSignatureByFunctionIndex(Index index);
+  Signature getSignatureByTypeIndex(Index index);
 
   size_t nextLabel;
 
@@ -1312,6 +1352,7 @@ public:
   void requireFunctionContext(const char* error);
 
   void readFunctions();
+  void readVars();
 
   std::map<Export*, Index> exportIndices;
   std::vector<Export*> exportOrder;
@@ -1332,6 +1373,29 @@ public:
 
   std::vector<Expression*> expressionStack;
 
+  // Each let block in the binary adds new locals to the bottom of the index
+  // space. That is, all previously-existing indexes are bumped to higher
+  // indexes. getAbsoluteLocalIndex does this computation.
+  // Note that we must track not just the number of locals added in each let,
+  // but also the absolute index from which they were allocated, as binaryen
+  // will add new locals as it goes for things like stacky code and tuples (so
+  // there isn't a simple way to get to the absolute index from a relative one).
+  // Hence each entry here is a pair of the number of items, and the absolute
+  // index they begin at.
+  struct LetData {
+    // How many items are defined in this let.
+    Index num;
+    // The absolute index from which they are allocated from. That is, if num is
+    // 5 and absoluteStart is 10, then we use indexes 10-14.
+    Index absoluteStart;
+  };
+  std::vector<LetData> letStack;
+
+  // Given a relative index of a local (the one used in the wasm binary), get
+  // the absolute one which takes into account lets, and is the one used in
+  // Binaryen IR.
+  Index getAbsoluteLocalIndex(Index index);
+
   // Control flow structure parsing: these have not just the normal binary
   // data for an instruction, but also some bytes later on like "end" or "else".
   // We must be aware of the connection between those things, for debug info.
@@ -1339,10 +1403,6 @@ public:
 
   // Called when we parse the beginning of a control flow structure.
   void startControlFlow(Expression* curr);
-
-  // Called when we parse a later part of a control flow structure, like "end"
-  // or "else".
-  void continueControlFlow(BinaryLocations::DelimiterId id, BinaryLocation pos);
 
   // set when we know code is unreachable in the sense of the wasm spec: we are
   // in a block and after an unreachable element. this helps parse stacky wasm
@@ -1402,8 +1462,6 @@ public:
   void readNextDebugLocation();
   void readSourceMapHeader();
 
-  void handleBrOnExnNotTaken(Expression* curr);
-
   // AST reading
   int depth = 0; // only for debugging
 
@@ -1451,6 +1509,7 @@ public:
   bool maybeVisitSIMDShift(Expression*& out, uint32_t code);
   bool maybeVisitSIMDLoad(Expression*& out, uint32_t code);
   bool maybeVisitSIMDLoadStoreLane(Expression*& out, uint32_t code);
+  bool maybeVisitPrefetch(Expression*& out, uint32_t code);
   bool maybeVisitMemoryInit(Expression*& out, uint32_t code);
   bool maybeVisitDataDrop(Expression*& out, uint32_t code);
   bool maybeVisitMemoryCopy(Expression*& out, uint32_t code);
@@ -1483,10 +1542,18 @@ public:
   void visitTryOrTryInBlock(Expression*& out);
   void visitThrow(Throw* curr);
   void visitRethrow(Rethrow* curr);
-  void visitBrOnExn(BrOnExn* curr);
   void visitCallRef(CallRef* curr);
+  // Let is lowered into a block.
+  void visitLet(Block* curr);
 
   void throwError(std::string text);
+
+  // Struct/Array instructions have an unnecessary heap type that is just for
+  // validation (except for the case of unreachability, but that's not a problem
+  // anyhow, we can ignore it there). That is, we also have a reference / rtt
+  // child from which we can infer the type anyhow, and we just need to check
+  // that type is the same.
+  void validateHeapTypeUsingChild(Expression* child, HeapType heapType);
 
 private:
   bool hasDWARFSections();

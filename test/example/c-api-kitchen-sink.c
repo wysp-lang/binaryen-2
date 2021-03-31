@@ -205,12 +205,6 @@ void test_types() {
   BinaryenTypeExpand(externref, &valueType);
   assert(valueType == externref);
 
-  BinaryenType exnref = BinaryenTypeExnref();
-  printf("  // BinaryenTypeExnref: %d\n", exnref);
-  assert(BinaryenTypeArity(exnref) == 1);
-  BinaryenTypeExpand(exnref, &valueType);
-  assert(valueType == exnref);
-
   BinaryenType anyref = BinaryenTypeAnyref();
   printf("  // BinaryenTypeAnyref: %d\n", anyref);
   assert(BinaryenTypeArity(anyref) == 1);
@@ -228,6 +222,12 @@ void test_types() {
   assert(BinaryenTypeArity(i31ref) == 1);
   BinaryenTypeExpand(i31ref, &valueType);
   assert(valueType == i31ref);
+
+  BinaryenType dataref = BinaryenTypeDataref();
+  printf("  // BinaryenTypeDataref: %d\n", dataref);
+  assert(BinaryenTypeArity(dataref) == 1);
+  BinaryenTypeExpand(dataref, &valueType);
+  assert(valueType == dataref);
 
   printf("  // BinaryenTypeAuto: %d\n", BinaryenTypeAuto());
 
@@ -312,7 +312,6 @@ void test_core() {
   BinaryenExpressionRef funcrefExpr = BinaryenRefNull(module, BinaryenTypeFuncref());
   funcrefExpr =
     BinaryenRefFunc(module, "kitchen()sinker", BinaryenTypeFuncref());
-  BinaryenExpressionRef exnrefExpr = BinaryenRefNull(module, BinaryenTypeExnref());
   BinaryenExpressionRef i31refExpr = BinaryenI31New(module, makeInt32(module, 1));
 
   // Events
@@ -325,40 +324,18 @@ void test_core() {
   //   (do
   //     (throw $a-event (i32.const 0))
   //   )
-  //   (catch
-  //     ;; We don't support multi-value yet. Use locals instead.
-  //     (local.set 0 (exnref.pop))
-  //     (drop
-  //       (block $try-block (result i32)
-  //         (rethrow
-  //           (br_on_exn $try-block $a-event (local.get 5))
-  //         )
-  //       )
-  //     )
+  //   (catch $a-event
+  //     (drop (i32 pop))
   //   )
+  //   (catch_all)
   // )
   BinaryenExpressionRef tryBody = BinaryenThrow(
     module, "a-event", (BinaryenExpressionRef[]){makeInt32(module, 0)}, 1);
-  BinaryenExpressionRef catchBody = BinaryenBlock(
-    module,
-    NULL,
-    (BinaryenExpressionRef[]){
-      BinaryenLocalSet(module, 5, BinaryenPop(module, BinaryenTypeExnref())),
-      BinaryenDrop(
-        module,
-        BinaryenBlock(module,
-                      "try-block",
-                      (BinaryenExpressionRef[]){BinaryenRethrow(
-                        module,
-                        BinaryenBrOnExn(
-                          module,
-                          "try-block",
-                          "a-event",
-                          BinaryenLocalGet(module, 5, BinaryenTypeExnref())))},
-                      1,
-                      BinaryenTypeInt32()))},
-    2,
-    BinaryenTypeNone());
+  BinaryenExpressionRef catchBody =
+    BinaryenDrop(module, BinaryenPop(module, BinaryenTypeInt32()));
+  BinaryenExpressionRef catchAllBody = BinaryenNop(module);
+  BinaryenExpressionRef catchBodies[] = {catchBody, catchAllBody};
+  const char* catchEvents[] = {"a-event"};
 
   BinaryenType i32 = BinaryenTypeInt32();
   BinaryenType i64 = BinaryenTypeInt64();
@@ -435,8 +412,6 @@ void test_core() {
     makeUnary(module, BinaryenAllTrueVecI32x4(), v128),
     makeUnary(module, BinaryenBitmaskVecI32x4(), v128),
     makeUnary(module, BinaryenNegVecI64x2(), v128),
-    makeUnary(module, BinaryenAnyTrueVecI64x2(), v128),
-    makeUnary(module, BinaryenAllTrueVecI64x2(), v128),
     makeUnary(module, BinaryenAbsVecF32x4(), v128),
     makeUnary(module, BinaryenNegVecF32x4(), v128),
     makeUnary(module, BinaryenSqrtVecF32x4(), v128),
@@ -737,7 +712,6 @@ void test_core() {
     // Reference types
     BinaryenRefIsNull(module, externrefExpr),
     BinaryenRefIsNull(module, funcrefExpr),
-    BinaryenRefIsNull(module, exnrefExpr),
     BinaryenSelect(
       module,
       temp10,
@@ -749,7 +723,7 @@ void test_core() {
                   BinaryenRefNull(module, BinaryenTypeEqref()),
                   BinaryenRefNull(module, BinaryenTypeEqref())),
     // Exception handling
-    BinaryenTry(module, tryBody, catchBody),
+    BinaryenTry(module, tryBody, catchEvents, 1, catchBodies, 2),
     // Atomics
     BinaryenAtomicStore(
       module,
@@ -774,7 +748,6 @@ void test_core() {
     BinaryenPop(module, BinaryenTypeFloat64()),
     BinaryenPop(module, BinaryenTypeFuncref()),
     BinaryenPop(module, BinaryenTypeExternref()),
-    BinaryenPop(module, BinaryenTypeExnref()),
     BinaryenPop(module, iIfF),
     // Memory
     BinaryenMemorySize(module),
@@ -804,7 +777,7 @@ void test_core() {
     BinaryenBlock(module, "the-body", bodyList, 2, BinaryenTypeAuto());
 
   // Create the function
-  BinaryenType localTypes[] = {BinaryenTypeInt32(), BinaryenTypeExnref()};
+  BinaryenType localTypes[] = {BinaryenTypeInt32(), BinaryenTypeExternref()};
   BinaryenFunctionRef sinker = BinaryenAddFunction(
     module, "kitchen()sinker", iIfF, BinaryenTypeInt32(), localTypes, 2, body);
 

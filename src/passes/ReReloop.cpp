@@ -31,10 +31,6 @@
 #include "wasm-traversal.h"
 #include "wasm.h"
 
-#ifdef RERELOOP_DEBUG
-#include <wasm-printing.h>
-#endif
-
 namespace wasm {
 
 struct ReReloop final : public Pass {
@@ -282,8 +278,7 @@ struct ReReloop final : public Pass {
       ReturnTask::handle(*this, ret);
     } else if (auto* un = curr->dynCast<Unreachable>()) {
       UnreachableTask::handle(*this, un);
-    } else if (curr->is<Try>() || curr->is<Throw>() || curr->is<Rethrow>() ||
-               curr->is<BrOnExn>()) {
+    } else if (curr->is<Try>() || curr->is<Throw>() || curr->is<Rethrow>()) {
       Fatal() << "ReReloop does not support EH instructions yet";
     } else {
       // not control flow, so just a simple element

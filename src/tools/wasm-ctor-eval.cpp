@@ -292,7 +292,7 @@ struct CtorEvalExternalInterface : EvallingModuleInstance::ExternalInterface {
     throw FailToEvalException(std::string("trap: ") + why);
   }
 
-  void throwException(Literal exn) override {
+  void throwException(const WasmException& exn) override {
     std::stringstream ss;
     ss << "exception thrown: " << exn;
     throw FailToEvalException(ss.str());
@@ -466,7 +466,7 @@ int main(int argc, const char* argv[]) {
   options.applyFeatures(wasm);
 
   if (!WasmValidator().validate(wasm)) {
-    WasmPrinter::printModule(&wasm);
+    std::cout << wasm << '\n';
     Fatal() << "error in validating input";
   }
 

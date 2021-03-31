@@ -25,7 +25,6 @@
 #include "ir/stack-utils.h"
 #include "ir/utils.h"
 #include "support/colors.h"
-#include "wasm-printing.h"
 #include "wasm-validator.h"
 #include "wasm.h"
 
@@ -41,10 +40,12 @@ inline std::ostream& printModuleComponent(T curr, std::ostream& stream) {
   return stream;
 }
 
-// Extra overload for Expressions, to print type info too
+// Extra overload for Expressions, to print their contents.
 inline std::ostream& printModuleComponent(Expression* curr,
                                           std::ostream& stream) {
-  WasmPrinter::printExpression(curr, stream, false, true) << std::endl;
+  if (curr) {
+    stream << *curr << '\n';
+  }
   return stream;
 }
 
@@ -336,7 +337,6 @@ public:
   void visitTry(Try* curr);
   void visitThrow(Throw* curr);
   void visitRethrow(Rethrow* curr);
-  void visitBrOnExn(BrOnExn* curr);
   void visitTupleMake(TupleMake* curr);
   void visitTupleExtract(TupleExtract* curr);
   void visitCallRef(CallRef* curr);
@@ -1394,10 +1394,10 @@ void FunctionValidator::validateMemBytes(uint8_t bytes,
       break;
     case Type::funcref:
     case Type::externref:
-    case Type::exnref:
     case Type::anyref:
     case Type::eqref:
     case Type::i31ref:
+    case Type::dataref:
     case Type::none:
       WASM_UNREACHABLE("unexpected type");
   }
@@ -1534,6 +1534,7 @@ void FunctionValidator::visitBinary(Binary* curr) {
     case GtUVecI32x4:
     case GeSVecI32x4:
     case GeUVecI32x4:
+    case EqVecI64x2:
     case EqVecF32x4:
     case NeVecF32x4:
     case LtVecF32x4:
@@ -1864,6 +1865,10 @@ void FunctionValidator::visitUnary(Unary* curr) {
     case FloorVecF64x2:
     case TruncVecF64x2:
     case NearestVecF64x2:
+    case ExtAddPairwiseSVecI8x16ToI16x8:
+    case ExtAddPairwiseUVecI8x16ToI16x8:
+    case ExtAddPairwiseSVecI16x8ToI32x4:
+    case ExtAddPairwiseUVecI16x8ToI32x4:
     case TruncSatSVecF32x4ToVecI32x4:
     case TruncSatUVecF32x4ToVecI32x4:
     case TruncSatSVecF64x2ToVecI64x2:
@@ -1880,6 +1885,16 @@ void FunctionValidator::visitUnary(Unary* curr) {
     case WidenHighSVecI16x8ToVecI32x4:
     case WidenLowUVecI16x8ToVecI32x4:
     case WidenHighUVecI16x8ToVecI32x4:
+    case WidenLowSVecI32x4ToVecI64x2:
+    case WidenHighSVecI32x4ToVecI64x2:
+    case WidenLowUVecI32x4ToVecI64x2:
+    case WidenHighUVecI32x4ToVecI64x2:
+    case ConvertLowSVecI32x4ToVecF64x2:
+    case ConvertLowUVecI32x4ToVecF64x2:
+    case TruncSatZeroSVecF64x2ToVecI32x4:
+    case TruncSatZeroUVecF64x2ToVecI32x4:
+    case DemoteZeroVecF64x2ToVecF32x4:
+    case PromoteLowVecF32x4ToVecF64x2:
       shouldBeEqual(curr->type, Type(Type::v128), curr, "expected v128 type");
       shouldBeEqual(
         curr->value->type, Type(Type::v128), curr, "expected v128 operand");
@@ -1887,14 +1902,13 @@ void FunctionValidator::visitUnary(Unary* curr) {
     case AnyTrueVecI8x16:
     case AnyTrueVecI16x8:
     case AnyTrueVecI32x4:
-    case AnyTrueVecI64x2:
     case AllTrueVecI8x16:
     case AllTrueVecI16x8:
     case AllTrueVecI32x4:
-    case AllTrueVecI64x2:
     case BitmaskVecI8x16:
     case BitmaskVecI16x8:
     case BitmaskVecI32x4:
+    case BitmaskVecI64x2:
       shouldBeEqual(curr->type, Type(Type::i32), curr, "expected i32 type");
       shouldBeEqual(
         curr->value->type, Type(Type::v128), curr, "expected v128 operand");
@@ -2017,21 +2031,28 @@ void FunctionValidator::visitTry(Try* curr) {
       curr->type,
       curr->body,
       "try's type does not match try body's type");
-    shouldBeSubTypeOrFirstIsUnreachable(
-      curr->catchBody->type,
-      curr->type,
-      curr->catchBody,
-      "try's type does not match catch's body type");
+    for (auto catchBody : curr->catchBodies) {
+      shouldBeSubTypeOrFirstIsUnreachable(
+        catchBody->type,
+        curr->type,
+        catchBody,
+        "try's type does not match catch's body type");
+    }
   } else {
     shouldBeEqual(curr->body->type,
                   Type(Type::unreachable),
                   curr,
                   "unreachable try-catch must have unreachable try body");
-    shouldBeEqual(curr->catchBody->type,
-                  Type(Type::unreachable),
-                  curr,
-                  "unreachable try-catch must have unreachable catch body");
+    for (auto catchBody : curr->catchBodies) {
+      shouldBeEqual(catchBody->type,
+                    Type(Type::unreachable),
+                    curr,
+                    "unreachable try-catch must have unreachable catch body");
+    }
   }
+  shouldBeTrue(curr->catchBodies.size() - curr->catchEvents.size() <= 1,
+               curr,
+               "the number of catch blocks and events do not match");
 }
 
 void FunctionValidator::visitThrow(Throw* curr) {
@@ -2075,39 +2096,8 @@ void FunctionValidator::visitRethrow(Rethrow* curr) {
                 Type(Type::unreachable),
                 curr,
                 "rethrow's type must be unreachable");
-  shouldBeSubTypeOrFirstIsUnreachable(
-    curr->exnref->type,
-    Type::exnref,
-    curr->exnref,
-    "rethrow's argument must be exnref type or its subtype");
-}
-
-void FunctionValidator::visitBrOnExn(BrOnExn* curr) {
-  shouldBeTrue(getModule()->features.hasExceptionHandling(),
-               curr,
-               "br_on_exn requires exception-handling to be enabled");
-  Event* event = getModule()->getEventOrNull(curr->event);
-  shouldBeTrue(event != nullptr, curr, "br_on_exn's event must exist");
-  shouldBeTrue(event->sig.params == curr->sent,
-               curr,
-               "br_on_exn's event params and event's params are different");
-  noteBreak(curr->name, curr->sent, curr);
-  shouldBeSubTypeOrFirstIsUnreachable(
-    curr->exnref->type,
-    Type::exnref,
-    curr,
-    "br_on_exn's argument must be unreachable or exnref type or its subtype");
-  if (curr->exnref->type == Type::unreachable) {
-    shouldBeTrue(curr->type == Type::unreachable,
-                 curr,
-                 "If exnref argument's type is unreachable, br_on_exn should "
-                 "be unreachable too");
-  } else {
-    shouldBeTrue(curr->type == Type::exnref,
-                 curr,
-                 "br_on_exn's type should be exnref unless its exnref argument "
-                 "is unreachable");
-  }
+  // TODO Validate the depth field. The current LLVM toolchain only generates
+  // depth 0 for C++ support.
 }
 
 void FunctionValidator::visitTupleMake(TupleMake* curr) {
@@ -2182,9 +2172,11 @@ void FunctionValidator::visitI31Get(I31Get* curr) {
   shouldBeTrue(getModule()->features.hasGC(),
                curr,
                "i31.get_s/u requires gc to be enabled");
+  // FIXME: use i31ref here, which is non-nullable, when we support non-
+  // nullability.
   shouldBeSubTypeOrFirstIsUnreachable(
     curr->i31->type,
-    Type::i31ref,
+    Type(HeapType::i31, Nullable),
     curr->i31,
     "i31.get_s/u's argument should be i31ref");
 }
@@ -2192,77 +2184,221 @@ void FunctionValidator::visitI31Get(I31Get* curr) {
 void FunctionValidator::visitRefTest(RefTest* curr) {
   shouldBeTrue(
     getModule()->features.hasGC(), curr, "ref.test requires gc to be enabled");
-  WASM_UNREACHABLE("TODO (gc): ref.test");
+  if (curr->ref->type != Type::unreachable) {
+    shouldBeTrue(
+      curr->ref->type.isRef(), curr, "ref.test ref must have ref type");
+  }
+  if (curr->rtt->type != Type::unreachable) {
+    shouldBeTrue(
+      curr->rtt->type.isRtt(), curr, "ref.test rtt must have rtt type");
+  }
 }
 
 void FunctionValidator::visitRefCast(RefCast* curr) {
   shouldBeTrue(
     getModule()->features.hasGC(), curr, "ref.cast requires gc to be enabled");
-  WASM_UNREACHABLE("TODO (gc): ref.cast");
+  if (curr->ref->type != Type::unreachable) {
+    shouldBeTrue(
+      curr->ref->type.isRef(), curr, "ref.cast ref must have ref type");
+  }
+  if (curr->rtt->type != Type::unreachable) {
+    shouldBeTrue(
+      curr->rtt->type.isRtt(), curr, "ref.cast rtt must have rtt type");
+  }
 }
 
 void FunctionValidator::visitBrOnCast(BrOnCast* curr) {
   shouldBeTrue(getModule()->features.hasGC(),
                curr,
                "br_on_cast requires gc to be enabled");
-  WASM_UNREACHABLE("TODO (gc): br_on_cast");
+  if (curr->ref->type != Type::unreachable) {
+    shouldBeTrue(
+      curr->ref->type.isRef(), curr, "br_on_cast ref must have ref type");
+  }
+  if (curr->rtt->type != Type::unreachable) {
+    shouldBeTrue(
+      curr->rtt->type.isRtt(), curr, "br_on_cast rtt must have rtt type");
+    shouldBeEqual(curr->rtt->type.getHeapType(),
+                  curr->castType.getHeapType(),
+                  curr,
+                  "br_on_cast rtt must have the proper heap type");
+    noteBreak(curr->name, curr->castType, curr);
+  }
 }
 
 void FunctionValidator::visitRttCanon(RttCanon* curr) {
   shouldBeTrue(
     getModule()->features.hasGC(), curr, "rtt.canon requires gc to be enabled");
-  WASM_UNREACHABLE("TODO (gc): rtt.canon");
+  shouldBeTrue(curr->type.isRtt(), curr, "rtt.canon must have RTT type");
+  auto rtt = curr->type.getRtt();
+  shouldBeEqual(rtt.depth, Index(0), curr, "rtt.canon has a depth of 0");
 }
 
 void FunctionValidator::visitRttSub(RttSub* curr) {
   shouldBeTrue(
     getModule()->features.hasGC(), curr, "rtt.sub requires gc to be enabled");
-  WASM_UNREACHABLE("TODO (gc): rtt.sub");
+  shouldBeTrue(curr->type.isRtt(), curr, "rtt.sub must have RTT type");
+  if (curr->parent->type != Type::unreachable) {
+    shouldBeTrue(
+      curr->parent->type.isRtt(), curr, "rtt.sub parent must have RTT type");
+    auto parentRtt = curr->parent->type.getRtt();
+    auto rtt = curr->type.getRtt();
+    if (rtt.hasDepth() && parentRtt.hasDepth()) {
+      shouldBeEqual(rtt.depth,
+                    parentRtt.depth + 1,
+                    curr,
+                    "rtt.canon has a depth of 1 over the parent");
+    }
+  }
 }
 
 void FunctionValidator::visitStructNew(StructNew* curr) {
   shouldBeTrue(getModule()->features.hasGC(),
                curr,
                "struct.new requires gc to be enabled");
-  WASM_UNREACHABLE("TODO (gc): struct.new");
+  if (curr->type == Type::unreachable) {
+    return;
+  }
+  if (!shouldBeTrue(
+        curr->rtt->type.isRtt(), curr, "struct.new rtt must be rtt")) {
+    return;
+  }
+  auto heapType = curr->rtt->type.getHeapType();
+  if (!shouldBeTrue(
+        heapType.isStruct(), curr, "struct.new heap type must be struct")) {
+    return;
+  }
+  const auto& fields = heapType.getStruct().fields;
+  if (curr->isWithDefault()) {
+    shouldBeTrue(curr->operands.empty(),
+                 curr,
+                 "struct.new_with_default should have no operands");
+    // All the fields must be defaultable.
+    for (const auto& field : fields) {
+      shouldBeTrue(field.type.isDefaultable(),
+                   field,
+                   "struct.new_with_default value type must be defaultable");
+    }
+  } else {
+    // All the fields must have the proper type.
+    for (Index i = 0; i < fields.size(); i++) {
+      shouldBeSubType(curr->operands[i]->type,
+                      fields[i].type,
+                      curr,
+                      "struct.new operand must have proper type");
+    }
+  }
 }
 
 void FunctionValidator::visitStructGet(StructGet* curr) {
   shouldBeTrue(getModule()->features.hasGC(),
                curr,
                "struct.get requires gc to be enabled");
-  WASM_UNREACHABLE("TODO (gc): struct.get");
+  const auto& fields = curr->ref->type.getHeapType().getStruct().fields;
+  shouldBeTrue(curr->index < fields.size(), curr, "bad struct.get field");
+  auto field = fields[curr->index];
+  // If the type is not packed, it must be marked internally as unsigned, by
+  // convention.
+  if (field.type != Type::i32 || field.packedType == Field::not_packed) {
+    shouldBeFalse(curr->signed_, curr, "non-packed get cannot be signed");
+  }
+  if (curr->ref->type == Type::unreachable) {
+    return;
+  }
+  shouldBeEqual(
+    curr->type, field.type, curr, "struct.get must have the proper type");
 }
 
 void FunctionValidator::visitStructSet(StructSet* curr) {
   shouldBeTrue(getModule()->features.hasGC(),
                curr,
                "struct.set requires gc to be enabled");
-  WASM_UNREACHABLE("TODO (gc): struct.set");
+  if (curr->ref->type != Type::unreachable) {
+    const auto& fields = curr->ref->type.getHeapType().getStruct().fields;
+    shouldBeTrue(curr->index < fields.size(), curr, "bad struct.get field");
+    auto& field = fields[curr->index];
+    shouldBeEqual(curr->value->type,
+                  field.type,
+                  curr,
+                  "struct.set must have the proper type");
+    shouldBeEqual(
+      field.mutable_, Mutable, curr, "struct.set field must be mutable");
+  }
 }
 
 void FunctionValidator::visitArrayNew(ArrayNew* curr) {
   shouldBeTrue(
     getModule()->features.hasGC(), curr, "array.new requires gc to be enabled");
-  WASM_UNREACHABLE("TODO (gc): array.new");
+  shouldBeEqualOrFirstIsUnreachable(
+    curr->size->type, Type(Type::i32), curr, "array.new size must be an i32");
+  if (curr->type == Type::unreachable) {
+    return;
+  }
+  if (!shouldBeTrue(
+        curr->rtt->type.isRtt(), curr, "array.new rtt must be rtt")) {
+    return;
+  }
+  auto heapType = curr->rtt->type.getHeapType();
+  if (!shouldBeTrue(
+        heapType.isArray(), curr, "array.new heap type must be array")) {
+    return;
+  }
+  const auto& element = heapType.getArray().element;
+  if (curr->isWithDefault()) {
+    shouldBeTrue(
+      !curr->init, curr, "array.new_with_default should have no init");
+    // The element must be defaultable.
+    shouldBeTrue(element.type.isDefaultable(),
+                 element,
+                 "array.new_with_default value type must be defaultable");
+  } else {
+    shouldBeTrue(!!curr->init, curr, "array.new should have an init");
+    // The inits must have the proper type.
+    shouldBeSubType(curr->init->type,
+                    element.type,
+                    curr,
+                    "array.new init must have proper type");
+  }
 }
 
 void FunctionValidator::visitArrayGet(ArrayGet* curr) {
   shouldBeTrue(
     getModule()->features.hasGC(), curr, "array.get requires gc to be enabled");
-  WASM_UNREACHABLE("TODO (gc): array.get");
+  shouldBeEqualOrFirstIsUnreachable(
+    curr->index->type, Type(Type::i32), curr, "array.get index must be an i32");
+  if (curr->type == Type::unreachable) {
+    return;
+  }
+  const auto& element = curr->ref->type.getHeapType().getArray().element;
+  // If the type is not packed, it must be marked internally as unsigned, by
+  // convention.
+  if (element.type != Type::i32 || element.packedType == Field::not_packed) {
+    shouldBeFalse(curr->signed_, curr, "non-packed get cannot be signed");
+  }
+  shouldBeEqual(
+    curr->type, element.type, curr, "array.get must have the proper type");
 }
 
 void FunctionValidator::visitArraySet(ArraySet* curr) {
   shouldBeTrue(
     getModule()->features.hasGC(), curr, "array.set requires gc to be enabled");
-  WASM_UNREACHABLE("TODO (gc): array.set");
+  shouldBeEqualOrFirstIsUnreachable(
+    curr->index->type, Type(Type::i32), curr, "array.set index must be an i32");
+  if (curr->type == Type::unreachable) {
+    return;
+  }
+  const auto& element = curr->ref->type.getHeapType().getArray().element;
+  shouldBeEqual(curr->value->type,
+                element.type,
+                curr,
+                "array.set must have the proper type");
 }
 
 void FunctionValidator::visitArrayLen(ArrayLen* curr) {
   shouldBeTrue(
     getModule()->features.hasGC(), curr, "array.len requires gc to be enabled");
-  WASM_UNREACHABLE("TODO (gc): array.len");
+  shouldBeEqualOrFirstIsUnreachable(
+    curr->type, Type(Type::i32), curr, "array.len result must be an i32");
 }
 
 void FunctionValidator::visitFunction(Function* curr) {
@@ -2282,8 +2418,7 @@ void FunctionValidator::visitFunction(Function* curr) {
   }
   for (const auto& var : curr->vars) {
     features |= var.getFeatures();
-    shouldBeTrue(var.isConcrete(), curr, "vars must be concretely typed");
-    // TODO: check for nullability
+    shouldBeTrue(var.isDefaultable(), var, "vars must be defaultable");
   }
   shouldBeTrue(features <= getModule()->features,
                curr->name,
@@ -2377,10 +2512,10 @@ void FunctionValidator::validateAlignment(
       break;
     case Type::funcref:
     case Type::externref:
-    case Type::exnref:
     case Type::anyref:
     case Type::eqref:
     case Type::i31ref:
+    case Type::dataref:
     case Type::none:
       WASM_UNREACHABLE("invalid type");
   }
@@ -2692,12 +2827,6 @@ static void validateFeatures(Module& module, ValidationInfo& info) {
     info.shouldBeTrue(module.features.hasReferenceTypes(),
                       module.features,
                       "--enable-gc requires --enable-reference-types");
-  }
-  if (module.features.hasExceptionHandling()) { // implies exnref
-    info.shouldBeTrue(
-      module.features.hasReferenceTypes(),
-      module.features,
-      "--enable-exception-handling requires --enable-reference-types");
   }
 }
 

@@ -155,8 +155,6 @@ struct CodeFolding : public WalkerPass<ControlFlowWalker<CodeFolding>> {
     unoptimizables.insert(curr->default_);
   }
 
-  void visitBrOnExn(BrOnExn* curr) { unoptimizables.insert(curr->name); }
-
   void visitUnreachable(Unreachable* curr) {
     // we can only optimize if we are at the end of the parent block
     if (!controlFlowStack.empty()) {
@@ -306,10 +304,10 @@ private:
       }
       if (getModule()->features.hasExceptionHandling()) {
         EffectAnalyzer effects(getPassOptions(), getModule()->features, item);
-        // Currently pop instructions are only used for exnref.pop, which is a
-        // pseudo instruction following a catch. We cannot move expressions
-        // containing pops if they are not enclosed in a 'catch' body, because a
-        // pop instruction should follow right after 'catch'.
+        // Pop instructions are pseudoinstructions used only after 'catch' to
+        // simulate its behavior. We cannot move expressions containing pops if
+        // they are not enclosed in a 'catch' body, because a pop instruction
+        // should follow right after 'catch'.
         if (effects.danglingPop) {
           return false;
         }
