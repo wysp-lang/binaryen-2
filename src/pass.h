@@ -98,7 +98,7 @@ struct InliningOptions {
   //
   //    [flexibleInlineMaxSize, 1.5 * flexibleInlineMaxSize)
   //
-  uint32_t speculativePercent = 200;
+  uint32_t speculativePercent = 0;
 };
 
 struct PassOptions {

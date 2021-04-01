@@ -1,4 +1,4 @@
-#define INLINING_DEBUG 1
+//#define INLINING_DEBUG 1
 /*
  * Copyright 2016 WebAssembly Community Group participants
  *
@@ -117,7 +117,7 @@ struct FunctionInfo {
   // optimizing, as to check if speculation is worthwhile we must optimize.
   bool speculativelyWorthInlining(const PassOptions& options) const {
     static char* str = getenv("SOURCE_LIMIT");
-    Index limit = 500;
+    Index limit = 0;
     if (str) {
       limit = atoi(str);
       std::cerr << "source limit: " << limit << '\n';
@@ -128,7 +128,7 @@ struct FunctionInfo {
 
   bool speculativelyWorthInliningInto(const PassOptions& options) const {
     static char* str = getenv("TARGET_LIMIT");
-    Index limit = 1000;
+    Index limit = 0;
     if (str) {
       limit = atoi(str);
       std::cerr << "target limit: " << limit << '\n';
