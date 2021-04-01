@@ -123,7 +123,7 @@ struct FunctionInfo {
       std::cerr << "source limit: " << limit << '\n';
       str = nullptr;
     }
-    return size <= limit || worthInlining(options);
+    return size < limit || worthInlining(options);
   }
 
   bool speculativelyWorthInliningInto(const PassOptions& options) const {
@@ -134,7 +134,7 @@ struct FunctionInfo {
       std::cerr << "target limit: " << limit << '\n';
       str = nullptr;
     }
-    return size <= limit;
+    return size < limit;
   }
 
   bool removableAfterInlining() const { return refs == 1 && !usedGlobally; }
