@@ -128,7 +128,7 @@ struct FunctionInfo {
 
   bool speculativelyWorthInliningInto(const PassOptions& options) const {
     static char* str = getenv("TARGET_LIMIT");
-    Index limit = 0;
+    Index limit = 0; // waka
     if (str) {
       limit = atoi(str);
       std::cerr << "target limit: " << limit << '\n';
