@@ -739,10 +739,10 @@ struct SpeculativeScheduler : public Scheduler {
     if (newTargetSize < oldTargetSize) {
       keepResults = true;
 #if SPEC_INLINING_DEBUG == 1
-    std::cerr << "keep!\n";
-    std::cerr << "  old size: " << oldTargetSize
-              << ", new size: " << newTargetSize
-              << ", source size: " << sourceInfo.size << '\n';
+      std::cerr << "keep!\n";
+      std::cerr << "  old size: " << oldTargetSize
+                << ", new size: " << newTargetSize
+                << ", source size: " << sourceInfo.size << '\n';
 #endif
     } else {
       // If we can remove the source after inlining, then we can look at if the
@@ -760,8 +760,7 @@ struct SpeculativeScheduler : public Scheduler {
         std::cerr << "keep!\n";
         std::cerr << "  old size: " << oldTargetSize
                   << ", new size: " << newTargetSize
-                  << ", source size: " << sourceInfo.size
-                  << " (removable)\n";
+                  << ", source size: " << sourceInfo.size << " (removable)\n";
 #endif
       }
     }
