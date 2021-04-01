@@ -14,40 +14,6 @@
   )
   (ref.func $foo)
  )
-<<<<<<< HEAD
- (func $br_on_exn_name_uniquify_test
-  (local $exn exnref)
-  (local $1 exnref)
-  (drop
-   (block $l (result i32)
-    (block
-     (local.set $1
-      (ref.null exn)
-     )
-     (block $__inlined_func$func_inner
-      (drop
-       (block $l0 (result i32)
-        (drop
-         (br_on_exn $l0 $e
-          (local.get $1)
-         )
-        )
-        (i32.const 0)
-       )
-      )
-     )
-    )
-    (drop
-     (br_on_exn $l $e
-      (local.get $exn)
-     )
-    )
-    (i32.const 0)
-   )
-  )
- )
-=======
->>>>>>> 89164cdf1403a21a3d79ada0f0cf529d526c9de6
 )
 (module
  (type $none_=>_i32 (func (result i32)))
@@ -149,10 +115,10 @@
  (elem declare func $1)
  (func $1 (result (ref func))
   (local $0 funcref)
+  (local.set $0
+   (ref.func $1)
+  )
   (block $__inlined_func$0 (result (ref func))
-   (local.set $0
-    (ref.func $1)
-   )
    (ref.as_non_null
     (local.get $0)
    )

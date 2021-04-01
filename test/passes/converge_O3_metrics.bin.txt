@@ -6,24 +6,6 @@ total
  [imports]      : 3       
  [memory-data]  : 28      
  [table-data]   : 429     
-<<<<<<< HEAD
- [total]        : 124     
- [vars]         : 2       
- binary         : 12      
- block          : 7       
- break          : 3       
- call           : 1       
- call_indirect  : 4       
- const          : 46      
- drop           : 3       
- global.set     : 1       
- if             : 2       
- load           : 16      
- local.get      : 16      
- local.set      : 7       
- loop           : 1       
- store          : 5       
-=======
  [tables]       : 0       
  [total]        : 553     
  [vars]         : 2       
@@ -42,7 +24,6 @@ total
  Loop           : 1       
  RefFunc        : 429     
  Store          : 5       
->>>>>>> 3da8b08ecd57f5662bebc69ea73bf59e1928341e
 (module
  (type $i32_i32_i32_=>_i32 (func (param i32 i32 i32) (result i32)))
  (type $i32_i32_=>_i32 (func (param i32 i32) (result i32)))
@@ -255,23 +236,6 @@ total
  [imports]      : 3       
  [memory-data]  : 28      
  [table-data]   : 429     
-<<<<<<< HEAD
- [total]        : 120           -4
- [vars]         : 2       
- binary         : 12      
- block          : 7       
- break          : 3       
- call           : 1       
- call_indirect  : 4       
- const          : 46      
- drop           : 3       
- if             : 2       
- load           : 16      
- local.get      : 14            -2
- local.set      : 6             -1
- loop           : 1       
- store          : 5       
-=======
  [tables]       : 0       
  [total]        : 549           -4
  [vars]         : 2       
@@ -289,7 +253,6 @@ total
  Loop           : 1       
  RefFunc        : 429     
  Store          : 5       
->>>>>>> 09cba0fa50b0492ecf7b7886180dbd6c5aa5d04d
 (module
  (type $i32_i32_i32_=>_i32 (func (param i32 i32 i32) (result i32)))
  (type $i32_i32_=>_i32 (func (param i32 i32) (result i32)))
@@ -496,23 +459,6 @@ total
  [imports]      : 3       
  [memory-data]  : 28      
  [table-data]   : 429     
-<<<<<<< HEAD
- [total]        : 120     
- [vars]         : 2       
- binary         : 12      
- block          : 7       
- break          : 3       
- call           : 1       
- call_indirect  : 4       
- const          : 46      
- drop           : 3       
- if             : 2       
- load           : 16      
- local.get      : 14      
- local.set      : 6       
- loop           : 1       
- store          : 5       
-=======
  [tables]       : 0       
  [total]        : 549     
  [vars]         : 2       
@@ -530,7 +476,6 @@ total
  Loop           : 1       
  RefFunc        : 429     
  Store          : 5       
->>>>>>> 3da8b08ecd57f5662bebc69ea73bf59e1928341e
 (module
  (type $i32_i32_i32_=>_i32 (func (param i32 i32 i32) (result i32)))
  (type $i32_i32_=>_i32 (func (param i32 i32) (result i32)))

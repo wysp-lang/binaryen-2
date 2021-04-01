@@ -6,19 +6,9 @@
  )
 )
 (module
-<<<<<<< HEAD
- (type $none_=>_none (func))
- (type $i32_=>_none (func (param i32)))
- (type $i32_=>_i32 (func (param i32) (result i32)))
-=======
  (type $0 (func))
  (type $11 (func (param i32)))
  (type $3 (func (param i32) (result i32)))
-<<<<<<< HEAD
- (type $4 (func (result i32)))
->>>>>>> 575aec37f3fe4793b1d16275426c6369864e1540
-=======
->>>>>>> 09cba0fa50b0492ecf7b7886180dbd6c5aa5d04d
  (type $f64_f64_f64_f64_f64_f64_f64_=>_i32 (func (param f64 f64 f64 f64 f64 f64 f64) (result i32)))
  (type $8 (func (result f64)))
  (import "env" "memory" (memory $1 1))
@@ -468,47 +458,6 @@
     )
    )
   )
-<<<<<<< HEAD
- )
- (func $assembly/index/init (; has Stack IR ;)
-  (local $0 i32)
-  (local $1 i32)
-  (i32.store
-   (local.tee $0
-    (call $~lib/allocator/arena/__memory_allocate
-     (i32.const 32)
-    )
-   )
-   (i32.const 20)
-  )
-  (i32.store
-   (local.tee $1
-    (call $~lib/allocator/arena/__memory_allocate
-     (i32.const 8)
-    )
-   )
-   (i32.const 0)
-  )
-  (i32.store offset=4
-   (local.get $1)
-   (i32.const 0)
-  )
-  (i32.store
-   (local.get $1)
-   (local.get $0)
-  )
-  (i32.store offset=4
-   (local.get $1)
-   (i32.const 5)
-  )
-  (call $~lib/internal/memory/memset
-   (i32.add
-    (local.get $0)
-    (i32.const 8)
-   )
-  )
-=======
->>>>>>> 09cba0fa50b0492ecf7b7886180dbd6c5aa5d04d
   (local.set $0
    (call $assembly/index/Body#constructor
     (f64.const 0)
