@@ -994,12 +994,14 @@ struct Inlining : public Pass {
     SpeculativeScheduler scheduler(module, state, runner, infos);
     if (scheduler.run()) {
       removeUnusedFunctions(scheduler);
-      // TODO: Return true here, to allow further work - both definite and
-      //       speculative inlining may now be possible. However, this would
-      //       require us to avoid repeated work across iterations in
+      // TODO: We return true here, to allow further work - both definite and
+      //       speculative inlining may now be possible. However, this really
+      //       requires us to avoid repeated work across iterations in
       //       speculative inlining. For example, we should not try the same
       //       action more than once, and we need to limit the total number of
       //       inlinings into a function to avoid infinite recursion, etc.
+      // FIXME ^^^^^^
+      return true;
     }
     return false;
   }
