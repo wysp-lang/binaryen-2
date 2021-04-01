@@ -46,19 +46,6 @@ function asmFunc(env) {
  
  function legalstub$2($0, $1_1, $2, $3) {
   var $4 = 0, $5 = 0, $6_1 = 0, $7_1 = 0;
-<<<<<<< HEAD
-  $4 = $1_1;
-  $1_1 = 0;
-  while (1) {
-   $5 = $1_1;
-   $7_1 = $6_1;
-   if ($0 | $4) {
-    $5 = $0;
-    $0 = $0 - 1 & $0;
-    $4 = $4 - ($5 >>> 0 < 1) & $4;
-    $1_1 = $1_1 + 1 | 0;
-    $6_1 = $1_1 >>> 0 < 1 ? $6_1 + 1 | 0 : $6_1;
-=======
   $7_1 = $2;
   $4 = $1_1;
   while (1) {
@@ -70,18 +57,12 @@ function asmFunc(env) {
     $4 = $4 - ($1_1 >>> 0 < 1) & $4;
     $5 = $5 + 1 | 0;
     $6_1 = $5 >>> 0 < 1 ? $6_1 + 1 | 0 : $6_1;
->>>>>>> 09cba0fa50b0492ecf7b7886180dbd6c5aa5d04d
     continue;
    }
    break;
   };
-<<<<<<< HEAD
-  i64toi32_i32$HIGH_BITS = $7_1;
-  return ($2 | 0) == ($5 | 0) & ($3 | 0) == (i64toi32_i32$HIGH_BITS | 0);
-=======
   i64toi32_i32$HIGH_BITS = $1_1;
   return ($2 | 0) == ($7_1 | 0) & ($3 | 0) == (i64toi32_i32$HIGH_BITS | 0);
->>>>>>> 09cba0fa50b0492ecf7b7886180dbd6c5aa5d04d
  }
  
  function legalstub$3($0, $1_1, $2) {
@@ -104,26 +85,6 @@ function asmFunc(env) {
  }
  
  function legalstub$9($0, $1_1, $2, $3) {
-<<<<<<< HEAD
-  return (__wasm_ctz_i64($0, $1_1) | 0) == ($2 | 0) & ($3 | 0) == (i64toi32_i32$HIGH_BITS | 0);
- }
- 
- function __wasm_ctz_i64($0, $1_1) {
-  var $2 = 0, $3 = 0;
-  if ($0 | $1_1) {
-   $2 = $1_1 - 1 | 0;
-   $3 = $0 - 1 | 0;
-   $2 = ($3 | 0) != -1 ? $2 + 1 | 0 : $2;
-   $3 = Math_clz32($0 ^ $3) + 32 | 0;
-   $0 = Math_clz32($1_1 ^ $2);
-   $0 = ($0 | 0) == 32 ? $3 : $0;
-   $1_1 = 63 - $0 | 0;
-   i64toi32_i32$HIGH_BITS = 0 - ($0 >>> 0 > 63) | 0;
-   return $1_1;
-  }
-  i64toi32_i32$HIGH_BITS = 0;
-  return 64;
-=======
   var $4 = 0, $5 = 0, $6_1 = 0, $7_1 = 0;
   __inlined_func$__wasm_ctz_i64 : {
    if ($0 | $1_1) {
@@ -142,7 +103,6 @@ function asmFunc(env) {
    $1_1 = 64;
   }
   return ($1_1 | 0) == ($2 | 0) & ($3 | 0) == (i64toi32_i32$HIGH_BITS | 0);
->>>>>>> 09cba0fa50b0492ecf7b7886180dbd6c5aa5d04d
  }
  
  return {
