@@ -1,4 +1,5 @@
-//#define INLINING_DEBUG 1
+//#define INLINING_DEBUG
+#define SPEC_INLINING_DEBUG 1
 /*
  * Copyright 2016 WebAssembly Community Group participants
  *
@@ -117,7 +118,7 @@ struct FunctionInfo {
   // optimizing, as to check if speculation is worthwhile we must optimize.
   bool speculativelyWorthInlining(const PassOptions& options) const {
     static char* str = getenv("SOURCE_LIMIT");
-    Index limit = 0;
+    static Index limit = 0;
     if (str) {
       limit = atoi(str);
       std::cerr << "source limit: " << limit << '\n';
@@ -128,7 +129,7 @@ struct FunctionInfo {
 
   bool speculativelyWorthInliningInto(const PassOptions& options) const {
     static char* str = getenv("TARGET_LIMIT");
-    Index limit = 0; // waka
+    static Index limit = 0;
     if (str) {
       limit = atoi(str);
       std::cerr << "target limit: " << limit << '\n';
@@ -524,7 +525,7 @@ protected:
         }
         continue;
       }
-#ifdef INLINING_DEBUG
+#if INLINING_DEBUG
       std::cerr << "will inline " << action.source->name << " into "
                 << action.target->name << '\n';
 #endif
@@ -573,7 +574,7 @@ struct DefiniteScheduler : public Scheduler {
       assert(!actions.empty());
       for (auto& action : actions) {
         assert(action.target == target);
-#ifdef INLINING_DEBUG
+#if INLINING_DEBUG
         std::cerr << "inline " << action.source->name << " into "
                   << target->name << '\n';
 #endif
@@ -644,7 +645,7 @@ struct SpeculativeScheduler : public Scheduler {
 
     // We found things to try to inline!
 
-#ifdef INLINING_DEBUG
+#if SPEC_INLINING_DEBUG >= 2
     std::cerr << "speculative inlining: " << actions.size()
               << " scheduled actions, with " << deferredActions.size()
               << " deferred\n";
@@ -663,12 +664,12 @@ struct SpeculativeScheduler : public Scheduler {
       assert(!actions.empty());
       for (auto& action : actions) {
         assert(action.target == target);
-#ifdef INLINING_DEBUG
+#if SPEC_INLINING_DEBUG >= 2
         std::cerr << "consider inlining " << action.source->name << " into "
                   << target->name << '\n';
 #endif
         if (doSpeculativeInlining(action)) {
-#ifdef INLINING_DEBUG
+#if SPEC_INLINING_DEBUG
           std::cerr << "!!!!!!speculatively inlined " << action.source->name
                     << " into " << target->name << '\n';
 #endif
@@ -725,7 +726,7 @@ struct SpeculativeScheduler : public Scheduler {
 
     ssize_t oldTargetSize = Measurer::measure(target->body);
     ssize_t newTargetSize = Measurer::measure(tempTarget->body);
-#ifdef INLINING_DEBUG
+#if SPEC_INLINING_DEBUG >= 2
     std::cerr << "  old size: " << oldTargetSize
               << ", new size: " << newTargetSize
               << ", source size: " << sourceInfo.size << '\n';
@@ -737,6 +738,12 @@ struct SpeculativeScheduler : public Scheduler {
     // optimizations happened after inlining.
     if (newTargetSize < oldTargetSize) {
       keepResults = true;
+#if SPEC_INLINING_DEBUG == 1
+    std::cerr << "keep!\n";
+    std::cerr << "  old size: " << oldTargetSize
+              << ", new size: " << newTargetSize
+              << ", source size: " << sourceInfo.size << '\n';
+#endif
     } else {
       // If we can remove the source after inlining, then we can look at if the
       // total code size (of the two functions before, to the single one now)
@@ -749,6 +756,13 @@ struct SpeculativeScheduler : public Scheduler {
       if (options.shrinkLevel && sourceInfo.removableAfterInlining() &&
           newTargetSize <= oldTargetSize + sourceInfo.size) {
         keepResults = true;
+#if SPEC_INLINING_DEBUG == 1
+        std::cerr << "keep!\n";
+        std::cerr << "  old size: " << oldTargetSize
+                  << ", new size: " << newTargetSize
+                  << ", source size: " << sourceInfo.size
+                  << " (removable)\n";
+#endif
       }
     }
     if (!keepResults && options.optimizeLevel >= 3) {
@@ -803,12 +817,19 @@ struct SpeculativeScheduler : public Scheduler {
         estimatedBenefit -= localIncrease * 2;
         // Decision time.
         keepResults = estimatedBenefit > 0;
-#ifdef INLINING_DEBUG
-        std::cerr << "  cost decrease: " << relevantCostImprovement
-                  << ", size increase: " << sizeIncrease
-                  << ", local increase: " << localIncrease
-                  << ", estimated benefit: " << estimatedBenefit << " => "
-                  << keepResults << '\n';
+#if SPEC_INLINING_DEBUG
+#if SPEC_INLINING_DEBUG == 1
+        if (keepResults) {
+          std::cerr << "keep!\n";
+#endif
+          std::cerr << "  cost decrease: " << relevantCostImprovement
+                    << ", size increase: " << sizeIncrease
+                    << ", local increase: " << localIncrease
+                    << ", estimated benefit: " << estimatedBenefit << " => "
+                    << keepResults << '\n';
+#if SPEC_INLINING_DEBUG == 1
+        }
+#endif
 #endif
 
         // Note that this is *not* guaranteed to terminate. For example,
@@ -877,7 +898,7 @@ struct Inlining : public Pass {
     // be very rare in practice, but it is possible that a recursive call
     // can look like it is worth inlining)
     while (iterationNumber <= numFunctions) {
-#ifdef INLINING_DEBUG
+#if INLINING_DEBUG
       std::cerr << "inlining loop iter " << iterationNumber
                 << " (numFunctions: " << numFunctions << ")\n";
 #endif
@@ -925,7 +946,7 @@ struct Inlining : public Pass {
     InliningState state;
     ModuleUtils::iterDefinedFunctions(*module, [&](Function* func) {
       if (infos[func->name].worthInlining(runner->options)) {
-#ifdef INLINING_DEBUG
+#if INLINING_DEBUG
         // std::cerr << "relevant definite source: " << func->name << '\n';
 #endif
         state.relevantSources.insert(func->name);
@@ -955,13 +976,13 @@ struct Inlining : public Pass {
     ModuleUtils::iterDefinedFunctions(*module, [&](Function* func) {
       auto& info = infos[func->name];
       if (info.speculativelyWorthInlining(runner->options)) {
-#ifdef INLINING_DEBUG
+#if SPEC_INLINING_DEBUG >= 2
         // std::cerr << "relevant speculative source: " << func->name << '\n';
 #endif
         state.relevantSources.insert(func->name);
       }
       if (info.speculativelyWorthInliningInto(runner->options)) {
-#ifdef INLINING_DEBUG
+#if SPEC_INLINING_DEBUG >= 2
         // std::cerr << "relevant speculative target: " << func->name << '\n';
 #endif
         state.relevantTargets.insert(func->name);
@@ -973,7 +994,7 @@ struct Inlining : public Pass {
     SpeculativeScheduler scheduler(module, state, runner, infos);
     if (scheduler.run()) {
       removeUnusedFunctions(scheduler);
-      // TODO: Return true here, to allow further work (both definite and
+      // TODO: Return true here, to allow further work - both definite and
       //       speculative inlining may now be possible. However, this would
       //       require us to avoid repeated work across iterations in
       //       speculative inlining. For example, we should not try the same
