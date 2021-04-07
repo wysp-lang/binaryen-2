@@ -21,6 +21,20 @@
 
 namespace wasm {
 
+struct UseDefAnalysisParams {
+  // Check if an expression is a use.
+  std::function<bool(Expression*)> isUse;
+
+  // Check if an expression is a def.
+  std::function<bool(Expression*)> isDef;
+
+  // For a use or a def, return the "lane".
+  std::function<Index(Expression*)> getLane;
+
+  // Return the total number of lanes.
+  Index numLanes;
+};
+
 //
 // Generic use-def analysis. Types are provided for the use and def, and hooks
 // for checking if something is a use or a def (which allows more specific
@@ -33,21 +47,7 @@ namespace wasm {
 template<typename Use, typename Def> struct UseDefAnalysis {
   // Main API
 
-  struct AnalysisParams {
-    // Check if an expression is a use.
-    std::function<bool(Expression*)> isUse;
-
-    // Check if an expression is a def.
-    std::function<bool(Expression*)> isDef;
-
-    // For a use or a def, return the "lane".
-    std::function<Index(Expression*)> getLane;
-
-    // Return the total number of lanes.
-    Index numLanes;
-  };
-
-  UseDefAnalysis(Function* func, AnalysisParams params);
+  UseDefAnalysis(Function* func, UseDefAnalysisParams params);
 
   using Defs = std::set<Def*>;
 
