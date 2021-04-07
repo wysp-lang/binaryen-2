@@ -239,7 +239,7 @@ UseDefAnalysis<Use, Def>::UseDefAnalysis(Function* func,
   for (const auto& kv : flower.useDefs) {
     auto* use = kv.first->cast<Use>();
     for (auto def : kv.second) {
-      useDefs[use].insert(def->cast<Def>());
+      useDefs[use].insert(def ? def->cast<Def>() : nullptr);
     }
   }
 
