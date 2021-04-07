@@ -233,8 +233,16 @@ UseDefAnalysis<Use, Def>::UseDefAnalysis(Function* func, UseDefAnalysisParams pa
 
   Flower flower(params, func);
 
-  useDefs = flower.useDefs;
-  locations = flower.locations;
+  // TODO: this can be optimized if Use=Expression or Def=Expression, but also
+  // it should be safe to just statically cast this entire thing.
+  for (const auto& kv : flower.useDefs) {
+    auto* use = kv.first->cast<Use>();
+    for (auto def : kv.second) {
+      useDefs[use].insert(def->cast<Def>());
+    }
+  }
+
+  locations = std::move(flower.locations);
 
 #ifdef LOCAL_GRAPH_DEBUG
   std::cout << "UseDefAnalysis::dump\n";
