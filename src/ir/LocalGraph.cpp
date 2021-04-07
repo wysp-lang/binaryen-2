@@ -237,7 +237,8 @@ UseDefAnalysis<Use, Def>::UseDefAnalysis(Function* func,
   Flower flower(params, func);
 
   // TODO: this can be optimized if Use=Expression or Def=Expression, but also
-  // it should be safe to just statically cast this entire thing.
+  // it should be safe to just statically cast this entire thing. The slow way
+  // is 9% slower on e.g. precompute-propagate.
 #if 1
   for (const auto& kv : flower.useDefs) {
     auto* use = kv.first->cast<Use>();
