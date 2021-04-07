@@ -21,14 +21,13 @@
 
 namespace wasm {
 
-template<typename Use, typename Def>
-struct UseDefAnalysis {
+template<typename Use, typename Def> struct UseDefAnalysis {
   // Main API
 
   struct AnalysisParams {
-    std::function<bool (Expression*)> isUse;
-    std::function<bool (Expression*)> isDef;
-    std::function<Index (Expression*)> getLane;
+    std::function<bool(Expression*)> isUse;
+    std::function<bool(Expression*)> isDef;
+    std::function<Index(Expression*)> getLane;
   };
 
   UseDefAnalysis(Function* func, AnalysisParams params);

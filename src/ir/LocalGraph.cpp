@@ -81,21 +81,22 @@ UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params) {
       // This block struct is optimized for this flow process (Minimal
       // information, iteration index).
       struct FlowBlock {
-        // Last Traversed Iteration: This value helps us to find if this block has
-        // been seen while traversing blocks. We compare this value to the current
-        // iteration index in order to determine if we already process this block
-        // in the current iteration. This speeds up the processing compared to
-        // unordered_set or other struct usage. (No need to reset internal values,
-        // lookup into container, ...)
+        // Last Traversed Iteration: This value helps us to find if this block
+        // has been seen while traversing blocks. We compare this value to the
+        // current iteration index in order to determine if we already process
+        // this block in the current iteration. This speeds up the processing
+        // compared to unordered_set or other struct usage. (No need to reset
+        // internal values, lookup into container, ...)
         size_t lastTraversedIteration;
         std::vector<Expression*> actions;
         std::vector<FlowBlock*> in;
         // Sor each index, the last local.set for it
         // The unordered_map from BasicBlock.Info is converted into a vector
-        // This speeds up search as there are usually few sets in a block, so just
-        // scanning them linearly is efficient, avoiding hash computations (while
-        // in Info, it's convenient to have a map so we can assign them easily,
-        // where the last one seen overwrites the previous; and, we do that O(1)).
+        // This speeds up search as there are usually few sets in a block, so
+        // just scanning them linearly is efficient, avoiding hash computations
+        // (while in Info, it's convenient to have a map so we can assign them
+        // easily, where the last one seen overwrites the previous; and, we do
+        // that O(1)).
         std::vector<std::pair<Index, Def*>> lastDefs;
       };
 
@@ -130,21 +131,22 @@ UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params) {
         // Map in block to flow blocks
         auto& in = block->in;
         flowBlock.in.resize(in.size());
-        std::transform(in.begin(),
-                       in.end(),
-                       flowBlock.in.begin(),
-                       [&](BasicBlock* block) { return basicToFlowMap[block]; });
+        std::transform(
+          in.begin(), in.end(), flowBlock.in.begin(), [&](BasicBlock* block) {
+            return basicToFlowMap[block];
+          });
         // Convert unordered_map to vector.
         flowBlock.lastDefs.reserve(block->contents.lastDefs.size());
         for (auto set : block->contents.lastDefs) {
-          flowBlock.lastDefs.emplace_back(std::make_pair(set.first, set.second));
+          flowBlock.lastDefs.emplace_back(
+            std::make_pair(set.first, set.second));
         }
       }
       assert(entryFlowBlock != nullptr);
 
       size_t currentIteration = 0;
       for (auto& block : flowBlocks) {
-  #ifdef LOCAL_GRAPH_DEBUG
+#ifdef LOCAL_GRAPH_DEBUG
         std::cout << "basic block " << block.get() << " :\n";
         for (auto& action : block->contents.actions) {
           std::cout << "  action: " << *action << '\n';
@@ -152,7 +154,7 @@ UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params) {
         for (auto* lastSet : block->contents.lastDefs) {
           std::cout << "  last set " << lastSet << '\n';
         }
-  #endif
+#endif
         // go through the block, finding each get and adding it to its index,
         // and seeing how sets affect that
         auto& actions = block.actions;
@@ -200,12 +202,11 @@ UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params) {
                   continue;
                 }
                 pred->lastTraversedIteration = currentIteration;
-                auto lastSet =
-                  std::find_if(pred->lastDefs.begin(),
-                               pred->lastDefs.end(),
-                               [&](std::pair<Index, Def*>& value) {
-                                 return value.first == index;
-                               });
+                auto lastSet = std::find_if(pred->lastDefs.begin(),
+                                            pred->lastDefs.end(),
+                                            [&](std::pair<Index, Def*>& value) {
+                                              return value.first == index;
+                                            });
                 if (lastSet != pred->lastDefs.end()) {
                   // There is a set here, apply it, and stop the flow.
                   for (auto* get : gets) {
@@ -261,22 +262,21 @@ void UseDefAnalysis::computeInfluences() {
 // LocalGraph implementation
 
 void LocalGraph::LocalGraph(Function* func)
-  : UseDefAnalysis<LocalGet, LocalSet>(func, {
-      // A use for us is a local.get.
-      [](Expression* curr) { return curr->is<LocalGet>(); },
-      // A definition for us is a local.set.
-      [](Expression* curr) { return curr->is<LocalSet>(); },
-      // A "lane" is the local index.
-      [](Expression* curr) {
-        if (auto* get = curr->dynCasts<LocalGet>()) {
-          return get->index;
-        } else if (auto* set = curr->dynCasts<LocalSet>()) {
-          return set->index;
-        }
-        WASM_UNREACHABLE("bad use-def expr");
-      }
-    }) {
-}
+  : UseDefAnalysis<LocalGet, LocalSet>(
+      func,
+      {// A use for us is a local.get.
+       [](Expression* curr) { return curr->is<LocalGet>(); },
+       // A definition for us is a local.set.
+       [](Expression* curr) { return curr->is<LocalSet>(); },
+       // A "lane" is the local index.
+       [](Expression* curr) {
+         if (auto* get = curr->dynCasts<LocalGet>()) {
+           return get->index;
+         } else if (auto* set = curr->dynCasts<LocalSet>()) {
+           return set->index;
+         }
+         WASM_UNREACHABLE("bad use-def expr");
+       }}) {}
 
 void LocalGraph::computeSSAIndexes() {
   std::unordered_map<Index, std::set<LocalSet*>> indexSets;

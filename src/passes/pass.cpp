@@ -104,8 +104,7 @@ void PassRegistry::registerPasses() {
                createConstHoistingPass);
   registerPass(
     "dce", "removes unreachable code", createDeadCodeEliminationPass);
-  registerPass(
-    "dse", "removes dead stores", createDeadStoreEliminationPass);
+  registerPass("dse", "removes dead stores", createDeadStoreEliminationPass);
   registerPass("dealign",
                "forces all loads and stores to have alignment 1",
                createDeAlignPass);
