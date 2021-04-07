@@ -238,12 +238,17 @@ UseDefAnalysis<Use, Def>::UseDefAnalysis(Function* func,
 
   // TODO: this can be optimized if Use=Expression or Def=Expression, but also
   // it should be safe to just statically cast this entire thing.
+#if 0
   for (const auto& kv : flower.useDefs) {
     auto* use = kv.first->cast<Use>();
     for (auto def : kv.second) {
       useDefs[use].insert(def ? def->cast<Def>() : nullptr);
     }
   }
+#else
+  auto* temp = (UseDefs*)&flower.useDefs;
+  useDefs = std::move(*temp);
+#endif
 
   locations = std::move(flower.locations);
 
