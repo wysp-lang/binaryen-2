@@ -39,7 +39,9 @@ struct Flower
   UseDefAnalysisParams params;
 
   // Similar to in UseDefAnalysis, but without specialized types. This avoids
-  // needing to template this class.
+  // needing to template this class (which would require a lot of this->,
+  // typename, etc., as we would need to template this (CRTP) class on the Use
+  // and Def types.
   using Defs = std::set<Expression*>;
   using UseDefs = std::map<Expression*, Defs>;
   using Locations = std::map<Expression*, Expression**>;
