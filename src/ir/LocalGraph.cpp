@@ -26,7 +26,7 @@ namespace wasm {
 // UseDefAnalysis implementation
 
 template<typename Use, typename Def>
-UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params) {
+UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params) : params(params) {
   // Information about a basic block.
   struct Info {
     // Actions occurring in this block: uses and defs.
@@ -35,20 +35,18 @@ UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params) {
     std::unordered_map<Index, Def*> lastDefs;
   };
 
-  // Flow helper class: flows the gets to their sets.
+  // Flow helper class: flows the uses to their defs.
 
-  struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
-    UseDefAnalysis<Use, Def>::UseDefs& useDefs;
-    UseDefAnalysis<Use, Def>::Locations& locations;
+  struct Flower : public CFGWalker<Flower, UniversalExpressionVisitor<Flower>, Info> {
+    UseDefAnalysis<Use, Def>& parent;
 
-    Flower(UseDefAnalysis<Use, Def>::UseDefs& useDefs,
-           UseDefAnalysis<Use, Def>::Locations& locations,
+    Flower(UseDefAnalysis<Use, Def>& parent,
            Function* func)
-      : useDefs(useDefs), locations(locations) {
+      : parent(parent) {
       setFunction(func);
       // create the CFG by walking the IR
       CFGWalker<Flower, Visitor<Flower>, Info>::doWalkFunction(func);
-      // flow gets across blocks
+      // flow uses across blocks
       flow(func);
     }
 
@@ -56,25 +54,18 @@ UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params) {
 
     // cfg traversal work
 
-    static void doVisitLocalGet(Flower* self, Expression** currp) {
-      auto* curr = (*currp)->cast<Use>();
+    void visitExpression(Expression* curr) {
       // if in unreachable code, skip
-      if (!self->currBasicBlock) {
+      if (!currBasicBlock) {
         return;
       }
-      self->currBasicBlock->contents.actions.emplace_back(curr);
-      self->locations[curr] = currp;
-    }
-
-    static void doVisitLocalSet(Flower* self, Expression** currp) {
-      auto* curr = (*currp)->cast<Def>();
-      // if in unreachable code, skip
-      if (!self->currBasicBlock) {
-        return;
+      if (parent.params.isUse(curr) || parent.params.isDef(curr)) {
+        currBasicBlock->contents.actions.emplace_back(curr);
+        locations[curr] = getCurrPointer();
+        if (parent.params.isDef(curr)) {
+          currBasicBlock->contents.lastDefs[parent.params.getLane(curr)] = curr;
+        }
       }
-      self->currBasicBlock->contents.actions.emplace_back(curr);
-      self->currBasicBlock->contents.lastDefs[curr->index] = curr;
-      self->locations[curr] = currp;
     }
 
     void flow(Function* func) {
@@ -90,9 +81,9 @@ UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params) {
         size_t lastTraversedIteration;
         std::vector<Expression*> actions;
         std::vector<FlowBlock*> in;
-        // Sor each index, the last local.set for it
+        // Sor each index, the last def for it.
         // The unordered_map from BasicBlock.Info is converted into a vector
-        // This speeds up search as there are usually few sets in a block, so
+        // This speeds up search as there are usually few defs in a block, so
         // just scanning them linearly is efficient, avoiding hash computations
         // (while in Info, it's convenient to have a map so we can assign them
         // easily, where the last one seen overwrites the previous; and, we do
@@ -100,9 +91,9 @@ UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params) {
         std::vector<std::pair<Index, Def*>> lastDefs;
       };
 
-      auto numLocals = func->getNumLocals();
-      std::vector<std::vector<Use*>> allGets;
-      allGets.resize(numLocals);
+      auto numLocals = parent.params.numLanes;
+      std::vector<std::vector<Use*>> allUses;
+      allUses.resize(numLocals);
       std::vector<FlowBlock*> work;
 
       // Convert input blocks (basicBlocks) into more efficient flow blocks to
@@ -137,9 +128,9 @@ UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params) {
           });
         // Convert unordered_map to vector.
         flowBlock.lastDefs.reserve(block->contents.lastDefs.size());
-        for (auto set : block->contents.lastDefs) {
+        for (auto* def : block->contents.lastDefs) {
           flowBlock.lastDefs.emplace_back(
-            std::make_pair(set.first, set.second));
+            std::make_pair(def.first, def.second));
         }
       }
       assert(entryFlowBlock != nullptr);
@@ -151,33 +142,33 @@ UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params) {
         for (auto& action : block->contents.actions) {
           std::cout << "  action: " << *action << '\n';
         }
-        for (auto* lastSet : block->contents.lastDefs) {
-          std::cout << "  last set " << lastSet << '\n';
+        for (auto* lastDef : block->contents.lastDefs) {
+          std::cout << "  last def " << lastDef << '\n';
         }
 #endif
         // go through the block, finding each get and adding it to its index,
-        // and seeing how sets affect that
+        // and seeing how defs affect that
         auto& actions = block.actions;
         // move towards the front, handling things as we go
         for (int i = int(actions.size()) - 1; i >= 0; i--) {
           auto* action = actions[i];
-          if (auto* get = action->dynCast<Use>()) {
-            allGets[get->index].push_back(get);
+          if (auto* use = action->dynCast<Use>()) {
+            allUses[parent.params.getLane(use)].push_back(use);
           } else {
-            // This set is the only set for all those gets.
-            auto* set = action->cast<Def>();
-            auto& gets = allGets[set->index];
-            for (auto* get : gets) {
-              useDefs[get].insert(set);
+            // This def is the only def for all those uses.
+            auto* def = action->cast<Def>();
+            auto& uses = allUses[parent.params.getLane(def)];
+            for (auto* use : uses) {
+              useDefs[use].insert(def);
             }
-            gets.clear();
+            uses.clear();
           }
         }
         // If anything is left, we must flow it back through other blocks. we
-        // can do that for all gets as a whole, they will get the same results.
+        // can do that for all uses as a whole, they will use the same results.
         for (Index index = 0; index < numLocals; index++) {
-          auto& gets = allGets[index];
-          if (gets.empty()) {
+          auto& uses = allUses[index];
+          if (uses.empty()) {
             continue;
           }
           work.push_back(&block);
@@ -191,8 +182,8 @@ UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params) {
             if (curr->in.empty()) {
               if (curr == entryFlowBlock) {
                 // These receive a param or zero init value.
-                for (auto* get : gets) {
-                  useDefs[get].insert(nullptr);
+                for (auto* use : uses) {
+                  useDefs[use].insert(nullptr);
                 }
               }
             } else {
@@ -202,15 +193,15 @@ UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params) {
                   continue;
                 }
                 pred->lastTraversedIteration = currentIteration;
-                auto lastSet = std::find_if(pred->lastDefs.begin(),
+                auto lastDef = std::find_if(pred->lastDefs.begin(),
                                             pred->lastDefs.end(),
                                             [&](std::pair<Index, Def*>& value) {
                                               return value.first == index;
                                             });
-                if (lastSet != pred->lastDefs.end()) {
-                  // There is a set here, apply it, and stop the flow.
-                  for (auto* get : gets) {
-                    useDefs[get].insert(lastSet->second);
+                if (lastDef != pred->lastDefs.end()) {
+                  // There is a def here, apply it, and stop the flow.
+                  for (auto* use : uses) {
+                    useDefs[use].insert(lastDef->second);
                   }
                 } else {
                   // Keep on flowing.
@@ -219,7 +210,7 @@ UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params) {
               }
             }
           }
-          gets.clear();
+          uses.clear();
           currentIteration++;
         }
       }
@@ -231,11 +222,11 @@ UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params) {
 #ifdef LOCAL_GRAPH_DEBUG
   std::cout << "UseDefAnalysis::dump\n";
   for (auto& pair : useDefs) {
-    auto* get = pair.first;
-    auto& sets = pair.second;
-    std::cout << "GET\n" << get << " is influenced by\n";
-    for (auto* set : sets) {
-      std::cout << set << '\n';
+    auto* use = pair.first;
+    auto& defs = pair.second;
+    std::cout << "USE\n" << use << " is influenced by\n";
+    for (auto* def : defs) {
+      std::cout << def << '\n';
     }
   }
   std::cout << "total locations: " << locations.size() << '\n';
@@ -245,15 +236,15 @@ UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params) {
 void UseDefAnalysis::computeInfluences() {
   for (auto& pair : locations) {
     auto* curr = pair.first;
-    if (auto* set = curr->dynCast<Def>()) {
-      FindAll<Use> findAll(set->value);
-      for (auto* get : findAll.list) {
-        getInfluences[get].insert(set);
+    if (auto* def = curr->dynCast<Def>()) {
+      FindAll<Use> findAll(def->value);
+      for (auto* use : findAll.list) {
+        useInfluences[use].insert(def);
       }
     } else {
-      auto* get = curr->cast<Use>();
-      for (auto* set : useDefs[get]) {
-        setInfluences[set].insert(get);
+      auto* use = curr->cast<Use>();
+      for (auto* def : useDefs[use]) {
+        defInfluences[def].insert(use);
       }
     }
   }
@@ -276,7 +267,9 @@ void LocalGraph::LocalGraph(Function* func)
            return set->index;
          }
          WASM_UNREACHABLE("bad use-def expr");
-       }}) {}
+       },
+       // The number of lanes is the number of locals.
+       func->getNumLocals()}) {}
 
 void LocalGraph::computeSSAIndexes() {
   std::unordered_map<Index, std::set<LocalSet*>> indexSets;

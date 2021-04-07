@@ -21,13 +21,30 @@
 
 namespace wasm {
 
+//
+// Generic use-def analysis. Types are provided for the use and def, and hooks
+// for checking if something is a use or a def (which allows more specific
+// filtering not based on the type. There is also a numerical "lane" which is a
+// number that determines if two uses interfere with each other - if the lane is
+// identical, they do (for example, the most common use-def analysis is on
+// locals, and the "lane" is the local index, which means that two sets of the
+// same local index interfere with each other as expected).
+//
 template<typename Use, typename Def> struct UseDefAnalysis {
   // Main API
 
   struct AnalysisParams {
+    // Check if an expression is a use.
     std::function<bool(Expression*)> isUse;
+
+    // Check if an expression is a def.
     std::function<bool(Expression*)> isDef;
+
+    // For a use or a def, return the "lane".
     std::function<Index(Expression*)> getLane;
+
+    // Return the total number of lanes.
+    Index numLanes;
   };
 
   UseDefAnalysis(Function* func, AnalysisParams params);
