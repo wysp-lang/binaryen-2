@@ -21,6 +21,42 @@
 
 namespace wasm {
 
+template<typename Use, typename Def>
+struct UseDefAnalysis {
+  // Main API
+
+  struct AnalysisParams {
+    std::function<bool (Expression*)> isUse;
+    std::function<bool (Expression*)> isDef;
+    std::function<Index (Expression*)> getLane;
+  };
+
+  UseDefAnalysis(Function* func, AnalysisParams params);
+
+  using Defs = std::set<Def*>;
+
+  using UseDefs = std::map<Use*, Defs>;
+
+  using Locations = std::map<Expression*, Expression**>;
+
+  // The defs for each use.
+  UseDefs useDefs;
+
+  // Maps expressions to the pointers to them (for easy replacing).
+  Locations locations;
+
+  // Optional API: compute the influence graphs between defs and uses
+  // (useful for algorithms that propagate changes).
+
+  void computeInfluences();
+
+  // For each use, the defs whose values are influenced by that use
+  std::unordered_map<Use*, std::unordered_set<Def*>> useInfluences;
+
+  // For each def, the uses whose values are influenced by that def
+  std::unordered_map<Def*, std::unordered_set<Use*>> defInfluences;
+};
+
 //
 // Finds the connections between local.gets and local.sets, creating
 // a graph of those ties. This is useful for "ssa-style" optimization,
@@ -29,34 +65,14 @@ namespace wasm {
 // (see the SSA pass for actually creating new local indexes based
 // on this).
 //
-struct LocalGraph {
+// This builds on UseDefAnalysis, done on LocalGet and LocalSet. A specific
+// convention used here is that a nullptr LocalSet means the initial value in
+// the function (0 for a var, the received value for a param).
+//
+struct LocalGraph : public UseDefAnalysis<LocalGet, LocalSet> {
   // main API
 
-  // the constructor computes getSetses, the sets affecting each get
   LocalGraph(Function* func);
-
-  // the local.sets relevant for an index or a get.
-  typedef std::set<LocalSet*> Sets;
-
-  typedef std::map<LocalGet*, Sets> GetSetses;
-
-  typedef std::map<Expression*, Expression**> Locations;
-
-  // externally useful information
-  GetSetses getSetses; // the sets affecting each get. a nullptr set means the
-                       // initial value (0 for a var, the received value for a
-                       // param)
-  Locations locations; // where each get and set is (for easy replacing)
-
-  // Optional: compute the influence graphs between sets and gets
-  // (useful for algorithms that propagate changes).
-
-  void computeInfluences();
-
-  // for each get, the sets whose values are influenced by that get
-  std::unordered_map<LocalGet*, std::unordered_set<LocalSet*>> getInfluences;
-  // for each set, the gets whose values are influenced by that set
-  std::unordered_map<LocalSet*, std::unordered_set<LocalGet*>> setInfluences;
 
   // Optional: Compute the local indexes that are SSA, in the sense of
   //  * a single set for all the gets for that local index
