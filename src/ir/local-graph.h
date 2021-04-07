@@ -17,6 +17,7 @@
 #ifndef wasm_ir_local_graph_h
 #define wasm_ir_local_graph_h
 
+#include "ir/find_all.h"
 #include "wasm.h"
 
 namespace wasm {
@@ -64,7 +65,22 @@ template<typename Use, typename Def> struct UseDefAnalysis {
   // Optional API: compute the influence graphs between defs and uses
   // (useful for algorithms that propagate changes).
 
-  void computeInfluences();
+  void computeInfluences() {
+    for (auto& pair : locations) {
+      auto* curr = pair.first;
+      if (auto* def = curr->dynCast<Def>()) {
+        FindAll<Use> findAll(def->value);
+        for (auto* use : findAll.list) {
+          useInfluences[use].insert(def);
+        }
+      } else {
+        auto* use = curr->cast<Use>();
+        for (auto* def : useDefs[use]) {
+          defInfluences[def].insert(use);
+        }
+      }
+    }
+  }
 
   // For each use, the defs whose values are influenced by that use
   std::unordered_map<Use*, std::unordered_set<Def*>> useInfluences;

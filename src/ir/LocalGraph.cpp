@@ -17,7 +17,6 @@
 #include <iterator>
 
 #include <cfg/cfg-traversal.h>
-#include <ir/find_all.h>
 #include <ir/local-graph.h>
 #include <wasm-builder.h>
 
@@ -258,24 +257,6 @@ UseDefAnalysis<Use, Def>::UseDefAnalysis(Function* func,
   }
   std::cout << "total locations: " << locations.size() << '\n';
 #endif
-}
-
-template<typename Use, typename Def>
-void UseDefAnalysis<Use, Def>::computeInfluences() {
-  for (auto& pair : locations) {
-    auto* curr = pair.first;
-    if (auto* def = curr->dynCast<Def>()) {
-      FindAll<Use> findAll(def->value);
-      for (auto* use : findAll.list) {
-        useInfluences[use].insert(def);
-      }
-    } else {
-      auto* use = curr->cast<Use>();
-      for (auto* def : useDefs[use]) {
-        defInfluences[def].insert(use);
-      }
-    }
-  }
 }
 
 // LocalGraph implementation
