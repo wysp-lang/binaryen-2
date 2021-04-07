@@ -26,7 +26,8 @@ namespace wasm {
 // UseDefAnalysis implementation
 
 template<typename Use, typename Def>
-UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params) : params(params) {
+UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params)
+  : params(params) {
   // Information about a basic block.
   struct Info {
     // Actions occurring in this block: uses and defs.
@@ -37,12 +38,11 @@ UseDefAnalysis::UseDefAnalysis(Function* func, AnalysisParams params) : params(p
 
   // Flow helper class: flows the uses to their defs.
 
-  struct Flower : public CFGWalker<Flower, UniversalExpressionVisitor<Flower>, Info> {
+  struct Flower
+    : public CFGWalker<Flower, UniversalExpressionVisitor<Flower>, Info> {
     UseDefAnalysis<Use, Def>& parent;
 
-    Flower(UseDefAnalysis<Use, Def>& parent,
-           Function* func)
-      : parent(parent) {
+    Flower(UseDefAnalysis<Use, Def>& parent, Function* func) : parent(parent) {
       setFunction(func);
       // create the CFG by walking the IR
       CFGWalker<Flower, Visitor<Flower>, Info>::doWalkFunction(func);
