@@ -51,7 +51,8 @@ struct Flower
   Flower(UseDefAnalysisParams params, Function* func) : params(params) {
     this->setFunction(func);
     // create the CFG by walking the IR
-    CFGWalker<Flower, UnifiedExpressionVisitor<Flower>, Info>::doWalkFunction(func);
+    CFGWalker<Flower, UnifiedExpressionVisitor<Flower>, Info>::doWalkFunction(
+      func);
     // flow uses across blocks
     flow(func);
   }
@@ -128,15 +129,14 @@ struct Flower
       // Map in block to flow blocks
       auto& in = block->in;
       flowBlock.in.resize(in.size());
-      std::transform(
-        in.begin(), in.end(), flowBlock.in.begin(), [&](BasicBlock* block) {
-          return basicToFlowMap[block];
-        });
+      std::transform(in.begin(),
+                     in.end(),
+                     flowBlock.in.begin(),
+                     [&](BasicBlock* block) { return basicToFlowMap[block]; });
       // Convert unordered_map to vector.
       flowBlock.lastDefs.reserve(block->contents.lastDefs.size());
       for (auto def : block->contents.lastDefs) {
-        flowBlock.lastDefs.emplace_back(
-          std::make_pair(def.first, def.second));
+        flowBlock.lastDefs.emplace_back(std::make_pair(def.first, def.second));
       }
     }
     assert(entryFlowBlock != nullptr);
@@ -200,11 +200,12 @@ struct Flower
                 continue;
               }
               pred->lastTraversedIteration = currentIteration;
-              auto lastDef = std::find_if(pred->lastDefs.begin(),
-                                          pred->lastDefs.end(),
-                                          [&](std::pair<Index, Expression*>& value) {
-                                            return value.first == index;
-                                          });
+              auto lastDef =
+                std::find_if(pred->lastDefs.begin(),
+                             pred->lastDefs.end(),
+                             [&](std::pair<Index, Expression*>& value) {
+                               return value.first == index;
+                             });
               if (lastDef != pred->lastDefs.end()) {
                 // There is a def here, apply it, and stop the flow.
                 for (auto* use : uses) {
@@ -229,7 +230,8 @@ struct Flower
 // UseDefAnalysis implementation
 
 template<typename Use, typename Def>
-UseDefAnalysis<Use, Def>::UseDefAnalysis(Function* func, UseDefAnalysisParams params) {
+UseDefAnalysis<Use, Def>::UseDefAnalysis(Function* func,
+                                         UseDefAnalysisParams params) {
 
   Flower flower(params, func);
 
