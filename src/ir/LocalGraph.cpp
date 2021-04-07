@@ -270,9 +270,9 @@ void LocalGraph::LocalGraph(Function* func)
        [](Expression* curr) { return curr->is<LocalSet>(); },
        // A "lane" is the local index.
        [](Expression* curr) {
-         if (auto* get = curr->dynCasts<LocalGet>()) {
+         if (auto* get = curr->dynCast<LocalGet>()) {
            return get->index;
-         } else if (auto* set = curr->dynCasts<LocalSet>()) {
+         } else if (auto* set = curr->dynCast<LocalSet>()) {
            return set->index;
          }
          WASM_UNREACHABLE("bad use-def expr");

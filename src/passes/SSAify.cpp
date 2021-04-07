@@ -116,8 +116,8 @@ struct SSAify : public Pass {
   }
 
   bool hasMerges(LocalSet* set, LocalGraph& graph) {
-    for (auto* get : graph.setInfluences[set]) {
-      if (graph.getSetses[get].size() > 1) {
+    for (auto* get : graph.defInfluences[set]) {
+      if (graph.useDefs[get].size() > 1) {
         return true;
       }
     }
@@ -127,7 +127,7 @@ struct SSAify : public Pass {
   void computeGetsAndPhis(LocalGraph& graph) {
     FindAll<LocalGet> gets(func->body);
     for (auto* get : gets.list) {
-      auto& sets = graph.getSetses[get];
+      auto& sets = graph.useDefs[get];
       if (sets.size() == 0) {
         continue; // unreachable, ignore
       }

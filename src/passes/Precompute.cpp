@@ -290,7 +290,7 @@ private:
           precomputeValue(Properties::getFallthrough(
             set->value, getPassOptions(), getModule()->features));
         if (values.isConcrete()) {
-          for (auto* get : localGraph.setInfluences[set]) {
+          for (auto* get : localGraph.defInfluences[set]) {
             work.insert(get);
           }
         }
@@ -302,7 +302,7 @@ private:
         // for this get to have constant value, all sets must agree
         Literals values;
         bool first = true;
-        for (auto* set : localGraph.getSetses[get]) {
+        for (auto* set : localGraph.useDefs[get]) {
           Literals curr;
           if (set == nullptr) {
             if (getFunction()->isVar(get->index)) {
@@ -337,7 +337,7 @@ private:
         if (values.isConcrete()) {
           // we did!
           getValues[get] = values;
-          for (auto* set : localGraph.getInfluences[get]) {
+          for (auto* set : localGraph.useInfluences[get]) {
             work.insert(set);
           }
         }

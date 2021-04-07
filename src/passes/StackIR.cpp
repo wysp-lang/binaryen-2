@@ -186,11 +186,11 @@ private:
               if (set->index == get->index) {
                 // This might be a proper set-get pair, where the set is
                 // used by this get and nothing else, check that.
-                auto& sets = localGraph.getSetses[get];
+                auto& sets = localGraph.useDefs[get];
                 if (sets.size() == 1 && *sets.begin() == set) {
-                  auto& setInfluences = localGraph.setInfluences[set];
-                  if (setInfluences.size() == 1) {
-                    assert(*setInfluences.begin() == get);
+                  auto& defInfluences = localGraph.defInfluences[set];
+                  if (defInfluences.size() == 1) {
+                    assert(*defInfluences.begin() == get);
                     // Do it! The set and the get can go away, the proper
                     // value is on the stack.
 #ifdef STACK_OPT_DEBUG

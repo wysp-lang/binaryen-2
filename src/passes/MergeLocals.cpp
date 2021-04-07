@@ -113,7 +113,7 @@ struct MergeLocals
     for (auto* copy : copies) {
       auto* trivial = copy->value->cast<LocalSet>();
       bool canOptimizeToCopy = false;
-      auto& trivialInfluences = preGraph.setInfluences[trivial];
+      auto& trivialInfluences = preGraph.defInfluences[trivial];
       if (!trivialInfluences.empty()) {
         canOptimizeToCopy = true;
         for (auto* influencedGet : trivialInfluences) {
@@ -121,9 +121,9 @@ struct MergeLocals
           // however, it may depend on other writes too, if there is a
           // merge/phi, and in that case we can't do anything
           assert(influencedGet->index == trivial->index);
-          if (preGraph.getSetses[influencedGet].size() == 1) {
+          if (preGraph.useDefs[influencedGet].size() == 1) {
             // this is ok
-            assert(*preGraph.getSetses[influencedGet].begin() == trivial);
+            assert(*preGraph.useDefs[influencedGet].begin() == trivial);
             // If local types are different (when one is a subtype of the
             // other), don't optimize
             if (func->getLocalType(copy->index) != influencedGet->type) {
@@ -153,15 +153,15 @@ struct MergeLocals
 
         // if the trivial set we added has influences, it means $y lives on
         if (!trivialInfluences.empty()) {
-          auto& copyInfluences = preGraph.setInfluences[copy];
+          auto& copyInfluences = preGraph.defInfluences[copy];
           if (!copyInfluences.empty()) {
             bool canOptimizeToTrivial = true;
             for (auto* influencedGet : copyInfluences) {
               // as above, avoid merges/phis
               assert(influencedGet->index == copy->index);
-              if (preGraph.getSetses[influencedGet].size() == 1) {
+              if (preGraph.useDefs[influencedGet].size() == 1) {
                 // this is ok
-                assert(*preGraph.getSetses[influencedGet].begin() == copy);
+                assert(*preGraph.useDefs[influencedGet].begin() == copy);
                 // If local types are different (when one is a subtype of the
                 // other), don't optimize
                 if (func->getLocalType(trivial->index) != influencedGet->type) {
@@ -196,10 +196,10 @@ struct MergeLocals
       for (auto& pair : optimizedToCopy) {
         auto* copy = pair.first;
         auto* trivial = pair.second;
-        auto& trivialInfluences = preGraph.setInfluences[trivial];
+        auto& trivialInfluences = preGraph.defInfluences[trivial];
         for (auto* influencedGet : trivialInfluences) {
           // verify the set
-          auto& sets = postGraph.getSetses[influencedGet];
+          auto& sets = postGraph.useDefs[influencedGet];
           if (sets.size() != 1 || *sets.begin() != copy) {
             // not good, undo all the changes for this copy
             for (auto* undo : trivialInfluences) {
@@ -212,10 +212,10 @@ struct MergeLocals
       for (auto& pair : optimizedToTrivial) {
         auto* copy = pair.first;
         auto* trivial = pair.second;
-        auto& copyInfluences = preGraph.setInfluences[copy];
+        auto& copyInfluences = preGraph.defInfluences[copy];
         for (auto* influencedGet : copyInfluences) {
           // verify the set
-          auto& sets = postGraph.getSetses[influencedGet];
+          auto& sets = postGraph.useDefs[influencedGet];
           if (sets.size() != 1 || *sets.begin() != trivial) {
             // not good, undo all the changes for this copy
             for (auto* undo : copyInfluences) {
