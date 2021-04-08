@@ -19,7 +19,7 @@
 // be read.
 //
 
-
+#include <ir/effects.h>
 #include <ir/local-graph.h>
 #include <pass.h>
 #include <wasm.h>
@@ -33,33 +33,41 @@ struct DeadStoreElimination
   Pass* create() override { return new DeadStoreElimination; }
 
   void doWalkFunction(Function* curr) {
-#if 0
-    UseDefAnalysisParams params;
 
-    params.isUse = [](Expression* curr) { return curr->is<LocalGet>(); };
+    struct Analysis : public UseDefAnalysis {
+      PassOptions& options;
+      Features features;
 
-    params.isDef = [](Expression* curr) { return curr->is<LocalSet>(); };
+      Analysis(PassOptions& options, Features features) : options(options), features(features) {}
 
-    params.getLane = [](Expression* curr) {
-               if (auto* get = curr->dynCast<LocalGet>()) {
-                 return get->index;
-               } else if (auto* set = curr->dynCast<LocalSet>()) {
-                 return set->index;
-               }
-               WASM_UNREACHABLE("bad use-def expr");
-             };
+      virtual bool isUse(Expression* curr) {
+        EffectAnalyzer effects(passOptions, features).visit(curr);
+        return effects.readsMemory;
+      }
 
-    params.numLanes = func->getNumLocals();
+      virtual bool isDef(Expression* curr) {
+        EffectAnalyzer effects(passOptions, features).visit(curr);
+        return effects.writesMemory;
+      }
 
-    params.noteUseDef =
-             [&](Expression* use, Expression* def) {
-               useDefs[use->cast<LocalGet>()].insert(def ? def->cast<LocalSet>()
-                                                         : nullptr);
-             };
+      virtual Index getLane(Expression* curr) {
+        if (auto* store = curr->dynCast<Store>()) {
+        }
+        // If we cannot recognize this, it is an arbitrary load or store or
+        // other memory operation.
+        return 0;
+      }
+
+      virtual Index getNumLanes() { return func->getNumLocals(); }
+
+      virtual void noteUseDef(Expression* use, Expression* def) {
+        useDefs[use->cast<LocalGet>()].insert(def ? def->cast<LocalSet>()
+                                               : nullptr);
+      }
+    };
 
     UseDefAnalysis analyzer;
-    analyzer.analyze(curr, params);
-#endif
+    analyzer.analyze(curr);
   }
 };
 

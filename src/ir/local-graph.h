@@ -31,6 +31,10 @@ namespace wasm {
 // locals, and the "lane" is the local index, which means that two sets of the
 // same local index interfere with each other as expected).
 //
+// The space of lanes should be a range [0..numLanes). The analysis will create
+// dense vectors on that range, so only reasonable numbers of lanes should be
+// used.
+//
 struct UseDefAnalysis {
   // Virtual methods to be implemented by users.
   

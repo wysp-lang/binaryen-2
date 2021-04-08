@@ -90,9 +90,9 @@ struct Flower
       std::vector<std::pair<Index, Expression*>> lastDefs;
     };
 
-    auto numLocals = analysis.getNumLanes();
+    auto numLanes = analysis.getNumLanes();
     std::vector<std::vector<Expression*>> allUses;
-    allUses.resize(numLocals);
+    allUses.resize(numLanes);
     std::vector<FlowBlock*> work;
 
     // Convert input blocks (basicBlocks) into more efficient flow blocks to
@@ -165,7 +165,7 @@ struct Flower
       }
       // If anything is left, we must flow it back through other blocks. we
       // can do that for all uses as a whole, they will use the same results.
-      for (Index index = 0; index < numLocals; index++) {
+      for (Index index = 0; index < numLanes; index++) {
         auto& uses = allUses[index];
         if (uses.empty()) {
           continue;
