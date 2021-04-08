@@ -244,25 +244,25 @@ void UseDefAnalysis::analyze(Function* func, UseDefAnalysisParams params) {
 
 LocalGraph::LocalGraph(Function* func) {
   analyze(func,
-                   {// A use for us is a local.get.
-                    [](Expression* curr) { return curr->is<LocalGet>(); },
-                    // A definition for us is a local.set.
-                    [](Expression* curr) { return curr->is<LocalSet>(); },
-                    // A "lane" is the local index.
-                    [](Expression* curr) {
-                      if (auto* get = curr->dynCast<LocalGet>()) {
-                        return get->index;
-                      } else if (auto* set = curr->dynCast<LocalSet>()) {
-                        return set->index;
-                      }
-                      WASM_UNREACHABLE("bad use-def expr");
-                    },
-                    // The number of lanes is the number of locals.
-                    Index(func->getNumLocals()),
-                    [&](Expression* use, Expression* def) {
-                      useDefs[use->cast<LocalGet>()].insert(
-                        def ? def->cast<LocalSet>() : nullptr);
-                    }});
+          {// A use for us is a local.get.
+           [](Expression* curr) { return curr->is<LocalGet>(); },
+           // A definition for us is a local.set.
+           [](Expression* curr) { return curr->is<LocalSet>(); },
+           // A "lane" is the local index.
+           [](Expression* curr) {
+             if (auto* get = curr->dynCast<LocalGet>()) {
+               return get->index;
+             } else if (auto* set = curr->dynCast<LocalSet>()) {
+               return set->index;
+             }
+             WASM_UNREACHABLE("bad use-def expr");
+           },
+           // The number of lanes is the number of locals.
+           Index(func->getNumLocals()),
+           [&](Expression* use, Expression* def) {
+             useDefs[use->cast<LocalGet>()].insert(def ? def->cast<LocalSet>()
+                                                       : nullptr);
+           }});
 }
 
 void LocalGraph::computeInfluences() {
