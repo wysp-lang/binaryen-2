@@ -36,7 +36,7 @@ struct UseDefAnalysisParams {
   Index numLanes;
 
   // Note a use-def pair that was discovered in the analysis.
-  std::function<void (Expression*, Expression*)> noteUseDef;
+  std::function<void(Expression*, Expression*)> noteUseDef;
 };
 
 //
