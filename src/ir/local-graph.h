@@ -48,9 +48,7 @@ struct UseDefAnalysisParams {
 // locals, and the "lane" is the local index, which means that two sets of the
 // same local index interfere with each other as expected).
 //
-template<typename Use, typename Def> struct UseDefAnalysis {
-  // Main API
-
+struct UseDefAnalysis {
   UseDefAnalysis(Function* func, UseDefAnalysisParams params);
 
   using Locations = std::map<Expression*, Expression**>;

@@ -221,8 +221,7 @@ struct Flower
 
 // UseDefAnalysis implementation
 
-template<typename Use, typename Def>
-UseDefAnalysis<Use, Def>::UseDefAnalysis(Function* func,
+UseDefAnalysis::UseDefAnalysis(Function* func,
                                          UseDefAnalysisParams params) {
 
   Flower flower(params, func);
@@ -246,7 +245,7 @@ UseDefAnalysis<Use, Def>::UseDefAnalysis(Function* func,
 // LocalGraph implementation
 
 LocalGraph::LocalGraph(Function* func)
-  : UseDefAnalysis<LocalGet, LocalSet>(
+  : UseDefAnalysis(
       func,
       {// A use for us is a local.get.
        [](Expression* curr) { return curr->is<LocalGet>(); },
