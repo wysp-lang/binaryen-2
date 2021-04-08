@@ -22,23 +22,6 @@
 
 namespace wasm {
 
-struct UseDefAnalysisParams {
-  // Check if an expression is a use.
-  std::function<bool(Expression*)> isUse;
-
-  // Check if an expression is a def.
-  std::function<bool(Expression*)> isDef;
-
-  // For a use or a def, return the "lane".
-  std::function<Index(Expression*)> getLane;
-
-  // Return the total number of lanes.
-  Index numLanes;
-
-  // Note a use-def pair that was discovered in the analysis.
-  std::function<void(Expression*, Expression*)> noteUseDef;
-};
-
 //
 // Generic use-def analysis. Types are provided for the use and def, and hooks
 // for checking if something is a use or a def (which allows more specific
@@ -49,14 +32,37 @@ struct UseDefAnalysisParams {
 // same local index interfere with each other as expected).
 //
 struct UseDefAnalysis {
-  void analyze(Function* func, UseDefAnalysisParams params);
+  // Virtual methods to be implemented by users.
+  
+  // Check if an expression is a use.
+  virtual bool isUse(Expression*) = 0;
 
-  using Locations = std::map<Expression*, Expression**>;
+  // Check if an expression is a def.
+  virtual bool isDef(Expression*) = 0;
+
+  // For a use or a def, return the "lane".
+  virtual Index getLane(Expression*) = 0;
+
+  // Return the total number of lanes.
+  virtual Index getNumLanes() = 0;
+
+  // Note a use-def pair that was discovered in the analysis. This is called as
+  // the analysis runs.
+  virtual void noteUseDef(Expression*, Expression*) = 0;
+
+  // Main API.
+
+  // Perform the analysis.
+  void analyze(Function* func);
 
   // Maps expressions to the pointers to them (for easy replacing). It is
   // efficiend and convenient to collect these while performing the analysis, so
   // it is better to avoid uses of the class needing to do the work later.
+  using Locations = std::map<Expression*, Expression**>;
+
   Locations locations;
+
+  virtual ~UseDefAnalysis() {}
 };
 
 //
@@ -75,6 +81,12 @@ struct LocalGraph : public UseDefAnalysis {
   // main API
 
   LocalGraph(Function* func);
+
+  virtual bool isUse(Expression*);
+  virtual bool isDef(Expression*);
+  virtual Index getLane(Expression*);
+  virtual Index getNumLanes();
+  virtual void noteUseDef(Expression*, Expression*);
 
   // TODO: go back to getsetes etc.
   using Defs = std::set<LocalSet*>;
@@ -121,6 +133,8 @@ struct LocalGraph : public UseDefAnalysis {
   bool isSSA(Index x);
 
 private:
+  Function* func;
+
   std::set<Index> SSAIndexes;
 };
 

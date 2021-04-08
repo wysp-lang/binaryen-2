@@ -33,6 +33,7 @@ struct DeadStoreElimination
   Pass* create() override { return new DeadStoreElimination; }
 
   void doWalkFunction(Function* curr) {
+#if 0
     UseDefAnalysisParams params;
 
     params.isUse = [](Expression* curr) { return curr->is<LocalGet>(); };
@@ -58,6 +59,7 @@ struct DeadStoreElimination
 
     UseDefAnalysis analyzer;
     analyzer.analyze(curr, params);
+#endif
   }
 };
 

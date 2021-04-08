@@ -36,11 +36,11 @@ struct Info {
 
 struct Flower
   : public CFGWalker<Flower, UnifiedExpressionVisitor<Flower>, Info> {
-  UseDefAnalysisParams params;
+  UseDefAnalysis& analysis;
 
   std::map<Expression*, Expression**> locations;
 
-  Flower(UseDefAnalysisParams params, Function* func) : params(params) {
+  Flower(UseDefAnalysis& analysis, Function* func) : analysis(analysis) {
     this->setFunction(func);
     // create the CFG by walking the IR
     CFGWalker<Flower, UnifiedExpressionVisitor<Flower>, Info>::doWalkFunction(
@@ -58,11 +58,11 @@ struct Flower
     if (!currBasicBlock) {
       return;
     }
-    if (params.isUse(curr) || params.isDef(curr)) {
+    if (analysis.isUse(curr) || analysis.isDef(curr)) {
       currBasicBlock->contents.actions.emplace_back(curr);
       locations[curr] = getCurrentPointer();
-      if (params.isDef(curr)) {
-        currBasicBlock->contents.lastDefs[params.getLane(curr)] = curr;
+      if (analysis.isDef(curr)) {
+        currBasicBlock->contents.lastDefs[analysis.getLane(curr)] = curr;
       }
     }
   }
@@ -90,7 +90,7 @@ struct Flower
       std::vector<std::pair<Index, Expression*>> lastDefs;
     };
 
-    auto numLocals = params.numLanes;
+    auto numLocals = analysis.getNumLanes();
     std::vector<std::vector<Expression*>> allUses;
     allUses.resize(numLocals);
     std::vector<FlowBlock*> work;
@@ -150,15 +150,15 @@ struct Flower
       // move towards the front, handling things as we go
       for (int i = int(actions.size()) - 1; i >= 0; i--) {
         auto* action = actions[i];
-        if (params.isUse(action)) {
-          allUses[params.getLane(action)].push_back(action);
+        if (analysis.isUse(action)) {
+          allUses[analysis.getLane(action)].push_back(action);
         } else {
-          assert(params.isDef(action));
+          assert(analysis.isDef(action));
 
           // This def is the only def for all those uses.
-          auto& uses = allUses[params.getLane(action)];
+          auto& uses = allUses[analysis.getLane(action)];
           for (auto* use : uses) {
-            params.noteUseDef(use, action);
+            analysis.noteUseDef(use, action);
           }
           uses.clear();
         }
@@ -182,7 +182,7 @@ struct Flower
             if (curr == entryFlowBlock) {
               // These receive a param or zero init value.
               for (auto* use : uses) {
-                params.noteUseDef(use, nullptr);
+                analysis.noteUseDef(use, nullptr);
               }
             }
           } else {
@@ -201,7 +201,7 @@ struct Flower
               if (lastDef != pred->lastDefs.end()) {
                 // There is a def here, apply it, and stop the flow.
                 for (auto* use : uses) {
-                  params.noteUseDef(use, lastDef->second);
+                  analysis.noteUseDef(use, lastDef->second);
                 }
               } else {
                 // Keep on flowing.
@@ -221,8 +221,8 @@ struct Flower
 
 // UseDefAnalysis implementation
 
-void UseDefAnalysis::analyze(Function* func, UseDefAnalysisParams params) {
-  Flower flower(params, func);
+void UseDefAnalysis::analyze(Function* func) {
+  Flower flower(*this, func);
 
   locations = std::move(flower.locations);
 
@@ -242,31 +242,28 @@ void UseDefAnalysis::analyze(Function* func, UseDefAnalysisParams params) {
 
 // LocalGraph implementation
 
-LocalGraph::LocalGraph(Function* func) {
-  UseDefAnalysisParams params;
+LocalGraph::LocalGraph(Function* func) : func(func) {
+  analyze(func);
+}
 
-  params.isUse = [](Expression* curr) { return curr->is<LocalGet>(); };
+bool LocalGraph::isUse(Expression* curr) { return curr->is<LocalGet>(); }
 
-  params.isDef = [](Expression* curr) { return curr->is<LocalSet>(); };
+bool LocalGraph::isDef(Expression* curr) { return curr->is<LocalSet>(); }
 
-  params.getLane = [](Expression* curr) {
-             if (auto* get = curr->dynCast<LocalGet>()) {
-               return get->index;
-             } else if (auto* set = curr->dynCast<LocalSet>()) {
-               return set->index;
-             }
-             WASM_UNREACHABLE("bad use-def expr");
-           };
+Index LocalGraph::getLane(Expression* curr) {
+  if (auto* get = curr->dynCast<LocalGet>()) {
+    return get->index;
+  } else if (auto* set = curr->dynCast<LocalSet>()) {
+    return set->index;
+  }
+  WASM_UNREACHABLE("bad use-def expr");
+}
 
-  params.numLanes = func->getNumLocals();
+Index LocalGraph::getNumLanes() { return func->getNumLocals(); }
 
-  params.noteUseDef =
-           [&](Expression* use, Expression* def) {
-             useDefs[use->cast<LocalGet>()].insert(def ? def->cast<LocalSet>()
-                                                       : nullptr);
-           };
-
-  analyze(func, params);
+void LocalGraph::noteUseDef(Expression* use, Expression* def) {
+  useDefs[use->cast<LocalGet>()].insert(def ? def->cast<LocalSet>()
+                                         : nullptr);
 }
 
 void LocalGraph::computeInfluences() {
