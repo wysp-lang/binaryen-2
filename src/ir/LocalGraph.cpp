@@ -221,8 +221,7 @@ struct Flower
 
 // UseDefAnalysis implementation
 
-UseDefAnalysis::UseDefAnalysis(Function* func, UseDefAnalysisParams params) {
-
+void UseDefAnalysis::analyze(Function* func, UseDefAnalysisParams params) {
   Flower flower(params, func);
 
   locations = std::move(flower.locations);
@@ -243,8 +242,8 @@ UseDefAnalysis::UseDefAnalysis(Function* func, UseDefAnalysisParams params) {
 
 // LocalGraph implementation
 
-LocalGraph::LocalGraph(Function* func)
-  : UseDefAnalysis(func,
+LocalGraph::LocalGraph(Function* func) {
+  analyze(func,
                    {// A use for us is a local.get.
                     [](Expression* curr) { return curr->is<LocalGet>(); },
                     // A definition for us is a local.set.
@@ -263,7 +262,25 @@ LocalGraph::LocalGraph(Function* func)
                     [&](Expression* use, Expression* def) {
                       useDefs[use->cast<LocalGet>()].insert(
                         def ? def->cast<LocalSet>() : nullptr);
-                    }}) {}
+                    }});
+}
+
+void LocalGraph::computeInfluences() {
+  for (auto& pair : locations) {
+    auto* curr = pair.first;
+    if (auto* def = curr->dynCast<LocalSet>()) {
+      FindAll<LocalGet> findAll(def->value);
+      for (auto* use : findAll.list) {
+        useInfluences[use].insert(def);
+      }
+    } else {
+      auto* use = curr->cast<LocalGet>();
+      for (auto* def : useDefs[use]) {
+        defInfluences[def].insert(use);
+      }
+    }
+  }
+}
 
 void LocalGraph::computeSSAIndexes() {
   std::unordered_map<Index, std::set<LocalSet*>> indexSets;

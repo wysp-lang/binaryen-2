@@ -49,7 +49,7 @@ struct UseDefAnalysisParams {
 // same local index interfere with each other as expected).
 //
 struct UseDefAnalysis {
-  UseDefAnalysis(Function* func, UseDefAnalysisParams params);
+  void analyze(Function* func, UseDefAnalysisParams params);
 
   using Locations = std::map<Expression*, Expression**>;
 
@@ -71,7 +71,7 @@ struct UseDefAnalysis {
 // convention used here is that a nullptr LocalSet means the initial value in
 // the function (0 for a var, the received value for a param).
 //
-struct LocalGraph : public UseDefAnalysis<LocalGet, LocalSet> {
+struct LocalGraph : public UseDefAnalysis {
   // main API
 
   LocalGraph(Function* func);
@@ -87,23 +87,7 @@ struct LocalGraph : public UseDefAnalysis<LocalGet, LocalSet> {
   // Optional API: compute the influence graphs between defs and uses
   // (useful for algorithms that propagate changes).
 
-  // TODO: move back into cpp
-  void computeInfluences() {
-    for (auto& pair : locations) {
-      auto* curr = pair.first;
-      if (auto* def = curr->dynCast<LocalSet>()) {
-        FindAll<LocalGet> findAll(def->value);
-        for (auto* use : findAll.list) {
-          useInfluences[use].insert(def);
-        }
-      } else {
-        auto* use = curr->cast<LocalGet>();
-        for (auto* def : useDefs[use]) {
-          defInfluences[def].insert(use);
-        }
-      }
-    }
-  }
+  void computeInfluences();
 
   // For each use, the defs whose values are influenced by that use
   std::unordered_map<LocalGet*, std::unordered_set<LocalSet*>> useInfluences;
