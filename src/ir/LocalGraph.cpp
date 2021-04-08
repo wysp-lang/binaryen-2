@@ -38,16 +38,7 @@ struct Flower
   : public CFGWalker<Flower, UnifiedExpressionVisitor<Flower>, Info> {
   UseDefAnalysisParams params;
 
-  // Similar to in UseDefAnalysis, but without specialized types. This avoids
-  // needing to template this class (which would require a lot of this->,
-  // typename, etc., as we would need to template this (CRTP) class on the Use
-  // and Def types.
-  using Defs = std::set<Expression*>;
-  using UseDefs = std::map<Expression*, Defs>;
-  using Locations = std::map<Expression*, Expression**>;
-
-  UseDefs useDefs;
-  Locations locations;
+  std::map<Expression*, Expression**> locations;
 
   Flower(UseDefAnalysisParams params, Function* func) : params(params) {
     this->setFunction(func);
@@ -167,7 +158,7 @@ struct Flower
           // This def is the only def for all those uses.
           auto& uses = allUses[params.getLane(action)];
           for (auto* use : uses) {
-            useDefs[use].insert(action);
+            params.noteUseDef(use, action);
           }
           uses.clear();
         }
@@ -191,7 +182,7 @@ struct Flower
             if (curr == entryFlowBlock) {
               // These receive a param or zero init value.
               for (auto* use : uses) {
-                useDefs[use].insert(nullptr);
+                params.noteUseDef(use, nullptr);
               }
             }
           } else {
@@ -210,7 +201,7 @@ struct Flower
               if (lastDef != pred->lastDefs.end()) {
                 // There is a def here, apply it, and stop the flow.
                 for (auto* use : uses) {
-                  useDefs[use].insert(lastDef->second);
+                  params.noteUseDef(use, lastDef->second);
                 }
               } else {
                 // Keep on flowing.
@@ -235,22 +226,6 @@ UseDefAnalysis<Use, Def>::UseDefAnalysis(Function* func,
                                          UseDefAnalysisParams params) {
 
   Flower flower(params, func);
-
-  // TODO: this can be optimized if Use=Expression or Def=Expression, but also
-  // it should be safe to just statically cast this entire thing. The slow way
-  // is 9% slower on e.g. precompute-propagate.
-#if 1
-  for (const auto& kv : flower.useDefs) {
-    auto* use = kv.first->cast<Use>();
-    auto& defs = useDefs[use];
-    for (auto def : kv.second) {
-      defs.insert(def ? def->cast<Def>() : nullptr);
-    }
-  }
-#else
-  auto* temp = (UseDefs*)&flower.useDefs;
-  useDefs = std::move(*temp);
-#endif
 
   locations = std::move(flower.locations);
 
@@ -287,7 +262,10 @@ LocalGraph::LocalGraph(Function* func)
          WASM_UNREACHABLE("bad use-def expr");
        },
        // The number of lanes is the number of locals.
-       Index(func->getNumLocals())}) {}
+       Index(func->getNumLocals()),
+       [&](Expression* use, Expression* def) {
+         useDefs[use->cast<LocalGet>()].insert(def ? def->cast<LocalSet>() : nullptr);
+       }}) {}
 
 void LocalGraph::computeSSAIndexes() {
   std::unordered_map<Index, std::set<LocalSet*>> indexSets;
