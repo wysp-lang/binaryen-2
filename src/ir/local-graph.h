@@ -53,43 +53,12 @@ template<typename Use, typename Def> struct UseDefAnalysis {
 
   UseDefAnalysis(Function* func, UseDefAnalysisParams params);
 
-  using Defs = std::set<Def*>;
-
-  using UseDefs = std::map<Use*, Defs>;
-
   using Locations = std::map<Expression*, Expression**>;
 
-  // The defs for each use.
-  UseDefs useDefs;
-
-  // Maps expressions to the pointers to them (for easy replacing).
+  // Maps expressions to the pointers to them (for easy replacing). It is
+  // efficiend and convenient to collect these while performing the analysis, so
+  // it is better to avoid uses of the class needing to do the work later.
   Locations locations;
-
-  // Optional API: compute the influence graphs between defs and uses
-  // (useful for algorithms that propagate changes).
-
-  void computeInfluences() {
-    for (auto& pair : locations) {
-      auto* curr = pair.first;
-      if (auto* def = curr->dynCast<Def>()) {
-        FindAll<Use> findAll(def->value);
-        for (auto* use : findAll.list) {
-          useInfluences[use].insert(def);
-        }
-      } else {
-        auto* use = curr->cast<Use>();
-        for (auto* def : useDefs[use]) {
-          defInfluences[def].insert(use);
-        }
-      }
-    }
-  }
-
-  // For each use, the defs whose values are influenced by that use
-  std::unordered_map<Use*, std::unordered_set<Def*>> useInfluences;
-
-  // For each def, the uses whose values are influenced by that def
-  std::unordered_map<Def*, std::unordered_set<Use*>> defInfluences;
 };
 
 //
@@ -108,6 +77,41 @@ struct LocalGraph : public UseDefAnalysis<LocalGet, LocalSet> {
   // main API
 
   LocalGraph(Function* func);
+
+  // TODO: go back to getsetes etc.
+  using Defs = std::set<LocalSet*>;
+
+  using UseDefs = std::map<LocalGet*, Defs>;
+
+  // The defs for each use.
+  UseDefs useDefs;
+
+  // Optional API: compute the influence graphs between defs and uses
+  // (useful for algorithms that propagate changes).
+
+  // TODO: move back into cpp
+  void computeInfluences() {
+    for (auto& pair : locations) {
+      auto* curr = pair.first;
+      if (auto* def = curr->dynCast<LocalSet>()) {
+        FindAll<LocalGet> findAll(def->value);
+        for (auto* use : findAll.list) {
+          useInfluences[use].insert(def);
+        }
+      } else {
+        auto* use = curr->cast<LocalGet>();
+        for (auto* def : useDefs[use]) {
+          defInfluences[def].insert(use);
+        }
+      }
+    }
+  }
+
+  // For each use, the defs whose values are influenced by that use
+  std::unordered_map<LocalGet*, std::unordered_set<LocalSet*>> useInfluences;
+
+  // For each def, the uses whose values are influenced by that def
+  std::unordered_map<LocalSet*, std::unordered_set<LocalGet*>> defInfluences;
 
   // Optional: Compute the local indexes that are SSA, in the sense of
   //  * a single set for all the gets for that local index
