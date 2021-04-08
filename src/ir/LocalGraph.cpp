@@ -264,7 +264,7 @@ LocalGraph::LocalGraph(Function* func) {
            [&](Expression* use, Expression* def) {
              useDefs[use->cast<LocalGet>()].insert(def ? def->cast<LocalSet>()
                                                        : nullptr);
-           }});
+           };
 
   analyze(func, params);
 }
