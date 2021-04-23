@@ -5523,6 +5523,29 @@
     (i32.const -1024)
    )
   )
+  ;; CHECK:      (func $optimizeAddedConstantsAccumulatedNonZero (result i32)
+  ;; CHECK-NEXT:  (i32.const -1)
+  ;; CHECK-NEXT: )
+  (func $optimizeAddedConstantsAccumulatedNonZero (result i32)
+    ;; this particular pattern of operations ends up optimized in a way that the
+    ;; final result is added onto a non-zero constant, which we used to have a
+    ;; bug on where we assumed it had to be zero. (it ends up non-zero due to
+    ;; the very specific order in which the shifts and adds are optimized in the
+    ;; logic in optimizeAddedConstants)
+    (i32.add
+      (i32.add
+        (i32.shl
+          (i32.const 1)
+          (i32.add
+            (i32.const 0)
+            (i32.const -32)
+          )
+        )
+        (i32.const -1)
+      )
+      (i32.const -1)
+    )
+  )
   ;; CHECK:      (func $return-proper-value-from-shift-left-by-zero (result i32)
   ;; CHECK-NEXT:  (if (result i32)
   ;; CHECK-NEXT:   (i32.add
