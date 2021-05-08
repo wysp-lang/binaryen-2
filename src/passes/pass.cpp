@@ -444,6 +444,7 @@ void PassRunner::addDefaultFunctionOptimizationPasses() {
   addIfNoDWARFIssues("coalesce-locals");
   addIfNoDWARFIssues("simplify-locals");
   addIfNoDWARFIssues("vacuum");
+  addIfNoDWARFIssues("ldse"); // XXX where for real?
   addIfNoDWARFIssues("reorder-locals");
   addIfNoDWARFIssues("coalesce-locals");
   addIfNoDWARFIssues("reorder-locals");

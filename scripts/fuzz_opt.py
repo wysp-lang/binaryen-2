@@ -151,7 +151,12 @@ def randomize_fuzz_settings():
 
 IMPORTANT_INITIAL_CONTENTS = [
     os.path.join('lit', 'passes', 'optimize-instructions.wast'),
+    os.path.join('lit', 'passes', 'ldse.wast'),
     os.path.join('passes', 'optimize-instructions_fuzz-exec.wast'),
+    os.path.join('passes', 'Oz_fuzz-exec_all-features.wast'),
+    '/home/azakai/Downloads/dart2wasm_benchmark_20210216/DeltaBlue-20210324.wasm',
+    '/home/azakai/Downloads/dart2wasm_benchmark_20210216/Richards-20210324.wasm',
+    '/home/azakai/Downloads/dart2wasm_benchmark_20210216/MergeSort-20210324.wasm',
 ]
 IMPORTANT_INITIAL_CONTENTS = [os.path.join(shared.get_test_dir('.'), t) for t in IMPORTANT_INITIAL_CONTENTS]
 
@@ -983,8 +988,8 @@ opt_choices = [
     ["--inlining"],
     ["--inlining-optimizing"],
     ["--flatten", "--local-cse"],
-    ["--generate-stack-ir"],
     ["--ldse"],
+    ["--generate-stack-ir"],
     ["--licm"],
     ["--memory-packing"],
     ["--merge-blocks"],
@@ -1118,6 +1123,7 @@ if __name__ == '__main__':
               'speed:', counter / elapsed,
               'iters/sec, ', total_wasm_size / elapsed,
               'wasm_bytes/sec\n')
+        time.sleep(0.5)
         with open(raw_input_data, 'wb') as f:
             f.write(bytes([random.randint(0, 255) for x in range(input_size)]))
         assert os.path.getsize(raw_input_data) == input_size
