@@ -35,6 +35,7 @@ high chance for set at start of loop
 #include <ir/names.h>
 #include <ir/utils.h>
 #include <support/file.h>
+#include <support/insert_ordered.h>
 #include <tools/optimization-options.h>
 #include <wasm-builder.h>
 
@@ -782,7 +783,7 @@ private:
     struct Scanner
       : public PostWalker<Scanner, UnifiedExpressionVisitor<Scanner>> {
       // A map of all expressions, categorized by type.
-      std::unordered_map<Type, std::vector<Expression*>> exprsByType;
+      InsertOrderedMap<Type, std::vector<Expression*>> exprsByType;
 
       void visitExpression(Expression* curr) {
         exprsByType[curr->type].push_back(curr);
