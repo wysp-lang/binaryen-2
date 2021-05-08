@@ -169,6 +169,7 @@ def pick_initial_contents():
     INITIAL_CONTENTS = None
     # half the time don't use any initial contents
     if random.random() < 0.5:
+        time.sleep(0.5)
         return
     # some of the time use initial contents that are known to be especially
     # important
@@ -177,6 +178,7 @@ def pick_initial_contents():
     else:
         test_name = random.choice(all_tests)
     print('initial contents:', test_name)
+    time.sleep(0.5)
     assert os.path.exists(test_name)
     # tests that check validation errors are not helpful for us
     if '.fail.' in test_name:
@@ -1126,7 +1128,6 @@ if __name__ == '__main__':
               'speed:', counter / elapsed,
               'iters/sec, ', total_wasm_size / elapsed,
               'wasm_bytes/sec\n')
-        time.sleep(0.5)
         with open(raw_input_data, 'wb') as f:
             f.write(bytes([random.randint(0, 255) for x in range(input_size)]))
         assert os.path.getsize(raw_input_data) == input_size
