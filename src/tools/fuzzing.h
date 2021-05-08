@@ -829,6 +829,7 @@ private:
       void visitExpression(Expression* curr) {
         if (parent.oneIn(10) && parent.canBeArbitrarilyReplaced(curr)) {
           // Replace it!
+          assert(scanner.exprsByType.count(curr->type));
           auto& candidates = scanner.exprsByType[curr->type];
           assert(!candidates.empty()); // this expression itself must be there
           replaceCurrent(
