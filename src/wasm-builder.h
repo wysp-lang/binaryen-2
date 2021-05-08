@@ -1050,13 +1050,12 @@ public:
     if (curr->type.isNullable()) {
       return ExpressionManipulator::refNull(curr, curr->type);
     }
-    if (curr->type.isFunction()) {
+    if (curr->type.isFunction() || !curr->type.isBasic()) {
       // We can't do any better, keep the original.
       return curr;
     }
     Literal value;
     // TODO: reuse node conditionally when possible for literals
-    TODO_SINGLE_COMPOUND(curr->type);
     switch (curr->type.getBasic()) {
       case Type::i32:
         value = Literal(int32_t(0));
