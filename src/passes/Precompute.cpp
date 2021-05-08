@@ -329,10 +329,12 @@ private:
         // IR we track the types, and so we must ensure that the type is
         // correct (that is, it must be a null of the type that the RefCast
         // returns).
-        for (auto& value : values) {
-          if (value.isNull()) {
-            value = Literal::makeNull(Type(set->value->type.getHeapType(), Nullable));
+        size_t index = 0;
+        for (auto t : set->value->type) {
+          if (values[index].isNull()) {
+            values[index] = Literal::makeNull(Type(t.getHeapType(), Nullable));
           }
+          index++;
         }
         setValues[set] = values;
         if (values.isConcrete()) {
