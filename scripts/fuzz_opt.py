@@ -669,6 +669,9 @@ class CheckDeterminism(TestCaseHandler):
         run([in_bin('wasm-opt'), before_wasm, '-o', 'b2.wasm'] + opts)
         assert open('b1.wasm', 'rb').read() == open('b2.wasm', 'rb').read(), 'output must be deterministic'
 
+    def can_run_on_feature_opts(self, feature_opts):
+        # https://github.com/WebAssembly/binaryen/issues/3869
+        return all([x in feature_opts for x in ['--disable-gc']])
 
 class Wasm2JS(TestCaseHandler):
     frequency = 0.6
