@@ -3,7 +3,7 @@
 ;; RUN:   | filecheck %s
 
 (module
- ;; CHECK:      (func $test-fallthrough (param $0 (ref func))
+ ;; CHECK:      (func $test-fallthrough (param $0 dataref)
  ;; CHECK-NEXT:  (unreachable)
  ;; CHECK-NEXT:  (drop
  ;; CHECK-NEXT:   (local.get $0)
