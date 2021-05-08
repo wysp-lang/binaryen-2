@@ -258,18 +258,18 @@
       )
     )
   )
-  (func $unreachables
+  (func $unreachables-1
     (drop
-      (struct.get $struct.A 0 (unreachable))
+      (struct.get $struct.C 0 (unreachable))
     )
-    (drop
-      (struct.set $struct.A 0 (ref.null $struct.A) (unreachable))
-    )
-    (drop
-      (struct.set $struct.A 0 (unreachable) (unreachable))
-    )
-    (drop
-      (struct.set $struct.A 0 (ref.null $struct.A) (i32.const 1))
-    )
+  )
+  (func $unreachables-2
+    (struct.set $struct.C 0 (ref.null $struct.C) (unreachable))
+  )
+  (func $unreachables-3
+    (struct.set $struct.C 0 (unreachable) (unreachable))
+  )
+  (func $unreachables-4
+    (struct.set $struct.C 0 (unreachable) (f32.const 1))
   )
 )
