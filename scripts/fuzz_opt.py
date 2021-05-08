@@ -1297,3 +1297,6 @@ After reduction, the reduced file will be in %(working_wasm)s
         else:
             print('(finished running seed %d, see error above)' % given_seed)
             sys.exit(1)
+'''
+the only change to insert_rered is to make he maps unordered.
+'''
