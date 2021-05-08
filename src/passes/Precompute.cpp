@@ -330,11 +330,14 @@ private:
         // correct (that is, it must be a null of the type that the RefCast
         // returns).
         size_t index = 0;
-        for (auto t : set->value->type) {
-          if (values[index].isNull()) {
-            values[index] = Literal::makeNull(Type(t.getHeapType(), Nullable));
+        if (values.isConcrete()) {
+          for (auto t : set->value->type) {
+            assert(index <= values.size());
+            if (values[index].isNull()) {
+              values[index] = Literal::makeNull(Type(t.getHeapType(), Nullable));
+            }
+            index++;
           }
-          index++;
         }
         setValues[set] = values;
         if (values.isConcrete()) {
