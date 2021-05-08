@@ -263,7 +263,13 @@
       (struct.get $struct.A 0 (unreachable))
     )
     (drop
+      (struct.set $struct.A 0 (ref.null $struct.A) (unreachable))
+    )
+    (drop
       (struct.set $struct.A 0 (unreachable) (unreachable))
+    )
+    (drop
+      (struct.set $struct.A 0 (ref.null $struct.A) (i32.const 1))
     )
   )
 )

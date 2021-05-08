@@ -159,6 +159,9 @@ IMPORTANT_INITIAL_CONTENTS = [
     '/home/azakai/Downloads/dart2wasm_benchmark_20210216/DeltaBlue-20210324.wasm',
     '/home/azakai/Downloads/dart2wasm_benchmark_20210216/Richards-20210324.wasm',
     '/home/azakai/Downloads/dart2wasm_benchmark_20210216/MergeSort-20210324.wasm',
+    '/home/azakai/Downloads/dart2wasm_benchmark_20210216/DeltaBlue-20210324.wasm',
+    '/home/azakai/Downloads/dart2wasm_benchmark_20210216/Richards-20210324.wasm',
+    '/home/azakai/Downloads/dart2wasm_benchmark_20210216/MergeSort-20210324.wasm',
 ]
 IMPORTANT_INITIAL_CONTENTS = [os.path.join(shared.get_test_dir('.'), t) for t in IMPORTANT_INITIAL_CONTENTS]
 

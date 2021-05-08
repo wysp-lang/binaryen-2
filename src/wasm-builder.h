@@ -1040,9 +1040,8 @@ public:
     iff->condition = makeUnary(EqZInt32, iff->condition);
   }
 
-  // returns a replacement with the precise same type, and with
-  // minimal contents. as a replacement, this may reuse the
-  // input node
+  // Returns a replacement with the precise same type, and with minimal contents
+  // as best we can. As a replacement, this may reuse the input node.
   template<typename T> Expression* replaceWithIdenticalType(T* curr) {
     if (curr->type.isTuple()) {
       return makeConstantExpression(Literal::makeZeros(curr->type));
@@ -1084,7 +1083,7 @@ public:
       case Type::i31ref:
         return makeI31New(makeConst(0));
       case Type::dataref:
-        WASM_UNREACHABLE("TODO: dataref");
+        return curr;
       case Type::none:
         return ExpressionManipulator::nop(curr);
       case Type::unreachable:
