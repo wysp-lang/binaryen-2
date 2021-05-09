@@ -1071,6 +1071,9 @@ def randomize_opt_flags():
     # possibly converge. don't do this very often as it can be slow.
     if random.random() < 0.05:
         ret += ['--converge']
+    # possibly inline all the things
+    if random.random() < 0.5:
+        ret += ['-fimfs=999999']
     assert ret.count('--flatten') <= 1
     return ret
 
