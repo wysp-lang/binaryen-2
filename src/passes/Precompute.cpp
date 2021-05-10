@@ -311,9 +311,8 @@ private:
         // somehow know the entire expression precomputes to a 42, then we can
         // propagate that 42 along to the users, regardless of whatever the call
         // did globally.)
-        auto values =
-          precomputeValue(Properties::getFallthrough(
-            set->value, getPassOptions(), getModule()->features));
+        auto values = precomputeValue(Properties::getFallthrough(
+          set->value, getPassOptions(), getModule()->features));
         // Fix up the value. The computation we just did was to look at the
         // fallthrough, then precompute that; that looks through expressions
         // that pass through the value. Normally that does not matter here,
@@ -334,7 +333,8 @@ private:
           for (auto t : set->value->type) {
             assert(index <= values.size());
             if (values[index].isNull()) {
-              values[index] = Literal::makeNull(Type(t.getHeapType(), Nullable));
+              values[index] =
+                Literal::makeNull(Type(t.getHeapType(), Nullable));
             }
             index++;
           }
