@@ -873,10 +873,10 @@ class RoundtripText(TestCaseHandler):
 testcase_handlers = [
     FuzzExec(),
     CompareVMs(),
-    CheckDeterminism(),
-    Wasm2JS(),
-    Asyncify(),
-    RoundtripText()
+    #CheckDeterminism(),
+    #Wasm2JS(),
+    #Asyncify(),
+    #RoundtripText()
 ]
 
 
@@ -1072,7 +1072,7 @@ def randomize_opt_flags():
     if random.random() < 0.05:
         ret += ['--converge']
     # possibly inline all the things
-    if random.random() < 0.5:
+    if random.random() < 0.5: # TODO lower
         ret += ['-fimfs=999999']
     assert ret.count('--flatten') <= 1
     return ret
