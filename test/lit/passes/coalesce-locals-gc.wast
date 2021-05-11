@@ -3,17 +3,18 @@
 ;; RUN:   | filecheck %s
 
 (module
- ;; CHECK:      (func $test-fallthrough (param $0 dataref)
+ ;; CHECK:      (func $test-dead-get-non-nullable (param $0 dataref)
  ;; CHECK-NEXT:  (unreachable)
  ;; CHECK-NEXT:  (drop
  ;; CHECK-NEXT:   (local.get $0)
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT: )
- (func $test-fallthrough (param $func (ref data))
+ (func $test-dead-get-non-nullable (param $func (ref data))
   (unreachable)
   (drop
-   ;; A get of a non-nullable parameter in unreachable code. We cannot replace
-   ;; it with a null, and so we cannot remove as we'd like.
+   ;; A useless get (that does not read from any set, or from the inputs to the
+   ;; function). Normally we replace such gets with nops as best we can, but in
+   ;; this case the type is non-nullable, so we must leave it alone.
    (local.get $func)
   )
  )
