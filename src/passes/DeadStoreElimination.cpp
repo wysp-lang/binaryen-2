@@ -523,10 +523,28 @@ struct GlobalLogic : public Logic {
   bool isLoad(Expression* curr) { return curr->is<GlobalGet>(); }
 
   bool mayInteract(Expression* curr, const ShallowEffectAnalyzer& currEffects) {
-    // Check if the function may interact with globals.
-    auto& functionInfo = wholeProgramInfo.get(call->target);
-    return functionInfo.effects->globalsWritten.size() +
-           functionInfo.effects->globalsRead.size();
+    if (wholeProgramInfo) {
+      if (auto* call = curr->dynCast<Call>()) {
+        // Check if the function may interact with globals.
+        auto& functionInfo = wholeProgramInfo.get(call->target);
+        return functionInfo.effects->globalsWritten.size() +
+               functionInfo.effects->globalsRead.size();
+      }
+    }
+
+    // We have already identified loads and stores, and nothing else can
+No! Pass in currEffects with the LTO info!!!1
+/*
+    if (wholeProgramInfo) {
+      if (auto* call = curr->dynCast<Call>()) {
+        // Check if the function may interact with globals.
+        auto& functionInfo = wholeProgramInfo.get(call->target);
+        return functionInfo.effects->globalsWritten.size() +
+               functionInfo.effects->globalsRead.size();
+      }
+    }
+*/
+    return false;
   }
 
   bool isLoadFrom(Expression* curr,
