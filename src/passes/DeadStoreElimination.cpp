@@ -59,6 +59,7 @@
 #include <cfg/cfg-traversal.h>
 #include <ir/effects.h>
 #include <ir/local-graph.h>
+#include <ir/module-utils.h>
 #include <ir/properties.h>
 #include <ir/replacer.h>
 #include <pass.h>
@@ -669,10 +670,62 @@ struct LocalDeadStoreElimination
   }
 };
 
+struct GlobalDeadStoreElimination : public Pass {
+  void run(PassRunner* runner, Module* module) override {
+    // Gather effects on all functions, and propagate those effects.
+
+    struct Info
+      : public ModuleUtils::CallGraphPropertyAnalysis<Info>::FunctionInfo {
+      // Set to true when anything can happen, which is the case when calling an
+      // import, doing an indirect call, etc. In such cases, we don't need to
+      // bother with computing specific effects.
+      bool anything = false;
+
+      std::unique_ptr<EffectAnalyzer> effects;
+    };
+
+    ModuleUtils::CallGraphPropertyAnalysis<Info> analyzer(
+      *module, [&](Function* func, Info& info) {
+        if (func->imported() ||
+            !FindAll<CallIndirect>(func->body).list.empty() ||
+            !FindAll<CallRef>(func->body).list.empty()) {
+          info.anything = true;
+          return;
+        }
+
+        auto& effects = make_unique<EffectAnalyzer>(runner->getPassOptions(),
+                                                    module->features,
+                                                    func->body);
+      });
+
+    analyzer.flexiblePropagateBack([&](
+      Function* from, Info& fromInfo,
+      Function* to, Info& toInfo) {
+      if (fromInfo.anything) {
+        if (toInfo.anything) {
+          // Nothing changed.
+          return false;
+        }
+
+        toInfo.anything = true;
+        return true;
+      }
+
+      EffectAnalyzer before = *toInfo.effects;
+      toInfo.effects->mergeIn(*fromInfo.effects);
+      return *toInfo.effects != before;
+    });
+  }
+};
+
 } // anonymous namespace
 
 Pass* createLocalDeadStoreEliminationPass() {
   return new LocalDeadStoreElimination();
+}
+
+Pass* createGlobalDeadStoreEliminationPass() {
+  return new GlobalDeadStoreElimination();
 }
 
 } // namespace wasm

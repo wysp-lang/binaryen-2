@@ -422,7 +422,7 @@ template<typename T> struct CallGraphPropertyAnalysis {
 
   enum NonDirectCalls { IgnoreNonDirectCalls, NonDirectCallsHaveProperty };
 
-  // Propagate a property from a function to those that call it.
+  // Propagate a boolean property from a function to those that call it.
   //
   // hasProperty() - Check if the property is present.
   // canHaveProperty() - Check if the property could be present.
@@ -449,6 +449,29 @@ template<typename T> struct CallGraphPropertyAnalysis {
         // from getting it, then it propagates back to us now.
         if (!hasProperty(map[caller]) && canHaveProperty(map[caller])) {
           addProperty(map[caller], func);
+          work.push(caller);
+        }
+      }
+    }
+  }
+
+  // Propagate a flexible set of properties between functions.
+  //
+  // propagates(fromFunc, fromInfo, toFunc, toInfo)
+  //     - Called to try to propagate properties from 'from' to 'to'. The called
+  //       function should update the properties and return true if any were
+  //       added to 'to'.
+  void flexiblePropagateBack(std::function<bool(Function*, const T&, Function*, const T&)> propagates) {
+    // The work queue contains items that just changed, and may propagate
+    // further.
+    UniqueDeferredQueue<Function*> work;
+    for (auto& func : wasm.functions) {
+      work.push(func.get());
+    }
+    while (!work.empty()) {
+      auto* func = work.pop();
+      for (auto* caller : map[func].calledBy) {
+        if (propagates(func, map[func], caller, map[caller]) {
           work.push(caller);
         }
       }
