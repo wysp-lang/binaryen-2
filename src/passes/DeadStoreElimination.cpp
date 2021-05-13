@@ -114,21 +114,19 @@ struct ComparingLocalGraph : public LocalGraph {
 // Computes information on the entire program that can make dead store
 // elimination more powerful. For example, we can find out that a certain call
 // will never read or modify the GC heap.
-struct WholeProgramInfo {
-  std::map<Function*, T> map;
+class WholeProgramInfo {
+public:
+  struct FunctionInfo
+    : public ModuleUtils::CallGraphPropertyAnalysis<FunctionInfo>::FunctionInfo {
+    // Set to true when anything can happen, which is the case when calling an
+    // import, doing an indirect call, etc. In such cases, we don't need to
+    // bother with computing specific effects.
+    bool anything = false;
 
-  WholeProgramInfo(Module* module, const PassOptions& passOptions) {
+    std::unique_ptr<EffectAnalyzer> effects;
+  };
 
-    struct FunctionInfo
-      : public ModuleUtils::CallGraphPropertyAnalysis<FunctionInfo>::FunctionInfo {
-      // Set to true when anything can happen, which is the case when calling an
-      // import, doing an indirect call, etc. In such cases, we don't need to
-      // bother with computing specific effects.
-      bool anything = false;
-
-      std::unique_ptr<EffectAnalyzer> effects;
-    };
-
+  WholeProgramInfo(Module* module, const PassOptions& passOptions) : module(module) {
     // Compute the information in each function.
     ModuleUtils::CallGraphPropertyAnalysis<FunctionInfo> analyzer(
       *module, [&](Function* func, FunctionInfo& info) {
@@ -165,6 +163,14 @@ struct WholeProgramInfo {
 
     map = std::move(analyzer.map);
   }
+
+  const FunctionInfo& get(Name name) {
+    return map.at(module->getFunction(name));
+  }
+
+private:
+  Module* module;
+  std::map<Function*, FunctionInfo> map;
 };
 
 // Parent class of all implementations of the logic of identifying stores etc.
@@ -173,9 +179,14 @@ struct WholeProgramInfo {
 struct Logic {
   Function* func;
 
+  // Whole-program information, which may be nullptr if there is none for us to
+  // use.
+  WholeProgramInfo* wholeProgramInfo;
+
   // TODO should recieve a mayne nullptr to an LTO Oracle.
-  Logic(Function* func, PassOptions& passOptions, FeatureSet features)
-    : func(func) {}
+  Logic(Function* func, PassOptions& passOptions, FeatureSet features,
+        WholeProgramInfo* wholeProgramInfo)
+    : func(func), wholeProgramInfo(wholeProgramInfo) {}
 
   //============================================================================
   // Hooks to identify relevant things to include in the analysis.
@@ -200,6 +211,12 @@ struct Logic {
   // The default behavior here considers all calls to be barriers. Subclasses
   // can use whole-program information to do better.
   bool isBarrier(Expression* curr, const ShallowEffectAnalyzer& currEffects) {
+    if (wholeProgramInfo && curr->is<Call>()) {
+      // This is a direct call. Our whole-program information may allow us to
+      // see that this is not a barrier later, so do not assume it is one now.
+      return false;
+    }
+
     // TODO: ignore throws of an exception that is definitely caught in this
     //       function
     // TODO: if we add an "ignore after trap mode" (to assume nothing happens
@@ -216,7 +233,10 @@ struct Logic {
   // as one of those simple categories, this allows us to still care about it in
   // our analysis.
   bool mayInteract(Expression* curr, const ShallowEffectAnalyzer& currEffects) {
-    WASM_UNREACHABLE("unimp");
+    // If there is no whole-program info, then calls were already classified as
+    // barriers. If there is such info, then note them as maybe interacting
+    // here, and we will check them specifically later.
+    return wholeProgramInfo && curr->is<Call>();
   }
 
   //============================================================================
@@ -497,11 +517,7 @@ struct GlobalLogic : public Logic {
 
   bool isLoad(Expression* curr) { return curr->is<GlobalGet>(); }
 
-  bool mayInteract(Expression* curr, const ShallowEffectAnalyzer& currEffects) {
-    // Globals are easy to statically analyze: there are no interactions we
-    // cannot be sure about.
-    return false;
-  }
+  // No need to override mayInteract(): the parent does all we need.
 
   bool isLoadFrom(Expression* curr,
                   const ShallowEffectAnalyzer& currEffects,
@@ -526,6 +542,19 @@ struct GlobalLogic : public Logic {
   bool mayInteractWith(Expression* curr,
                        const ShallowEffectAnalyzer& currEffects,
                        Expression* store) {
+    if (wholeProgramInfo) {
+      if (auto* call = curr->dynCast<Call>()) {
+        auto& functionInfo = wholeProgramInfo.get(call->target);
+        if (auto* get = curr->dynCast<GlobalGet>()) {
+          return functionInfo.globalsWritten.count(get->name);
+        } else if (auto* set = curr->dynCast<GlobalGet>()) {
+          return functionInfo.globalsWritten.count(set->name) +
+                 functionInfo.globalsRead.count(set->name);
+        } else {
+          WASM_UNREACHABLE("invalid global op");
+        }
+      }
+    }
     return false;
   }
 
@@ -544,7 +573,8 @@ struct MemoryLogic : public ComparingLogic {
   bool isLoad(Expression* curr) { return curr->is<Load>(); }
 
   bool mayInteract(Expression* curr, const ShallowEffectAnalyzer& currEffects) {
-    return currEffects.readsMemory || currEffects.writesMemory;
+    return currEffects.readsMemory || currEffects.writesMemory ||
+           ComparingLogic::mayInteract(curr, currEffects);
   }
 
   bool isLoadFrom(Expression* curr,
@@ -621,7 +651,8 @@ struct GCLogic : public ComparingLogic {
   bool isLoad(Expression* curr) { return curr->is<StructGet>(); }
 
   bool mayInteract(Expression* curr, const ShallowEffectAnalyzer& currEffects) {
-    return currEffects.readsHeap || currEffects.writesHeap;
+    return currEffects.readsHeap || currEffects.writesHeap ||
+           ComparingLogic::mayInteract(curr, currEffects);
   }
 
   bool isLoadFrom(Expression* curr,
