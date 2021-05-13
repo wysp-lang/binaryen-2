@@ -211,10 +211,14 @@ struct Logic {
   // The default behavior here considers all calls to be barriers. Subclasses
   // can use whole-program information to do better.
   bool isBarrier(Expression* curr, const ShallowEffectAnalyzer& currEffects) {
-    if (wholeProgramInfo && curr->is<Call>()) {
-      // This is a direct call. Our whole-program information may allow us to
-      // see that this is not a barrier later, so do not assume it is one now.
-      return false;
+    if (wholeProgramInfo) {
+      if (auto* call = curr->dynCast<Call>()) {
+        // This is a direct call. Our whole-program information may allow us to
+        // see that this is not a barrier later, so do not assume it is one now,
+        // not unless it is something we cannot analyze.
+        auto& functionInfo = wholeProgramInfo.get(call->target);
+        return functionInfo.anything;
+      }
     }
 
     // TODO: ignore throws of an exception that is definitely caught in this
@@ -236,6 +240,7 @@ struct Logic {
     // If there is no whole-program info, then calls were already classified as
     // barriers. If there is such info, then note them as maybe interacting
     // here, and we will check them specifically later.
+    // FIXME is this used? children override
     return wholeProgramInfo && curr->is<Call>();
   }
 
@@ -517,7 +522,12 @@ struct GlobalLogic : public Logic {
 
   bool isLoad(Expression* curr) { return curr->is<GlobalGet>(); }
 
-  // No need to override mayInteract(): the parent does all we need.
+  bool mayInteract(Expression* curr, const ShallowEffectAnalyzer& currEffects) {
+    // Check if the function may interact with globals.
+    auto& functionInfo = wholeProgramInfo.get(call->target);
+    return functionInfo.effects->globalsWritten.size() +
+           functionInfo.effects->globalsRead.size();
+  }
 
   bool isLoadFrom(Expression* curr,
                   const ShallowEffectAnalyzer& currEffects,
@@ -541,18 +551,14 @@ struct GlobalLogic : public Logic {
 
   bool mayInteractWith(Expression* curr,
                        const ShallowEffectAnalyzer& currEffects,
-                       Expression* store) {
+                       Expression* store_) {
     if (wholeProgramInfo) {
       if (auto* call = curr->dynCast<Call>()) {
+        auto* store = store_->cast<GlobalSet>();
+        // Check if the function may interact with our global.
         auto& functionInfo = wholeProgramInfo.get(call->target);
-        if (auto* get = curr->dynCast<GlobalGet>()) {
-          return functionInfo.globalsWritten.count(get->name);
-        } else if (auto* set = curr->dynCast<GlobalGet>()) {
-          return functionInfo.globalsWritten.count(set->name) +
-                 functionInfo.globalsRead.count(set->name);
-        } else {
-          WASM_UNREACHABLE("invalid global op");
-        }
+        return functionInfo.effects->globalsWritten.count(set->name) +
+               functionInfo.effects->globalsRead.count(set->name);
       }
     }
     return false;
@@ -574,7 +580,7 @@ struct MemoryLogic : public ComparingLogic {
 
   bool mayInteract(Expression* curr, const ShallowEffectAnalyzer& currEffects) {
     return currEffects.readsMemory || currEffects.writesMemory ||
-           ComparingLogic::mayInteract(curr, currEffects);
+           ComparingLogic::mayInteract(curr, currEffects); // FIXME
   }
 
   bool isLoadFrom(Expression* curr,
@@ -628,7 +634,20 @@ struct MemoryLogic : public ComparingLogic {
 
   bool mayInteractWith(Expression* curr,
                        const ShallowEffectAnalyzer& currEffects,
-                       Expression* store) {
+                       Expression* store_) {
+    if (wholeProgramInfo) {
+      if (auto* call = curr->dynCast<Call>()) {
+        auto& functionInfo = wholeProgramInfo.get(call->target);
+        if (auto* load = curr->dynCast<Load>()) {
+          return functionInfo.globalsWritten.count(get->name);
+        } else if (auto* set = curr->dynCast<GlobalGet>()) {
+          return functionInfo.globalsWritten.count(set->name) +
+                 functionInfo.globalsRead.count(set->name);
+        } else {
+          WASM_UNREACHABLE("invalid global op");
+        }
+      }
+    }
     // Anything we did not identify so far is dangerous.
     return currEffects.readsMemory || currEffects.writesMemory;
   }
