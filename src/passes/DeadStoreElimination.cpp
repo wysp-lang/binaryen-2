@@ -111,12 +111,69 @@ struct ComparingLocalGraph : public LocalGraph {
   }
 };
 
+// Computes information on the entire program that can make dead store
+// elimination more powerful. For example, we can find out that a certain call
+// will never read or modify the GC heap.
+struct WholeProgramInfo {
+  std::map<Function*, T> map;
+
+  WholeProgramInfo(Module* module, const PassOptions& passOptions) {
+
+    struct FunctionInfo
+      : public ModuleUtils::CallGraphPropertyAnalysis<FunctionInfo>::FunctionInfo {
+      // Set to true when anything can happen, which is the case when calling an
+      // import, doing an indirect call, etc. In such cases, we don't need to
+      // bother with computing specific effects.
+      bool anything = false;
+
+      std::unique_ptr<EffectAnalyzer> effects;
+    };
+
+    // Compute the information in each function.
+    ModuleUtils::CallGraphPropertyAnalysis<FunctionInfo> analyzer(
+      *module, [&](Function* func, FunctionInfo& info) {
+        if (func->imported() ||
+            !FindAll<CallIndirect>(func->body).list.empty() ||
+            !FindAll<CallRef>(func->body).list.empty()) {
+          info.anything = true;
+          return;
+        }
+
+        info.effects = make_unique<EffectAnalyzer>(passOptions(),
+                                                    module->features,
+                                                    func->body);
+      });
+
+    // Propagate it through the whole program.
+    analyzer.flexiblePropagateBack([&](
+      Function* from, FunctionInfo& fromInfo,
+      Function* to, FunctionInfo& toInfo) {
+      if (fromInfo.anything) {
+        if (toInfo.anything) {
+          // Nothing changed.
+          return false;
+        }
+
+        toInfo.anything = true;
+        return true;
+      }
+
+      EffectAnalyzer before = *toInfo.effects;
+      toInfo.effects->mergeIn(*fromInfo.effects);
+      return *toInfo.effects != before;
+    });
+
+    map = std::move(analyzer.map);
+  }
+};
+
 // Parent class of all implementations of the logic of identifying stores etc.
 // One implementation of Logic can handle globals, another memory, and another
 // GC, etc., implementing the various hooks appropriately.
 struct Logic {
   Function* func;
 
+  // TODO should recieve a mayne nullptr to an LTO Oracle.
   Logic(Function* func, PassOptions& passOptions, FeatureSet features)
     : func(func) {}
 
@@ -672,49 +729,6 @@ struct LocalDeadStoreElimination
 
 struct GlobalDeadStoreElimination : public Pass {
   void run(PassRunner* runner, Module* module) override {
-    // Gather effects on all functions, and propagate those effects.
-
-    struct Info
-      : public ModuleUtils::CallGraphPropertyAnalysis<Info>::FunctionInfo {
-      // Set to true when anything can happen, which is the case when calling an
-      // import, doing an indirect call, etc. In such cases, we don't need to
-      // bother with computing specific effects.
-      bool anything = false;
-
-      std::unique_ptr<EffectAnalyzer> effects;
-    };
-
-    ModuleUtils::CallGraphPropertyAnalysis<Info> analyzer(
-      *module, [&](Function* func, Info& info) {
-        if (func->imported() ||
-            !FindAll<CallIndirect>(func->body).list.empty() ||
-            !FindAll<CallRef>(func->body).list.empty()) {
-          info.anything = true;
-          return;
-        }
-
-        auto& effects = make_unique<EffectAnalyzer>(runner->getPassOptions(),
-                                                    module->features,
-                                                    func->body);
-      });
-
-    analyzer.flexiblePropagateBack([&](
-      Function* from, Info& fromInfo,
-      Function* to, Info& toInfo) {
-      if (fromInfo.anything) {
-        if (toInfo.anything) {
-          // Nothing changed.
-          return false;
-        }
-
-        toInfo.anything = true;
-        return true;
-      }
-
-      EffectAnalyzer before = *toInfo.effects;
-      toInfo.effects->mergeIn(*fromInfo.effects);
-      return *toInfo.effects != before;
-    });
   }
 };
 
