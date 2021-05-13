@@ -311,33 +311,25 @@ private:
         // somehow know the entire expression precomputes to a 42, then we can
         // propagate that 42 along to the users, regardless of whatever the call
         // did globally.)
-        auto values =
-          precomputeValue(Properties::getFallthrough(
-            set->value, getPassOptions(), getModule()->features));
+        auto values = precomputeValue(Properties::getFallthrough(
+          set->value, getPassOptions(), getModule()->features));
         // Fix up the value. The computation we just did was to look at the
         // fallthrough, then precompute that; that looks through expressions
         // that pass through the value. Normally that does not matter here,
         // for example, (block .. (value)) returns the value unmodified.
         // However, some things change the type, for example RefAsNonNull has
-        // has a non-null type, while its input may be nullable. That does not
+        // a non-null type, while its input may be nullable. That does not
         // matter either, as if we managed to precompute it then the value had
         // the more specific (in this example, non-nullable) type. But there
-        // is a situation where this can cause an issue, RefCast on a null.
-        // RefCast passes through a null, even if the type is wrong (we may be
-        // trying to cast between completely incompatible types). All nulls
-        // are identical in wasm, so it does not matter normally, but in our
-        // IR we track the types, and so we must ensure that the type is
-        // correct (that is, it must be a null of the type that the RefCast
-        // returns).
-        size_t index = 0;
-        if (values.isConcrete()) {
-          for (auto t : set->value->type) {
-            assert(index <= values.size());
-            if (values[index].isNull()) {
-              values[index] = Literal::makeNull(Type(t.getHeapType(), Nullable));
-            }
-            index++;
-          }
+        // is a situation where this can cause an issue: RefCast. An attempt to
+        // perform a "bad" cast, say of a function to a struct, is a case where
+        // the fallthrough value's type is very different than the actually
+        // returned value's type. To handle that, if we precomputed a value and
+        // if it has the wrong type then precompute it again without looking
+        // through to the fallthrough.
+        if (values.isConcrete() &&
+            !Type::isSubType(values.getType(), set->value->type)) {
+          values = precomputeValue(set->value);
         }
         setValues[set] = values;
         if (values.isConcrete()) {

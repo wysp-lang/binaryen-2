@@ -309,8 +309,10 @@
  )
  (func $unreachables-1
   (drop
-   (block 
-    (unreachable)
+   (block ;; (replaces something unreachable we can't emit)
+    (drop
+     (unreachable)
+    )
    )
   )
  )
@@ -321,6 +323,7 @@
   )
  )
  (func $unreachables-3
+<<<<<<< HEAD
   (block 
    (unreachable)
    (unreachable)
@@ -330,6 +333,25 @@
   (block 
    (unreachable)
    (f32.const 1)
+=======
+  (block ;; (replaces something unreachable we can't emit)
+   (drop
+    (unreachable)
+   )
+   (drop
+    (unreachable)
+   )
+  )
+ )
+ (func $unreachables-4
+  (block ;; (replaces something unreachable we can't emit)
+   (drop
+    (unreachable)
+   )
+   (drop
+    (f32.const 1)
+   )
+>>>>>>> origin/main
   )
  )
 )

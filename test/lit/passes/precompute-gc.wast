@@ -6,10 +6,19 @@
  (type $struct (struct (mut i32)))
  (type $empty (struct))
 
+<<<<<<< HEAD
  ;; two incompatible types
  (type $A (struct (field (mut f32))))
  (type $B (struct (field (mut f64))))
 
+=======
+ ;; two incompatible struct types
+ (type $A (struct (field (mut f32))))
+ (type $B (struct (field (mut f64))))
+
+ (type $func-return-i32 (func (result i32)))
+
+>>>>>>> origin/main
  (import "fuzzing-support" "log-i32" (func $log (param i32)))
 
  ;; CHECK:      (func $test-fallthrough (result i32)
@@ -396,7 +405,11 @@
   (local.get $tempresult)
  )
 
+<<<<<<< HEAD
  ;; CHECK:      (func $bad-cast-and-get
+=======
+ ;; CHECK:      (func $odd-cast-and-get
+>>>>>>> origin/main
  ;; CHECK-NEXT:  (local $temp (ref null $B))
  ;; CHECK-NEXT:  (local.set $temp
  ;; CHECK-NEXT:   (ref.null $B)
@@ -407,11 +420,20 @@
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT: )
+<<<<<<< HEAD
  (func $bad-cast-and-get
   (local $temp (ref null $B))
   ;; Try to cast a null of A to B. While the types are incompatible, ref.cast
   ;; returns a null when given a null (and the null must have the type that the
   ;; ref.cast instruction has, that is, the value is a null of type $B).
+=======
+ (func $odd-cast-and-get
+  (local $temp (ref null $B))
+  ;; Try to cast a null of A to B. While the types are incompatible, ref.cast
+  ;; returns a null when given a null (and the null must have the type that the
+  ;; ref.cast instruction has, that is, the value is a null of type $B). So this
+  ;; is an odd cast that "works".
+>>>>>>> origin/main
   (local.set $temp
    (ref.cast
     (ref.null $A)
@@ -419,15 +441,24 @@
    )
   )
   (drop
+<<<<<<< HEAD
    ;; Read from the reference in the local. Precompute should not be confused by
    ;; the attempt above to store a different type.
+=======
+   ;; Read from the local, which precompute should set to a null with the proper
+   ;; type.
+>>>>>>> origin/main
    (struct.get $B 0
     (local.get $temp)
    )
   )
  )
 
+<<<<<<< HEAD
  ;; CHECK:      (func $bad-cast-and-get-tuple
+=======
+ ;; CHECK:      (func $odd-cast-and-get-tuple
+>>>>>>> origin/main
  ;; CHECK-NEXT:  (local $temp ((ref null $B) i32))
  ;; CHECK-NEXT:  (local.set $temp
  ;; CHECK-NEXT:   (tuple.make
@@ -441,7 +472,11 @@
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT: )
+<<<<<<< HEAD
  (func $bad-cast-and-get-tuple
+=======
+ (func $odd-cast-and-get-tuple
+>>>>>>> origin/main
   (local $temp ((ref null $B) i32))
   ;; As above, but with a tuple.
   (local.set $temp
@@ -454,8 +489,11 @@
    )
   )
   (drop
+<<<<<<< HEAD
    ;; Read from the reference in the local. Precompute should not be confused by
    ;; the attempt above to store a different type.
+=======
+>>>>>>> origin/main
    (struct.get $B 0
     (tuple.extract 0
      (local.get $temp)
@@ -463,4 +501,44 @@
    )
   )
  )
+<<<<<<< HEAD
+=======
+
+ ;; CHECK:      (func $receive-f64 (param $0 f64)
+ ;; CHECK-NEXT:  (unreachable)
+ ;; CHECK-NEXT: )
+ (func $receive-f64 (param f64)
+  (unreachable)
+ )
+
+ ;; CHECK:      (func $odd-cast-and-get-non-null (param $temp (ref $func-return-i32))
+ ;; CHECK-NEXT:  (local.set $temp
+ ;; CHECK-NEXT:   (ref.cast
+ ;; CHECK-NEXT:    (ref.func $receive-f64)
+ ;; CHECK-NEXT:    (rtt.canon $func-return-i32)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (call_ref
+ ;; CHECK-NEXT:    (local.get $temp)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $odd-cast-and-get-non-null (param $temp (ref $func-return-i32))
+  ;; Try to cast a function to an incompatible type.
+  (local.set $temp
+   (ref.cast
+    (ref.func $receive-f64)
+    (rtt.canon $func-return-i32)
+   )
+  )
+  (drop
+   ;; Read from the local, checking whether precompute set a value there (it
+   ;; should not, as the cast fails).
+   (call_ref
+    (local.get $temp)
+   )
+  )
+ )
+>>>>>>> origin/main
 )
