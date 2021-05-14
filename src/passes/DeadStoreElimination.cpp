@@ -116,8 +116,8 @@ struct ComparingLocalGraph : public LocalGraph {
 // will never read or modify the GC heap.
 class WholeProgramInfo {
 public:
-  struct FunctionInfo : public ModuleUtils::CallGraphPropertyAnalysis<
-                          FunctionInfo>::FunctionInfo {
+  struct FunctionEffects : public ModuleUtils::CallGraphPropertyAnalysis<
+                          FunctionEffects>::FunctionInfo {
     // Set to true when anything can happen, which is the case when calling an
     // import, doing an indirect call, etc. In such cases, we don't need to
     // bother with computing specific effects, and this is just a barrier to any
@@ -130,8 +130,8 @@ public:
   WholeProgramInfo(Module* module, const PassOptions& passOptions)
     : module(module) {
     // Compute the information in each function.
-    ModuleUtils::CallGraphPropertyAnalysis<FunctionInfo> analyzer(
-      *module, [&](Function* func, FunctionInfo& info) {
+    ModuleUtils::CallGraphPropertyAnalysis<FunctionEffects> analyzer(
+      *module, [&](Function* func, FunctionEffects& info) {
         if (func->imported() ||
             !FindAll<CallIndirect>(func->body).list.empty() ||
             !FindAll<CallRef>(func->body).list.empty()) {
@@ -145,9 +145,9 @@ public:
 
     // Propagate it through the whole program.
     analyzer.flexiblePropagateBack([&](Function* from,
-                                       FunctionInfo& fromInfo,
+                                       const FunctionEffects& fromInfo,
                                        Function* to,
-                                       FunctionInfo& toInfo) {
+                                       FunctionEffects& toInfo) {
       if (fromInfo.barrier) {
         if (toInfo.barrier) {
           // Nothing changed.
@@ -166,13 +166,13 @@ public:
     map = std::move(analyzer.map);
   }
 
-  const FunctionInfo& get(Name name) {
+  const FunctionEffects& get(Name name) {
     return map.at(module->getFunction(name));
   }
 
 private:
   Module* module;
-  std::map<Function*, FunctionInfo> map;
+  std::map<Function*, FunctionEffects> map;
 };
 
 // Parent class of all implementations of the logic of identifying stores etc.
@@ -345,8 +345,7 @@ struct DeadStoreCFG
         // This is a direct call. Our whole-program information may allow us to
         // see that this is not a barrier later, so do not assume it is one now,
         // not unless it is something we cannot analyze.
-        auto& functionInfo = wholeProgramInfo->get(call->target);
-        if (functionInfo.barrier) {
+        if (wholeProgramInfo->get(call->target).barrier) {
           isBarrier = true;
         }
       }
