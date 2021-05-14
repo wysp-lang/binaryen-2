@@ -166,8 +166,8 @@ public:
     map = std::move(analyzer.map);
   }
 
-  const FunctionInfo* get(Name name) {
-    return &map.at(module->getFunction(name));
+  const FunctionInfo& get(Name name) {
+    return map.at(module->getFunction(name));
   }
 
 private:
@@ -325,7 +325,7 @@ struct DeadStoreCFG
     EffectAnalyzer* currEffects = &immediateEffects;
     if (wholeProgramInfo) {
       if (auto* call = curr->dynCast<Call>()) {
-        currEffects = wholeProgramInfo.get(call->target);
+        currEffects = wholeProgramInfo->get(call->target).effects.get();
       }
     }
 
@@ -342,7 +342,7 @@ struct DeadStoreCFG
         // This is a direct call. Our whole-program information may allow us to
         // see that this is not a barrier later, so do not assume it is one now,
         // not unless it is something we cannot analyze.
-        auto& functionInfo = wholeProgramInfo.get(call->target);
+        auto& functionInfo = wholeProgramInfo->get(call->target);
         if (functionInfo.barrier) {
           isBarrier = true;
         }
@@ -434,8 +434,8 @@ struct DeadStoreCFG
             ShallowEffectAnalyzer immediateEffects(passOptions, features, curr);
             EffectAnalyzer* currEffects = &immediateEffects;
             if (wholeProgramInfo) {
-              if (auto* call = curr->dynCast<Call>()) {
-                currEffects = wholeProgramInfo.get(call->target);
+              if (auto* call = curr->template dynCast<Call>()) {
+                currEffects = wholeProgramInfo->get(call->target).effects.get();
               }
             }
 
@@ -578,7 +578,7 @@ struct GlobalLogic : public Logic {
   }
 
   Expression* replaceStoreWithDrops(Expression* store_, Builder& builder) {
-    return builder.makeDrop(store->cast<GlobalSet>()->value);
+    return builder.makeDrop(store_->cast<GlobalSet>()->value);
   }
 };
 
@@ -761,7 +761,7 @@ struct LocalDeadStoreElimination
 
   Pass* create() { return new LocalDeadStoreElimination(wholeProgramInfo); }
 
-  LocalDeadStoreElimination(WholeProgramInfo* wholeProgramInfo) : wholeProgramInfo(wholeProgramInfo) {}
+  LocalDeadStoreElimination(WholeProgramInfo* wholeProgramInfo = nullptr) : wholeProgramInfo(wholeProgramInfo) {}
 
   WholeProgramInfo* wholeProgramInfo = nullptr;
 
@@ -781,11 +781,11 @@ struct LocalDeadStoreElimination
 
 struct GlobalDeadStoreElimination : public Pass {
   void run(PassRunner* runner, Module* module) override {
-    WholeProgramInfo wholeProgramInfo(module, runner->getPassOptions());
+    WholeProgramInfo wholeProgramInfo(module, runner->options);
 
     PassRunner subRunner(runner);
     subRunner.setIsNested(true);
-    subRunner.add(LocalDeadStoreElimination, &wholeProgramInfo);
+    subRunner.add(make_unique<LocalDeadStoreElimination>(&wholeProgramInfo));
     subRunner.run();
   }
 };
@@ -793,6 +793,7 @@ struct GlobalDeadStoreElimination : public Pass {
 } // anonymous namespace
 
 Pass* createLocalDeadStoreEliminationPass() {
+  // TODO: rename to remove 'Local' internally?
   return new LocalDeadStoreElimination();
 }
 
