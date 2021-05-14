@@ -181,7 +181,6 @@ private:
 struct Logic {
   Function* func;
 
-  // TODO should recieve a mayne nullptr to an LTO Oracle.
   Logic(Function* func, PassOptions& passOptions, FeatureSet features)
     : func(func) {}
 
@@ -581,8 +580,8 @@ struct GlobalLogic : public Logic {
            currEffects.globalsRead.count(store->name);
   }
 
-  Expression* replaceStoreWithDrops(Expression* store_, Builder& builder) {
-    return builder.makeDrop(store_->cast<GlobalSet>()->value);
+  Expression* replaceStoreWithDrops(Expression* store, Builder& builder) {
+    return builder.makeDrop(store->cast<GlobalSet>()->value);
   }
 };
 
