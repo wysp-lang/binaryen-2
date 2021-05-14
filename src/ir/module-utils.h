@@ -461,7 +461,8 @@ template<typename T> struct CallGraphPropertyAnalysis {
   //     - Called to try to propagate properties from 'from' to 'to'. The called
   //       function should update the properties and return true if any were
   //       added to 'to'.
-  void flexiblePropagateBack(std::function<bool(Function*, const T&, Function*, const T&)> propagates) {
+  void flexiblePropagateBack(
+    std::function<bool(Function*, const T&, Function*, const T&)> propagates) {
     // The work queue contains items that just changed, and may propagate
     // further.
     UniqueDeferredQueue<Function*> work;

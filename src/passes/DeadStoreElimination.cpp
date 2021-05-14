@@ -116,8 +116,8 @@ struct ComparingLocalGraph : public LocalGraph {
 // will never read or modify the GC heap.
 class WholeProgramInfo {
 public:
-  struct FunctionInfo
-    : public ModuleUtils::CallGraphPropertyAnalysis<FunctionInfo>::FunctionInfo {
+  struct FunctionInfo : public ModuleUtils::CallGraphPropertyAnalysis<
+                          FunctionInfo>::FunctionInfo {
     // Set to true when anything can happen, which is the case when calling an
     // import, doing an indirect call, etc. In such cases, we don't need to
     // bother with computing specific effects, and this is just a barrier to any
@@ -127,7 +127,8 @@ public:
     std::unique_ptr<EffectAnalyzer> effects;
   };
 
-  WholeProgramInfo(Module* module, const PassOptions& passOptions) : module(module) {
+  WholeProgramInfo(Module* module, const PassOptions& passOptions)
+    : module(module) {
     // Compute the information in each function.
     ModuleUtils::CallGraphPropertyAnalysis<FunctionInfo> analyzer(
       *module, [&](Function* func, FunctionInfo& info) {
@@ -138,15 +139,15 @@ public:
           return;
         }
 
-        info.effects = make_unique<EffectAnalyzer>(passOptions(),
-                                                    module->features,
-                                                    func->body);
+        info.effects = make_unique<EffectAnalyzer>(
+          passOptions(), module->features, func->body);
       });
 
     // Propagate it through the whole program.
-    analyzer.flexiblePropagateBack([&](
-      Function* from, FunctionInfo& fromInfo,
-      Function* to, FunctionInfo& toInfo) {
+    analyzer.flexiblePropagateBack([&](Function* from,
+                                       FunctionInfo& fromInfo,
+                                       Function* to,
+                                       FunctionInfo& toInfo) {
       if (fromInfo.barrier) {
         if (toInfo.barrier) {
           // Nothing changed.
@@ -312,7 +313,6 @@ struct DeadStoreCFG
 
   ~DeadStoreCFG() {}
 
-  
   void visitExpression(Expression* curr) {
     if (!this->currBasicBlock) {
       return;
@@ -543,8 +543,8 @@ struct GlobalLogic : public Logic {
 
   bool mayInteract(Expression* curr, const EffectAnalyzer& currEffects) {
     // Check for any global interactions.
-    return currEffects.globalsWritten.size() +
-           currEffects.globalsRead.size() > 0;
+    return currEffects.globalsWritten.size() + currEffects.globalsRead.size() >
+           0;
   }
 
   bool isLoadFrom(Expression* curr,
@@ -775,8 +775,7 @@ struct LocalDeadStoreElimination
 };
 
 struct GlobalDeadStoreElimination : public Pass {
-  void run(PassRunner* runner, Module* module) override {
-  }
+  void run(PassRunner* runner, Module* module) override {}
 };
 
 } // anonymous namespace
