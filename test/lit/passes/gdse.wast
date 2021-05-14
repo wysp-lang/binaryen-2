@@ -33,4 +33,25 @@
    (i32.const 20)
   )
  )
+
+ ;; CHECK:      (func $different-globals
+ ;; CHECK-NEXT:  (global.set $global$0
+ ;; CHECK-NEXT:   (i32.const 10)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (call $do-nothing)
+ ;; CHECK-NEXT:  (global.set $global$1
+ ;; CHECK-NEXT:   (i32.const 20)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $different-globals
+  (global.set $global$0
+   (i32.const 10)
+  )
+  ;; This call has no relevant effects, but the global below is different, and
+  ;; so we cannot remove anything as dead.
+  (call $do-nothing)
+  (global.set $global$1
+   (i32.const 20)
+  )
+ )
 )
