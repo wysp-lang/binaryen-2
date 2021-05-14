@@ -13,6 +13,15 @@
 
  (func $do-nothing)
 
+ ;; CHECK:      (func $calls-nothing-doer
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.const 10)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (call $do-nothing)
+ ;; CHECK-NEXT:  (global.set $global$0
+ ;; CHECK-NEXT:   (i32.const 20)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
  (func $calls-nothing-doer
   (global.set $global$0
    (i32.const 10)
@@ -20,7 +29,7 @@
   ;; This call has no relevant effects, and so we can see that the first store
   ;; here is killed by the last.
   (call $do-nothing)
-  (global.set $global$1
+  (global.set $global$0
    (i32.const 20)
   )
  )
