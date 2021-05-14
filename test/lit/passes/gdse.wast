@@ -11,6 +11,8 @@
  (global $global$0 (mut i32) (i32.const 0))
  (global $global$1 (mut i32) (i32.const 0))
 
+ (global $sp (mut i32) (i32.const 0))
+
  (func $do-nothing)
 
  ;; CHECK:      (func $calls-nothing-doer
@@ -52,6 +54,81 @@
   (call $do-nothing)
   (global.set $global$1
    (i32.const 20)
+  )
+ )
+
+ ;; CHECK:      (func $sp-middle
+ ;; CHECK-NEXT:  (local $old i32)
+ ;; CHECK-NEXT:  (local.set $old
+ ;; CHECK-NEXT:   (global.get $sp)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (i32.add
+ ;; CHECK-NEXT:    (global.get $sp)
+ ;; CHECK-NEXT:    (i32.const 1)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (call $do-nothing)
+ ;; CHECK-NEXT:  (global.set $sp
+ ;; CHECK-NEXT:   (local.get $old)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $sp-middle
+  (local $old i32)
+  ;; Use the stack pointer in a realistic manner. This function will be at the
+  ;; middle of a stack of calls
+  ;;
+  ;;   $sp-bottom  =>  $sp-middle  =>  $do-nothing
+  ;;
+  (local.set $old
+   (global.get $sp)
+  )
+  ;; As we will call $do-nothing, then trample, this store is dead
+  (global.set $sp
+   (i32.add
+    (global.get $sp)
+    (i32.const 1)
+   )
+  )
+  (call $do-nothing)
+  (global.set $sp
+   (local.get $old)
+  )
+ )
+
+ ;; CHECK:      (func $sp-bottom
+ ;; CHECK-NEXT:  (local $old i32)
+ ;; CHECK-NEXT:  (local.set $old
+ ;; CHECK-NEXT:   (global.get $sp)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (global.set $sp
+ ;; CHECK-NEXT:   (i32.add
+ ;; CHECK-NEXT:    (global.get $sp)
+ ;; CHECK-NEXT:    (i32.const 1)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (call $sp-middle)
+ ;; CHECK-NEXT:  (global.set $sp
+ ;; CHECK-NEXT:   (local.get $old)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $sp-bottom
+  (local $old i32)
+  ;; As $sp-middle, but this is the bottom of a stack of calls.
+  (local.set $old
+   (global.get $sp)
+  )
+  ;; We will call $sp-middle, which reads the stack pointer, and so this is not
+  ;; dead.
+  (global.set $sp
+   (i32.add
+    (global.get $sp)
+    (i32.const 1)
+   )
+  )
+  (call $sp-middle)
+  (global.set $sp
+   (local.get $old)
   )
  )
 )
