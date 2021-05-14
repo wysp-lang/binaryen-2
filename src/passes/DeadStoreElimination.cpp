@@ -304,10 +304,11 @@ struct DeadStoreCFG
   PassOptions& passOptions;
   FeatureSet features;
   LogicType logic;
+  WholeProgramInfo* wholeProgramInfo;
 
-  DeadStoreCFG(Module* wasm, Function* func, PassOptions& passOptions)
+  DeadStoreCFG(Module* wasm, Function* func, PassOptions& passOptions, WholeProgramInfo* wholeProgramInfo)
     : func(func), passOptions(passOptions), features(wasm->features),
-      logic(func, passOptions, wasm->features) {
+      logic(func, passOptions, wasm->features), wholeProgramInfo(wholeProgramInfo) {
     this->setModule(wasm);
   }
 
@@ -758,24 +759,35 @@ struct LocalDeadStoreElimination
   : public WalkerPass<PostWalker<LocalDeadStoreElimination>> {
   bool isFunctionParallel() { return true; }
 
-  Pass* create() { return new LocalDeadStoreElimination; }
+  Pass* create() { return new LocalDeadStoreElimination(wholeProgramInfo); }
+
+  LocalDeadStoreElimination(WholeProgramInfo* wholeProgramInfo) : wholeProgramInfo(wholeProgramInfo) {}
+
+  WholeProgramInfo* wholeProgramInfo = nullptr;
 
   void doWalkFunction(Function* func) {
     // Optimize globals.
-    DeadStoreCFG<GlobalLogic>(getModule(), func, getPassOptions()).optimize();
+    DeadStoreCFG<GlobalLogic>(getModule(), func, getPassOptions(), wholeProgramInfo).optimize();
 
     // Optimize memory.
-    DeadStoreCFG<MemoryLogic>(getModule(), func, getPassOptions()).optimize();
+    DeadStoreCFG<MemoryLogic>(getModule(), func, getPassOptions(), wholeProgramInfo).optimize();
 
     // Optimize GC heap.
     if (getModule()->features.hasGC()) {
-      DeadStoreCFG<GCLogic>(getModule(), func, getPassOptions()).optimize();
+      DeadStoreCFG<GCLogic>(getModule(), func, getPassOptions(), wholeProgramInfo).optimize();
     }
   }
 };
 
 struct GlobalDeadStoreElimination : public Pass {
-  void run(PassRunner* runner, Module* module) override {}
+  void run(PassRunner* runner, Module* module) override {
+    WholeProgramInfo wholeProgramInfo(module, runner->getPassOptions());
+
+    PassRunner subRunner(runner);
+    subRunner.setIsNested(true);
+    subRunner.add(LocalDeadStoreElimination, &wholeProgramInfo);
+    subRunner.run();
+  }
 };
 
 } // anonymous namespace
