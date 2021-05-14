@@ -140,7 +140,7 @@ public:
         }
 
         info.effects = make_unique<EffectAnalyzer>(
-          passOptions(), module->features, func->body);
+          passOptions, module->features, func->body);
       });
 
     // Propagate it through the whole program.
@@ -335,19 +335,19 @@ struct DeadStoreCFG
       exprs.push_back(curr);
       return;
     }
-    bool barrier = logic.isBarrier(curr, *currEffects);
-    if (!barrier && wholeProgramInfo) {
+    bool isBarrier = logic.isBarrier(curr, *currEffects);
+    if (!isBarrier && wholeProgramInfo) {
       if (auto* call = curr->dynCast<Call>()) {
         // This is a direct call. Our whole-program information may allow us to
         // see that this is not a barrier later, so do not assume it is one now,
         // not unless it is something we cannot analyze.
         auto& functionInfo = wholeProgramInfo.get(call->target);
         if (functionInfo.barrier) {
-          barrier = true;
+          isBarrier = true;
         }
       }
     }
-    if (barrier) {
+    if (isBarrier) {
       // Barriers can be very common, so as a minor optimization avoid having
       // consecutive ones; a single barrier will stop us.
       if (exprs.empty() || exprs.back() != barrier) {

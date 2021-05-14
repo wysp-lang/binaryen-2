@@ -472,7 +472,7 @@ template<typename T> struct CallGraphPropertyAnalysis {
     while (!work.empty()) {
       auto* func = work.pop();
       for (auto* caller : map[func].calledBy) {
-        if (propagates(func, map[func], caller, map[caller]) {
+        if (propagates(func, map[func], caller, map[caller])) {
           work.push(caller);
         }
       }
