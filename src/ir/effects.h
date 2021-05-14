@@ -248,27 +248,20 @@ public:
   }
 
   bool operator==(const EffectAnalyzer& other) {
-    return branchesOut == other.branchesOut &&
-          calls == other.calls &&
-          readsMemory == other.readsMemory &&
-          writesMemory == other.writesMemory &&
-          readsHeap == other.readsHeap &&
-          writesHeap == other.writesHeap &&
-          trap == other.trap &&
-          implicitTrap == other.implicitTrap &&
-          isAtomic == other.isAtomic &&
-          throws == other.throws &&
-          danglingPop == other.danglingPop &&
-          localsRead == other.localsRead &&
-          localsWritten == other.localsWritten &&
-          globalsRead == other.globalsRead &&
-          globalsWritten == other.globalsWritten &&
-          breakTargets == other.breakTargets;
+    return branchesOut == other.branchesOut && calls == other.calls &&
+           readsMemory == other.readsMemory &&
+           writesMemory == other.writesMemory && readsHeap == other.readsHeap &&
+           writesHeap == other.writesHeap && trap == other.trap &&
+           implicitTrap == other.implicitTrap && isAtomic == other.isAtomic &&
+           throws == other.throws && danglingPop == other.danglingPop &&
+           localsRead == other.localsRead &&
+           localsWritten == other.localsWritten &&
+           globalsRead == other.globalsRead &&
+           globalsWritten == other.globalsWritten &&
+           breakTargets == other.breakTargets;
   }
 
-  bool operator!=(const EffectAnalyzer& other) {
-    return !(*this == other);
-  }
+  bool operator!=(const EffectAnalyzer& other) { return !(*this == other); }
 
   // the checks above happen after the node's children were processed, in the
   // order of execution we must also check for control flow that happens before

@@ -306,9 +306,13 @@ struct DeadStoreCFG
   LogicType logic;
   WholeProgramInfo* wholeProgramInfo;
 
-  DeadStoreCFG(Module* wasm, Function* func, PassOptions& passOptions, WholeProgramInfo* wholeProgramInfo)
+  DeadStoreCFG(Module* wasm,
+               Function* func,
+               PassOptions& passOptions,
+               WholeProgramInfo* wholeProgramInfo)
     : func(func), passOptions(passOptions), features(wasm->features),
-      logic(func, passOptions, wasm->features), wholeProgramInfo(wholeProgramInfo) {
+      logic(func, passOptions, wasm->features),
+      wholeProgramInfo(wholeProgramInfo) {
     this->setModule(wasm);
   }
 
@@ -761,20 +765,27 @@ struct LocalDeadStoreElimination
 
   Pass* create() { return new LocalDeadStoreElimination(wholeProgramInfo); }
 
-  LocalDeadStoreElimination(WholeProgramInfo* wholeProgramInfo = nullptr) : wholeProgramInfo(wholeProgramInfo) {}
+  LocalDeadStoreElimination(WholeProgramInfo* wholeProgramInfo = nullptr)
+    : wholeProgramInfo(wholeProgramInfo) {}
 
   WholeProgramInfo* wholeProgramInfo = nullptr;
 
   void doWalkFunction(Function* func) {
     // Optimize globals.
-    DeadStoreCFG<GlobalLogic>(getModule(), func, getPassOptions(), wholeProgramInfo).optimize();
+    DeadStoreCFG<GlobalLogic>(
+      getModule(), func, getPassOptions(), wholeProgramInfo)
+      .optimize();
 
     // Optimize memory.
-    DeadStoreCFG<MemoryLogic>(getModule(), func, getPassOptions(), wholeProgramInfo).optimize();
+    DeadStoreCFG<MemoryLogic>(
+      getModule(), func, getPassOptions(), wholeProgramInfo)
+      .optimize();
 
     // Optimize GC heap.
     if (getModule()->features.hasGC()) {
-      DeadStoreCFG<GCLogic>(getModule(), func, getPassOptions(), wholeProgramInfo).optimize();
+      DeadStoreCFG<GCLogic>(
+        getModule(), func, getPassOptions(), wholeProgramInfo)
+        .optimize();
     }
   }
 };
