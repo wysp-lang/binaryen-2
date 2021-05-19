@@ -36,6 +36,7 @@ set(passes_SOURCES
   InstrumentMemory.cpp
   LegalizeJSInterface.cpp
   LimitSegments.cpp
+  LLVM.cpp
   LocalCSE.cpp
   LogExecution.cpp
   LoopInvariantCodeMotion.cpp

@@ -165,6 +165,9 @@ void PassRegistry::registerPasses() {
                "legalizes i64 types on the import/export boundary in a minimal "
                "manner, only on things only JS will call",
                createLegalizeJSInterfaceMinimallyPass);
+  registerPass("llvm-opt",
+               "run the LLVM optimizer (!)",
+               createLLVMOptPass);
   registerPass("local-cse",
                "common subexpression elimination inside basic blocks",
                createLocalCSEPass);

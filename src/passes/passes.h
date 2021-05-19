@@ -61,6 +61,7 @@ Pass* createLocalCSEPass();
 Pass* createLogExecutionPass();
 Pass* createInstrumentLocalsPass();
 Pass* createInstrumentMemoryPass();
+Pass* createLLLVMOptPass();
 Pass* createLoopInvariantCodeMotionPass();
 Pass* createMemory64LoweringPass();
 Pass* createMemoryPackingPass();
