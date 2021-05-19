@@ -23,6 +23,7 @@
 #include "ir/module-utils.h"
 #include "pass.h"
 #include "support/process.h"
+#include "wasm-builder.h"
 #include "wasm-io.h"
 #include "wasm.h"
 
@@ -35,9 +36,22 @@ struct LLVMOpt : public Pass {
       "LLVMOpt usage:  wasm-opt --llvm-opt=BASENAME\n"
       "  BASENAME will be used as the base name for the temporary files that\n"
       "  we create (BASENAME.1.wasm, BASENAME.2.c, etc.");
+
     // Save features, which would not otherwise make it through a round trip if
     // the target features section has been stripped.
     auto features = module->features;
+
+    Builder builder(*module);
+    // Ensure the memory is exported, which wasm2c requires.
+    if (!module->getExportOrNull("memory")) {
+      module->addExport(builder.makeExport("memory", "0", ExternalKind::Memory));
+    }
+    // Ensure a _start is exported, which wasm2c requires.
+    if (!module->getExportOrNull("_start")) {
+      module->addFunction(builder.makeFunction("start", { Type::none, Type::none }, {}, builder.makeNop()));
+      module->addExport(builder.makeExport("_start", "start", ExternalKind::Function));
+    }
+
     // Write the module to a temp file.
     std::string tempWasmA = base + ".1.wasm";
     ModuleWriter().writeBinary(*module, tempWasmA);
