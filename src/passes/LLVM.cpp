@@ -23,6 +23,7 @@
 #include "ir/module-utils.h"
 #include "pass.h"
 #include "wasm-binary.h"
+#include "wasm-io.h"
 #include "wasm.h"
 
 namespace wasm {
@@ -33,12 +34,15 @@ struct LLVMOpt : public Pass {
     // Save features, which would not otherwise make it through a round trip if
     // the target features section has been stripped.
     auto features = module->features;
-    // Write, clear, and read the module
+    // Write the module to a temp file.
     WasmBinaryWriter(module, buffer).write();
+    FILE* temp = std::tmpfile();
+    std::fwrite(buffer.data(), buffer.size(), 1, temp);
+    std::fclose(temp);
+    // Clear the module in preparation for reading, and read it.
     ModuleUtils::clearModule(*module);
     auto input = buffer.getAsChars();
     WasmBinaryBuilder parser(*module, input);
-    parser.setDWARF(runner->options.debugInfo);
     try {
       parser.read();
     } catch (ParseException& p) {
