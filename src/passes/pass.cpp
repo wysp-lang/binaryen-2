@@ -152,6 +152,8 @@ void PassRegistry::registerPasses() {
   registerPass(
     "generate-stack-ir", "generate Stack IR", createGenerateStackIRPass);
   registerPass(
+    "heap2local", "replace GC allocations with locals", createHeap2LocalPass);
+  registerPass(
     "inline-main", "inline __original_main into main", createInlineMainPass);
   registerPass("inlining",
                "inline functions (you probably want inlining-optimizing)",
@@ -263,9 +265,18 @@ void PassRegistry::registerPasses() {
     "print-full", "print in full s-expression format", createFullPrinterPass);
   registerPass(
     "print-call-graph", "print call graph", createPrintCallGraphPass);
+
+  // Register PrintFunctionMap using its normal name.
   registerPass("print-function-map",
                "print a map of function indexes to names",
                createPrintFunctionMapPass);
+  // Also register it as "symbolmap" so that  wasm-opt --symbolmap=foo  is the
+  // same as  wasm-as --symbolmap=foo  even though the latter is not a pass
+  // (wasm-as cannot run arbitrary passes).
+  // TODO: switch emscripten to this name, then remove the old one
+  registerPass(
+    "symbolmap", "(alias for print-function-map)", createPrintFunctionMapPass);
+
   registerPass("print-stack-ir",
                "print out Stack IR (useful for internal debugging)",
                createPrintStackIRPass);
@@ -437,6 +448,9 @@ void PassRunner::addDefaultFunctionOptimizationPasses() {
   addIfNoDWARFIssues("reorder-locals");
   // simplify-locals opens opportunities for optimizations
   addIfNoDWARFIssues("remove-unused-brs");
+  if (options.optimizeLevel > 1 && wasm->features.hasGC()) {
+    addIfNoDWARFIssues("heap2local");
+  }
   // if we are willing to work hard, also optimize copies before coalescing
   if (options.optimizeLevel >= 3 || options.shrinkLevel >= 2) {
     addIfNoDWARFIssues("merge-locals"); // very slow on e.g. sqlite

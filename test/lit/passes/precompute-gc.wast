@@ -6,12 +6,25 @@
  (type $struct (struct (mut i32)))
  (type $empty (struct))
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+ ;; two incompatible types
+ (type $A (struct (field (mut f32))))
+ (type $B (struct (field (mut f64))))
+
+=======
+>>>>>>> origin/fuzztemp
  ;; two incompatible struct types
  (type $A (struct (field (mut f32))))
  (type $B (struct (field (mut f64))))
 
  (type $func-return-i32 (func (result i32)))
 
+<<<<<<< HEAD
+=======
+>>>>>>> origin/main
+>>>>>>> origin/fuzztemp
  (import "fuzzing-support" "log-i32" (func $log (param i32)))
 
  ;; CHECK:      (func $test-fallthrough (result i32)
@@ -398,7 +411,15 @@
   (local.get $tempresult)
  )
 
+<<<<<<< HEAD
  ;; CHECK:      (func $odd-cast-and-get
+=======
+<<<<<<< HEAD
+ ;; CHECK:      (func $bad-cast-and-get
+=======
+ ;; CHECK:      (func $odd-cast-and-get
+>>>>>>> origin/main
+>>>>>>> origin/fuzztemp
  ;; CHECK-NEXT:  (local $temp (ref null $B))
  ;; CHECK-NEXT:  (local.set $temp
  ;; CHECK-NEXT:   (ref.null $B)
@@ -409,12 +430,26 @@
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT: )
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+ (func $bad-cast-and-get
+  (local $temp (ref null $B))
+  ;; Try to cast a null of A to B. While the types are incompatible, ref.cast
+  ;; returns a null when given a null (and the null must have the type that the
+  ;; ref.cast instruction has, that is, the value is a null of type $B).
+=======
+>>>>>>> origin/fuzztemp
  (func $odd-cast-and-get
   (local $temp (ref null $B))
   ;; Try to cast a null of A to B. While the types are incompatible, ref.cast
   ;; returns a null when given a null (and the null must have the type that the
   ;; ref.cast instruction has, that is, the value is a null of type $B). So this
   ;; is an odd cast that "works".
+<<<<<<< HEAD
+=======
+>>>>>>> origin/main
+>>>>>>> origin/fuzztemp
   (local.set $temp
    (ref.cast
     (ref.null $A)
@@ -422,15 +457,33 @@
    )
   )
   (drop
+<<<<<<< HEAD
    ;; Read from the local, which precompute should set to a null with the proper
    ;; type.
+=======
+<<<<<<< HEAD
+   ;; Read from the reference in the local. Precompute should not be confused by
+   ;; the attempt above to store a different type.
+=======
+   ;; Read from the local, which precompute should set to a null with the proper
+   ;; type.
+>>>>>>> origin/main
+>>>>>>> origin/fuzztemp
    (struct.get $B 0
     (local.get $temp)
    )
   )
  )
 
+<<<<<<< HEAD
  ;; CHECK:      (func $odd-cast-and-get-tuple
+=======
+<<<<<<< HEAD
+ ;; CHECK:      (func $bad-cast-and-get-tuple
+=======
+ ;; CHECK:      (func $odd-cast-and-get-tuple
+>>>>>>> origin/main
+>>>>>>> origin/fuzztemp
  ;; CHECK-NEXT:  (local $temp ((ref null $B) i32))
  ;; CHECK-NEXT:  (local.set $temp
  ;; CHECK-NEXT:   (tuple.make
@@ -444,7 +497,15 @@
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT: )
+<<<<<<< HEAD
  (func $odd-cast-and-get-tuple
+=======
+<<<<<<< HEAD
+ (func $bad-cast-and-get-tuple
+=======
+ (func $odd-cast-and-get-tuple
+>>>>>>> origin/main
+>>>>>>> origin/fuzztemp
   (local $temp ((ref null $B) i32))
   ;; As above, but with a tuple.
   (local.set $temp
@@ -457,6 +518,14 @@
    )
   )
   (drop
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+   ;; Read from the reference in the local. Precompute should not be confused by
+   ;; the attempt above to store a different type.
+=======
+>>>>>>> origin/main
+>>>>>>> origin/fuzztemp
    (struct.get $B 0
     (tuple.extract 0
      (local.get $temp)
@@ -464,6 +533,11 @@
    )
   )
  )
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+>>>>>>> origin/fuzztemp
 
  ;; CHECK:      (func $receive-f64 (param $0 f64)
  ;; CHECK-NEXT:  (unreachable)
@@ -501,4 +575,8 @@
    )
   )
  )
+<<<<<<< HEAD
+=======
+>>>>>>> origin/main
+>>>>>>> origin/fuzztemp
 )
