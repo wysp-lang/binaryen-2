@@ -18,15 +18,16 @@
 #define wasm_support_insert_ordered_h
 
 #include <list>
-#include <map>
+#include <stddef.h>
+#include <unordered_map>
 
-#include "wasm.h"
+#include "support/utilities.h"
 
 namespace wasm {
 
-// Like std::set, except that begin() -> end() iterates in the
+// like std::set, except that begin() -> end() iterates in the
 // order that elements were added to the set (not in the order
-// of operator<(T, T)).
+// of operator<(T, T))
 template<typename T> struct InsertOrderedSet {
   std::unordered_map<T, typename std::list<T>::iterator> Map;
   std::list<T> List;
@@ -78,27 +79,46 @@ template<typename T> struct InsertOrderedSet {
   }
 };
 
-// Like std::map, except that begin() -> end() iterates in the
+// like std::map, except that begin() -> end() iterates in the
 // order that elements were added to the map (not in the order
-// of operator<(Key, Key)).
+// of operator<(Key, Key))
 template<typename Key, typename T> struct InsertOrderedMap {
-  std::unordered_map<Key, typename std::list<std::pair<Key, T>>::iterator> Map;
-  std::list<std::pair<Key, T>> List;
+  std::unordered_map<Key, typename std::list<std::pair<const Key, T>>::iterator>
+    Map;
+  std::list<std::pair<const Key, T>> List;
 
-  T& operator[](const Key& k) {
-    auto it = Map.find(k);
-    if (it == Map.end()) {
-      List.push_back(std::make_pair(k, T()));
-      auto e = --List.end();
-      Map.insert(std::make_pair(k, e));
-      return e->second;
-    }
-    return it->second->second;
-  }
-
-  typedef typename std::list<std::pair<Key, T>>::iterator iterator;
+  typedef typename std::list<std::pair<const Key, T>>::iterator iterator;
   iterator begin() { return List.begin(); }
   iterator end() { return List.end(); }
+
+  typedef
+    typename std::list<std::pair<const Key, T>>::const_iterator const_iterator;
+  const_iterator begin() const { return List.begin(); }
+  const_iterator end() const { return List.end(); }
+
+  std::pair<iterator, bool> insert(std::pair<const Key, T>& kv) {
+    // Try inserting with a placeholder list iterator.
+    auto inserted = Map.insert({kv.first, List.end()});
+    if (inserted.second) {
+      // This is a new item; insert it in the list and update the iterator.
+      List.push_back(kv);
+      inserted.first->second = std::prev(List.end());
+    }
+    return {inserted.first->second, inserted.second};
+  }
+
+  T& operator[](const Key& k) {
+    std::pair<const Key, T> kv = {k, {}};
+    return insert(kv).first->second;
+  }
+
+  iterator find(const Key& k) {
+    auto it = Map.find(k);
+    if (it == Map.end()) {
+      return end();
+    }
+    return it->second;
+  }
 
   void erase(const Key& k) {
     auto it = Map.find(k);
@@ -125,12 +145,19 @@ template<typename Key, typename T> struct InsertOrderedMap {
   size_t count(const Key& k) const { return Map.count(k); }
 
   InsertOrderedMap() = default;
-  InsertOrderedMap(InsertOrderedMap& other) {
-    abort(); // TODO, watch out for iterators
+  InsertOrderedMap(const InsertOrderedMap& other) {
+    for (auto kv : other) {
+      insert(kv);
+    }
   }
   InsertOrderedMap& operator=(const InsertOrderedMap& other) {
-    abort(); // TODO, watch out for iterators
+    if (this != &other) {
+      this->~InsertOrderedMap();
+      new (this) InsertOrderedMap<Key, T>(other);
+    }
+    return *this;
   }
+
   bool operator==(const InsertOrderedMap& other) {
     return Map == other.Map && List == other.List;
   }

@@ -29,6 +29,7 @@ high chance for set at start of loop
 
 #include "ir/branch-utils.h"
 #include "ir/memory-utils.h"
+#include "support/insert_ordered.h"
 #include <ir/find_all.h>
 #include <ir/literal-utils.h>
 #include <ir/manipulation.h>

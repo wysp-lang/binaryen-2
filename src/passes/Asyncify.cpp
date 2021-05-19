@@ -381,7 +381,7 @@ public:
 
 private:
   std::unordered_map<Type, Name> map;
-  std::map<Name, Type> rev;
+  std::unordered_map<Name, Type> rev;
 
   // Collect the types returned from all calls for which call support globals
   // may need to be generated.
