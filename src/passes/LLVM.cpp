@@ -22,7 +22,7 @@
 
 #include "ir/module-utils.h"
 #include "pass.h"
-#include "wasm-binary.h"
+#include "support/process.h"
 #include "wasm-io.h"
 #include "wasm.h"
 
@@ -30,26 +30,31 @@ namespace wasm {
 
 struct LLVMOpt : public Pass {
   void run(PassRunner* runner, Module* module) override {
-    BufferWithRandomAccess buffer;
+    std::string base = runner->options.getArgument(
+      "llvm-opt",
+      "LLVMOpt usage:  wasm-opt --llvm-opt=BASENAME\n"
+      "  BASENAME will be used as the base name for the temporary files that\n"
+      "  we create (BASENAME.1.wasm, BASENAME.2.c, BASENAME.3.wasm");
     // Save features, which would not otherwise make it through a round trip if
     // the target features section has been stripped.
     auto features = module->features;
     // Write the module to a temp file.
-    WasmBinaryWriter(module, buffer).write();
-    FILE* temp = std::tmpfile();
-    std::fwrite(buffer.data(), buffer.size(), 1, temp);
-    std::fclose(temp);
+    std::string tempWasmA = base + ".1.wasm";
+    ModuleWriter().writeBinary(*module, tempWasmA);
+    // Compile the wasm to C.
+    std::string tempC = base + ".2.c";
+    if (ProgramResult("emcc " + tempWasmA + " -o " + tempC + " -s WASM2C").failed()) {
+      Fatal() << "LLVMOpt: failed to convert to C";
+    }
+    // Compile the C to wasm.
+    // TODO: optimize!
+    std::string tempWasmB = base + ".3.c";
+    if (ProgramResult("emcc " + tempC + " -o " + tempWasmB).failed()) {
+      Fatal() << "LLVMOpt: failed to convert to wasm";
+    }
     // Clear the module in preparation for reading, and read it.
     ModuleUtils::clearModule(*module);
-    auto input = buffer.getAsChars();
-    WasmBinaryBuilder parser(*module, input);
-    try {
-      parser.read();
-    } catch (ParseException& p) {
-      p.dump(std::cerr);
-      std::cerr << '\n';
-      Fatal() << "error in parsing wasm binary";
-    }
+    ModuleReader().readBinary(tempWasmB, *module);
     // Reapply features
     module->features = features;
   }

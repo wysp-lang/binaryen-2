@@ -66,7 +66,7 @@ struct ProgramResult {
   double time;
 
   ProgramResult(size_t timeout = -1) : timeout(timeout) {}
-  ProgramResult(std::string command, size_t timeout) : timeout(timeout) {
+  ProgramResult(std::string command, size_t timeout = -1) : timeout(timeout) {
     getFromExecution(command);
   }
 
