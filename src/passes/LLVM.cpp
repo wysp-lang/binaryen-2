@@ -34,22 +34,29 @@ struct LLVMOpt : public Pass {
       "llvm-opt",
       "LLVMOpt usage:  wasm-opt --llvm-opt=BASENAME\n"
       "  BASENAME will be used as the base name for the temporary files that\n"
-      "  we create (BASENAME.1.wasm, BASENAME.2.c, BASENAME.3.wasm");
+      "  we create (BASENAME.1.wasm, BASENAME.2.c, etc.");
     // Save features, which would not otherwise make it through a round trip if
     // the target features section has been stripped.
     auto features = module->features;
     // Write the module to a temp file.
     std::string tempWasmA = base + ".1.wasm";
     ModuleWriter().writeBinary(*module, tempWasmA);
-    // Compile the wasm to C.
-    std::string tempC = base + ".2.c";
-    if (ProgramResult("emcc " + tempWasmA + " -o " + tempC + " -s WASM2C").failed()) {
+    // Compile the wasm to C, which we do by "compiling" it to wasm + wasm2c. By
+    // running emcc with --post-link, the input wasm file is left as is, and we
+    // only do the wasm2c bit.
+    std::string tempWasmB = base + ".2.wasm";
+    std::string tempC = tempWasmB + ".c";
+    ProgramResult wasm2c("emcc " + tempWasmA + " -o " + tempWasmB + " -s WASM2C --post-link -s ASSERTIONS=0 -s ERROR_ON_UNDEFINED_SYMBOLS=0");
+    if (wasm2c.failed()) {
+      wasm2c.dump(std::cout);
       Fatal() << "LLVMOpt: failed to convert to C";
     }
     // Compile the C to wasm.
     // TODO: optimize!
-    std::string tempWasmB = base + ".3.c";
-    if (ProgramResult("emcc " + tempC + " -o " + tempWasmB).failed()) {
+    std::string tempWasmC = base + ".3.wasm";
+    ProgramResult c2wasm("emcc " + tempC + " -o " + tempWasmC);
+    if (c2wasm.failed()) {
+      c2wasm.dump(std::cout);
       Fatal() << "LLVMOpt: failed to convert to wasm";
     }
     // Clear the module in preparation for reading, and read it.

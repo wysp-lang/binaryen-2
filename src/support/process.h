@@ -61,6 +61,8 @@ namespace wasm {
 struct ProgramResult {
   size_t timeout;
 
+  std::string command;
+
   int code;
   std::string output;
   double time;
@@ -71,7 +73,9 @@ struct ProgramResult {
   }
 
 #ifdef _WIN32
-  void getFromExecution(std::string command) {
+  void getFromExecution(std::string command_) {
+    command = command_;
+
     Timer timer;
     timer.start();
     SECURITY_ATTRIBUTES saAttr;
@@ -158,7 +162,9 @@ struct ProgramResult {
 #else  // POSIX
   // runs the command and notes the output
   // TODO: also stderr, not just stdout?
-  void getFromExecution(std::string command) {
+  void getFromExecution(std::string command_) {
+    command = command_;
+
     Timer timer;
     timer.start();
     // do this using just core stdio.h and stdlib.h, for portability
@@ -189,7 +195,7 @@ struct ProgramResult {
   bool failed() { return code != 0; }
 
   void dump(std::ostream& o) {
-    o << "[ProgramResult] code: " << code << " stdout: \n"
+    o << "[ProgramResult " << command << "]\ncode: " << code << ", stdout: \n"
       << output << "[====]\nin " << time << " seconds\n[/ProgramResult]\n";
   }
 };
