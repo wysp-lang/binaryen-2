@@ -36,39 +36,12 @@
 #include "support/command-line.h"
 #include "support/file.h"
 #include "support/path.h"
+#include "support/process.h"
 #include "support/timing.h"
 #include "wasm-builder.h"
 #include "wasm-io.h"
 #include "wasm-validator.h"
-#ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-// Create a string with last error message
-std::string GetLastErrorStdStr() {
-  DWORD error = GetLastError();
-  if (error) {
-    LPVOID lpMsgBuf;
-    DWORD bufLen = FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
-                                   FORMAT_MESSAGE_FROM_SYSTEM |
-                                   FORMAT_MESSAGE_IGNORE_INSERTS,
-                                 NULL,
-                                 error,
-                                 MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                                 (LPTSTR)&lpMsgBuf,
-                                 0,
-                                 NULL);
-    if (bufLen) {
-      LPCSTR lpMsgStr = (LPCSTR)lpMsgBuf;
-      std::string result(lpMsgStr, lpMsgStr + bufLen);
-      LocalFree(lpMsgBuf);
-      return result;
-    }
-  }
-  return std::string();
-}
-#endif
+
 using namespace wasm;
 
 // A timeout on every execution of the command.
@@ -78,148 +51,8 @@ static size_t timeout = 2;
 // default of enabling all features should work in most cases.
 static std::string extraFlags = "-all";
 
-struct ProgramResult {
-  int code;
-  std::string output;
-  double time;
-
-  ProgramResult() = default;
-  ProgramResult(std::string command) { getFromExecution(command); }
-
-#ifdef _WIN32
-  void getFromExecution(std::string command) {
-    Timer timer;
-    timer.start();
-    SECURITY_ATTRIBUTES saAttr;
-    saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
-    saAttr.bInheritHandle = TRUE;
-    saAttr.lpSecurityDescriptor = NULL;
-
-    HANDLE hChildStd_OUT_Rd;
-    HANDLE hChildStd_OUT_Wr;
-
-    if (
-      // Create a pipe for the child process's STDOUT.
-      !CreatePipe(&hChildStd_OUT_Rd, &hChildStd_OUT_Wr, &saAttr, 0) ||
-      // Ensure the read handle to the pipe for STDOUT is not inherited.
-      !SetHandleInformation(hChildStd_OUT_Rd, HANDLE_FLAG_INHERIT, 0)) {
-      Fatal() << "CreatePipe \"" << command
-              << "\" failed: " << GetLastErrorStdStr() << ".\n";
-    }
-
-    STARTUPINFO si;
-    PROCESS_INFORMATION pi;
-
-    ZeroMemory(&si, sizeof(si));
-    si.cb = sizeof(si);
-    si.hStdError = hChildStd_OUT_Wr;
-    si.hStdOutput = hChildStd_OUT_Wr;
-    si.dwFlags |= STARTF_USESTDHANDLES;
-    ZeroMemory(&pi, sizeof(pi));
-
-    // Start the child process.
-    if (!CreateProcess(NULL, // No module name (use command line)
-                       (LPSTR)command.c_str(), // Command line
-                       NULL,                   // Process handle not inheritable
-                       NULL,                   // Thread handle not inheritable
-                       TRUE,                   // Set handle inheritance to TRUE
-                       0,                      // No creation flags
-                       NULL,                   // Use parent's environment block
-                       NULL, // Use parent's starting directory
-                       &si,  // Pointer to STARTUPINFO structure
-                       &pi)  // Pointer to PROCESS_INFORMATION structure
-    ) {
-      Fatal() << "CreateProcess \"" << command
-              << "\" failed: " << GetLastErrorStdStr() << ".\n";
-    }
-
-    // Wait until child process exits.
-    DWORD retVal = WaitForSingleObject(pi.hProcess, timeout * 1000);
-    if (retVal == WAIT_TIMEOUT) {
-      printf("Command timeout: %s", command.c_str());
-      TerminateProcess(pi.hProcess, -1);
-    }
-    DWORD dwordExitCode;
-    if (!GetExitCodeProcess(pi.hProcess, &dwordExitCode)) {
-      Fatal() << "GetExitCodeProcess failed: " << GetLastErrorStdStr() << ".\n";
-    }
-    code = (int)dwordExitCode;
-
-    // Close process and thread handles.
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-
-    // Read output from the child process's pipe for STDOUT
-    // Stop when there is no more data.
-    {
-      const int BUFSIZE = 4096;
-      DWORD dwRead, dwTotal, dwTotalRead = 0;
-      CHAR chBuf[BUFSIZE];
-      BOOL bSuccess = FALSE;
-
-      PeekNamedPipe(hChildStd_OUT_Rd, NULL, 0, NULL, &dwTotal, NULL);
-      while (dwTotalRead < dwTotal) {
-        bSuccess =
-          ReadFile(hChildStd_OUT_Rd, chBuf, BUFSIZE - 1, &dwRead, NULL);
-        if (!bSuccess || dwRead == 0)
-          break;
-        chBuf[dwRead] = 0;
-        dwTotalRead += dwRead;
-        output.append(chBuf);
-      }
-    }
-    timer.stop();
-    time = timer.getTotal();
-  }
-#else  // POSIX
-  // runs the command and notes the output
-  // TODO: also stderr, not just stdout?
-  void getFromExecution(std::string command) {
-    Timer timer;
-    timer.start();
-    // do this using just core stdio.h and stdlib.h, for portability
-    // sadly this requires two invokes
-    code = system(("timeout " + std::to_string(timeout) + "s " + command +
-                   " > /dev/null 2> /dev/null")
-                    .c_str());
-    const int MAX_BUFFER = 1024;
-    char buffer[MAX_BUFFER];
-    FILE* stream = popen(
-      ("timeout " + std::to_string(timeout) + "s " + command + " 2> /dev/null")
-        .c_str(),
-      "r");
-    while (fgets(buffer, MAX_BUFFER, stream) != NULL) {
-      output.append(buffer);
-    }
-    pclose(stream);
-    timer.stop();
-    time = timer.getTotal() / 2;
-  }
-#endif // _WIN32
-
-  bool operator==(ProgramResult& other) {
-    return code == other.code && output == other.output;
-  }
-  bool operator!=(ProgramResult& other) { return !(*this == other); }
-
-  bool failed() { return code != 0; }
-
-  void dump(std::ostream& o) {
-    o << "[ProgramResult] code: " << code << " stdout: \n"
-      << output << "[====]\nin " << time << " seconds\n[/ProgramResult]\n";
-  }
-};
-
-namespace std {
-
-inline std::ostream& operator<<(std::ostream& o, ProgramResult& result) {
-  result.dump(o);
-  return o;
-}
-
-} // namespace std
-
-ProgramResult expected;
+// The expected outcome.
+static ProgramResult expected;
 
 // Removing functions is extremely beneficial and efficient. We aggressively
 // try to remove functions, unless we've seen they can't be removed, in which
@@ -296,12 +129,12 @@ struct Reducer
         if (verbose) {
           std::cerr << "|    trying pass command: " << currCommand << "\n";
         }
-        if (!ProgramResult(currCommand).failed()) {
+        if (!ProgramResult(currCommand, timeout).failed()) {
           auto newSize = file_size(test);
           if (newSize < oldSize) {
             // the pass didn't fail, and the size looks smaller, so promising
             // see if it is still has the property we are preserving
-            if (ProgramResult(command) == expected) {
+            if (ProgramResult(command, timeout) == expected) {
               std::cerr << "|    command \"" << currCommand
                         << "\" succeeded, reduced size to " << newSize << '\n';
               copy_file(test, working);
@@ -1273,14 +1106,14 @@ int main(int argc, const char* argv[]) {
       std::ofstream dst(test, std::ios::binary);
       dst << "waka waka\n";
     }
-    ProgramResult resultOnInvalid(command);
+    ProgramResult resultOnInvalid(command, timeout);
     if (resultOnInvalid == expected) {
       // Try it on a valid input.
       Module emptyModule;
       ModuleWriter writer;
       writer.setBinary(true);
       writer.write(emptyModule, test);
-      ProgramResult resultOnValid(command);
+      ProgramResult resultOnValid(command, timeout);
       if (resultOnValid == expected) {
         Fatal()
           << "running the command on the given input gives the same result as "
@@ -1300,11 +1133,11 @@ int main(int argc, const char* argv[]) {
     if (!binary) {
       cmd += " -S ";
     }
-    ProgramResult readWrite(cmd);
+    ProgramResult readWrite(cmd, timeout);
     if (readWrite.failed()) {
       stopIfNotForced("failed to read and write the binary", readWrite);
     } else {
-      ProgramResult result(command);
+      ProgramResult result(command, timeout);
       if (result != expected) {
         stopIfNotForced("running command on the canonicalized module should "
                         "give the same results",
