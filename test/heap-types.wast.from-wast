@@ -323,22 +323,7 @@
   )
  )
  (func $unreachables-3
-<<<<<<< HEAD
-  (block
-=======
-<<<<<<< HEAD
-  (block 
-   (unreachable)
-   (unreachable)
-  )
- )
- (func $unreachables-4
-  (block 
-   (unreachable)
-   (f32.const 1)
-=======
   (block ;; (replaces something unreachable we can't emit)
->>>>>>> origin/fuzztemp
    (drop
     (unreachable)
    )
@@ -355,10 +340,6 @@
    (drop
     (f32.const 1)
    )
-<<<<<<< HEAD
-=======
->>>>>>> origin/main
->>>>>>> origin/fuzztemp
   )
  )
  (func $unreachables-array-1
