@@ -111,6 +111,7 @@ struct LLVMOpt : public Pass {
         return !e->name.startsWith("w2c_");
       }),
       module->exports.end());
+    // But, the table... :(
     // Do a cleanup (we may optimize anyhow, though?)
     {
       PassRunner postRunner(runner);
