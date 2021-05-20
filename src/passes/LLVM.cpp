@@ -117,7 +117,7 @@ struct LLVMOpt : public Pass {
     ModuleUtils::clearModule(*module);
     std::cout << "[LLVMOpt] reading wasm...\n";
     ModuleReader().readBinary(tempWasmC, *module);
-    // Filter out any new exports
+    // Filter out any new exports, and rename the existing ones.
     module->exports.erase(std::remove_if(module->exports.begin(),
                                          module->exports.end(),
                                          [&](const std::unique_ptr<Export>& e) {
@@ -125,7 +125,11 @@ struct LLVMOpt : public Pass {
                                            // all those that are not one of our
                                            // original exports, whose name is
                                            // now "w2c_${ORIGINAL_NAME}"
-                                           return !e->name.startsWith("w2c_");
+                                           if (!e->name.startsWith("w2c_")) {
+                                             return true;
+                                           }
+                                           e->name = e->name.str + 4;
+                                           return false;
                                          }),
                           module->exports.end());
     // Remove the table: the "native" table contains things the new sandboxing
