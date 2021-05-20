@@ -42,6 +42,9 @@ struct LLVMOpt : public Pass {
     auto features = module->features;
 
     Builder builder(*module);
+
+    // Ensure there is a memory.
+    module->memory.exists = true;
     // Ensure the memory is exported, which wasm2c requires.
     if (!module->getExportOrNull("memory")) {
       module->addExport(builder.makeExport("memory", "0", ExternalKind::Memory));
