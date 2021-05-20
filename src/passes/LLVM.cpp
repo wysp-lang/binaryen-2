@@ -51,21 +51,24 @@ struct LLVMOpt : public Pass {
       originalExports.insert(e->name);
     }
 
+    // Add exports for more things that we need, either for the wasm2c runtime,
+    // or to make it easy for us to find what we need afterwards. (We will
+    // remove all non-original exports at the end anyhow.)
     Builder builder(*module);
 
     // Ensure there is a memory.
     module->memory.exists = true;
-    // Ensure the memory is exported, which wasm2c requires.
+    // Ensure the memory is exported, as the wasm2c runtime uses it
     if (!module->getExportOrNull("memory")) {
       module->addExport(
         builder.makeExport("memory", "0", ExternalKind::Memory));
     }
-    // Ensure a _start is exported, which wasm2c requires.
+    // Ensure a _start is exported, which wasm2c expects.
     if (!module->getExportOrNull("_start")) {
       module->addFunction(builder.makeFunction(
-        "start", {Type::none, Type::none}, {}, builder.makeNop()));
+        "byn$llvm-start", {Type::none, Type::none}, {}, builder.makeNop()));
       module->addExport(
-        builder.makeExport("_start", "start", ExternalKind::Function));
+        builder.makeExport("_start", "byn$llvm-start", ExternalKind::Function));
     }
 
     // Write the module to a temp file.
