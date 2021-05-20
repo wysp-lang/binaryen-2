@@ -44,9 +44,9 @@ struct LLVMOpt : public Pass {
 
     // Note the original exports, which are the only things we will want to have
     // exported at the end.
-    std::vector<Export> originalExports;
+    std::set<Name> originalExports;
     for (auto& e : module->exports) {
-      originalExports.push_back(*e);
+      originalExports.insert(e->name);
     }
 
     Builder builder(*module);
@@ -76,6 +76,14 @@ struct LLVMOpt : public Pass {
       wasm2c.dump(std::cout);
       Fatal() << "LLVMOpt: failed to convert to C";
     }
+    // Modify the C.
+    auto cCode(read_file<std::string>(tempC, Flags::Text));
+    // Remove "static" as we want direct access to the wasm exports actually.
+    String::replaceAll(cCode, "static ", "");
+    // Remove extra sandboxing: we are compiling back to wasm!
+    String::replaceAll(cCode, "FUNC_PROLOGUE;", "");
+    String::replaceAll(cCode, "FUNC_EPILOGUE;", "");
+    Output(tempC, Flags::Text).getStream() << cCode;
     // Compile the C to wasm.
     std::string tempWasmC = base + ".3.wasm";
     std::string cmd = "emcc " + tempC + " -o " + tempWasmC + " -O1 -s EXPORTED_FUNCTIONS=";
@@ -86,7 +94,7 @@ struct LLVMOpt : public Pass {
       } else {
         cmd += ',';
       }
-      cmd += std::string("_w2c_") + e.name.str;
+      cmd += std::string("_w2c_") + e.str;
     }
     ProgramResult c2wasm(cmd);
     if (c2wasm.failed()) {
@@ -96,6 +104,20 @@ struct LLVMOpt : public Pass {
     // Clear the module in preparation for reading, and read it.
     ModuleUtils::clearModule(*module);
     ModuleReader().readBinary(tempWasmC, *module);
+    // Filter out any new exports
+    module->exports.erase(std::remove_if(module->exports.begin(), module->exports.end(), [&](const std::unique_ptr<Export>& e) {
+        // The exports we want to erase are all those that are not one of our
+        // original exports, whose name is now "w2c_${ORIGINAL_NAME}"
+        return !e->name.startsWith("w2c_");
+      }),
+      module->exports.end());
+    // Do a cleanup (we may optimize anyhow, though?)
+    {
+      PassRunner postRunner(runner);
+      postRunner.add("remove-unused-module-elements");
+      postRunner.setIsNested(true);
+      postRunner.run();
+    }
     // Reapply features
     module->features = features;
   }
