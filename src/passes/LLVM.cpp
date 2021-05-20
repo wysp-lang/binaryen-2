@@ -50,6 +50,13 @@ struct LLVMOpt : public Pass {
     for (auto& e : module->exports) {
       originalExports.insert(e->name);
     }
+    // We will add additional exports, some of which we can forget about
+    // imediately, but others we need to keep around until almost the very end
+    // because we need to use them.
+    // For example, we add an export for the start function if there is one, and
+    // we find it in the output wasm and use it to find the start function. We
+    // can then remove the export
+    std::set<Name> usedExports;
 
     // Add exports for more things that we need, either for the wasm2c runtime,
     // or to make it easy for us to find what we need afterwards. (We will
@@ -65,10 +72,18 @@ struct LLVMOpt : public Pass {
     }
     // Ensure a _start is exported, which wasm2c expects.
     if (!module->getExportOrNull("_start")) {
+      Name name("byn_llvm_runtime_start");
       module->addFunction(builder.makeFunction(
-        "byn$llvm-start", {Type::none, Type::none}, {}, builder.makeNop()));
+        name, {Type::none, Type::none}, {}, builder.makeNop()));
       module->addExport(
-        builder.makeExport("_start", "byn$llvm-start", ExternalKind::Function));
+        builder.makeExport("_start", name, ExternalKind::Function));
+    }
+    // Export the wasm start function, if there is one.
+    Name wasmStartExport("byn_llvm_wasm_start");
+    if (module->start.is()) {
+      module->addExport(
+        builder.makeExport(wasmStartExport, module->start, ExternalKind::Function));
+      usedExports.insert(wasmStartExport);
     }
 
     // Write the module to a temp file.
@@ -103,14 +118,18 @@ struct LLVMOpt : public Pass {
     std::string cmd =
       "emcc " + tempC + " -o " + tempWasmC + " -O1 -s EXPORTED_FUNCTIONS=";
     bool first = true;
-    for (auto e : originalExports) {
-      if (first) {
-        first = false;
-      } else {
-        cmd += ',';
+    auto addExports = [&](const std::set<Name>& names) {
+      for (auto e : names) {
+        if (first) {
+          first = false;
+        } else {
+          cmd += ',';
+        }
+        cmd += std::string("_w2c_") + e.str;
       }
-      cmd += std::string("_w2c_") + e.str;
-    }
+    };
+    addExports(originalExports);
+    addExports(usedExports);
     ProgramResult c2wasm(cmd);
     if (c2wasm.failed()) {
       c2wasm.dump(std::cout);
@@ -135,6 +154,11 @@ struct LLVMOpt : public Pass {
                                            return false;
                                          }),
                           module->exports.end());
+    module->updateMaps();
+    // Find the important things we exported so that we could find them later.
+    if (auto* e = module->getExportOrNull(wasmStartExport)) {
+      module->start = e->value;
+    }
     // Remove the table: the "native" table contains things the new sandboxing
     // layer in C added and needs. We want to look into the wasm in that
     // sandbox.
