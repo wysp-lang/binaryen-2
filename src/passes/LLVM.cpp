@@ -41,6 +41,13 @@ struct LLVMOpt : public Pass {
     // the target features section has been stripped.
     auto features = module->features;
 
+    // Note the original exports, which are the only things we will want to have
+    // exported at the end.
+    std::vector<Export> originalExports;
+    for (auto& e : module->exports) {
+      originalExports.push_back(*e);
+    }
+
     Builder builder(*module);
 
     // Ensure there is a memory.
@@ -69,16 +76,25 @@ struct LLVMOpt : public Pass {
       Fatal() << "LLVMOpt: failed to convert to C";
     }
     // Compile the C to wasm.
-    // TODO: optimize!
     std::string tempWasmC = base + ".3.wasm";
-    ProgramResult c2wasm("emcc " + tempC + " -o " + tempWasmC);
+    std::string cmd = "emcc " + tempC + " -o " + tempWasmC + " -O1 -s EXPORTED_FUNCTIONS=";
+    bool first = true;
+    for (auto e : originalExports) {
+      if (first) {
+        first = false;
+      } else {
+        cmd += ',';
+      }
+      cmd += std::string("_w2c_") + e.name.str;
+    }
+    ProgramResult c2wasm(cmd);
     if (c2wasm.failed()) {
       c2wasm.dump(std::cout);
       Fatal() << "LLVMOpt: failed to convert to wasm";
     }
     // Clear the module in preparation for reading, and read it.
     ModuleUtils::clearModule(*module);
-    ModuleReader().readBinary(tempWasmB, *module);
+    ModuleReader().readBinary(tempWasmC, *module);
     // Reapply features
     module->features = features;
   }
