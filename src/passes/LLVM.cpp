@@ -23,6 +23,7 @@
 #include "ir/module-utils.h"
 #include "pass.h"
 #include "support/process.h"
+#include "support/string.h"
 #include "wasm-builder.h"
 #include "wasm-io.h"
 #include "wasm.h"

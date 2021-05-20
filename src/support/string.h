@@ -120,6 +120,14 @@ inline bool isNumber(const std::string& str) {
   return !str.empty() && std::all_of(str.begin(), str.end(), ::isdigit);
 }
 
+inline void replaceAll(std::string& str, const std::string& from, const std::string& to) {
+  size_t start = 0;
+  while((start = str.find(from, start)) != std::string::npos) {
+    str.replace(start, from.length(), to);
+    start += to.length();
+  }
+}
+
 } // namespace String
 
 } // namespace wasm
