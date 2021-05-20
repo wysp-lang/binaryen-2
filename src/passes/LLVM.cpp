@@ -38,6 +38,8 @@ struct LLVMOpt : public Pass {
       "  BASENAME will be used as the base name for the temporary files that\n"
       "  we create (BASENAME.1.wasm, BASENAME.2.c, etc.");
 
+    std::cout << "[LLVMOpt] preprocessing...\n";
+
     // Save features, which would not otherwise make it through a round trip if
     // the target features section has been stripped.
     auto features = module->features;
@@ -67,11 +69,13 @@ struct LLVMOpt : public Pass {
     }
 
     // Write the module to a temp file.
+    std::cout << "[LLVMOpt] writing wasm...\n";
     std::string tempWasmA = base + ".1.wasm";
     ModuleWriter().writeBinary(*module, tempWasmA);
     // Compile the wasm to C, which we do by "compiling" it to wasm + wasm2c. By
     // running emcc with --post-link, the input wasm file is left as is, and we
     // only do the wasm2c bit.
+    std::cout << "[LLVMOpt] wasm => C...\n";
     std::string tempWasmB = base + ".2.wasm";
     std::string tempC = tempWasmB + ".c";
     ProgramResult wasm2c(
@@ -82,6 +86,7 @@ struct LLVMOpt : public Pass {
       Fatal() << "LLVMOpt: failed to convert to C";
     }
     // Modify the C.
+    std::cout << "[LLVMOpt] rewrite C...\n";
     auto cCode(read_file<std::string>(tempC, Flags::Text));
     // Remove "static" as we want direct access to the wasm exports actually.
     String::replaceAll(cCode, "static ", "");
@@ -90,6 +95,7 @@ struct LLVMOpt : public Pass {
     String::replaceAll(cCode, "FUNC_EPILOGUE;", "");
     Output(tempC, Flags::Text).getStream() << cCode;
     // Compile the C to wasm.
+    std::cout << "[LLVMOpt] C => LLVM optimizer => wasm...\n";
     std::string tempWasmC = base + ".3.wasm";
     std::string cmd =
       "emcc " + tempC + " -o " + tempWasmC + " -O1 -s EXPORTED_FUNCTIONS=";
@@ -109,6 +115,7 @@ struct LLVMOpt : public Pass {
     }
     // Clear the module in preparation for reading, and read it.
     ModuleUtils::clearModule(*module);
+    std::cout << "[LLVMOpt] reading wasm...\n";
     ModuleReader().readBinary(tempWasmC, *module);
     // Filter out any new exports
     module->exports.erase(std::remove_if(module->exports.begin(),
@@ -121,9 +128,16 @@ struct LLVMOpt : public Pass {
                                            return !e->name.startsWith("w2c_");
                                          }),
                           module->exports.end());
-    // But, the table... :(
+    // Remove the table: the "native" table contains things the new sandboxing
+    // layer in C added and needs. We want to look into the wasm in that
+    // sandbox.
+    // TODO: find the sandboxed table items (export them first)
+    module->tables.clear();
+    module->elementSegments.clear();
+    module->updateMaps();
     // Do a cleanup (we may optimize anyhow, though?)
     {
+      std::cout << "[LLVMOpt] postprocessing...\n";
       PassRunner postRunner(runner);
       postRunner.add("remove-unused-module-elements");
       postRunner.setIsNested(true);
