@@ -21,8 +21,8 @@
 #ifndef wasm_support_process_h
 #define wasm_support_process_h
 
-#include <string>
 #include <iostream>
+#include <string>
 
 #include "support/timing.h"
 
@@ -212,4 +212,3 @@ inline std::ostream& operator<<(std::ostream& o, wasm::ProgramResult& result) {
 } // namespace std
 
 #endif // wasm_support_process_h
-

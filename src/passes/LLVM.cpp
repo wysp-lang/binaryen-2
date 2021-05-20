@@ -55,12 +55,15 @@ struct LLVMOpt : public Pass {
     module->memory.exists = true;
     // Ensure the memory is exported, which wasm2c requires.
     if (!module->getExportOrNull("memory")) {
-      module->addExport(builder.makeExport("memory", "0", ExternalKind::Memory));
+      module->addExport(
+        builder.makeExport("memory", "0", ExternalKind::Memory));
     }
     // Ensure a _start is exported, which wasm2c requires.
     if (!module->getExportOrNull("_start")) {
-      module->addFunction(builder.makeFunction("start", { Type::none, Type::none }, {}, builder.makeNop()));
-      module->addExport(builder.makeExport("_start", "start", ExternalKind::Function));
+      module->addFunction(builder.makeFunction(
+        "start", {Type::none, Type::none}, {}, builder.makeNop()));
+      module->addExport(
+        builder.makeExport("_start", "start", ExternalKind::Function));
     }
 
     // Write the module to a temp file.
@@ -71,7 +74,9 @@ struct LLVMOpt : public Pass {
     // only do the wasm2c bit.
     std::string tempWasmB = base + ".2.wasm";
     std::string tempC = tempWasmB + ".c";
-    ProgramResult wasm2c("emcc " + tempWasmA + " -o " + tempWasmB + " -s WASM2C --post-link -s ASSERTIONS=0 -s ERROR_ON_UNDEFINED_SYMBOLS=0");
+    ProgramResult wasm2c(
+      "emcc " + tempWasmA + " -o " + tempWasmB +
+      " -s WASM2C --post-link -s ASSERTIONS=0 -s ERROR_ON_UNDEFINED_SYMBOLS=0");
     if (wasm2c.failed()) {
       wasm2c.dump(std::cout);
       Fatal() << "LLVMOpt: failed to convert to C";
@@ -86,7 +91,8 @@ struct LLVMOpt : public Pass {
     Output(tempC, Flags::Text).getStream() << cCode;
     // Compile the C to wasm.
     std::string tempWasmC = base + ".3.wasm";
-    std::string cmd = "emcc " + tempC + " -o " + tempWasmC + " -O1 -s EXPORTED_FUNCTIONS=";
+    std::string cmd =
+      "emcc " + tempC + " -o " + tempWasmC + " -O1 -s EXPORTED_FUNCTIONS=";
     bool first = true;
     for (auto e : originalExports) {
       if (first) {
@@ -105,12 +111,16 @@ struct LLVMOpt : public Pass {
     ModuleUtils::clearModule(*module);
     ModuleReader().readBinary(tempWasmC, *module);
     // Filter out any new exports
-    module->exports.erase(std::remove_if(module->exports.begin(), module->exports.end(), [&](const std::unique_ptr<Export>& e) {
-        // The exports we want to erase are all those that are not one of our
-        // original exports, whose name is now "w2c_${ORIGINAL_NAME}"
-        return !e->name.startsWith("w2c_");
-      }),
-      module->exports.end());
+    module->exports.erase(std::remove_if(module->exports.begin(),
+                                         module->exports.end(),
+                                         [&](const std::unique_ptr<Export>& e) {
+                                           // The exports we want to erase are
+                                           // all those that are not one of our
+                                           // original exports, whose name is
+                                           // now "w2c_${ORIGINAL_NAME}"
+                                           return !e->name.startsWith("w2c_");
+                                         }),
+                          module->exports.end());
     // But, the table... :(
     // Do a cleanup (we may optimize anyhow, though?)
     {
