@@ -154,6 +154,7 @@ IMPORTANT_INITIAL_CONTENTS = [
     os.path.join('lit', 'passes', 'ldse.wast'),
     #os.path.join('passes', 'optimize-instructions_fuzz-exec.wast'),
     os.path.join('passes', 'Oz_fuzz-exec_all-features.wast'),
+    os.path.join('lit', 'passes', 'coalesce-locals-gc.wast').
     os.path.join('lit', 'passes/precompute-gc.wast'),
     os.path.join('lit', 'passes/optimize-instructions-gc.wast'),
     '/home/azakai/Downloads/dart2wasm_benchmark_20210216/DeltaBlue-20210324.wasm',
