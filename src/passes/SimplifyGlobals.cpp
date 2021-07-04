@@ -24,6 +24,7 @@
 //  * Apply the constant values of immutable globals.
 //  * Apply the constant values of previous global.sets, in a linear
 //    execution trace.
+//  * Write-only globals do not need to be written to.
 //
 // Some globals may not have uses after these changes, which we leave
 // to other passes to optimize.
