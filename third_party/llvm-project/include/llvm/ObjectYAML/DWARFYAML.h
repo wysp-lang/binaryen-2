@@ -73,6 +73,7 @@ struct ARangeDescriptor {
 };
 
 struct ARange {
+  dwarf::DwarfFormat Format;
   InitialLength Length;
   uint16_t Version;
   uint32_t CuOffset;
@@ -103,6 +104,7 @@ struct PubEntry {
 };
 
 struct PubSection {
+  dwarf::DwarfFormat Format;
   InitialLength Length;
   uint16_t Version;
   uint32_t UnitOffset;
@@ -123,6 +125,7 @@ struct Entry {
 };
 
 struct Unit {
+  dwarf::DwarfFormat Format;
   InitialLength Length;
   uint16_t Version;
   llvm::dwarf::UnitType Type; // Added in DWARF 5
@@ -151,6 +154,7 @@ struct LineTableOpcode {
 };
 
 struct LineTable {
+  dwarf::DwarfFormat Format;
   uint64_t Position; // XXX BINARYEN: the binary location in .debug_line
   InitialLength Length;
   uint16_t Version;
