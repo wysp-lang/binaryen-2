@@ -16,7 +16,7 @@ using namespace llvm;
 
 void DWARFCompileUnit::dump(raw_ostream &OS, DIDumpOptions DumpOpts) {
   OS << format("0x%08" PRIx64, getOffset()) << ": Compile Unit:"
-     << ", length = " << format("0x%08" PRIx64, getLength())
+     << " length = " << format("0x%08" PRIx64, getLength())
      << ", format = " << dwarf::FormatString(getFormat())
      << ", version = " << format("0x%04x", getVersion());
   if (getVersion() >= 5)
