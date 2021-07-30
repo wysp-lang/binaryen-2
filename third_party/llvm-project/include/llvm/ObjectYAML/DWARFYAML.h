@@ -73,7 +73,6 @@ struct ARangeDescriptor {
 };
 
 struct ARange {
-  dwarf::DwarfFormat Format;
   InitialLength Length;
   uint16_t Version;
   uint32_t CuOffset;
@@ -104,7 +103,6 @@ struct PubEntry {
 };
 
 struct PubSection {
-  dwarf::DwarfFormat Format;
   InitialLength Length;
   uint16_t Version;
   uint32_t UnitOffset;

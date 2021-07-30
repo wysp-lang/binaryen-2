@@ -71,7 +71,7 @@ static void writeInitialLength(const dwarf::DwarfFormat Format,
   writeVariableSizedInteger(Length, IsDWARF64 ? 8 : 4, OS, IsLittleEndian);
 }
 
-static void writeDWARFOffset(uint64_t Offset, dwarf::DwarfFormat Format, // XXX needed?
+static void writeDWARFOffset(uint64_t Offset, dwarf::DwarfFormat Format,
                              raw_ostream &OS, bool IsLittleEndian) {
   writeVariableSizedInteger(Offset, Format == dwarf::DWARF64 ? 8 : 4,
                             OS, IsLittleEndian);
@@ -191,9 +191,9 @@ protected:
     if(CU.Version >= 5) {
       writeInteger((uint8_t)CU.Type, OS, DebugInfo.IsLittleEndian);
       writeInteger((uint8_t)CU.AddrSize, OS, DebugInfo.IsLittleEndian);
-      writeInteger((uint32_t)CU.AbbrOffset, OS, DebugInfo.IsLittleEndian);
+      writeDWARFOffset(CU.AbbrOffset, CU.Format, OS, DebugInfo.IsLittleEndian);
     }else {
-      writeInteger((uint32_t)CU.AbbrOffset, OS, DebugInfo.IsLittleEndian);
+      writeDWARFOffset(CU.AbbrOffset, CU.Format, OS, DebugInfo.IsLittleEndian);
       writeInteger((uint8_t)CU.AddrSize, OS, DebugInfo.IsLittleEndian);
     }
   }
