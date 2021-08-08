@@ -1266,6 +1266,10 @@ int main(int argc, const char* argv[]) {
     Fatal() << "working file not provided\n";
   }
 
+  if (getTypeSystem() == TypeSystem::Nominal) {
+    extraFlags += " --nominal";
+  }
+
   if (!binary) {
     Colors::setEnabled(false);
   }
