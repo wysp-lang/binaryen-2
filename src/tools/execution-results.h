@@ -146,7 +146,11 @@ struct ExecutionResults {
   bool areEqual(Literal a, Literal b) {
     // We allow nulls to have different types (as they compare equal regardless)
     // but anything else must have an identical type.
-    if (a.type != b.type && !(a.isNull() && b.isNull())) {
+    //
+    // Note that we cannot do this comparison with nominal types, as the types
+    // arrive from different modules and are necessarily different.
+    if (getTypeSystem() != TypeSystem::Nominal &&
+        a.type != b.type && !(a.isNull() && b.isNull())) {
       std::cout << "types not identical! " << a << " != " << b << '\n';
       return false;
     }
