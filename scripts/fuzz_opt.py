@@ -104,6 +104,7 @@ def no_pass_debug():
 def randomize_feature_opts():
     global FEATURE_OPTS
     FEATURE_OPTS = CONSTANT_FEATURE_OPTS[:]
+
     # 1/3 the time apply all the possible opts, 1/3 none of them, to maximize
     # coverage both ways, and 1/3 pick each one randomly
     if random.random() < 0.33333:
@@ -114,6 +115,11 @@ def randomize_feature_opts():
                 FEATURE_OPTS.append(possible)
                 if possible in IMPLIED_FEATURE_OPTS:
                     FEATURE_OPTS.extend(IMPLIED_FEATURE_OPTS[possible])
+
+    # half the time fuzz with nominal types
+    if random.random() < 0.5:
+        FEATURE_OPTS += ['--nominal']
+
     print('randomized feature opts:', ' '.join(FEATURE_OPTS))
 
 
