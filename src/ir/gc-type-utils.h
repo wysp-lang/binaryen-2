@@ -17,6 +17,7 @@
 #ifndef wasm_ir_gc_type_utils_h
 #define wasm_ir_gc_type_utils_h
 
+#include "ir/properties.h"
 #include "wasm.h"
 
 namespace wasm {
@@ -42,7 +43,9 @@ enum EvaluationResult {
 // (like br_on_func checks if it is a function), see if type info lets us
 // determine that at compile time.
 // This ignores nullability - it just checks the kind.
-inline EvaluationResult evaluateKindCheck(Expression* curr) {
+inline EvaluationResult evaluateKindCheck(Expression* curr,
+                                          const PassOptions& options,
+                                          FeatureSet features) {
   Kind expected;
   Expression* child;
 
@@ -119,6 +122,10 @@ inline EvaluationResult evaluateKindCheck(Expression* curr) {
   } else {
     WASM_UNREACHABLE("invalid input to evaluateKindCheck");
   }
+
+  // Look at the fallthrough value, which may have a more specific type than the
+  // child.
+  child = Properties::getFallthrough(child, options, features);
 
   auto childType = child->type;
 

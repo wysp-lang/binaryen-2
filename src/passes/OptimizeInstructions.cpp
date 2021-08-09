@@ -1278,9 +1278,18 @@ struct OptimizeInstructions
 
     Builder builder(*getModule());
 
-    auto nonNull = !curr->value->type.isNullable();
+    auto options = getPassOptions();
+    auto features = getModule()->features;
+
+    // Look at the fallthrough value, which may have a more specific type than
+    // the child.
+    auto* value = Properties::getFallthrough(curr->value, options, features);
+
+    auto nonNull = !value->type.isNullable();
 
     if (curr->op == RefIsNull) {
+      // We know the result if the type proves it is not null, or if the value
+      // proves it is.
       if (nonNull) {
         replaceCurrent(builder.makeSequence(
           builder.makeDrop(curr->value),
@@ -1290,7 +1299,7 @@ struct OptimizeInstructions
     }
 
     // Check if the type is the kind we are checking for.
-    auto result = GCTypeUtils::evaluateKindCheck(curr);
+    auto result = GCTypeUtils::evaluateKindCheck(curr, options, features);
 
     if (result != GCTypeUtils::Unknown) {
       // We know the kind. Now we must also take into account nullability.
@@ -1334,7 +1343,9 @@ struct OptimizeInstructions
     skipNonNullCast(curr->value);
 
     // Check if the type is the kind we are checking for.
-    auto result = GCTypeUtils::evaluateKindCheck(curr);
+    auto result = GCTypeUtils::evaluateKindCheck(curr,
+                                                 getPassOptions(),
+                                                 getModule()->features);
 
     if (result == GCTypeUtils::Success) {
       // We know the kind is correct, so all that is left is a check for

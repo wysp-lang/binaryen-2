@@ -684,7 +684,9 @@ struct RemoveUnusedBrs : public WalkerPass<PostWalker<RemoveUnusedBrs>> {
         }
 
         // Check if the type is the kind we are checking for.
-        auto result = GCTypeUtils::evaluateKindCheck(curr);
+        auto result = GCTypeUtils::evaluateKindCheck(curr,
+                                                     options,
+                                                     getModule()->features);
 
         if (result == GCTypeUtils::Success) {
           // The type is what we are looking for, so we can switch from BrOn to
@@ -699,9 +701,12 @@ struct RemoveUnusedBrs : public WalkerPass<PostWalker<RemoveUnusedBrs>> {
           worked = true;
         }
       }
+
+      PassOptions options;
     } optimizer;
 
     optimizer.setModule(getModule());
+    optimizer.options = getPassOptions();
     optimizer.doWalkFunction(func);
 
     // If we removed any BrOn instructions, that might affect the reachability
