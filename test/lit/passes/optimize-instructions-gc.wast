@@ -286,6 +286,85 @@
     )
   )
 
+  ;; similar to $unneeded_is, but we need to look to the fallthrough value to
+  ;; be able to optimize
+  ;; CHECK:      (func $unneeded_is_fallthrough (param $struct (ref $struct)) (param $func (ref func)) (param $data dataref) (param $i31 i31ref)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (block (result (ref null $struct))
+  ;; CHECK-NEXT:      (local.get $struct)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (block (result funcref)
+  ;; CHECK-NEXT:      (local.get $func)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (block (result (ref null data))
+  ;; CHECK-NEXT:      (local.get $data)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (block (result (ref null i31))
+  ;; CHECK-NEXT:      (local.get $i31)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $unneeded_is_fallthrough
+    (param $struct (ref $struct))
+    (param $func (ref func))
+    (param $data (ref data))
+    (param $i31 (ref i31))
+    (drop
+      (ref.is_null
+        (block (result (ref null $struct))
+          (local.get $struct)
+        )
+      )
+    )
+    (drop
+      (ref.is_func
+        (block (result (ref null func))
+          (local.get $func)
+        )
+      )
+     )
+    (drop
+      (ref.is_data
+        (block (result (ref null data))
+          (local.get $data)
+        )
+      )
+    )
+    (drop
+      (ref.is_i31
+        (block (result (ref null i31))
+          (local.get $i31)
+        )
+      )
+    )
+  )
+
   ;; ref.as_non_null is not needed on a non-nullable value, and if something is
   ;; a func we don't need that either etc., and can just return the value.
   ;; CHECK:      (func $unneeded_as (param $struct (ref $struct)) (param $func (ref func)) (param $data dataref) (param $i31 i31ref)
