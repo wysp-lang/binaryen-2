@@ -117,8 +117,8 @@ def randomize_feature_opts():
                     FEATURE_OPTS.extend(IMPLIED_FEATURE_OPTS[possible])
 
     # half the time fuzz with nominal types
-    if random.random() < 0.5:
-        FEATURE_OPTS += ['--nominal']
+    #if random.random() < 0.5:
+    FEATURE_OPTS += ['--nominal']
 
     print('randomized feature opts:', ' '.join(FEATURE_OPTS))
 
@@ -919,7 +919,7 @@ class RoundtripText(TestCaseHandler):
 testcase_handlers = [
     FuzzExec(),
     CompareVMs(),
-    CheckDeterminism(),
+    # CheckDeterminism(),
     Wasm2JS(),
     Asyncify(),
     # FIXME: Re-enable after https://github.com/WebAssembly/binaryen/issues/3989
