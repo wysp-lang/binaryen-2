@@ -1259,6 +1259,10 @@ int main(int argc, const char* argv[]) {
       [&](Options* o, const std::string& argument) { input = argument; });
   options.parse(argc, argv);
 
+  if (getTypeSystem() == TypeSystem::Nominal) {
+    extraFlags += " --nominal";
+  }
+
   if (test.size() == 0) {
     Fatal() << "test file not provided\n";
   }
