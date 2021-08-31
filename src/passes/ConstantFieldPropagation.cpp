@@ -29,6 +29,7 @@
 
 #include "ir/module-utils.h"
 #include "ir/properties.h"
+#include "ir/type-updating.h"
 #include "ir/utils.h"
 #include "pass.h"
 #include "support/unique_deferring_queue.h"
@@ -443,10 +444,16 @@ private:
     //        (value3)
     //        (are.equal (struct.get) (value2)))
     //      (are.equal (struct.get) (value1)))
-    //
-    // TODO: Perhaps modify the type to contain an enum here and use a table.
 
     auto type = get->type;
+
+    // We will need to make comparisons in order to pick the right value, so if
+    // the type prevents that, give up.
+    // TODO: Perhaps modify the field to contain an enum here and use a table.
+    if (!Type::isSubType(type, Type::eqref)) {
+std::cout << "so sad " << type << '\n'; // function ref types are not eqref :( so we MUST use an enum
+      return nullptr;
+    }
 
     // If there are more than 2 values, then we will need the value of the
     // struct.get more than once. If we can't use a local for that, give up. 
@@ -494,12 +501,12 @@ private:
         if (values.size() > 2) {
           // We will have further uses of the input. Tee it to a local.
           // TODO: nullability and defaultability.
-          tempLocal = builder.addVar(getFunction(), type);
-          input = builder.makeLocalTee(tempLocal, input, type);
+          tempLocal = builder.addVar(getFunction(), localType);
+          input = builder.makeLocalTee(tempLocal, input, localType);
         }
       } else {
         // This is a reuse of the original input.
-        input = builder.makeLocalGet(tempLocal, type);
+        input = builder.makeLocalGet(tempLocal, localType);
       }
       ret = builder.makeSelect(makeCheck(currExpr, input),
                                currExpr,
