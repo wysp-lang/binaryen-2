@@ -447,37 +447,39 @@ private:
 
     // Given a constant expression, make a check for it, that is, that returns
     // i32:1 if an input value is indeed that value.
-    auto makeCheck = [&](Expression* constant, Expression* input) {
+    auto makeCheck = [&](Expression* constant, Expression* input) -> Expression* {
       if (type.isInteger() || type.isFloat()) {
-        return builder.makeBinary(Abstract::getBinary(type), input, constant);
+        return builder.makeBinary(Abstract::getBinary(type, Abstract::Eq), input, constant);
       }
       if (type.isRef()) {
         return builder.makeRefEq(input, constant);
       }
-      Fatal() << "TODO: makeCheck for " << type;
+      WASM_UNREACHABLE("bad type for makeCheck");
     };
 
     Expression* ret = nullptr;
     Index tempLocal;
-    for (auto value : values) {
+    auto iter = values.begin();
+    for (Index i = 0; i < values.size(); i++, iter++) {
+      auto value = *iter;
       auto* currExpr = builder.makeConstantExpression(value);
-      if (!ret) {
+      if (i == 0) {
         // This is the first item.
         ret = currExpr;
         continue;
       }
 
-      // This is a subsequent item, create a select on a proper input.
+      // This is a subsequent item, create a select. First, create the input
+      // value for the select. This is the value that the struct.get returns,
+      // but if we need it more than once we'll end up using a local.
       Expression* input = nullptr;
-      if (get) {
-        // This is the first time we need to use an input. Use the original
-        // input.
-        std::swap(input, get);
+      if (i == 1) {
+        input = get;
         if (values.size() > 2) {
           // We will have further uses of the input. Tee it to a local.
           // TODO: nullability and defaultability.
           tempLocal = builder.addVar(getFunction(), type);
-          input = builder.makeLocalTee(tempLocal, type);
+          input = builder.makeLocalTee(tempLocal, input, type);
         }
       } else {
         // This is a reuse of the original input.
