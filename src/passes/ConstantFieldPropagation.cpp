@@ -77,7 +77,7 @@ private:
 struct PossibleConstantValues {
   // The maximum amount of constant values we are willing to tolerate. Anything
   // above this causes us to say that the value is unknown.
-  static const size_t MaxConstantValues = 3;
+  static const size_t MaxConstantValues = 2;
 
   // Note a written value as we see it, and update our internal knowledge based
   // on it and all previous values noted.
@@ -450,10 +450,27 @@ private:
     // We will need to make comparisons in order to pick the right value, so if
     // the type prevents that, give up.
     // TODO: Perhaps modify the field to contain an enum here and use a table.
+/*
     if (!Type::isSubType(type, Type::eqref)) {
 std::cout << "so sad " << type << '\n'; // function ref types are not eqref :( so we MUST use an enum
       return nullptr;
     }
+*/
+if (!type.isRef()) return nullptr;
+if (!type.isFunction()) return nullptr;
+
+static size_t count = 0;
+std::cout << ++count << '\n';
+
+std::cout << get->index << " : " << getModule()->typeNames[get->ref->type.getHeapType()].name << '\n';
+static std::unordered_set<HeapType> seens;
+seens.insert(get->ref->type.getHeapType());
+if (seens.size() == 2) Fatal() << "enough";
+
+/*
+6 : com.google.gwt.corp.collections.ImmutableJsMap.vtable
+27 : com.google.trix.ritz.shared.calc.api.value.CalcValue.vtable
+*/
 
     // If there are more than 2 values, then we will need the value of the
     // struct.get more than once. If we can't use a local for that, give up. 
