@@ -443,10 +443,11 @@ private:
     //
     // TODO: Perhaps modify the type to contain an enum here and use a table.
 
+    auto type = get->type;
+
     // Given a constant expression, make a check for it, that is, that returns
     // i32:1 if an input value is indeed that value.
     auto makeCheck = [&](Expression* constant, Expression* input) {
-      auto type = constant->type;
       if (type.isInteger() || type.isFloat()) {
         return builder.makeBinary(Abstract::getBinary(type), input, constant);
       }
@@ -457,6 +458,7 @@ private:
     };
 
     Expression* ret = nullptr;
+    Index tempLocal;
     for (auto value : values) {
       auto* currExpr = builder.makeConstantExpression(value);
       if (!ret) {
@@ -466,7 +468,21 @@ private:
       }
 
       // This is a subsequent item, create a select on a proper input.
-      input = tee etc. if size > 2 etc.
+      Expression* input = nullptr;
+      if (get) {
+        // This is the first time we need to use an input. Use the original
+        // input.
+        std::swap(input, get);
+        if (values.size() > 2) {
+          // We will have further uses of the input. Tee it to a local.
+          // TODO: nullability and defaultability.
+          tempLocal = builder.addVar(getFunction(), type);
+          input = builder.makeLocalTee(tempLocal, type);
+        }
+      } else {
+        // This is a reuse of the original input.
+        input = builder.makeLocalGet(tempLocal, type);
+      }
       ret = builder.makeSelect(makeCheck(currExpr, input),
                                currExpr,
                                ret);
