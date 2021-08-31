@@ -73,31 +73,49 @@ private:
 // place. There may be no values, or one, or many, or if a non-constant value is
 // possible, then all we can say is that the value is "unknown" - it can be
 // anything.
-//
-// Currently this just looks for a single constant value, and even two constant
-// values are treated as unknown. It may be worth optimizing more than that TODO
 struct PossibleConstantValues {
+  // The maximum amount of constant values we are willing to tolerate. Anything
+  // above this causes us to say that the value is unknown.
+  static const size_t MaxConstantValues = 3;
+
   // Note a written value as we see it, and update our internal knowledge based
   // on it and all previous values noted.
-  void note(Literal curr) {
+  //
+  // Returns whether we changed anything.
+  bool note(Literal curr) {
     if (!noted) {
       // This is the first value.
-      value = curr;
+      values.insert(curr);
+      static_assert(MaxConstantValues >= 1, "invalid max values");
       noted = true;
-      return;
+      return true;
     }
 
-    // This is a subsequent value. Check if it is different from all previous
-    // ones.
-    if (curr != value) {
-      noteUnknown();
+    // If this was already non-constant, it stays that way.
+    if (!isConstant()) {
+      return false;
     }
+
+    // This is a subsequent value. Perhaps we have seen it before; if so, we
+    // have nothing else to do.
+    if (values.count(curr)) {
+      return false;
+    }
+
+    // If this pushed us past the limit of the number of values, then mark us as
+    // unknown.
+    if (values.size() == MaxConstantValues) {
+      noteUnknown();
+    } else {
+      values.insert(curr);
+    }
+    return true;
   }
 
   // Notes a value that is unknown - it can be anything. We have failed to
   // identify a constant value here.
   void noteUnknown() {
-    value = Literal(Type::none);
+    values.clear();
     noted = true;
   }
 
@@ -117,20 +135,29 @@ struct PossibleConstantValues {
     if (!isConstant()) {
       return false;
     }
-    if (!other.isConstant() || getConstantValue() != other.getConstantValue()) {
+    if (!other.isConstant()) {
       noteUnknown();
       return true;
+    }
+
+    // Both have constant values. Add the values from the other to this one,
+    // looking for a change (which may be a new value, or may be that we become
+    // non-constant due to too many values).
+    for (auto otherValue : other.values) {
+      if (note(otherValue)) {
+        return true;
+      }
     }
     return false;
   }
 
   // Check if all the values are identical and constant.
-  bool isConstant() const { return noted && value.type.isConcrete(); }
+  bool isConstant() const { return noted && !values.empty(); }
 
   // Returns the single constant value.
-  Literal getConstantValue() const {
+  std::unordered_set<Literal> getConstantValues() const {
     assert(isConstant());
-    return value;
+    return values;
   }
 
   // Returns whether we have ever noted a value.
@@ -143,7 +170,9 @@ struct PossibleConstantValues {
     } else if (!isConstant()) {
       o << "unknown";
     } else {
-      o << value;
+      for (auto value : values) {
+        o << value << ' ';
+      }
     }
     o << ']';
   }
@@ -152,11 +181,12 @@ private:
   // Whether we have noted any values at all.
   bool noted = false;
 
-  // The one value we have seen, if there is one. If we realize there is no
-  // single constant value here, we make this have a non-concrete (impossible)
-  // type to indicate that. Otherwise, a concrete type indicates we have a
-  // constant value.
-  Literal value;
+  // The constant values we have seen. If |noted| is false, then this will be
+  // empty. Once |noted| is true, this will contain the values, or, if we found
+  // too many constant values or a non-constant value, this will be empty to
+  // indicate that.
+  // TODO: use a SmallSet?
+  std::unordered_set<Literal> values;
 };
 
 // A vector of PossibleConstantValues. One such vector will be used per struct
@@ -354,13 +384,15 @@ struct FunctionOptimizer : public WalkerPass<PostWalker<FunctionOptimizer>> {
       return;
     }
 
+    // TODO: in -Os, avoid multiple constant values here?
+
     // We can do this! Replace the get with a trap on a null reference using a
     // ref.as_non_null (we need to trap as the get would have done so), plus the
     // constant value. (Leave it to further optimizations to get rid of the
     // ref.)
     replaceCurrent(builder.makeSequence(
       builder.makeDrop(builder.makeRefAs(RefAsNonNull, curr->ref)),
-      builder.makeConstantExpression(info.getConstantValue())));
+      makeConstantExpression(info, curr, builder)));
     changed = true;
   }
 
@@ -378,6 +410,69 @@ private:
   StructValuesMap& infos;
 
   bool changed = false;
+
+  Expression* makeConstantExpression(const PossibleConstantValues& info,
+                                     StructGet* get,
+                                     Builder& builder) {
+    auto values = info.getConstantValues();
+    if (values.size() == 1) {
+      // Simply return the single constant value here.
+      return builder.makeConstantExpression(*values.begin());
+    }
+
+    // There is more than one constant value. Emit a "select chain" for it, like
+    // this:
+    //
+    //    (struct.get (ref))
+    // =>
+    //    (select
+    //      (value1)
+    //      (value2)
+    //      (are.equal (struct.get) (value1)))
+    //
+    // If there are more values then two, then we recurse into the select's
+    // "else" arm:
+    //
+    //    (select
+    //      (value1)
+    //      (select
+    //        (value2)
+    //        (value3)
+    //        (are.equal (struct.get) (value2)))
+    //      (are.equal (struct.get) (value1)))
+    //
+    // TODO: Perhaps modify the type to contain an enum here and use a table.
+
+    // Given a constant expression, make a check for it, that is, that returns
+    // i32:1 if an input value is indeed that value.
+    auto makeCheck = [&](Expression* constant, Expression* input) {
+      auto type = constant->type;
+      if (type.isInteger() || type.isFloat()) {
+        return builder.makeBinary(Abstract::getBinary(type), input, constant);
+      }
+      if (type.isRef()) {
+        return builder.makeRefEq(input, constant);
+      }
+      Fatal() << "TODO: makeCheck for " << type;
+    };
+
+    Expression* ret = nullptr;
+    for (auto value : values) {
+      auto* currExpr = builder.makeConstantExpression(value);
+      if (!ret) {
+        // This is the first item.
+        ret = currExpr;
+        continue;
+      }
+
+      // This is a subsequent item, create a select on a proper input.
+      input = tee etc. if size > 2 etc.
+      ret = builder.makeSelect(makeCheck(currExpr, input),
+                               currExpr,
+                               ret);
+    }
+    return ret;
+  }
 };
 
 struct ConstantFieldPropagation : public Pass {
