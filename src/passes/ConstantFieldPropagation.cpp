@@ -386,14 +386,17 @@ struct FunctionOptimizer : public WalkerPass<PostWalker<FunctionOptimizer>> {
 
     // TODO: in -Os, avoid multiple constant values here?
 
-    // We can do this! Replace the get with a trap on a null reference using a
+    // Looks like we can do this! Replace the get with a trap on a null reference using a
     // ref.as_non_null (we need to trap as the get would have done so), plus the
     // constant value. (Leave it to further optimizations to get rid of the
     // ref.)
-    replaceCurrent(builder.makeSequence(
-      builder.makeDrop(builder.makeRefAs(RefAsNonNull, curr->ref)),
-      makeConstantExpression(info, curr, builder)));
-    changed = true;
+    auto* constantExpression = makeConstantExpression(info, curr, builder);
+    if (constantExpression) {
+      replaceCurrent(builder.makeSequence(
+        builder.makeDrop(builder.makeRefAs(RefAsNonNull, curr->ref)),
+        constantExpression));
+      changed = true;
+    }
   }
 
   void doWalkFunction(Function* func) {
@@ -444,6 +447,19 @@ private:
     // TODO: Perhaps modify the type to contain an enum here and use a table.
 
     auto type = get->type;
+
+    // If there are more than 2 values, then we will need the value of the
+    // struct.get more than once. If we can't use a local for that, give up. 
+    if (values.size() > 2 && !TypeUpdating::canHandleAsLocal(type)) {
+      return nullptr;
+    }
+
+    // If we do need a local, we will use this type. Note that we don't need to
+    // do anything more than this: if the type was non-nullable, then we just
+    // turned it into a nullable type, but that is fine: we don't need to turn
+    // it back into a non-nullable one because we know exactly what the uses of
+    // the type will be, which are simple comparisons in the select chain.
+    auto localType = TypeUpdating::getValidLocalType(type, getModule()->features);
 
     // Given a constant expression, make a check for it, that is, that returns
     // i32:1 if an input value is indeed that value.
