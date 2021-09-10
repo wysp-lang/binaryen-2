@@ -654,6 +654,13 @@ static bool isTombstone(uint32_t x) {
   return x == 0 || x == uint32_t(-1) || x == uint32_t(-2);
 }
 
+// Match LLVM's computeTombstoneAddress() behavior where we need to.
+static BinaryLocation fixTombstoneValue(BinaryLocation location) {
+  // TODO: this may differ in wasm64/DWARF64
+  return isTombstone(location) ? std::numeric_limits<uint32_t>::max()
+                               : location;
+}
+
 // Update debug lines, and update the locationUpdater with debug line offset
 // changes so we can update offsets into the debug line section.
 static void updateDebugLines(llvm::DWARFYAML::Data& data,
@@ -810,6 +817,7 @@ static void updateDIE(const llvm::DWARFDebugInfoEntry& DIE,
             tag == llvm::dwarf::DW_TAG_lexical_block ||
             tag == llvm::dwarf::DW_TAG_label) {
           newValue = locationUpdater.getNewStart(oldValue);
+          newValue = fixTombstoneValue(newValue);
         } else if (tag == llvm::dwarf::DW_TAG_compile_unit) {
           newValue = locationUpdater.getNewFuncStart(oldValue);
           // Per the DWARF spec, "The base address of a compile unit is
