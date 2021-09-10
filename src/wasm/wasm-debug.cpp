@@ -943,8 +943,6 @@ static void updateRanges(llvm::DWARFYAML::Data& yaml,
       newEnd = locationUpdater.getNewEnd(oldEnd);
       if (isTombstone(newStart) || isTombstone(newEnd)) {
         // This part of the range no longer has a mapping, so we must skip it.
-        // Don't use (0, 0) as that would be an end marker; emit something
-        // invalid for the debugger to ignore.
         newStart = newEnd = getTombstone();
       }
       // TODO even if range start and end markers have been preserved,
