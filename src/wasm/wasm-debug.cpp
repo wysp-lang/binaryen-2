@@ -654,11 +654,15 @@ static bool isTombstone(uint32_t x) {
   return x == 0 || x == uint32_t(-1) || x == uint32_t(-2);
 }
 
-// Match LLVM's computeTombstoneAddress() behavior where we need to.
-static BinaryLocation fixTombstoneValue(BinaryLocation location) {
+static BinaryLocation getTombstone() {
   // TODO: this may differ in wasm64/DWARF64
-  return isTombstone(location) ? std::numeric_limits<uint32_t>::max()
-                               : location;
+  return std::numeric_limits<uint32_t>::max();
+}
+
+// Canonicalize tombstones to match LLVM's computeTombstoneAddress() behavior as
+// much as we can.
+static BinaryLocation fixTombstoneValue(BinaryLocation location) {
+  return isTombstone(location) ? getTombstone() : location;
 }
 
 // Update debug lines, and update the locationUpdater with debug line offset
@@ -941,8 +945,7 @@ static void updateRanges(llvm::DWARFYAML::Data& yaml,
         // This part of the range no longer has a mapping, so we must skip it.
         // Don't use (0, 0) as that would be an end marker; emit something
         // invalid for the debugger to ignore.
-        newStart = 0;
-        newEnd = 1;
+        newStart = newEnd = getTombstone();
       }
       // TODO even if range start and end markers have been preserved,
       // instructions in the middle may have moved around, making the range no
