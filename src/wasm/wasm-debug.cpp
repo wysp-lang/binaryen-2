@@ -826,6 +826,7 @@ static void updateDIE(const llvm::DWARFDebugInfoEntry& DIE,
             LocationUpdater::OldToNew{oldValue, newValue};
         } else if (tag == llvm::dwarf::DW_TAG_subprogram) {
           newValue = locationUpdater.getNewFuncStart(oldValue);
+          newValue = fixTombstoneValue(newValue);
         } else {
           Fatal() << "unknown tag with low_pc "
                   << llvm::dwarf::TagString(tag).str();
