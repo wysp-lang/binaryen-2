@@ -863,7 +863,7 @@ static void updateDIE(const llvm::DWARFDebugInfoEntry& DIE,
       BinaryLocation oldValue = yamlValue.Value, newValue = 0;
       bool isRelative = attrSpec.Form == llvm::dwarf::DW_FORM_data4;
       if (isRelative) {
-        if (!isTombstone(oldLowPC)) {
+        if (!isTombstone(oldValue) && !isTombstone(oldLowPC)) {
           oldValue += oldLowPC;
         }
       }
@@ -880,7 +880,9 @@ static void updateDIE(const llvm::DWARFDebugInfoEntry& DIE,
                 << llvm::dwarf::TagString(tag).str();
       }
       if (isRelative) {
-        newValue -= newLowPC;
+        if (!isTombstone(newValue) && !isTombstone(newLowPC)) {
+          newValue -= newLowPC;
+        }
       }
       yamlValue.Value = newValue;
     });
