@@ -941,7 +941,7 @@ static void updateRanges(llvm::DWARFYAML::Data& yaml,
     auto& range = yaml.Ranges[i];
     BinaryLocation oldStart = range.Start, oldEnd = range.End, newStart = 0,
                    newEnd = 0;
-   // If this is an end marker (0, 0), or an invalid range (0, x) or (x, 0)
+    // If this is an end marker (0, 0), or an invalid range (0, x) or (x, 0)
     // then just emit it as it is - either to mark the end, or to mark an
     // invalid entry.
     if (isTombstone(oldStart) || isTombstone(oldEnd)) {
