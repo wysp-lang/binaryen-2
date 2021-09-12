@@ -925,34 +925,57 @@ static void updateCompileUnits(const BinaryenDWARFInfo& info,
 static void updateRanges(llvm::DWARFYAML::Data& yaml,
                          const LocationUpdater& locationUpdater) {
   // In each range section, try to update the start and end. If we no longer
-  // have something to map them to, we must skip that part.
-  size_t skip = 0;
+  // have something to map them to, skip emitting anything in the rest of that
+  // sequence as well.
+  bool skip = false;
   for (size_t i = 0; i < yaml.Ranges.size(); i++) {
     auto& range = yaml.Ranges[i];
     BinaryLocation oldStart = range.Start, oldEnd = range.End, newStart = 0,
                    newEnd = 0;
-    // If this is an end marker (0, 0), or an invalid range (0, x) or (x, 0)
+std::cout << "range " << std::hex << "0x" << oldStart << " - 0x" << oldEnd << '\n';
+   // If this is an end marker (0, 0), or an invalid range (0, x) or (x, 0)
     // then just emit it as it is - either to mark the end, or to mark an
     // invalid entry.
+assert(oldStart < getTombstone());
+assert(oldEnd < getTombstone());
+
     if (isTombstone(oldStart) || isTombstone(oldEnd)) {
       newStart = oldStart;
       newEnd = oldEnd;
+      if (oldStart == 0 && oldEnd == 0) {
+        // A sequence has ended, so we should stop skipping.
+        skip = false;
+      }
     } else {
       // This was a valid entry; update it.
       newStart = locationUpdater.getNewStart(oldStart);
       newEnd = locationUpdater.getNewEnd(oldEnd);
       if (isTombstone(newStart) || isTombstone(newEnd)) {
-        // This part of the range no longer has a mapping, so we must skip it.
-        newStart = newEnd = getTombstone();
+        // This no longer has a mapping, so we must skip it.
+        skip = true;
       }
       // TODO even if range start and end markers have been preserved,
       // instructions in the middle may have moved around, making the range no
       // longer contiguous. We should check that, and possibly split/merge
       // the range. Or, we may need to have tracking in the IR for this.
     }
+    if (skip) {
+      newStart = newEnd = 0;
+    }
     auto& writtenRange = yaml.Ranges[i - skip];
     writtenRange.Start = newStart;
     writtenRange.End = newEnd;
+std::cout << "  new " << std::hex << "0x" << newStart << " - 0x" << newEnd << '\n' << '\n';
+assert(oldStart < getTombstone());
+assert(oldEnd < getTombstone());
+if (writtenRange.Start >= uint64_t(0x100000000)) {
+  std::cerr << "waka " << getTombstone() << " : " << writtenRange.Start << " : " << newStart << '\n';
+  abort();
+}
+if (writtenRange.End >= uint64_t(0x100000000)) {
+  std::cerr << "waka " << getTombstone() << " : " << writtenRange.End << " : " << newStart << '\n';
+  abort();
+}
   }
 }
 

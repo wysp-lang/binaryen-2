@@ -93,7 +93,7 @@ public:
   /// Get the endianness for this extractor.
   bool isLittleEndian() const { return IsLittleEndian; }
   /// Get the address size for this extractor.
-  uint8_t getAddressSize() const { return AddressSize; }
+  uint8_t getAddressSize() const { assert(AddressSize == 4); return AddressSize; }
   /// Set the address size for this extractor.
   void setAddressSize(uint8_t Size) { AddressSize = Size; }
 
