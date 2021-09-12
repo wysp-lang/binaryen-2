@@ -863,7 +863,7 @@ static void updateDIE(const llvm::DWARFDebugInfoEntry& DIE,
       BinaryLocation oldValue = yamlValue.Value, newValue = 0;
       bool isRelative = attrSpec.Form == llvm::dwarf::DW_FORM_data4;
       if (isRelative) {
-        if (!isTombstone(oldLowPC) {
+        if (!isTombstone(oldLowPC)) {
           oldValue += oldLowPC;
         }
       }
