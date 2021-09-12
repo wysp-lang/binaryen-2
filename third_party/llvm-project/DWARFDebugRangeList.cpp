@@ -43,12 +43,6 @@ Error DWARFDebugRangeList::extract(const DWARFDataExtractor &data,
     Entry.EndAddress =
         data.getRelocatedAddress(offset_ptr, &Entry.SectionIndex);
 
-// Seems like we write 32-bit values, but somehow read > 32bit values?
-
-// Print out all ranges we write, compare to what we read here.
-
-// Is a tombstone getting added, to create those >32bit values like 0x1000001d0 - ?
-
     // Check that both values were extracted correctly.
     if (*offset_ptr != prev_offset + 2 * AddressSize) {
       clear();
