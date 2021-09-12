@@ -926,19 +926,24 @@ static void updateRanges(llvm::DWARFYAML::Data& yaml,
                          const LocationUpdater& locationUpdater) {
   // In each range section, try to update the start and end. If we no longer
   // have something to map them to, skip emitting anything in the rest of that
-  // sequence as well.
+  // sequence as well, as likely we are processing something we do not know how
+  // to update. Specifically, we currently only handle ranges referred to from
+  // DIEs with a low_pc of 0: that low_pc is added to each part of the range,
+  // and we do not look at the low_pc here yet TODO (considering the low_pc
+  // would require us to verify that the sequence is only used by a single
+  // DIE; multiple ones can use the same sequence if everything is relative).
+  // When we fail to map, assume it is because of this low_pc issue, and skip to
+  // the end of the sequence to avoid emitting erroneous code (we might think we
+  // can map something due to a false positive when an address happens to
+  // collide).
   bool skip = false;
   for (size_t i = 0; i < yaml.Ranges.size(); i++) {
     auto& range = yaml.Ranges[i];
     BinaryLocation oldStart = range.Start, oldEnd = range.End, newStart = 0,
                    newEnd = 0;
-std::cout << "range " << std::hex << "0x" << oldStart << " - 0x" << oldEnd << '\n';
    // If this is an end marker (0, 0), or an invalid range (0, x) or (x, 0)
     // then just emit it as it is - either to mark the end, or to mark an
     // invalid entry.
-assert(oldStart < getTombstone());
-assert(oldEnd < getTombstone());
-
     if (isTombstone(oldStart) || isTombstone(oldEnd)) {
       newStart = oldStart;
       newEnd = oldEnd;
@@ -965,17 +970,6 @@ assert(oldEnd < getTombstone());
     auto& writtenRange = yaml.Ranges[i - skip];
     writtenRange.Start = newStart;
     writtenRange.End = newEnd;
-std::cout << "  new " << std::hex << "0x" << newStart << " - 0x" << newEnd << '\n' << '\n';
-assert(oldStart < getTombstone());
-assert(oldEnd < getTombstone());
-if (writtenRange.Start >= uint64_t(0x100000000)) {
-  std::cerr << "waka " << getTombstone() << " : " << writtenRange.Start << " : " << newStart << '\n';
-  abort();
-}
-if (writtenRange.End >= uint64_t(0x100000000)) {
-  std::cerr << "waka " << getTombstone() << " : " << writtenRange.End << " : " << newStart << '\n';
-  abort();
-}
   }
 }
 
