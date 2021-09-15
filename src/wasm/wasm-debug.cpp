@@ -856,12 +856,17 @@ static void updateRanges(
 #endif
     } else {
       // This was a valid entry; update it.
+      oldStart += oldLowPC;
+      oldEnd += oldLowPC;
       newStart = locationUpdater.getNewStart(oldStart);
       newEnd = locationUpdater.getNewEnd(oldEnd);
       if (isTombstone(newStart) || isTombstone(newEnd)) {
         // This no longer has a mapping, so we must skip it.
         newStart = newEnd = 0; // or tombstone?
 //        skip = true;
+      } else {
+        newStart -= newLowPC;
+        newEnd -= newLowPC;
       }
       // TODO even if range start and end markers have been preserved,
       // instructions in the middle may have moved around, making the range no
