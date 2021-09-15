@@ -654,13 +654,15 @@ static bool isTombstone(uint32_t x) {
   return x == 0 || x == uint32_t(-1) || x == uint32_t(-2);
 }
 
+// Return a canonical tombstone value, the same as LLVM's in
+// computeTombstoneAddress().
 static BinaryLocation getTombstone() {
   // TODO: this may differ in wasm64/DWARF64
-  return std::numeric_limits<uint32_t>::max();
+  return uint32_t(-1);
 }
 
-// Canonicalize tombstones to match LLVM's computeTombstoneAddress() behavior as
-// much as we can.
+// Fixes up tombstone values to be canonical. This makes us match LLVM as much
+// as possible.
 static BinaryLocation fixTombstoneValue(BinaryLocation location) {
   return isTombstone(location) ? getTombstone() : location;
 }
