@@ -837,7 +837,9 @@ static void updateRanges(
     llvm::DWARFYAML::Data& yaml) {
   // Start processing at the offset we are given in the ranges section, and
   // keep doing so until the end of that sequence.
-  size_t i = yamlValue.Value;
+  // FIXME is this offset the byte offset? or index of an item (pair of i32s)?
+  // or just one of them? docs unclear.
+  size_t i = yamlValue.Value / 8;
   while (i < yaml.Ranges.size()) {
     auto& range = yaml.Ranges[i];
     BinaryLocation oldStart = range.Start, oldEnd = range.End, newStart = 0,
