@@ -63,7 +63,6 @@ public:
         // The item already exists, so there is nothing to do.
         return;
       }
-
       // We must add a new item.
       if (usedFixed < N) {
         // Room remains in the fixed storage.
@@ -75,11 +74,28 @@ public:
         for (size_t i = 0; i < usedFixed; i++) {
           flexible.insert(fixed[i]);
         }
+        flexible.insert(x);
         assert(!usingFixed());
         usedFixed = 0;
       }
     } else {
       flexible.insert(x);
+    }
+  }
+
+  void erase(const T& x) {
+    if (usingFixed()) {
+      for (size_t i = 0; i < usedFixed; i++) {
+        if (fixed[i] == x) {
+          // We found the item; erase it by moving the final item to replace it
+          // and truncating the size.
+          usedFixed--;
+          fixed[i] = fixed[usedFixed];
+          return;
+        }
+      }
+    } else {
+      flexible.erase(x);
     }
   }
 
@@ -146,7 +162,7 @@ public:
     size_t fixedIndex;
     FlexibleIterator flexibleIterator;
 
-    IteratorBase(Parent* parent) : parent(parent), usingFixed(parent.usingFixed()) {}
+    IteratorBase(Parent* parent) : parent(parent), usingFixed(parent->usingFixed()) {}
 
     void setBegin() {
       if (usingFixed) {
@@ -185,12 +201,12 @@ public:
     }
   };
 
-  struct Iterator : IteratorBase<SmallSet<T, N>, Iterator, std::set<T>::iterator> {
+  struct Iterator : IteratorBase<SmallSet<T, N>, Iterator, typename std::set<T>::iterator> {
     Iterator(SmallSet<T, N>* parent)
-      : IteratorBase<SmallSet<T, N>, Iterator>(parent) {}
+      : IteratorBase<SmallSet<T, N>, Iterator, typename std::set<T>::iterator>(parent) {}
 
     value_type& operator*() {
-      if (usingFixed) {
+      if (this->usingFixed) {
         return (*this->parent)[this->fixedIndex];
       } else {
         *this->parent->flexibleIterator;
@@ -198,12 +214,12 @@ public:
     }
   };
 
-  struct ConstIterator : IteratorBase<const SmallSet<T, N>, ConstIterator, std::set<T>::const_iterator> {
+  struct ConstIterator : IteratorBase<const SmallSet<T, N>, ConstIterator, typename std::set<T>::const_iterator> {
     ConstIterator(const SmallSet<T, N>* parent)
-      : IteratorBase<const SmallSet<T, N>, ConstIterator>(parent) {}
+      : IteratorBase<const SmallSet<T, N>, ConstIterator, typename std::set<T>::iterator>(parent) {}
 
     const value_type& operator*() {
-      if (usingFixed) {
+      if (this->usingFixed) {
         return (*this->parent)[this->fixedIndex];
       } else {
         *this->parent->flexibleIterator;
