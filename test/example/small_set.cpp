@@ -1,6 +1,6 @@
 #include <algorithm>
-#include <iostream>
 #include <cassert>
+#include <iostream>
 #include <vector>
 
 #include "support/small_set.h"
@@ -23,8 +23,7 @@ void assertContents(T& t, const std::vector<int>& expectedContents) {
   }
 }
 
-template<typename T>
-void test() {
+template<typename T> void test() {
   {
     T t;
 
@@ -160,4 +159,3 @@ int main() {
 
   std::cout << "ok.\n";
 }
-

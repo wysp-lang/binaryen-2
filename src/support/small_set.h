@@ -168,7 +168,8 @@ public:
     size_t fixedIndex;
     FlexibleIterator flexibleIterator;
 
-    IteratorBase(Parent* parent) : parent(parent), usingFixed(parent->usingFixed()) {}
+    IteratorBase(Parent* parent)
+      : parent(parent), usingFixed(parent->usingFixed()) {}
 
     void setBegin() {
       if (usingFixed) {
@@ -198,9 +199,7 @@ public:
       }
     }
 
-    bool operator!=(const Iterator& other) const {
-      return !(*this == other);
-    }
+    bool operator!=(const Iterator& other) const { return !(*this == other); }
 
     void operator++() {
       if (usingFixed) {
@@ -211,11 +210,13 @@ public:
     }
   };
 
-  struct Iterator : IteratorBase<SmallSet<T, N>, Iterator, typename std::set<T>::iterator> {
+  struct Iterator
+    : IteratorBase<SmallSet<T, N>, Iterator, typename std::set<T>::iterator> {
     typedef std::forward_iterator_tag iterator_category;
 
     Iterator(SmallSet<T, N>* parent)
-      : IteratorBase<SmallSet<T, N>, Iterator, typename std::set<T>::iterator>(parent) {}
+      : IteratorBase<SmallSet<T, N>, Iterator, typename std::set<T>::iterator>(
+          parent) {}
 
     value_type operator*() const {
       if (this->usingFixed) {
@@ -226,11 +227,15 @@ public:
     }
   };
 
-  struct ConstIterator : IteratorBase<const SmallSet<T, N>, ConstIterator, typename std::set<T>::const_iterator> {
+  struct ConstIterator : IteratorBase<const SmallSet<T, N>,
+                                      ConstIterator,
+                                      typename std::set<T>::const_iterator> {
     typedef std::forward_iterator_tag iterator_category;
 
     ConstIterator(const SmallSet<T, N>* parent)
-      : IteratorBase<const SmallSet<T, N>, ConstIterator, typename std::set<T>::const_iterator>(parent) {}
+      : IteratorBase<const SmallSet<T, N>,
+                     ConstIterator,
+                     typename std::set<T>::const_iterator>(parent) {}
 
     const value_type operator*() const {
       if (this->usingFixed) {
@@ -264,18 +269,16 @@ public:
 
   using iterator = Iterator;
   using const_iterator = ConstIterator;
-  //using reverse_iterator = typename vector_type::const_reverse_iterator;
-  //using const_reverse_iterator = typename vector_type::const_reverse_iterator;
+  // using reverse_iterator = typename vector_type::const_reverse_iterator;
+  // using const_reverse_iterator = typename
+  // vector_type::const_reverse_iterator;
 
   // Test-only method to allow unit tests to verify the right internal
   // behavior.
-  bool TEST_ONLY_NEVER_USE_usingFixed() {
-    return usingFixed();
-  }
+  bool TEST_ONLY_NEVER_USE_usingFixed() { return usingFixed(); }
 };
 
 } // namespace wasm
-
 
 #if 0
 

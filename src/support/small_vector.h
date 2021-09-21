@@ -181,7 +181,9 @@ public:
     ConstIterator(const SmallVector<T, N>* parent, size_t index)
       : IteratorBase<const SmallVector<T, N>, ConstIterator>(parent, index) {}
     const value_type& operator*() const { return (*this->parent)[this->index]; }
-    const value_type* operator->() const { return &(*this->parent)[this->index]; }
+    const value_type* operator->() const {
+      return &(*this->parent)[this->index];
+    }
   };
 
   Iterator begin() { return Iterator(this, 0); }
