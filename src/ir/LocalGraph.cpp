@@ -16,6 +16,7 @@
 
 #include <iterator>
 
+#include <support/unique_deferring_queue.h>
 #include <cfg/cfg-traversal.h>
 #include <ir/find_all.h>
 #include <ir/local-graph.h>
@@ -103,16 +104,23 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
     // single vector makes it easy to check if something is in fact a Phi.
     std::vector<LocalSet> phis(loopTops.size() * numLocals);
 
-    // Check if a set is a phi.
+    // Maps a phi index to the list of sets for it.
+    std::vector<std::vector<LocalSet*>> phiSets;
+
     auto isPhi = [&](LocalSet* set) {
       return set >= &phis.front() && set < &phis.back();
+    };
+
+    auto getPhiIndex = [&](LocalSet* phi) {
+      assert(isPhi(phi));
+      return (phi - &phis[0]) / sizeof(LocalSet);
     };
 
     // Use a convenient data structure for querying if something is a loop top.
     std::unordered_set<BasicBlock*> loopTopSet(loopTops.begin(), loopTops.end());
 
     // The base index in |phis| where the phis for each loop resides.
-    std::unordered_map<BasicBlock*> loopTopPhiIndex;
+    std::unordered_map<BasicBlock*, Index> loopTopPhiIndex;
     Index next phiIndex = 0;
 
     // Track the flowing sets as a map from local indexes to the sets for that
@@ -145,9 +153,9 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
 
         // This predecessor has already been traversed. Add it's info to ours.
         auto& inFlow = blockFlows[inIndex];
-        for (Index j = 0; j < numLocals; j++) {
-          std::copy(inFlow[j].begin(), inFlow[j].end(),
-                  std::back_inserter(blockFlow[j]));
+        for (Index i = 0; i < numLocals; i++) {
+          std::copy(inFlow[i].begin(), inFlow[i].end(),
+                    std::back_inserter(blockFlow[i]));
         }
       }
 
@@ -155,8 +163,8 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
         // This is a loop top. Add the phis for it.
         assert(phiIndex < phis.size());
         loopTopPhiIndex[block] = phiIndex;
-        for (Index j = 0; j < numLocals; j++) {
-          blockFlow[j].push_back(&phis[phiIndex + j]);
+        for (Index i = 0; i < numLocals; i++) {
+          blockFlow[i].push_back(&phis[phiIndex + i]);
         }
         phiIndex += numLocals;
       }
@@ -174,159 +182,82 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
         }
       }
 
-      // If we have a successor that is a loop top - a succ that is *before* us -
-      // then we are a backedge back to a loop top. Add phi info to a phi info struct.
-    }
-
-    //
-
-
-#if 0
-    // This block struct is optimized for this flow process (Minimal
-    // information, iteration index).
-    struct FlowBlock {
-      // Last Traversed Iteration: This value helps us to find if this block has
-      // been seen while traversing blocks. We compare this value to the current
-      // iteration index in order to determine if we already process this block
-      // in the current iteration. This speeds up the processing compared to
-      // unordered_set or other struct usage. (No need to reset internal values,
-      // lookup into container, ...)
-      size_t lastTraversedIteration;
-      std::vector<Expression*> actions;
-      std::vector<FlowBlock*> in;
-      // Sor each index, the last local.set for it
-      // The unordered_map from BasicBlock.Info is converted into a vector
-      // This speeds up search as there are usually few sets in a block, so just
-      // scanning them linearly is efficient, avoiding hash computations (while
-      // in Info, it's convenient to have a map so we can assign them easily,
-      // where the last one seen overwrites the previous; and, we do that O(1)).
-      std::vector<std::pair<Index, LocalSet*>> lastSets;
-    };
-
-    auto numLocals = func->getNumLocals();
-    std::vector<std::vector<LocalGet*>> allGets;
-    allGets.resize(numLocals);
-    std::vector<FlowBlock*> work;
-
-    // Convert input blocks (basicBlocks) into more efficient flow blocks to
-    // improve memory access.
-    std::vector<FlowBlock> flowBlocks;
-    flowBlocks.resize(basicBlocks.size());
-
-    // Init mapping between basicblocks and flowBlocks
-    std::unordered_map<BasicBlock*, FlowBlock*> basicToFlowMap;
-    for (Index i = 0; i < basicBlocks.size(); ++i) {
-      basicToFlowMap[basicBlocks[i].get()] = &flowBlocks[i];
-    }
-
-    const size_t NULL_ITERATION = -1;
-
-    FlowBlock* entryFlowBlock = nullptr;
-    for (Index i = 0; i < flowBlocks.size(); ++i) {
-      auto& block = basicBlocks[i];
-      auto& flowBlock = flowBlocks[i];
-      // Get the equivalent block to entry in the flow list
-      if (block.get() == entry) {
-        entryFlowBlock = &flowBlock;
-      }
-      flowBlock.lastTraversedIteration = NULL_ITERATION;
-      flowBlock.actions.swap(block->contents.actions);
-      // Map in block to flow blocks
-      auto& in = block->in;
-      flowBlock.in.resize(in.size());
-      std::transform(in.begin(),
-                     in.end(),
-                     flowBlock.in.begin(),
-                     [&](BasicBlock* block) { return basicToFlowMap[block]; });
-      // Convert unordered_map to vector.
-      flowBlock.lastSets.reserve(block->contents.lastSets.size());
-      for (auto set : block->contents.lastSets) {
-        flowBlock.lastSets.emplace_back(std::make_pair(set.first, set.second));
-      }
-    }
-    assert(entryFlowBlock != nullptr);
-
-    size_t currentIteration = 0;
-    for (auto& block : flowBlocks) {
-#ifdef LOCAL_GRAPH_DEBUG
-      std::cout << "basic block " << block.get() << " :\n";
-      for (auto& action : block->contents.actions) {
-        std::cout << "  action: " << *action << '\n';
-      }
-      for (auto* lastSet : block->contents.lastSets) {
-        std::cout << "  last set " << lastSet << '\n';
-      }
-#endif
-      // go through the block, finding each get and adding it to its index,
-      // and seeing how sets affect that
-      auto& actions = block.actions;
-      // move towards the front, handling things as we go
-      for (int i = int(actions.size()) - 1; i >= 0; i--) {
-        auto* action = actions[i];
-        if (auto* get = action->dynCast<LocalGet>()) {
-          allGets[get->index].push_back(get);
-        } else {
-          // This set is the only set for all those gets.
-          auto* set = action->cast<LocalSet>();
-          auto& gets = allGets[set->index];
-          for (auto* get : gets) {
-            getSetses[get].insert(set);
-          }
-          gets.clear();
-        }
-      }
-      // If anything is left, we must flow it back through other blocks. we
-      // can do that for all gets as a whole, they will get the same results.
-      for (Index index = 0; index < numLocals; index++) {
-        auto& gets = allGets[index];
-        if (gets.empty()) {
-          continue;
-        }
-        work.push_back(&block);
-        // Note that we may need to revisit the later parts of this initial
-        // block, if we are in a loop, so don't mark it as seen.
-        while (!work.empty()) {
-          auto* curr = work.back();
-          work.pop_back();
-          // We have gone through this block; now we must handle flowing to
-          // the inputs.
-          if (curr->in.empty()) {
-            if (curr == entryFlowBlock) {
-              // These receive a param or zero init value.
-              for (auto* get : gets) {
-                getSetses[get].insert(nullptr);
-              }
-            }
-          } else {
-            for (auto* pred : curr->in) {
-              if (pred->lastTraversedIteration == currentIteration) {
-                // We've already seen pred in this iteration.
-                continue;
-              }
-              pred->lastTraversedIteration = currentIteration;
-              auto lastSet =
-                std::find_if(pred->lastSets.begin(),
-                             pred->lastSets.end(),
-                             [&](std::pair<Index, LocalSet*>& value) {
-                               return value.first == index;
-                             });
-              if (lastSet != pred->lastSets.end()) {
-                // There is a set here, apply it, and stop the flow.
-                for (auto* get : gets) {
-                  getSetses[get].insert(lastSet->second);
-                }
-              } else {
-                // Keep on flowing.
-                work.push_back(pred);
-              }
-            }
+      // If we have a successor that is before us, then that is a backedge to a
+      // loop top, and we can update phi info.
+      // TODO: test for a loop to itself, the <= and >= here and above
+      for (auto* loopTop : block->out) {
+        auto loopTopIndex = blockIndices[loopTop];
+        if (loopTopIndex <= blockIndex) {
+          // This is indeed a backedge, and loopTop is a loop top. Update the
+          // phi info.
+          auto phiIndex = loopTopPhiIndex[loopTop];
+          for (Index i = 0; i < numLocals; i++) {
+            std::copy(blockFlow[i].begin(), blockFlow[i].end(),
+                      std::back_inserter(phiSets[phiIndex + i]));
           }
         }
-        gets.clear();
-        currentIteration++;
       }
     }
-#endif
+
+    // To finish the flow, expand phis. A phi may contain a reference to another
+    // phi, in which case, we can expand out that phi and so forth, until we are
+    // left with only actual Sets and not phis.
+    for (Index phiIndex = 0; phiIndex < phis.size(); phiIndex++) {
+      auto& sets = phiSets[phiIndex];
+
+      // Perform multiple iterations, while we still find placeholders. Note
+      // that once we see a phi, we never need to expand it again recursively.
+      UniqueNonrepeatingDeferredQueue<LocalSet*> removedPhis;
+      while (1) {
+        sets.erase(std::remove_if(sets.begin(), 
+                                  sets.end(),
+                                  [&](LocalSet* set) {
+                                    if (isPhi(set)) {
+                                      removedPhis.push(set);
+                                      return true;
+                                    }
+                                    return false;
+                                  }),
+                   sets.end());
+        if (removedPhis.empty()) {
+          break;
+        }
+        while (!removedPhis.empty()) {
+          auto* otherPhi = removedPhis.pop();
+          auto& otherPhiSets = phiSets[getPhiIndex(otherPhi)];
+          std::copy(otherPhiSets.begin(), otherPhiSets.end(),
+                    std::back_inserter(sets));
+        }
+      }
+    }
+
+    // Now that phis are expanded, we can replace them in the getSetses.
+    for (auto& kv : getSetes) {
+      auto* sets : kv.second;
+
+      UniqueDeferredQueue<LocalSet*> removedPhis;
+      sets.erase(std::remove_if(sets.begin(), 
+                                sets.end(),
+                                [&](LocalSet* set) {
+                                  if (isPhi(set)) {
+                                    removedPhis.push(set);
+                                    return true;
+                                  }
+                                  return false;
+                                }),
+                 sets.end());
+      while (!removedPhis.empty()) {
+        auto* phi = removedPhis.pop();
+        auto& phiSets = phiSets[getPhiIndex(phi)];
+        std::copy(phiSets.begin(), phiSets.end(),
+                  std::back_inserter(sets));
+      }
+    }
+
+    // TODO: "phi" is wrong. placeholder. or "backedge placeholder"
+
+    // TODO: SmallVectors. Or, use "Sets" which is a set of sets, and is defined in our class?
+    //       Or: dedup Flows at the end. Faster that way?
   }
 };
 
