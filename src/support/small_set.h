@@ -228,10 +228,14 @@ public:
   };
 
   Iterator begin() {
-    return Iterator(this, 0);
+    auto ret = Iterator(this);
+    ret.setBegin();
+    return ret;
   }
   Iterator end() {
-    return Iterator(this, size());
+    auto ret = Iterator(this);
+    ret.setEnd();
+    return ret;
   }
   ConstIterator begin() const {
     auto ret = ConstIterator(this);

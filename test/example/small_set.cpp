@@ -6,11 +6,17 @@
 
 using namespace wasm;
 
-template<typename T, typename U>
-void assertContents(T& t, const std::vector<U>& contents) {
-  assert(t.size() == contents.size());
-  for (auto item : contents) {
+template<typename T>
+void assertContents(T& t, const std::vector<int>& expectedContents) {
+  assert(t.size() == expectedContents.size());
+  for (auto item : expectedContents) {
     assert(t.count(item) == 1);
+  }
+  for (auto item : t) {
+    assert(expectedContents.count(item) > 0);
+  }
+  for (const auto item : t) {
+    assert(expectedContents.count(item) > 0);
   }
 }
 
@@ -23,21 +29,27 @@ void test() {
     assert(t.empty());
     assert(t.size() == 0);
     t.insert(1);
+    assertContents(t, {1});
     assert(!t.empty());
     assert(t.size() == 1);
     t.insert(2);
+    assertContents(t, {1, 2});
     assert(!t.empty());
     assert(t.size() == 2);
     t.insert(3);
+    assertContents(t, {1, 2, 3});
     assert(!t.empty());
 
     // unwind
     assert(t.size() == 3);
     t.erase(3);
+    assertContents(t, {1, 2});
     assert(t.size() == 2);
     t.erase(2);
+    assertContents(t, {1});
     assert(t.size() == 1);
     t.erase(1);
+    assertContents(t, {0});
     assert(t.size() == 0);
     assert(t.empty());
   }
@@ -49,6 +61,7 @@ void test() {
     t.insert(2);
     t.insert(2);
     t.insert(3);
+    assertContents(t, {1, 2, 3});
     assert(t.size() == 3);
 
     // unwind by erasing (in the opposite direction from before)
