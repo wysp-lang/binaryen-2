@@ -180,16 +180,20 @@ public:
       }
     }
 
-    bool operator!=(const Iterator& other) const {
+    bool operator==(const Iterator& other) const {
       if (parent != other.parent) {
-        return true;
+        return false;
       }
       assert(usingFixed == other.usingFixed);
       if (usingFixed) {
-        return fixedIndex != other.fixedIndex;
+        return fixedIndex == other.fixedIndex;
       } else {
-        return flexibleIterator != other.flexibleIterator;
+        return flexibleIterator == other.flexibleIterator;
       }
+    }
+
+    bool operator!=(const Iterator& other) const {
+      return !(*this == other);
     }
 
     void operator++() {
