@@ -48,7 +48,7 @@ struct LocalGraph {
   // less common case). Also, having zero sets is extremely rare, as the
   // function entry always zero-initializes (only unreachable code can avoid
   // that).
-  typedef SmallSet<LocalSet*, 1> Sets;
+  typedef SmallSet<LocalSet*, 2> Sets;
 
   typedef std::map<LocalGet*, Sets> GetSetses;
 

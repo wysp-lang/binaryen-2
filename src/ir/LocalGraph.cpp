@@ -28,7 +28,7 @@ namespace LocalGraphInternal {
 // Information about a basic block.
 struct Info {
   // actions occurring in this block: local.gets and local.sets
-  std::vector<Expression*> actions;
+  SmallVector<Expression*, 2> actions;
   // for each index, the last local.set for it
   std::unordered_map<Index, LocalSet*> lastSets;
 };
@@ -86,26 +86,25 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
       // unordered_set or other struct usage. (No need to reset internal values,
       // lookup into container, ...)
       size_t lastTraversedIteration;
-      std::vector<Expression*> actions;
-      std::vector<FlowBlock*> in;
+      SmallVector<Expression*, 2> actions;
+      SmallVector<FlowBlock*, 2> in;
       // Sor each index, the last local.set for it
       // The unordered_map from BasicBlock.Info is converted into a vector
       // This speeds up search as there are usually few sets in a block, so just
       // scanning them linearly is efficient, avoiding hash computations (while
       // in Info, it's convenient to have a map so we can assign them easily,
       // where the last one seen overwrites the previous; and, we do that O(1)).
-      std::vector<std::pair<Index, LocalSet*>> lastSets;
+      SmallVector<std::pair<Index, LocalSet*>, 2> lastSets;
     };
 
     auto numLocals = func->getNumLocals();
-    std::vector<std::vector<LocalGet*>> allGets;
+    std::vector<SmallVector<LocalGet*, 2>> allGets;
     allGets.resize(numLocals);
     std::vector<FlowBlock*> work;
 
     // Convert input blocks (basicBlocks) into more efficient flow blocks to
     // improve memory access.
-    std::vector<FlowBlock> flowBlocks;
-    flowBlocks.resize(basicBlocks.size());
+    std::vector<FlowBlock> flowBlocks(basicBlocks.size());
 
     // Init mapping between basicblocks and flowBlocks
     std::unordered_map<BasicBlock*, FlowBlock*> basicToFlowMap;
@@ -124,7 +123,7 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
         entryFlowBlock = &flowBlock;
       }
       flowBlock.lastTraversedIteration = NULL_ITERATION;
-      flowBlock.actions.swap(block->contents.actions);
+      flowBlock.actions = std::move(block->contents.actions);
       // Map in block to flow blocks
       auto& in = block->in;
       flowBlock.in.resize(in.size());

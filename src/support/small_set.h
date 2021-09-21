@@ -154,7 +154,7 @@ public:
   // iteration
 
   template<typename Parent, typename Iterator, typename FlexibleIterator>
-  struct IteratorBase : public std::iterator<std::forward_iterator_tag, T>{
+  struct IteratorBase : public std::iterator<std::forward_iterator_tag, T> {
     typedef T value_type;
     typedef long difference_type;
     typedef T& reference;

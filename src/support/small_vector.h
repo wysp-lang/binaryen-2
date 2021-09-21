@@ -119,6 +119,12 @@ public:
     }
   }
 
+  void reserve(size_t newSize) {
+    if (newSize >= N + 1) {
+      flexible.reserve(newSize - N);
+    }
+  }
+
   bool operator==(const SmallVector<T, N>& other) const {
     if (usedFixed != other.usedFixed) {
       return false;
@@ -137,7 +143,8 @@ public:
 
   // iteration
 
-  template<typename Parent, typename Iterator> struct IteratorBase {
+  template<typename Parent, typename Iterator>
+  struct IteratorBase : public std::iterator<std::forward_iterator_tag, T> {
     typedef T value_type;
     typedef long difference_type;
     typedef T& reference;
@@ -167,12 +174,14 @@ public:
     Iterator(SmallVector<T, N>* parent, size_t index)
       : IteratorBase<SmallVector<T, N>, Iterator>(parent, index) {}
     value_type& operator*() { return (*this->parent)[this->index]; }
+    value_type* operator->() { return &(*this->parent)[this->index]; }
   };
 
   struct ConstIterator : IteratorBase<const SmallVector<T, N>, ConstIterator> {
     ConstIterator(const SmallVector<T, N>* parent, size_t index)
       : IteratorBase<const SmallVector<T, N>, ConstIterator>(parent, index) {}
     const value_type& operator*() const { return (*this->parent)[this->index]; }
+    const value_type* operator->() const { return &(*this->parent)[this->index]; }
   };
 
   Iterator begin() { return Iterator(this, 0); }
