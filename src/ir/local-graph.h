@@ -21,6 +21,11 @@
 
 namespace wasm {
 
+SmallSet
+
+If you reach a get of your index, copy and stop!
+
+
 //
 // Finds the connections between local.gets and local.sets, creating
 // a graph of those ties. This is useful for "ssa-style" optimization,
