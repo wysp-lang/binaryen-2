@@ -77,9 +77,11 @@ struct LocalGraph {
 
   // for each get, the sets whose values are influenced by that get
   // TODO: Small
-  std::unordered_map<LocalGet*, std::unordered_set<LocalSet*>> getInfluences;
+  using GetInfluences = SmallSet<LocalSet*, 2>;
+  std::unordered_map<LocalGet*, GetInfluences> getInfluences;
   // for each set, the gets whose values are influenced by that set
-  std::unordered_map<LocalSet*, std::unordered_set<LocalGet*>> setInfluences;
+  using SetInfluences = SmallSet<LocalGet*, 2>;
+  std::unordered_map<LocalSet*, SetInfluences> setInfluences;
 
   // Optional: Compute the local indexes that are SSA, in the sense of
   //  * a single set for all the gets for that local index
