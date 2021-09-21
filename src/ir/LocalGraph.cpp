@@ -129,30 +129,48 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
     // very large - TODO experiment.)
     using FlowingSets = std::map<Index, std::vector<LocalSet*>>;
 
+    auto numBlocks = basicBlocks.size();
+    if (numBlocks == 0) {
+      return;
+    }
+
     // For each basic block, the flow at the end of it (which is what should
     // then flow to its successors).
-    std::vector<FlowingSets> blockFlows(basicBlocks.size());
+    std::vector<FlowingSets> blockFlows(numBlocks);
 
-    for (Index blockIndex = 0; blockIndex < basicBlocks.size(); blockIndex++) {
+    // The entry block has a set to each local (either a parameter value, or a
+    // zero-init), noted as a nullptr.
+    auto& entryFlows = blockFlows[0];
+    for (Index i = 0; i < numLocals; i++) {
+      entryFlows[i].insert(nullptr);
+    }
+
+    for (Index blockIndex = 0; blockIndex < numBlocks; blockIndex++) {
       auto* block = basicBlocks[blockIndex].get();
       auto& blockFlow = blockFlows[blockIndex];
+
+      // Check if this is a loop top.
       bool loopTop = false;
+      for (auto* in : block->in) {
+        if (blockIndices[in] >= blockIndex) {
+          // This incoming edge is a backedge, which means this block is a loop
+          // top.
+          loopTop = true;
+          break;
+        }
+      }
 
       // The initial flow is the union of all the things that flow into this
-      // block.
+      // block, ignoring backedges (which have not been computed yet).
       for (auto* in : block->in) {
         auto inIndex = blockIndices[in];
         if (inIndex >= blockIndex) {
-          // This is a backedge, which means this is a loop top.
-          loopTop = true;
-
-          // We have not yet traversed this predecessor, and so we can do
-          // nothing for it now. Later down we will add phis for it, so that we
-          // can fix things up later.
+          // This is a backedge, so ignore it. We will create a phi for it
+          // later.
           continue;
         }
 
-        // This predecessor has already been traversed. Add it's info to ours.
+        // This predecessor has already been traversed. Add its info to ours.
         auto& inFlow = blockFlows[inIndex];
         for (Index i = 0; i < numLocals; i++) {
           std::copy(inFlow[i].begin(),
@@ -162,11 +180,18 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
       }
 
       if (loopTop) {
-        // This is a loop top. Add the phis for it.
+        // This is a loop top, so we need to add phis.
         assert(phiIndex < phis.size());
         loopTopPhiIndex[block] = phiIndex;
+
+        // The phi's initial values are the current flow, which the phis
+        // replace.
         for (Index i = 0; i < numLocals; i++) {
-          blockFlow[i].push_back(&phis[phiIndex + i]);
+          // std::moves etc.?
+          phiSets[phiIndex + i] = blockFlow[i];
+          // TODO: if using SmallSet, ensure this actually returns us to the
+          //       fast state.
+          blockFlow[i] = {&phis[phiIndex + i]};
         }
         phiIndex += numLocals;
       }
@@ -256,11 +281,11 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
       }
     }
 
-    // TODO: "phi" is wrong. placeholder. or "backedge placeholder"
-
     // TODO: SmallVectors. Or, use "Sets" which is a set of sets, and is defined
     // in our class?
     //       Or: dedup Flows at the end. Faster that way?
+    // SmallSET<1> here. Actual merges are rare. The common case is 1 item, and
+    // then we'd be flat and linear.
   }
 };
 
