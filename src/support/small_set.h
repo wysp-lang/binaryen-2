@@ -49,6 +49,11 @@ template<typename T, size_t N> class SmallSet {
 
 public:
   using value_type = T;
+  using key_type = T;
+  using reference = T&;
+  using const_reference = const T&;
+  using set_type = typename std::set<T>;
+  using size_type = size_t;
 
   SmallSet() {}
   SmallSet(std::initializer_list<T> init) {
@@ -148,7 +153,8 @@ public:
 
   // iteration
 
-  template<typename Parent, typename Iterator, typename FlexibleIterator> struct IteratorBase {
+  template<typename Parent, typename Iterator, typename FlexibleIterator>
+  struct IteratorBase : public std::iterator<std::forward_iterator_tag, T>{
     typedef T value_type;
     typedef long difference_type;
     typedef T& reference;
@@ -206,6 +212,8 @@ public:
   };
 
   struct Iterator : IteratorBase<SmallSet<T, N>, Iterator, typename std::set<T>::iterator> {
+    typedef std::forward_iterator_tag iterator_category;
+
     Iterator(SmallSet<T, N>* parent)
       : IteratorBase<SmallSet<T, N>, Iterator, typename std::set<T>::iterator>(parent) {}
 
@@ -219,6 +227,8 @@ public:
   };
 
   struct ConstIterator : IteratorBase<const SmallSet<T, N>, ConstIterator, typename std::set<T>::const_iterator> {
+    typedef std::forward_iterator_tag iterator_category;
+
     ConstIterator(const SmallSet<T, N>* parent)
       : IteratorBase<const SmallSet<T, N>, ConstIterator, typename std::set<T>::const_iterator>(parent) {}
 
@@ -252,6 +262,11 @@ public:
     return ret;
   }
 
+  using iterator = Iterator;
+  using const_iterator = ConstIterator;
+  //using reverse_iterator = typename vector_type::const_reverse_iterator;
+  //using const_reverse_iterator = typename vector_type::const_reverse_iterator;
+
   // Test-only method to allow unit tests to verify the right internal
   // behavior.
   bool TEST_ONLY_NEVER_USE_usingFixed() {
@@ -260,5 +275,24 @@ public:
 };
 
 } // namespace wasm
+
+
+#if 0
+
+namespace std {
+
+template<typename T, size_t N>
+struct iterator_traits<typename wasm::SmallSet<T, N>::Iterator> {
+  typedef forward_iterator_tag iterator_category;
+};
+
+template<typename T, size_t N>
+struct iterator_traits<typename wasm::SmallSet<T, N>::ConstIterator> {
+  typedef forward_iterator_tag iterator_category;
+};
+
+}
+
+#endif
 
 #endif // wasm_support_small_set_h
