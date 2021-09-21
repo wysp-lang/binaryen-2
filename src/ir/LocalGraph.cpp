@@ -29,8 +29,6 @@ namespace LocalGraphInternal {
 struct Info {
   // actions occurring in this block: local.gets and local.sets
   std::vector<Expression*> actions;
-  // for each index, the last local.set for it
-  std::unordered_map<Index, LocalSet*> lastSets;
 };
 
 // flow helper class. flows the gets to their sets
@@ -55,27 +53,135 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
   // cfg traversal work
 
   static void doVisitLocalGet(Flower* self, Expression** currp) {
-    auto* curr = (*currp)->cast<LocalGet>();
     // if in unreachable code, skip
     if (!self->currBasicBlock) {
       return;
     }
+
+    auto* curr = (*currp)->cast<LocalGet>();
     self->currBasicBlock->contents.actions.emplace_back(curr);
     self->locations[curr] = currp;
   }
 
   static void doVisitLocalSet(Flower* self, Expression** currp) {
-    auto* curr = (*currp)->cast<LocalSet>();
     // if in unreachable code, skip
     if (!self->currBasicBlock) {
       return;
     }
+
+    auto* curr = (*currp)->cast<LocalSet>();
     self->currBasicBlock->contents.actions.emplace_back(curr);
     self->currBasicBlock->contents.lastSets[curr->index] = curr;
     self->locations[curr] = currp;
   }
 
   void flow(Function* func) {
+    // The flow logic here is based on the fact that wasm is in structured form,
+    // and that the CFG walker's blocks are in reverse postorder. Using that, we
+    // can do basically the same type of flow as a fast SSA generation approach
+    // would do, as follows:
+    //
+    //  * Flow a map if  index => vector of Sets to that index. This flows to
+    //    the end of a block and then to the successors.
+    //  * When we reach a Get, its sets are the vector of Sets for its index.
+    //  * The only thing requiring special handling here are backedges, that is,
+    //    loop tops. They are the only case in which we have not yet seen all
+    //    the predecessors (otherwise, reverse postorder handles that for us).
+    //    To handle loops, we create a "Phi" for each index at the loop top. The
+    //    Phi looks like a Set, and is added to the normal flow. After we finish
+    //    everything, we can finalize Phis and apply their actual values.
+
+    auto numLocals = func->getNumLocals();
+
+    // Map basic blocks to their indices.
+    std::unordered_map<BasicBlock*, Index> blockIndices;
+    for (Index i = 0; i < numBlocks; i++) {
+      blockIndices[blocks[i].get()] = i;
+    }
+
+    // Create a Phi for each loop top and for each index. Placing them all in a
+    // single vector makes it easy to check if something is in fact a Phi.
+    std::vector<LocalSet> phis(loopTops.size() * numLocals);
+
+    // Check if a set is a phi.
+    auto isPhi = [&](LocalSet* set) {
+      return set >= &phis.front() && set < &phis.back();
+    };
+
+    // Use a convenient data structure for querying if something is a loop top.
+    std::unordered_set<BasicBlock*> loopTopSet(loopTops.begin(), loopTops.end());
+
+    // The base index in |phis| where the phis for each loop resides.
+    std::unordered_map<BasicBlock*> loopTopPhiIndex;
+    Index next phiIndex = 0;
+
+    // Track the flowing sets as a map from local indexes to the sets for that
+    // index. (We could also use a vector here, but the number of locals may be
+    // very large - TODO experiment.)
+    using FlowingSets = std::map<Index, std::vector<LocalSet*>>;
+
+    // For each basic block, the flow at the end of it (which is what should
+    // then flow to its successors).
+    std::vector<FlowingSets> blockFlows(basicBlocks.size());
+
+    for (Index blockIndex = 0; blockIndex < basicBlocks.size(); blockIndex++) {
+      auto* block = basicBlocks[blockIndex].get();
+      auto& blockFlow = blockFlows[blockIndex];
+      bool loopTop = false;
+
+      // The initial flow is the union of all the things that flow into this
+      // block.
+      for (auto* in : block->in) {
+        auto inIndex = blockIndices[in];
+        if (inIndex >= blockIndex) {
+          // This is a backedge, which means this is a loop top.
+          loopTop = true;
+
+          // We have not yet traversed this predecessor, and so we can do
+          // nothing for it now. Later down we will add phis for it, so that we
+          // can fix things up later.
+          continue;
+        }
+
+        // This predecessor has already been traversed. Add it's info to ours.
+        auto& inFlow = blockFlows[inIndex];
+        for (Index j = 0; j < numLocals; j++) {
+          std::copy(inFlow[j].begin(), inFlow[j].end(),
+                  std::back_inserter(blockFlow[j]));
+        }
+      }
+
+      if (loopTop) {
+        // This is a loop top. Add the phis for it.
+        assert(phiIndex < phis.size());
+        loopTopPhiIndex[block] = phiIndex;
+        for (Index j = 0; j < numLocals; j++) {
+          blockFlow[j].push_back(&phis[phiIndex + j]);
+        }
+        phiIndex += numLocals;
+      }
+
+      // Traverse through the block.
+      auto& actions = block->contents.actions;
+      for (auto* action : actions) {
+        if (auto* get = action->dynCast<LocalGet>()) {
+          // This get's sets are all the sets for its index.
+          getSetses[get] = blockFlow[get->index];
+        } else {
+          // This set is now the only set for this index.
+          auto* set = action->cast<LocalSet>();
+          blockFlow[set->index] = {set};
+        }
+      }
+
+      // If we have a successor that is a loop top - a succ that is *before* us -
+      // then we are a backedge back to a loop top. Add phi info to a phi info struct.
+    }
+
+    //
+
+
+#if 0
     // This block struct is optimized for this flow process (Minimal
     // information, iteration index).
     struct FlowBlock {
@@ -220,6 +326,7 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
         currentIteration++;
       }
     }
+#endif
   }
 };
 
