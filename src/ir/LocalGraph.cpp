@@ -172,9 +172,9 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
         // This predecessor has already been traversed. Add its info to ours.
         auto& inFlow = blockFlows[inIndex];
         for (Index i = 0; i < numLocals; i++) {
-          std::copy(inFlow[i].begin(),
-                    inFlow[i].end(),
-                    blockFlow[i]);
+          for (auto* set : inFlow[i]) {
+            blockFlow[i].insert(set);
+          }
         }
       }
 
@@ -218,9 +218,9 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
           // phi info.
           auto phiIndex = loopTopPhiIndex[loopTop];
           for (Index i = 0; i < numLocals; i++) {
-            std::copy(blockFlow[i].begin(),
-                      blockFlow[i].end(),
-                      phiSets[phiIndex + i]);
+            for (auto* set : blockFlow[i]) {
+              phiSets[phiIndex + i].insert(set);
+            }
           }
         }
       }
@@ -248,8 +248,9 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
           auto* otherPhi = removedPhis.pop();
           sets.erase(otherPhi);
           auto& otherPhiSets = phiSets[getPhiIndex(otherPhi)];
-          std::copy(
-            otherPhiSets.begin(), otherPhiSets.end(), sets);
+          for (auto* set : otherPhiSets) {
+            sets.insert(set);
+          }
         }
       }
     }
@@ -268,7 +269,9 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
         auto* phi = removedPhis.pop();
         sets.erase(phi);
         auto& currPhiSets = phiSets[getPhiIndex(phi)];
-        std::copy(currPhiSets.begin(), currPhiSets.end(), sets);
+        for (auto* set : currPhiSets) {
+          sets.insert(set);
+        }
       }
     }
 
