@@ -16,10 +16,10 @@
 
 #include <iterator>
 
-#include <support/unique_deferring_queue.h>
 #include <cfg/cfg-traversal.h>
 #include <ir/find_all.h>
 #include <ir/local-graph.h>
+#include <support/unique_deferring_queue.h>
 #include <wasm-builder.h>
 
 namespace wasm {
@@ -117,7 +117,8 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
     };
 
     // Use a convenient data structure for querying if something is a loop top.
-    std::unordered_set<BasicBlock*> loopTopSet(loopTops.begin(), loopTops.end());
+    std::unordered_set<BasicBlock*> loopTopSet(loopTops.begin(),
+                                               loopTops.end());
 
     // The base index in |phis| where the phis for each loop resides.
     std::unordered_map<BasicBlock*, Index> loopTopPhiIndex;
@@ -154,7 +155,8 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
         // This predecessor has already been traversed. Add it's info to ours.
         auto& inFlow = blockFlows[inIndex];
         for (Index i = 0; i < numLocals; i++) {
-          std::copy(inFlow[i].begin(), inFlow[i].end(),
+          std::copy(inFlow[i].begin(),
+                    inFlow[i].end(),
                     std::back_inserter(blockFlow[i]));
         }
       }
@@ -192,7 +194,8 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
           // phi info.
           auto phiIndex = loopTopPhiIndex[loopTop];
           for (Index i = 0; i < numLocals; i++) {
-            std::copy(blockFlow[i].begin(), blockFlow[i].end(),
+            std::copy(blockFlow[i].begin(),
+                      blockFlow[i].end(),
                       std::back_inserter(phiSets[phiIndex + i]));
           }
         }
@@ -209,7 +212,7 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
       // that once we see a phi, we never need to expand it again recursively.
       UniqueNonrepeatingDeferredQueue<LocalSet*> removedPhis;
       while (1) {
-        sets.erase(std::remove_if(sets.begin(), 
+        sets.erase(std::remove_if(sets.begin(),
                                   sets.end(),
                                   [&](LocalSet* set) {
                                     if (isPhi(set)) {
@@ -225,8 +228,8 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
         while (!removedPhis.empty()) {
           auto* otherPhi = removedPhis.pop();
           auto& otherPhiSets = phiSets[getPhiIndex(otherPhi)];
-          std::copy(otherPhiSets.begin(), otherPhiSets.end(),
-                    std::back_inserter(sets));
+          std::copy(
+            otherPhiSets.begin(), otherPhiSets.end(), std::back_inserter(sets));
         }
       }
     }
@@ -236,7 +239,7 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
       auto* sets : kv.second;
 
       UniqueDeferredQueue<LocalSet*> removedPhis;
-      sets.erase(std::remove_if(sets.begin(), 
+      sets.erase(std::remove_if(sets.begin(),
                                 sets.end(),
                                 [&](LocalSet* set) {
                                   if (isPhi(set)) {
@@ -249,14 +252,14 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
       while (!removedPhis.empty()) {
         auto* phi = removedPhis.pop();
         auto& phiSets = phiSets[getPhiIndex(phi)];
-        std::copy(phiSets.begin(), phiSets.end(),
-                  std::back_inserter(sets));
+        std::copy(phiSets.begin(), phiSets.end(), std::back_inserter(sets));
       }
     }
 
     // TODO: "phi" is wrong. placeholder. or "backedge placeholder"
 
-    // TODO: SmallVectors. Or, use "Sets" which is a set of sets, and is defined in our class?
+    // TODO: SmallVectors. Or, use "Sets" which is a set of sets, and is defined
+    // in our class?
     //       Or: dedup Flows at the end. Faster that way?
   }
 };
