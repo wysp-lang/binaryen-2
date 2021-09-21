@@ -184,7 +184,7 @@ public:
       if (parent != other.parent) {
         return true;
       }
-      assert(usingFixed != other.usingFixed);
+      assert(usingFixed == other.usingFixed);
       if (usingFixed) {
         return fixedIndex != other.fixedIndex;
       } else {
@@ -205,24 +205,24 @@ public:
     Iterator(SmallSet<T, N>* parent)
       : IteratorBase<SmallSet<T, N>, Iterator, typename std::set<T>::iterator>(parent) {}
 
-    value_type& operator*() {
+    value_type operator*() const {
       if (this->usingFixed) {
-        return (*this->parent)[this->fixedIndex];
+        return (this->parent->fixed)[this->fixedIndex];
       } else {
-        *this->parent->flexibleIterator;
+        return *this->flexibleIterator;
       }
     }
   };
 
   struct ConstIterator : IteratorBase<const SmallSet<T, N>, ConstIterator, typename std::set<T>::const_iterator> {
     ConstIterator(const SmallSet<T, N>* parent)
-      : IteratorBase<const SmallSet<T, N>, ConstIterator, typename std::set<T>::iterator>(parent) {}
+      : IteratorBase<const SmallSet<T, N>, ConstIterator, typename std::set<T>::const_iterator>(parent) {}
 
-    const value_type& operator*() {
+    const value_type operator*() const {
       if (this->usingFixed) {
-        return (*this->parent)[this->fixedIndex];
+        return (this->parent->fixed)[this->fixedIndex];
       } else {
-        *this->parent->flexibleIterator;
+        return *this->flexibleIterator;
       }
     }
   };
@@ -246,6 +246,12 @@ public:
     auto ret = ConstIterator(this);
     ret.setEnd();
     return ret;
+  }
+
+  // Test-only method to allow unit tests to verify the right internal
+  // behavior.
+  bool TEST_ONLY_NEVER_USE_usingFixed() {
+    return usingFixed();
   }
 };
 

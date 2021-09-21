@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <iostream>
 #include <cassert>
 #include <vector>
@@ -13,10 +14,12 @@ void assertContents(T& t, const std::vector<int>& expectedContents) {
     assert(t.count(item) == 1);
   }
   for (auto item : t) {
-    assert(expectedContents.count(item) > 0);
+    assert(std::find(expectedContents.begin(), expectedContents.end(), item) !=
+           expectedContents.end());
   }
   for (const auto item : t) {
-    assert(expectedContents.count(item) > 0);
+    assert(std::find(expectedContents.begin(), expectedContents.end(), item) !=
+           expectedContents.end());
   }
 }
 
@@ -49,7 +52,7 @@ void test() {
     assertContents(t, {1});
     assert(t.size() == 1);
     t.erase(1);
-    assertContents(t, {0});
+    assertContents(t, {});
     assert(t.size() == 0);
     assert(t.empty());
   }
@@ -119,11 +122,42 @@ void test() {
   }
 }
 
+void testInternals() {
+  {
+    SmallSet<int, 1> s;
+    // Start out using fixed storage.
+    assert(s.TEST_ONLY_NEVER_USE_usingFixed());
+    // Adding one item still keeps us using fixed storage, as that is the exact
+    // amount we have in fact.
+    s.insert(0);
+    assert(s.TEST_ONLY_NEVER_USE_usingFixed());
+    // Adding one more item forces us to use flexible storage.
+    s.insert(1);
+    assert(!s.TEST_ONLY_NEVER_USE_usingFixed());
+    // Removing an item returns us to size 1, *but we keep using flexible
+    // storage*. We do not ping-pong between flexible and fixed; once flexible,
+    // we stay that way.
+    s.erase(0);
+    assert(!s.TEST_ONLY_NEVER_USE_usingFixed());
+    // However, removing all items does return us to using fixed storage, should
+    // we ever insert again.
+    s.erase(1);
+    assert(s.empty());
+    assert(s.TEST_ONLY_NEVER_USE_usingFixed());
+    // And once more we can add an additional item while remaining fixed.
+    s.insert(10);
+    assert(s.TEST_ONLY_NEVER_USE_usingFixed());
+  }
+}
+
 int main() {
   test<SmallSet<int, 0>>();
   test<SmallSet<int, 1>>();
   test<SmallSet<int, 2>>();
   test<SmallSet<int, 10>>();
+
+  testInternals();
+
   std::cout << "ok.\n";
 }
 
