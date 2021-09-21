@@ -72,7 +72,6 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
 
     auto* curr = (*currp)->cast<LocalSet>();
     self->currBasicBlock->contents.actions.emplace_back(curr);
-    self->currBasicBlock->contents.lastSets[curr->index] = curr;
     self->locations[curr] = currp;
   }
 
@@ -92,12 +91,17 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
     //    Phi looks like a Set, and is added to the normal flow. After we finish
     //    everything, we can finalize Phis and apply their actual values.
 
+    auto numBlocks = basicBlocks.size();
+    if (numBlocks == 0) {
+      return;
+    }
+
     auto numLocals = func->getNumLocals();
 
     // Map basic blocks to their indices.
     std::unordered_map<BasicBlock*, Index> blockIndices;
     for (Index i = 0; i < numBlocks; i++) {
-      blockIndices[blocks[i].get()] = i;
+      blockIndices[basicBlocks[i].get()] = i;
     }
 
     // Create a Phi for each loop top and for each index. Placing them all in a
@@ -105,7 +109,7 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
     std::vector<LocalSet> phis(loopTops.size() * numLocals);
 
     // Maps a phi index to the list of sets for it.
-    std::vector<std::vector<LocalSet*>> phiSets;
+    std::vector<LocalGraph::Sets> phiSets;
 
     auto isPhi = [&](LocalSet* set) {
       return set >= &phis.front() && set < &phis.back();
@@ -122,17 +126,12 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
 
     // The base index in |phis| where the phis for each loop resides.
     std::unordered_map<BasicBlock*, Index> loopTopPhiIndex;
-    Index next phiIndex = 0;
+    Index nextPhiIndex = 0;
 
     // Track the flowing sets as a map from local indexes to the sets for that
     // index. (We could also use a vector here, but the number of locals may be
     // very large - TODO experiment.)
-    using FlowingSets = std::map<Index, std::vector<LocalSet*>>;
-
-    auto numBlocks = basicBlocks.size();
-    if (numBlocks == 0) {
-      return;
-    }
+    using FlowingSets = std::map<Index, LocalGraph::Sets>;
 
     // For each basic block, the flow at the end of it (which is what should
     // then flow to its successors).
@@ -175,25 +174,25 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
         for (Index i = 0; i < numLocals; i++) {
           std::copy(inFlow[i].begin(),
                     inFlow[i].end(),
-                    std::back_inserter(blockFlow[i]));
+                    blockFlow[i]);
         }
       }
 
       if (loopTop) {
         // This is a loop top, so we need to add phis.
-        assert(phiIndex < phis.size());
-        loopTopPhiIndex[block] = phiIndex;
+        assert(nextPhiIndex < phis.size());
+        loopTopPhiIndex[block] = nextPhiIndex;
 
         // The phi's initial values are the current flow, which the phis
         // replace.
         for (Index i = 0; i < numLocals; i++) {
           // std::moves etc.?
-          phiSets[phiIndex + i] = blockFlow[i];
+          phiSets[nextPhiIndex + i] = blockFlow[i];
           // TODO: if using SmallSet, ensure this actually returns us to the
           //       fast state.
-          blockFlow[i] = {&phis[phiIndex + i]};
+          blockFlow[i] = {&phis[nextPhiIndex + i]};
         }
-        phiIndex += numLocals;
+        nextPhiIndex += numLocals;
       }
 
       // Traverse through the block.
@@ -221,7 +220,7 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
           for (Index i = 0; i < numLocals; i++) {
             std::copy(blockFlow[i].begin(),
                       blockFlow[i].end(),
-                      std::back_inserter(phiSets[phiIndex + i]));
+                      phiSets[phiIndex + i]);
           }
         }
       }
@@ -237,47 +236,39 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
       // that once we see a phi, we never need to expand it again recursively.
       UniqueNonrepeatingDeferredQueue<LocalSet*> removedPhis;
       while (1) {
-        sets.erase(std::remove_if(sets.begin(),
-                                  sets.end(),
-                                  [&](LocalSet* set) {
-                                    if (isPhi(set)) {
-                                      removedPhis.push(set);
-                                      return true;
-                                    }
-                                    return false;
-                                  }),
-                   sets.end());
+        for (auto* set : sets) {
+          if (isPhi(set)) {
+            removedPhis.push(set);
+          }
+        }
         if (removedPhis.empty()) {
           break;
         }
         while (!removedPhis.empty()) {
           auto* otherPhi = removedPhis.pop();
+          sets.erase(otherPhi);
           auto& otherPhiSets = phiSets[getPhiIndex(otherPhi)];
           std::copy(
-            otherPhiSets.begin(), otherPhiSets.end(), std::back_inserter(sets));
+            otherPhiSets.begin(), otherPhiSets.end(), sets);
         }
       }
     }
 
     // Now that phis are expanded, we can replace them in the getSetses.
-    for (auto& kv : getSetes) {
-      auto* sets : kv.second;
+    for (auto& kv : getSetses) {
+      auto& sets = kv.second;
 
       UniqueDeferredQueue<LocalSet*> removedPhis;
-      sets.erase(std::remove_if(sets.begin(),
-                                sets.end(),
-                                [&](LocalSet* set) {
-                                  if (isPhi(set)) {
-                                    removedPhis.push(set);
-                                    return true;
-                                  }
-                                  return false;
-                                }),
-                 sets.end());
+      for (auto* set : sets) {
+        if (isPhi(set)) {
+          removedPhis.push(set);
+        }
+      }
       while (!removedPhis.empty()) {
         auto* phi = removedPhis.pop();
-        auto& phiSets = phiSets[getPhiIndex(phi)];
-        std::copy(phiSets.begin(), phiSets.end(), std::back_inserter(sets));
+        sets.erase(phi);
+        auto& currPhiSets = phiSets[getPhiIndex(phi)];
+        std::copy(currPhiSets.begin(), currPhiSets.end(), sets);
       }
     }
 
