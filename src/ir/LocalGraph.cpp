@@ -108,16 +108,23 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
     // single vector makes it easy to check if something is in fact a Phi.
     std::vector<LocalSet> phis(loopTops.size() * numLocals);
 
+std::cout << "Phis go from " << &phis.front() << ", size " << phis.size() << " to.. " << &phis.back() << '\n';
+
     // Maps a phi index to the list of sets for it.
-    std::vector<LocalGraph::Sets> phiSets;
+    std::vector<LocalGraph::Sets> phiSets(phis.size());
 
     auto isPhi = [&](LocalSet* set) {
-      return set >= &phis.front() && set < &phis.back();
+      if (phis.empty()) {
+        return false;
+      }
+      return set >= &phis.front() && set <= &phis.back();
     };
 
     auto getPhiIndex = [&](LocalSet* phi) {
       assert(isPhi(phi));
-      return (phi - &phis[0]) / sizeof(LocalSet);
+      auto ret = (phi - &phis[0]) / sizeof(LocalSet);
+      assert(ret < phis.size());
+      return ret;
     };
 
     // Use a convenient data structure for querying if something is a loop top.
@@ -148,16 +155,7 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
       auto* block = basicBlocks[blockIndex].get();
       auto& blockFlow = blockFlows[blockIndex];
 
-      // Check if this is a loop top.
       bool loopTop = false;
-      for (auto* in : block->in) {
-        if (blockIndices[in] >= blockIndex) {
-          // This incoming edge is a backedge, which means this block is a loop
-          // top.
-          loopTop = true;
-          break;
-        }
-      }
 
       // The initial flow is the union of all the things that flow into this
       // block, ignoring backedges (which have not been computed yet).
@@ -166,6 +164,7 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
         if (inIndex >= blockIndex) {
           // This is a backedge, so ignore it. We will create a phi for it
           // later.
+          loopTop = true;
           continue;
         }
 
@@ -182,6 +181,7 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
         // This is a loop top, so we need to add phis.
         assert(nextPhiIndex < phis.size());
         loopTopPhiIndex[block] = nextPhiIndex;
+std::cout << "loop top, phi index " << nextPhiIndex << "\n";
 
         // The phi's initial values are the current flow, which the phis
         // replace.
@@ -190,7 +190,10 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
           phiSets[nextPhiIndex + i] = blockFlow[i];
           // TODO: if using SmallSet, ensure this actually returns us to the
           //       fast state.
-          blockFlow[i] = {&phis[nextPhiIndex + i]};
+          auto* phi = &phis[nextPhiIndex + i];
+std::cout << "set stuff " << (nextPhiIndex + i) << " / " << phis.size() << " : " << phi << '\n';
+          assert(isPhi(phi));
+          blockFlow[i] = {phi};
         }
         nextPhiIndex += numLocals;
       }
@@ -201,6 +204,9 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
         if (auto* get = action->dynCast<LocalGet>()) {
           // This get's sets are all the sets for its index.
           getSetses[get] = blockFlow[get->index];
+for (auto* set : getSetses[get]) {
+  std::cout << "-add set- " << set << '\n';
+}
         } else {
           // This set is now the only set for this index.
           auto* set = action->cast<LocalSet>();
@@ -234,21 +240,21 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
 
       // Perform multiple iterations, while we still find placeholders. Note
       // that once we see a phi, we never need to expand it again recursively.
-      UniqueNonrepeatingDeferredQueue<LocalSet*> removedPhis;
+      UniqueNonrepeatingDeferredQueue<LocalSet*> seenPhis;
       while (1) {
         for (auto* set : sets) {
           if (isPhi(set)) {
-            removedPhis.push(set);
+            seenPhis.push(set);
           }
         }
-        if (removedPhis.empty()) {
+        if (seenPhis.empty()) {
           break;
         }
-        while (!removedPhis.empty()) {
-          auto* otherPhi = removedPhis.pop();
-          sets.erase(otherPhi);
-          auto& otherPhiSets = phiSets[getPhiIndex(otherPhi)];
-          for (auto* set : otherPhiSets) {
+        while (!seenPhis.empty()) {
+          auto* seenPhi = seenPhis.pop();
+          sets.erase(seenPhi);
+          auto& seenPhiSets = phiSets[getPhiIndex(seenPhi)];
+          for (auto* set : seenPhiSets) {
             sets.insert(set);
           }
         }
@@ -259,21 +265,31 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
     for (auto& kv : getSetses) {
       auto& sets = kv.second;
 
-      UniqueDeferredQueue<LocalSet*> removedPhis;
+      UniqueDeferredQueue<LocalSet*> seenPhis;
       for (auto* set : sets) {
         if (isPhi(set)) {
-          removedPhis.push(set);
+          seenPhis.push(set);
         }
       }
-      while (!removedPhis.empty()) {
-        auto* phi = removedPhis.pop();
+      while (!seenPhis.empty()) {
+        auto* phi = seenPhis.pop();
         sets.erase(phi);
         auto& currPhiSets = phiSets[getPhiIndex(phi)];
         for (auto* set : currPhiSets) {
+          assert(!isPhi(set));
           sets.insert(set);
         }
       }
     }
+
+#ifndef NDEBUG
+    for (auto& kv : getSetses) {
+      auto& sets = kv.second;
+      for (auto* set : sets) {
+        assert(!isPhi(set));
+      }
+    }
+#endif
 
     // TODO: SmallVectors. Or, use "Sets" which is a set of sets, and is defined
     // in our class?
@@ -290,14 +306,24 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
 LocalGraph::LocalGraph(Function* func) : func(func) {
   LocalGraphInternal::Flower flower(getSetses, locations, func);
 
-#ifdef LOCAL_GRAPH_DEBUG
+#if 1 //def LOCAL_GRAPH_DEBUG
   std::cout << "LocalGraph::dump\n";
+  for (auto& pair : locations) {
+    auto* curr = pair.first;
+    if (curr->is<LocalGet>()) {
+      std::cout << "get: " << curr << '\n';
+    } else if (curr->is<LocalSet>()) {
+      std::cout << "set: " << curr << '\n';
+    } else {
+      WASM_UNREACHABLE("invalid location");
+    }
+  }
   for (auto& pair : getSetses) {
     auto* get = pair.first;
     auto& sets = pair.second;
-    std::cout << "GET\n" << get << " is influenced by\n";
+    std::cout << "get  " << get << " is written by\n";
     for (auto* set : sets) {
-      std::cout << set << '\n';
+      std::cout << "  " << set << '\n';
     }
   }
   std::cout << "total locations: " << locations.size() << '\n';
