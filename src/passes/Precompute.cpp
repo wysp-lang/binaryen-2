@@ -118,21 +118,30 @@ struct Precompute
   bool worked;
 
   void doWalkFunction(Function* func) {
+    super::doWalkFunction(func);
+    if (!propagate) {
+      return;
+    }
     // if propagating, we may need multiple rounds: each propagation can
     // lead to the main walk removing code, which might open up more
     // propagation opportunities
-    do {
-      getValues.clear();
+    while (1) {
       // with extra effort, we can utilize the get-set graph to precompute
       // things that use locals that are known to be constant. otherwise,
       // we just look at what is immediately before us
-      if (propagate) {
-        optimizeLocals(func);
+      getValues.clear();
+      worked = false;
+      optimizeLocals(func);
+      if (!worked) {
+        break;
       }
-      // do the main walk over everything
+
       worked = false;
       super::doWalkFunction(func);
-    } while (propagate && worked);
+      if (!worked) {
+        break;
+      }
+    }
   }
 
   template<typename T> void reuseConstantNode(T* curr, Flow flow) {
@@ -426,6 +435,7 @@ private:
           for (auto* set : localGraph.getInfluences[get]) {
             work.push(set);
           }
+          worked = true;
         }
       }
     }
