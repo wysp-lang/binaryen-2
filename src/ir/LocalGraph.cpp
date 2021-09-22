@@ -250,12 +250,12 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
       // Perform multiple iterations, while we still find placeholders. Note
       // that once we see a phi, we never need to expand it again recursively.
       UniqueNonrepeatingDeferredQueue<LocalSet*> seenPhis;
-      while (1) {
-        for (auto* set : sets) {
-          if (isPhi(set)) {
-            seenPhis.push(set);
-          }
+      for (auto* set : sets) {
+        if (isPhi(set)) {
+          seenPhis.push(set);
         }
+      }
+      while (1) {
         if (seenPhis.empty()) {
           break;
         }
@@ -264,7 +264,11 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
           sets.erase(seenPhi);
           auto& seenPhiSets = phiSets[getPhiIndex(seenPhi)];
           for (auto* set : seenPhiSets) {
-            sets.insert(set);
+            if (isPhi(set)) {
+              seenPhis.push(set);
+            } else {
+              sets.insert(set);
+            }
 //std::cout << "  add phi set: " << set << '\n';
           }
         }
