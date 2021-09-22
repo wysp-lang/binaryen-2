@@ -118,29 +118,18 @@ struct Precompute
   bool worked;
 
   void doWalkFunction(Function* func) {
+    // Walk the function and optimize.
     super::doWalkFunction(func);
     if (!propagate) {
       return;
     }
-    // if propagating, we may need multiple rounds: each propagation can
-    // lead to the main walk removing code, which might open up more
-    // propagation opportunities
-    while (1) {
-      // with extra effort, we can utilize the get-set graph to precompute
-      // things that use locals that are known to be constant. otherwise,
-      // we just look at what is immediately before us
-      getValues.clear();
-      worked = false;
-      optimizeLocals(func);
-      if (!worked) {
-        break;
-      }
-
-      worked = false;
+    // When propagating, we can utilize the graph of local operations to
+    // precompute the values of local.gets. This populates getValues which is
+    // then used by a subsequent walk that applies those values.
+    worked = false;
+    optimizeLocals(func);
+    if (worked) {
       super::doWalkFunction(func);
-      if (!worked) {
-        break;
-      }
     }
   }
 
@@ -233,7 +222,6 @@ struct Precompute
     // this was precomputed
     if (flow.values.isConcrete()) {
       replaceCurrent(flow.getConstExpression(*getModule()));
-      worked = true;
     } else {
       ExpressionManipulator::nop(curr);
     }
