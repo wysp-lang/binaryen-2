@@ -28,6 +28,7 @@
 //
 
 #include <ir/literal-utils.h>
+#include <ir/effects.h>
 #include <ir/local-graph.h>
 #include <ir/manipulation.h>
 #include <ir/properties.h>
@@ -278,8 +279,43 @@ private:
     // operation: note which sets are assigned locals, then see if that lets us
     // compute other sets as locals (since some of the gets they read may be
     // constant).
-    // compute all dependencies
     LocalGraph localGraph(func);
+
+    // Prune sets that we know we cannot precompute. Avoiding work on them saves
+    // wasted effort. To calculate that, fill in a map of a set to whether it is
+    // precomputable or not.
+    std::unordered_map<LocalSet*, bool> setPrecomputability;
+    for (auto& kv : localGraph.getSetses) {
+      auto* get = kv.first;
+      auto& sets = kv.second;
+      for (auto* set : sets) {
+        bool precomputable;
+        if (!set) {
+          if (func->isParam(get->index)) {
+            precomputable = false;
+          } else {
+            assert(func->isVar(get->index));
+            precomputable = true;
+          }
+        } else {
+          auto iter = setPrecomputability.find(set);
+          if (iter == setPrecomputability.end()) {
+            precomputable = setPrecomputability[set] = isLikelyPrecomputable(set->value);
+          } else {
+            precomputable = iter->second;
+          }
+        }
+        if (!precomputable) {
+          // Clearing the list of sets for this get has the effect of the get
+          // never being able to be precomputed to a constant, since we have no
+          // constant values (or any values) for it at all.
+          sets.clear();
+          break;
+        }
+      }
+    }
+
+    // compute all dependencies
     localGraph.computeInfluences();
     // prepare the work list. we add things here that might change to a constant
     // initially, that means everything
@@ -429,6 +465,27 @@ private:
     // For now, don't try to precompute an Rtt. TODO figure out when that would
     // be safe and useful.
     return !type.isRtt();
+  }
+
+  // Check if an expression is likely to be precomputable or not. This is a
+  // quick and imprecise check that may have false positives, but not false
+  // negatives.
+  bool isLikelyPrecomputable(Expression* curr) {
+    EffectAnalyzer effects(getPassOptions(), *getModule());
+
+    // Just visit this node, avoiding a full walk would would be O(N).
+    effects.visit(curr);
+
+    // If this reads global state, like a read from memory, then we can't
+    // precompute it as it reads data we can't see at compile time.
+    // FIXME: This may become an incorrect heuristic if wasm adds an instruction
+    //        that reads memory that we *can* precompute, like imagine something
+    //        that takes an input, and if the input is 0 then it reads from
+    //        memory, and otherwise it returns 1, then if the input is not zero
+    //        then we can precompute it (to 1). For now, however, this should
+    //        handle most cases in a simple way.
+    // TODO: side effects? (but not traps)
+    return !effects.readsGlobalState() && !effects.hasNonTrapSideEffects();
   }
 };
 
