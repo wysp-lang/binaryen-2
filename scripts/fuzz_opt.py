@@ -39,7 +39,7 @@ assert sys.version_info.major == 3, 'requires Python 3!'
 CONSTANT_FEATURE_OPTS = ['--all-features']
 
 INPUT_SIZE_MIN = 1024
-INPUT_SIZE_MEAN = 4 * 1024
+INPUT_SIZE_MEAN = 40 * 1024
 INPUT_SIZE_MAX = 5 * INPUT_SIZE_MEAN
 
 PRINT_WATS = False

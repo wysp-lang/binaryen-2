@@ -141,6 +141,7 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
     // Track the flowing sets as a map from local indexes to the sets for that
     // index. (We could also use a vector here, but the number of locals may be
     // very large - TODO experiment.)
+    // Slower. but try smallset here!
     using FlowingSets = std::map<Index, LocalGraph::Sets>;
 
     // For each basic block, the flow at the end of it (which is what should
