@@ -485,7 +485,7 @@ private:
     //        then we can precompute it (to 1). For now, however, this should
     //        handle most cases in a simple way.
     // TODO: side effects? (but not traps)
-    return !effects.readsGlobalState() && !effects.hasNonTrapSideEffects();
+    return !effects.readsGlobalState() && !effects.writesGlobalState();
   }
 };
 
