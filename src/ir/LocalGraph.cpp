@@ -182,7 +182,7 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
 
       if (loopTop) {
         // This is a loop top, so we need to add phis.
-std::cout << loopTops.size() << " : " << nextPhiIndex << " : " << phis.size() << '\n';
+//std::cout << loopTops.size() << " : " << nextPhiIndex << " : " << phis.size() << '\n';
         assert(nextPhiIndex < phis.size());
         loopTopPhiIndex[block] = nextPhiIndex;
 //std::cout << "loop top, phi index " << nextPhiIndex << "\n";
@@ -193,7 +193,7 @@ std::cout << loopTops.size() << " : " << nextPhiIndex << " : " << phis.size() <<
           // std::moves etc.?
           phiSets[nextPhiIndex + i] = blockFlow[i];
 
-for (auto* set : phiSets[nextPhiIndex + i]) std::cout << "phi set: " << set << '\n';
+//for (auto* set : phiSets[nextPhiIndex + i]) std::cout << "phi set: " << set << '\n';
           // TODO: if using SmallSet, ensure this actually returns us to the
           //       fast state.
           auto* phi = &phis[nextPhiIndex + i];
@@ -232,7 +232,7 @@ for (auto* set : phiSets[nextPhiIndex + i]) std::cout << "phi set: " << set << '
           for (Index i = 0; i < numLocals; i++) {
             for (auto* set : blockFlow[i]) {
               phiSets[phiIndex + i].insert(set);
-std::cout << "add phi set: " << set << '\n';
+//std::cout << "add phi set: " << set << '\n';
             }
           }
         }
@@ -244,8 +244,8 @@ std::cout << "add phi set: " << set << '\n';
     // left with only actual Sets and not phis.
     for (Index phiIndex = 0; phiIndex < phis.size(); phiIndex++) {
       auto& sets = phiSets[phiIndex];
-std::cout << "expand " << &phis[phiIndex] << " : " << phiIndex << "\n";
-for (auto* set : sets) std::cout << "  pre-phi set: " << set << '\n';
+//std::cout << "expand " << &phis[phiIndex] << " : " << phiIndex << "\n";
+//for (auto* set : sets) std::cout << "  pre-phi set: " << set << '\n';
 
       // Perform multiple iterations, while we still find placeholders. Note
       // that once we see a phi, we never need to expand it again recursively.
@@ -265,19 +265,19 @@ for (auto* set : sets) std::cout << "  pre-phi set: " << set << '\n';
           auto& seenPhiSets = phiSets[getPhiIndex(seenPhi)];
           for (auto* set : seenPhiSets) {
             sets.insert(set);
-std::cout << "  add phi set: " << set << '\n';
+//std::cout << "  add phi set: " << set << '\n';
           }
         }
       }
 
-for (auto* set : sets) std::cout << " post-phi set: " << set << '\n';
+//for (auto* set : sets) std::cout << " post-phi set: " << set << '\n';
     }
 
     // Now that phis are expanded, we can replace them in the getSetses.
     for (auto& kv : getSetses) {
       auto& sets = kv.second;
-std::cout << "expand get " << "\n";
-for (auto* set : sets) std::cout << "  pre-get set: " << set << '\n';
+//std::cout << "expand get " << "\n";
+//for (auto* set : sets) std::cout << "  pre-get set: " << set << '\n';
 
       UniqueDeferredQueue<LocalSet*> seenPhis;
       for (auto* set : sets) {
@@ -287,16 +287,16 @@ for (auto* set : sets) std::cout << "  pre-get set: " << set << '\n';
       }
       while (!seenPhis.empty()) {
         auto* phi = seenPhis.pop();
-std::cout << "  star phi " << phi << " : " << getPhiIndex(phi) <<  "\n";
+//std::cout << "  star phi " << phi << " : " << getPhiIndex(phi) <<  "\n";
         sets.erase(phi);
         auto& currPhiSets = phiSets[getPhiIndex(phi)];
         for (auto* set : currPhiSets) {
           assert(!isPhi(set));
           sets.insert(set);
-std::cout << "  add set: " << set << '\n';
+//std::cout << "  add set: " << set << '\n';
         }
       }
-for (auto* set : sets) std::cout << " post-get set: " << set << '\n';
+//for (auto* set : sets) std::cout << " post-get set: " << set << '\n';
     }
 
 #ifndef NDEBUG
