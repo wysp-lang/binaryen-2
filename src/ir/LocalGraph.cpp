@@ -323,7 +323,7 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
 LocalGraph::LocalGraph(Function* func) : func(func) {
   LocalGraphInternal::Flower flower(getSetses, locations, func);
 
-#if 1 //def LOCAL_GRAPH_DEBUG
+#if 0 //def LOCAL_GRAPH_DEBUG
   std::cout << "LocalGraph::dump\n";
   for (auto& pair : locations) {
     auto* curr = pair.first;
