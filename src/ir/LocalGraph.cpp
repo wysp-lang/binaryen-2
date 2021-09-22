@@ -97,6 +97,9 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
     }
 
     auto numLocals = func->getNumLocals();
+    if (numLocals == 0) {
+      return;
+    }
 
     // Map basic blocks to their indices.
     std::unordered_map<BasicBlock*, Index> blockIndices;
@@ -108,7 +111,7 @@ struct Flower : public CFGWalker<Flower, Visitor<Flower>, Info> {
     // single vector makes it easy to check if something is in fact a Phi.
     std::vector<LocalSet> phis(loopTops.size() * numLocals);
 
-std::cout << "Phis go from " << &phis.front() << ", size " << phis.size() << " to.. " << &phis.back() << '\n';
+//std::cout << "Phis go from " << &phis.front() << ", size " << phis.size() << " to.. " << &phis.back() << '\n';
 
     // Maps a phi index to the list of sets for it.
     std::vector<LocalGraph::Sets> phiSets(phis.size());
@@ -179,9 +182,10 @@ std::cout << "Phis go from " << &phis.front() << ", size " << phis.size() << " t
 
       if (loopTop) {
         // This is a loop top, so we need to add phis.
+std::cout << loopTops.size() << " : " << nextPhiIndex << " : " << phis.size() << '\n';
         assert(nextPhiIndex < phis.size());
         loopTopPhiIndex[block] = nextPhiIndex;
-std::cout << "loop top, phi index " << nextPhiIndex << "\n";
+//std::cout << "loop top, phi index " << nextPhiIndex << "\n";
 
         // The phi's initial values are the current flow, which the phis
         // replace.
@@ -191,7 +195,7 @@ std::cout << "loop top, phi index " << nextPhiIndex << "\n";
           // TODO: if using SmallSet, ensure this actually returns us to the
           //       fast state.
           auto* phi = &phis[nextPhiIndex + i];
-std::cout << "set stuff " << (nextPhiIndex + i) << " / " << phis.size() << " : " << phi << '\n';
+//std::cout << "set stuff " << (nextPhiIndex + i) << " / " << phis.size() << " : " << phi << '\n';
           assert(isPhi(phi));
           blockFlow[i] = {phi};
         }
@@ -204,9 +208,9 @@ std::cout << "set stuff " << (nextPhiIndex + i) << " / " << phis.size() << " : "
         if (auto* get = action->dynCast<LocalGet>()) {
           // This get's sets are all the sets for its index.
           getSetses[get] = blockFlow[get->index];
-for (auto* set : getSetses[get]) {
-  std::cout << "-add set- " << set << '\n';
-}
+//for (auto* set : getSetses[get]) {
+//  std::cout << "-add set- " << set << '\n';
+//}
         } else {
           // This set is now the only set for this index.
           auto* set = action->cast<LocalSet>();
@@ -306,7 +310,7 @@ for (auto* set : getSetses[get]) {
 LocalGraph::LocalGraph(Function* func) : func(func) {
   LocalGraphInternal::Flower flower(getSetses, locations, func);
 
-#if 1 //def LOCAL_GRAPH_DEBUG
+#if 0 //def LOCAL_GRAPH_DEBUG
   std::cout << "LocalGraph::dump\n";
   for (auto& pair : locations) {
     auto* curr = pair.first;
