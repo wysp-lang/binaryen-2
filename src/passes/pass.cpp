@@ -113,6 +113,9 @@ void PassRegistry::registerPasses() {
   registerPass("denan",
                "instrument the wasm to convert NaNs into 0 at runtime",
                createDeNaNPass);
+  registerPass("dertt",
+               "replace rtt-using instructions with static versions",
+               createDeRTTPass);
   registerPass(
     "directize", "turns indirect calls into direct ones", createDirectizePass);
   registerPass(

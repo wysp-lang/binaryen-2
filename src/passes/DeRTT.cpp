@@ -52,7 +52,9 @@ struct DeRTT : public WalkerPass<PostWalker<DeRTT>> {
   // Cast instructions update their intendedType field.
   template<typename T>
   void handleCast(T* curr) {
-    Builder builder(*getModule());
+    if (!curr->rtt) {
+      return;
+    }
 
     if (curr->rtt->type == Type::unreachable) {
       handleUnreachable(curr);
@@ -67,7 +69,9 @@ struct DeRTT : public WalkerPass<PostWalker<DeRTT>> {
   // New/creation instructions update their type field.
   template<typename T>
   void handleNew(T* curr) {
-    Builder builder(*getModule());
+    if (!curr->rtt) {
+      return;
+    }
 
     if (curr->type == Type::unreachable) {
       handleUnreachable(curr);
