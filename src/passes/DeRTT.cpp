@@ -19,6 +19,7 @@
 // the RTT instructions.
 //
 
+#include <ir/effects.h>
 #include <ir/iteration.h>
 #include <pass.h>
 #include <wasm-builder.h>
@@ -45,6 +46,8 @@ struct DeRTT : public WalkerPass<PostWalker<DeRTT>> {
       return;
     }
 
+    checkEffects(curr->rtt);
+
     if (curr->rtt->type == Type::unreachable) {
       handleUnreachable(curr);
       return;
@@ -60,6 +63,8 @@ struct DeRTT : public WalkerPass<PostWalker<DeRTT>> {
     if (!curr->rtt) {
       return;
     }
+
+    checkEffects(curr->rtt);
 
     if (curr->type == Type::unreachable) {
       handleUnreachable(curr);
@@ -83,6 +88,12 @@ struct DeRTT : public WalkerPass<PostWalker<DeRTT>> {
       items.push_back(builder.makeUnreachable());
     }
     replaceCurrent(builder.makeBlock(items));
+  }
+
+  void checkEffects(Expression* rtt) {
+    if (EffectAnalyzer(getPassOptions(), *getModule(), rtt).hasUnremovableSideEffects()) {
+      Fatal() << "TODO: handle RTT effects in deRTT";
+    }
   }
 };
 
