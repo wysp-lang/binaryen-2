@@ -22,6 +22,7 @@ set(passes_SOURCES
   DeadCodeElimination.cpp
   DeAlign.cpp
   DeNaN.cpp
+  DeRTT.cpp
   Directize.cpp
   DuplicateImportElimination.cpp
   DuplicateFunctionElimination.cpp
