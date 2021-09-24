@@ -415,7 +415,7 @@ void PassRunner::addDefaultOptimizationPasses() {
   addDefaultGlobalOptimizationPostPasses();
 }
 
-void PassRunner::addDefaultFunctionOptimizationPasses() {
+void PassRunner::addDefaultFunctionOptimizationPasses(PassAdditionFlags flags) {
   // All the additions here are optional if DWARF must be preserved. That is,
   // when DWARF is relevant we run fewer optimizations.
   // FIXME: support DWARF in all of them.
@@ -445,8 +445,12 @@ void PassRunner::addDefaultFunctionOptimizationPasses() {
   if (options.optimizeLevel >= 2 || options.shrinkLevel >= 2) {
     addIfNoDWARFIssues("pick-load-signs");
   }
-  // early propagation
-  if (options.optimizeLevel >= 3 || options.shrinkLevel >= 2) {
+  // Early propagation. The -propagate variation is fairly costly to run, so
+  // only do so in higher optimization levels. Also do it after inlining, as
+  // we'll only be optimizing a smaller number of functions then and inlining
+  // often opens up good propagation opportunities.
+  if (options.optimizeLevel >= 3 || options.shrinkLevel >= 2 ||
+      (flags & AfterInlining)) {
     addIfNoDWARFIssues("precompute-propagate");
   } else {
     addIfNoDWARFIssues("precompute");

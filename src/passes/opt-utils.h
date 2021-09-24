@@ -29,12 +29,12 @@ namespace wasm {
 
 namespace OptUtils {
 
-// Run useful optimizations after inlining new code into a set
-// of functions.
+// Run useful optimizations after inlining new code into a set of functions.
 inline void optimizeAfterInlining(const std::unordered_set<Function*>& funcs,
                                   Module* module,
                                   PassRunner* parentRunner) {
-  // save the full list of functions on the side
+  // Save the full list of functions on the side, then run just on the relevant
+  // ones.
   std::vector<std::unique_ptr<Function>> all;
   all.swap(module->functions);
   module->updateMaps();
@@ -43,12 +43,11 @@ inline void optimizeAfterInlining(const std::unordered_set<Function*>& funcs,
   }
   PassRunner runner(module, parentRunner->options);
   runner.setIsNested(true);
-  runner.setValidateGlobally(false); // not a full valid module
-  // this is especially useful after inlining
-  runner.add("precompute-propagate");
-  runner.addDefaultFunctionOptimizationPasses(); // do all the usual stuff
+  // Note that this is not a full valid module
+  runner.setValidateGlobally(false);
+  runner.addDefaultFunctionOptimizationPasses(PassRunner::AfterInlining);
   runner.run();
-  // restore all the funcs
+  // Restore the original functions to the module.
   for (auto& func : module->functions) {
     func.release();
   }

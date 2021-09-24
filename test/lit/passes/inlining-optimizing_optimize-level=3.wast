@@ -4428,7 +4428,7 @@
  ;; CHECK-NEXT:           )
  ;; CHECK-NEXT:          )
  ;; CHECK-NEXT:         )
- ;; CHECK-NEXT:         (local.set $17
+ ;; CHECK-NEXT:         (local.set $16
  ;; CHECK-NEXT:          (select
  ;; CHECK-NEXT:           (local.get $8)
  ;; CHECK-NEXT:           (i32.const -1)
@@ -4445,7 +4445,7 @@
  ;; CHECK-NEXT:         (local.set $6
  ;; CHECK-NEXT:          (local.get $9)
  ;; CHECK-NEXT:         )
- ;; CHECK-NEXT:         (local.set $17
+ ;; CHECK-NEXT:         (local.set $16
  ;; CHECK-NEXT:          (i32.const -1)
  ;; CHECK-NEXT:         )
  ;; CHECK-NEXT:         (local.get $1)
@@ -4619,7 +4619,7 @@
  ;; CHECK-NEXT:            (local.set $8
  ;; CHECK-NEXT:             (i32.const 1)
  ;; CHECK-NEXT:            )
- ;; CHECK-NEXT:            (local.set $16
+ ;; CHECK-NEXT:            (local.set $17
  ;; CHECK-NEXT:             (i32.load
  ;; CHECK-NEXT:              (local.get $6)
  ;; CHECK-NEXT:             )
@@ -4651,7 +4651,7 @@
  ;; CHECK-NEXT:             (local.set $11
  ;; CHECK-NEXT:              (local.get $6)
  ;; CHECK-NEXT:             )
- ;; CHECK-NEXT:             (local.set $16
+ ;; CHECK-NEXT:             (local.set $17
  ;; CHECK-NEXT:              (i32.const 0)
  ;; CHECK-NEXT:             )
  ;; CHECK-NEXT:             (br $do-once5
@@ -4659,7 +4659,7 @@
  ;; CHECK-NEXT:             )
  ;; CHECK-NEXT:            )
  ;; CHECK-NEXT:           )
- ;; CHECK-NEXT:           (local.set $16
+ ;; CHECK-NEXT:           (local.set $17
  ;; CHECK-NEXT:            (i32.load
  ;; CHECK-NEXT:             (local.tee $11
  ;; CHECK-NEXT:              (i32.and
@@ -4690,14 +4690,14 @@
  ;; CHECK-NEXT:         (local.set $9
  ;; CHECK-NEXT:          (if (result i32)
  ;; CHECK-NEXT:           (i32.lt_s
- ;; CHECK-NEXT:            (local.get $16)
+ ;; CHECK-NEXT:            (local.get $17)
  ;; CHECK-NEXT:            (i32.const 0)
  ;; CHECK-NEXT:           )
  ;; CHECK-NEXT:           (block (result i32)
- ;; CHECK-NEXT:            (local.set $16
+ ;; CHECK-NEXT:            (local.set $17
  ;; CHECK-NEXT:             (i32.sub
  ;; CHECK-NEXT:              (i32.const 0)
- ;; CHECK-NEXT:              (local.get $16)
+ ;; CHECK-NEXT:              (local.get $17)
  ;; CHECK-NEXT:             )
  ;; CHECK-NEXT:            )
  ;; CHECK-NEXT:            (i32.or
@@ -4783,7 +4783,7 @@
  ;; CHECK-NEXT:            (local.set $9
  ;; CHECK-NEXT:             (local.get $1)
  ;; CHECK-NEXT:            )
- ;; CHECK-NEXT:            (local.set $16
+ ;; CHECK-NEXT:            (local.set $17
  ;; CHECK-NEXT:             (local.get $6)
  ;; CHECK-NEXT:            )
  ;; CHECK-NEXT:            (local.get $10)
@@ -4794,7 +4794,7 @@
  ;; CHECK-NEXT:          (local.set $9
  ;; CHECK-NEXT:           (local.get $1)
  ;; CHECK-NEXT:          )
- ;; CHECK-NEXT:          (local.set $16
+ ;; CHECK-NEXT:          (local.set $17
  ;; CHECK-NEXT:           (i32.const 0)
  ;; CHECK-NEXT:          )
  ;; CHECK-NEXT:          (local.get $10)
@@ -5092,7 +5092,7 @@
  ;; CHECK-NEXT:      )
  ;; CHECK-NEXT:      (local.set $19
  ;; CHECK-NEXT:       (i32.gt_s
- ;; CHECK-NEXT:        (local.get $17)
+ ;; CHECK-NEXT:        (local.get $16)
  ;; CHECK-NEXT:        (i32.const -1)
  ;; CHECK-NEXT:       )
  ;; CHECK-NEXT:      )
@@ -5124,7 +5124,7 @@
  ;; CHECK-NEXT:             (i32.add
  ;; CHECK-NEXT:              (local.get $4)
  ;; CHECK-NEXT:              (i32.shl
- ;; CHECK-NEXT:               (local.get $17)
+ ;; CHECK-NEXT:               (local.get $16)
  ;; CHECK-NEXT:               (i32.const 2)
  ;; CHECK-NEXT:              )
  ;; CHECK-NEXT:             )
@@ -5136,7 +5136,7 @@
  ;; CHECK-NEXT:               (i32.add
  ;; CHECK-NEXT:                (local.get $3)
  ;; CHECK-NEXT:                (i32.shl
- ;; CHECK-NEXT:                 (local.get $17)
+ ;; CHECK-NEXT:                 (local.get $16)
  ;; CHECK-NEXT:                 (i32.const 3)
  ;; CHECK-NEXT:                )
  ;; CHECK-NEXT:               )
@@ -5222,7 +5222,7 @@
  ;; CHECK-NEXT:                 (call $_pad
  ;; CHECK-NEXT:                  (local.get $0)
  ;; CHECK-NEXT:                  (i32.const 32)
- ;; CHECK-NEXT:                  (local.get $16)
+ ;; CHECK-NEXT:                  (local.get $17)
  ;; CHECK-NEXT:                  (local.tee $7
  ;; CHECK-NEXT:                   (block $__rjti$7 (result i32)
  ;; CHECK-NEXT:                    (block $__rjti$6
@@ -5801,7 +5801,7 @@
  ;; CHECK-NEXT:                            (call $_pad
  ;; CHECK-NEXT:                             (local.get $0)
  ;; CHECK-NEXT:                             (i32.const 32)
- ;; CHECK-NEXT:                             (local.get $16)
+ ;; CHECK-NEXT:                             (local.get $17)
  ;; CHECK-NEXT:                             (i32.const 0)
  ;; CHECK-NEXT:                             (local.get $9)
  ;; CHECK-NEXT:                            )
@@ -6124,7 +6124,7 @@
  ;; CHECK-NEXT:                                (i32.const 1)
  ;; CHECK-NEXT:                               )
  ;; CHECK-NEXT:                              )
- ;; CHECK-NEXT:                              (local.set $17
+ ;; CHECK-NEXT:                              (local.set $16
  ;; CHECK-NEXT:                               (i32.eqz
  ;; CHECK-NEXT:                                (i32.and
  ;; CHECK-NEXT:                                 (local.get $9)
@@ -6200,7 +6200,7 @@
  ;; CHECK-NEXT:                                 )
  ;; CHECK-NEXT:                                 (if (result i32)
  ;; CHECK-NEXT:                                  (i32.and
- ;; CHECK-NEXT:                                   (local.get $17)
+ ;; CHECK-NEXT:                                   (local.get $16)
  ;; CHECK-NEXT:                                   (i32.and
  ;; CHECK-NEXT:                                    (local.get $15)
  ;; CHECK-NEXT:                                    (f64.eq
@@ -6234,7 +6234,7 @@
  ;; CHECK-NEXT:                              (call $_pad
  ;; CHECK-NEXT:                               (local.get $0)
  ;; CHECK-NEXT:                               (i32.const 32)
- ;; CHECK-NEXT:                               (local.get $16)
+ ;; CHECK-NEXT:                               (local.get $17)
  ;; CHECK-NEXT:                               (local.tee $7
  ;; CHECK-NEXT:                                (i32.add
  ;; CHECK-NEXT:                                 (local.tee $6
@@ -6293,7 +6293,7 @@
  ;; CHECK-NEXT:                              (call $_pad
  ;; CHECK-NEXT:                               (local.get $0)
  ;; CHECK-NEXT:                               (i32.const 48)
- ;; CHECK-NEXT:                               (local.get $16)
+ ;; CHECK-NEXT:                               (local.get $17)
  ;; CHECK-NEXT:                               (local.get $7)
  ;; CHECK-NEXT:                               (i32.xor
  ;; CHECK-NEXT:                                (local.get $9)
@@ -6361,7 +6361,7 @@
  ;; CHECK-NEXT:                              (call $_pad
  ;; CHECK-NEXT:                               (local.get $0)
  ;; CHECK-NEXT:                               (i32.const 32)
- ;; CHECK-NEXT:                               (local.get $16)
+ ;; CHECK-NEXT:                               (local.get $17)
  ;; CHECK-NEXT:                               (local.get $7)
  ;; CHECK-NEXT:                               (i32.xor
  ;; CHECK-NEXT:                                (local.get $9)
@@ -6370,11 +6370,11 @@
  ;; CHECK-NEXT:                              )
  ;; CHECK-NEXT:                              (br $do-once49
  ;; CHECK-NEXT:                               (select
- ;; CHECK-NEXT:                                (local.get $16)
+ ;; CHECK-NEXT:                                (local.get $17)
  ;; CHECK-NEXT:                                (local.get $7)
  ;; CHECK-NEXT:                                (i32.lt_s
  ;; CHECK-NEXT:                                 (local.get $7)
- ;; CHECK-NEXT:                                 (local.get $16)
+ ;; CHECK-NEXT:                                 (local.get $17)
  ;; CHECK-NEXT:                                )
  ;; CHECK-NEXT:                               )
  ;; CHECK-NEXT:                              )
@@ -6518,31 +6518,32 @@
  ;; CHECK-NEXT:                                   (local.get $12)
  ;; CHECK-NEXT:                                   (call $___uremdi3
  ;; CHECK-NEXT:                                    (block (result i32)
+ ;; CHECK-NEXT:                                     (local.set $16
+ ;; CHECK-NEXT:                                      (call $_bitshift64Shl
+ ;; CHECK-NEXT:                                       (i32.load
+ ;; CHECK-NEXT:                                        (local.get $12)
+ ;; CHECK-NEXT:                                       )
+ ;; CHECK-NEXT:                                       (i32.const 0)
+ ;; CHECK-NEXT:                                       (local.get $19)
+ ;; CHECK-NEXT:                                      )
+ ;; CHECK-NEXT:                                     )
  ;; CHECK-NEXT:                                     (global.set $tempRet0
  ;; CHECK-NEXT:                                      (i32.add
- ;; CHECK-NEXT:                                       (i32.gt_u
- ;; CHECK-NEXT:                                        (local.tee $17
- ;; CHECK-NEXT:                                         (call $_bitshift64Shl
- ;; CHECK-NEXT:                                          (i32.load
- ;; CHECK-NEXT:                                           (local.get $12)
- ;; CHECK-NEXT:                                          )
- ;; CHECK-NEXT:                                          (i32.const 0)
- ;; CHECK-NEXT:                                          (local.get $19)
- ;; CHECK-NEXT:                                         )
- ;; CHECK-NEXT:                                        )
+ ;; CHECK-NEXT:                                       (global.get $tempRet0)
+ ;; CHECK-NEXT:                                       (i32.lt_u
  ;; CHECK-NEXT:                                        (local.tee $10
  ;; CHECK-NEXT:                                         (i32.add
  ;; CHECK-NEXT:                                          (local.get $10)
- ;; CHECK-NEXT:                                          (local.get $17)
+ ;; CHECK-NEXT:                                          (local.get $16)
  ;; CHECK-NEXT:                                         )
  ;; CHECK-NEXT:                                        )
+ ;; CHECK-NEXT:                                        (local.get $16)
  ;; CHECK-NEXT:                                       )
- ;; CHECK-NEXT:                                       (global.get $tempRet0)
  ;; CHECK-NEXT:                                      )
  ;; CHECK-NEXT:                                     )
  ;; CHECK-NEXT:                                     (local.get $10)
  ;; CHECK-NEXT:                                    )
- ;; CHECK-NEXT:                                    (local.tee $17
+ ;; CHECK-NEXT:                                    (local.tee $16
  ;; CHECK-NEXT:                                     (global.get $tempRet0)
  ;; CHECK-NEXT:                                    )
  ;; CHECK-NEXT:                                    (i32.const 1000000000)
@@ -6552,7 +6553,7 @@
  ;; CHECK-NEXT:                                  (local.set $10
  ;; CHECK-NEXT:                                   (call $___udivdi3
  ;; CHECK-NEXT:                                    (local.get $10)
- ;; CHECK-NEXT:                                    (local.get $17)
+ ;; CHECK-NEXT:                                    (local.get $16)
  ;; CHECK-NEXT:                                    (i32.const 1000000000)
  ;; CHECK-NEXT:                                    (i32.const 0)
  ;; CHECK-NEXT:                                   )
@@ -6634,7 +6635,7 @@
  ;; CHECK-NEXT:                              (local.get $8)
  ;; CHECK-NEXT:                             )
  ;; CHECK-NEXT:                            )
- ;; CHECK-NEXT:                            (local.set $17
+ ;; CHECK-NEXT:                            (local.set $16
  ;; CHECK-NEXT:                             (select
  ;; CHECK-NEXT:                              (i32.const 6)
  ;; CHECK-NEXT:                              (local.get $6)
@@ -6654,7 +6655,7 @@
  ;; CHECK-NEXT:                               (i32.add
  ;; CHECK-NEXT:                                (i32.div_s
  ;; CHECK-NEXT:                                 (i32.add
- ;; CHECK-NEXT:                                  (local.get $17)
+ ;; CHECK-NEXT:                                  (local.get $16)
  ;; CHECK-NEXT:                                  (i32.const 25)
  ;; CHECK-NEXT:                                 )
  ;; CHECK-NEXT:                                 (i32.const 9)
@@ -6923,7 +6924,7 @@
  ;; CHECK-NEXT:                               (local.tee $6
  ;; CHECK-NEXT:                                (i32.add
  ;; CHECK-NEXT:                                 (i32.sub
- ;; CHECK-NEXT:                                  (local.get $17)
+ ;; CHECK-NEXT:                                  (local.get $16)
  ;; CHECK-NEXT:                                  (select
  ;; CHECK-NEXT:                                   (local.get $7)
  ;; CHECK-NEXT:                                   (i32.const 0)
@@ -6938,7 +6939,7 @@
  ;; CHECK-NEXT:                                   (i32.and
  ;; CHECK-NEXT:                                    (local.tee $31
  ;; CHECK-NEXT:                                     (i32.ne
- ;; CHECK-NEXT:                                      (local.get $17)
+ ;; CHECK-NEXT:                                      (local.get $16)
  ;; CHECK-NEXT:                                      (i32.const 0)
  ;; CHECK-NEXT:                                     )
  ;; CHECK-NEXT:                                    )
@@ -7339,7 +7340,7 @@
  ;; CHECK-NEXT:                            (call $_pad
  ;; CHECK-NEXT:                             (local.get $0)
  ;; CHECK-NEXT:                             (i32.const 32)
- ;; CHECK-NEXT:                             (local.get $16)
+ ;; CHECK-NEXT:                             (local.get $17)
  ;; CHECK-NEXT:                             (local.tee $8
  ;; CHECK-NEXT:                              (i32.add
  ;; CHECK-NEXT:                               (i32.add
@@ -7357,7 +7358,7 @@
  ;; CHECK-NEXT:                                          (i32.eqz
  ;; CHECK-NEXT:                                           (local.get $31)
  ;; CHECK-NEXT:                                          )
- ;; CHECK-NEXT:                                          (local.get $17)
+ ;; CHECK-NEXT:                                          (local.get $16)
  ;; CHECK-NEXT:                                         )
  ;; CHECK-NEXT:                                        )
  ;; CHECK-NEXT:                                        (local.get $8)
@@ -7368,7 +7369,7 @@
  ;; CHECK-NEXT:                                       )
  ;; CHECK-NEXT:                                      )
  ;; CHECK-NEXT:                                      (block (result i32)
- ;; CHECK-NEXT:                                       (local.set $17
+ ;; CHECK-NEXT:                                       (local.set $16
  ;; CHECK-NEXT:                                        (i32.sub
  ;; CHECK-NEXT:                                         (i32.sub
  ;; CHECK-NEXT:                                          (local.get $5)
@@ -7383,7 +7384,7 @@
  ;; CHECK-NEXT:                                       )
  ;; CHECK-NEXT:                                      )
  ;; CHECK-NEXT:                                      (block (result i32)
- ;; CHECK-NEXT:                                       (local.set $17
+ ;; CHECK-NEXT:                                       (local.set $16
  ;; CHECK-NEXT:                                        (i32.sub
  ;; CHECK-NEXT:                                         (local.get $5)
  ;; CHECK-NEXT:                                         (i32.const 1)
@@ -7398,7 +7399,7 @@
  ;; CHECK-NEXT:                                    )
  ;; CHECK-NEXT:                                    (drop
  ;; CHECK-NEXT:                                     (br_if $do-once91
- ;; CHECK-NEXT:                                      (local.get $17)
+ ;; CHECK-NEXT:                                      (local.get $16)
  ;; CHECK-NEXT:                                      (local.tee $21
  ;; CHECK-NEXT:                                       (i32.and
  ;; CHECK-NEXT:                                        (local.get $9)
@@ -7508,7 +7509,7 @@
  ;; CHECK-NEXT:                                       (i32.const 0)
  ;; CHECK-NEXT:                                      )
  ;; CHECK-NEXT:                                      (select
- ;; CHECK-NEXT:                                       (local.get $17)
+ ;; CHECK-NEXT:                                       (local.get $16)
  ;; CHECK-NEXT:                                       (local.tee $5
  ;; CHECK-NEXT:                                        (select
  ;; CHECK-NEXT:                                         (i32.const 0)
@@ -7526,7 +7527,7 @@
  ;; CHECK-NEXT:                                       )
  ;; CHECK-NEXT:                                       (i32.gt_s
  ;; CHECK-NEXT:                                        (local.get $5)
- ;; CHECK-NEXT:                                        (local.get $17)
+ ;; CHECK-NEXT:                                        (local.get $16)
  ;; CHECK-NEXT:                                       )
  ;; CHECK-NEXT:                                      )
  ;; CHECK-NEXT:                                     )
@@ -7535,7 +7536,7 @@
  ;; CHECK-NEXT:                                       (i32.const 0)
  ;; CHECK-NEXT:                                      )
  ;; CHECK-NEXT:                                      (select
- ;; CHECK-NEXT:                                       (local.get $17)
+ ;; CHECK-NEXT:                                       (local.get $16)
  ;; CHECK-NEXT:                                       (local.tee $5
  ;; CHECK-NEXT:                                        (select
  ;; CHECK-NEXT:                                         (i32.const 0)
@@ -7556,7 +7557,7 @@
  ;; CHECK-NEXT:                                       )
  ;; CHECK-NEXT:                                       (i32.gt_s
  ;; CHECK-NEXT:                                        (local.get $5)
- ;; CHECK-NEXT:                                        (local.get $17)
+ ;; CHECK-NEXT:                                        (local.get $16)
  ;; CHECK-NEXT:                                       )
  ;; CHECK-NEXT:                                      )
  ;; CHECK-NEXT:                                     )
@@ -7572,7 +7573,7 @@
  ;; CHECK-NEXT:                                    (local.set $7
  ;; CHECK-NEXT:                                     (local.get $15)
  ;; CHECK-NEXT:                                    )
- ;; CHECK-NEXT:                                    (local.get $17)
+ ;; CHECK-NEXT:                                    (local.get $16)
  ;; CHECK-NEXT:                                   )
  ;; CHECK-NEXT:                                  )
  ;; CHECK-NEXT:                                 )
@@ -7582,7 +7583,7 @@
  ;; CHECK-NEXT:                                 )
  ;; CHECK-NEXT:                                )
  ;; CHECK-NEXT:                                (i32.ne
- ;; CHECK-NEXT:                                 (local.tee $17
+ ;; CHECK-NEXT:                                 (local.tee $16
  ;; CHECK-NEXT:                                  (i32.or
  ;; CHECK-NEXT:                                   (local.get $5)
  ;; CHECK-NEXT:                                   (local.get $21)
@@ -7742,7 +7743,7 @@
  ;; CHECK-NEXT:                            (call $_pad
  ;; CHECK-NEXT:                             (local.get $0)
  ;; CHECK-NEXT:                             (i32.const 48)
- ;; CHECK-NEXT:                             (local.get $16)
+ ;; CHECK-NEXT:                             (local.get $17)
  ;; CHECK-NEXT:                             (local.get $8)
  ;; CHECK-NEXT:                             (i32.xor
  ;; CHECK-NEXT:                              (local.get $9)
@@ -7867,7 +7868,7 @@
  ;; CHECK-NEXT:                               )
  ;; CHECK-NEXT:                              )
  ;; CHECK-NEXT:                              (if
- ;; CHECK-NEXT:                               (local.get $17)
+ ;; CHECK-NEXT:                               (local.get $16)
  ;; CHECK-NEXT:                               (if
  ;; CHECK-NEXT:                                (i32.eqz
  ;; CHECK-NEXT:                                 (i32.and
@@ -8025,7 +8026,7 @@
  ;; CHECK-NEXT:                                  (i32.const -1)
  ;; CHECK-NEXT:                                 )
  ;; CHECK-NEXT:                                 (block (result i32)
- ;; CHECK-NEXT:                                  (local.set $17
+ ;; CHECK-NEXT:                                  (local.set $16
  ;; CHECK-NEXT:                                   (i32.eqz
  ;; CHECK-NEXT:                                    (local.get $21)
  ;; CHECK-NEXT:                                   )
@@ -8100,7 +8101,7 @@
  ;; CHECK-NEXT:                                      )
  ;; CHECK-NEXT:                                      (br_if $do-once115
  ;; CHECK-NEXT:                                       (i32.and
- ;; CHECK-NEXT:                                        (local.get $17)
+ ;; CHECK-NEXT:                                        (local.get $16)
  ;; CHECK-NEXT:                                        (i32.lt_s
  ;; CHECK-NEXT:                                         (local.get $7)
  ;; CHECK-NEXT:                                         (i32.const 1)
@@ -8235,7 +8236,7 @@
  ;; CHECK-NEXT:                            (call $_pad
  ;; CHECK-NEXT:                             (local.get $0)
  ;; CHECK-NEXT:                             (i32.const 32)
- ;; CHECK-NEXT:                             (local.get $16)
+ ;; CHECK-NEXT:                             (local.get $17)
  ;; CHECK-NEXT:                             (local.get $8)
  ;; CHECK-NEXT:                             (i32.xor
  ;; CHECK-NEXT:                              (local.get $9)
@@ -8243,11 +8244,11 @@
  ;; CHECK-NEXT:                             )
  ;; CHECK-NEXT:                            )
  ;; CHECK-NEXT:                            (select
- ;; CHECK-NEXT:                             (local.get $16)
+ ;; CHECK-NEXT:                             (local.get $17)
  ;; CHECK-NEXT:                             (local.get $8)
  ;; CHECK-NEXT:                             (i32.lt_s
  ;; CHECK-NEXT:                              (local.get $8)
- ;; CHECK-NEXT:                              (local.get $16)
+ ;; CHECK-NEXT:                              (local.get $17)
  ;; CHECK-NEXT:                             )
  ;; CHECK-NEXT:                            )
  ;; CHECK-NEXT:                           )
@@ -8255,7 +8256,7 @@
  ;; CHECK-NEXT:                            (call $_pad
  ;; CHECK-NEXT:                             (local.get $0)
  ;; CHECK-NEXT:                             (i32.const 32)
- ;; CHECK-NEXT:                             (local.get $16)
+ ;; CHECK-NEXT:                             (local.get $17)
  ;; CHECK-NEXT:                             (local.tee $7
  ;; CHECK-NEXT:                              (i32.add
  ;; CHECK-NEXT:                               (local.tee $8
@@ -8342,7 +8343,7 @@
  ;; CHECK-NEXT:                            (call $_pad
  ;; CHECK-NEXT:                             (local.get $0)
  ;; CHECK-NEXT:                             (i32.const 32)
- ;; CHECK-NEXT:                             (local.get $16)
+ ;; CHECK-NEXT:                             (local.get $17)
  ;; CHECK-NEXT:                             (local.get $7)
  ;; CHECK-NEXT:                             (i32.xor
  ;; CHECK-NEXT:                              (local.get $9)
@@ -8350,11 +8351,11 @@
  ;; CHECK-NEXT:                             )
  ;; CHECK-NEXT:                            )
  ;; CHECK-NEXT:                            (select
- ;; CHECK-NEXT:                             (local.get $16)
+ ;; CHECK-NEXT:                             (local.get $17)
  ;; CHECK-NEXT:                             (local.get $7)
  ;; CHECK-NEXT:                             (i32.lt_s
  ;; CHECK-NEXT:                              (local.get $7)
- ;; CHECK-NEXT:                              (local.get $16)
+ ;; CHECK-NEXT:                              (local.get $17)
  ;; CHECK-NEXT:                             )
  ;; CHECK-NEXT:                            )
  ;; CHECK-NEXT:                           )
@@ -8811,7 +8812,7 @@
  ;; CHECK-NEXT:                    (call $_pad
  ;; CHECK-NEXT:                     (local.get $0)
  ;; CHECK-NEXT:                     (i32.const 32)
- ;; CHECK-NEXT:                     (local.get $16)
+ ;; CHECK-NEXT:                     (local.get $17)
  ;; CHECK-NEXT:                     (local.get $5)
  ;; CHECK-NEXT:                     (local.get $9)
  ;; CHECK-NEXT:                    )
@@ -8904,11 +8905,11 @@
  ;; CHECK-NEXT:                 )
  ;; CHECK-NEXT:                 (local.set $11
  ;; CHECK-NEXT:                  (select
- ;; CHECK-NEXT:                   (local.get $16)
+ ;; CHECK-NEXT:                   (local.get $17)
  ;; CHECK-NEXT:                   (local.get $7)
  ;; CHECK-NEXT:                   (i32.lt_s
  ;; CHECK-NEXT:                    (local.get $7)
- ;; CHECK-NEXT:                    (local.get $16)
+ ;; CHECK-NEXT:                    (local.get $17)
  ;; CHECK-NEXT:                   )
  ;; CHECK-NEXT:                  )
  ;; CHECK-NEXT:                 )
@@ -8991,10 +8992,10 @@
  ;; CHECK-NEXT:           (local.get $8)
  ;; CHECK-NEXT:          )
  ;; CHECK-NEXT:         )
- ;; CHECK-NEXT:         (local.get $16)
+ ;; CHECK-NEXT:         (local.get $17)
  ;; CHECK-NEXT:         (i32.gt_s
  ;; CHECK-NEXT:          (local.get $5)
- ;; CHECK-NEXT:          (local.get $16)
+ ;; CHECK-NEXT:          (local.get $17)
  ;; CHECK-NEXT:         )
  ;; CHECK-NEXT:        )
  ;; CHECK-NEXT:       )
@@ -31085,22 +31086,18 @@
 ;; CHECK-NEXT:     (i32.const 48)
 ;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
-;; CHECK-NEXT:   (local.set $1
+;; CHECK-NEXT:   (local.set $0
 ;; CHECK-NEXT:    (i32.div_u
-;; CHECK-NEXT:     (local.get $0)
+;; CHECK-NEXT:     (local.tee $1
+;; CHECK-NEXT:      (local.get $0)
+;; CHECK-NEXT:     )
 ;; CHECK-NEXT:     (i32.const 10)
 ;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
-;; CHECK-NEXT:   (if
+;; CHECK-NEXT:   (br_if $while-in1
 ;; CHECK-NEXT:    (i32.ge_u
-;; CHECK-NEXT:     (local.get $0)
+;; CHECK-NEXT:     (local.get $1)
 ;; CHECK-NEXT:     (i32.const 10)
-;; CHECK-NEXT:    )
-;; CHECK-NEXT:    (block
-;; CHECK-NEXT:     (local.set $0
-;; CHECK-NEXT:      (local.get $1)
-;; CHECK-NEXT:     )
-;; CHECK-NEXT:     (br $while-in1)
 ;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )

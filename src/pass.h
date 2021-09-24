@@ -243,9 +243,16 @@ struct PassRunner {
   // what -O does.
   void addDefaultOptimizationPasses();
 
+  enum PassAdditionFlags {
+    Normal = 0,
+    // After inlining we may choose to run slightly different passes. For
+    // example, inlining often opens up more constant propagation opportunities.
+    AfterInlining = 1
+  };
+
   // Adds the default optimization passes that work on
   // individual functions.
-  void addDefaultFunctionOptimizationPasses();
+  void addDefaultFunctionOptimizationPasses(PassAdditionFlags flags = Normal);
 
   // Adds the default optimization passes that work on
   // entire modules as a whole, and make sense to
