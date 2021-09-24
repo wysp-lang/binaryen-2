@@ -91,7 +91,8 @@ struct DeRTT : public WalkerPass<PostWalker<DeRTT>> {
   }
 
   void checkEffects(Expression* rtt) {
-    if (EffectAnalyzer(getPassOptions(), *getModule(), rtt).hasUnremovableSideEffects()) {
+    if (EffectAnalyzer(getPassOptions(), *getModule(), rtt)
+          .hasUnremovableSideEffects()) {
       Fatal() << "TODO: handle RTT effects in deRTT";
     }
   }
