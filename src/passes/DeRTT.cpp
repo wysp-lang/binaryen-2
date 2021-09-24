@@ -27,31 +27,20 @@
 namespace wasm {
 
 struct DeRTT : public WalkerPass<PostWalker<DeRTT>> {
-  void visitRefTest(RefTest* curr) {
-    handleCast(curr);
-  }
-  void visitRefCast(RefCast* curr) {
-    handleCast(curr);
-  }
+  void visitRefTest(RefTest* curr) { handleCast(curr); }
+  void visitRefCast(RefCast* curr) { handleCast(curr); }
   void visitBrOn(BrOn* curr) {
     if (curr->op == BrOnCast || curr->op == BrOnCastFail) {
       handleCast(curr);
     }
   }
 
-  void visitStructNew(StructNew* curr) {
-    handleNew(curr);
-  }
-  void visitArrayNew(ArrayNew* curr) {
-    handleNew(curr);
-  }
-  void visitArrayInit(ArrayInit* curr) {
-    handleNew(curr);
-  }
+  void visitStructNew(StructNew* curr) { handleNew(curr); }
+  void visitArrayNew(ArrayNew* curr) { handleNew(curr); }
+  void visitArrayInit(ArrayInit* curr) { handleNew(curr); }
 
   // Cast instructions update their intendedType field.
-  template<typename T>
-  void handleCast(T* curr) {
+  template<typename T> void handleCast(T* curr) {
     if (!curr->rtt) {
       return;
     }
@@ -67,8 +56,7 @@ struct DeRTT : public WalkerPass<PostWalker<DeRTT>> {
   }
 
   // New/creation instructions update their type field.
-  template<typename T>
-  void handleNew(T* curr) {
+  template<typename T> void handleNew(T* curr) {
     if (!curr->rtt) {
       return;
     }
@@ -83,8 +71,7 @@ struct DeRTT : public WalkerPass<PostWalker<DeRTT>> {
   }
 
   // If the RTT is unreachable, emit the children without the RTT.
-  template<typename T>
-  void handleUnreachable(T* curr) {
+  template<typename T> void handleUnreachable(T* curr) {
     Builder builder(*getModule());
     std::vector<Expression*> items;
     for (auto* child : ChildIterator(curr)) {
