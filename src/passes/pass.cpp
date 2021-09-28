@@ -420,6 +420,18 @@ void PassRunner::addDefaultFunctionOptimizationPasses(PassAdditionFlags flags) {
   // when DWARF is relevant we run fewer optimizations.
   // FIXME: support DWARF in all of them.
 
+  // precompute-propagate variation is fairly costly to run, so only do so in
+  // higher optimization levels.
+  bool precomputePropagate =
+    options.optimizeLevel >= 3 || options.shrinkLevel >= 2;
+
+  // If we have just inlined, then constant propagation can be especially
+  // useful. If we will run precompute-propagate later anyhow, then that is
+  // fine; if not, then do that here before anything else.
+  if ((flags & AfterInlining) && !precomputePropagate) {
+    addIfNoDWARFIssues("precompute-propagate");
+  }
+
   // Untangling to semi-ssa form is helpful (but best to ignore merges
   // so as to not introduce new copies).
   if (options.optimizeLevel >= 3 || options.shrinkLevel >= 1) {
@@ -445,12 +457,8 @@ void PassRunner::addDefaultFunctionOptimizationPasses(PassAdditionFlags flags) {
   if (options.optimizeLevel >= 2 || options.shrinkLevel >= 2) {
     addIfNoDWARFIssues("pick-load-signs");
   }
-  // Early propagation. The -propagate variation is fairly costly to run, so
-  // only do so in higher optimization levels. Also do it after inlining, as
-  // we'll only be optimizing a smaller number of functions then and inlining
-  // often opens up good propagation opportunities.
-  if (options.optimizeLevel >= 3 || options.shrinkLevel >= 2 ||
-      (flags & AfterInlining)) {
+  // Early propagation.
+  if (options.optimizeLevel >= 3 || options.shrinkLevel >= 2) {
     addIfNoDWARFIssues("precompute-propagate");
   } else {
     addIfNoDWARFIssues("precompute");
