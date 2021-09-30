@@ -77,21 +77,44 @@ struct VTableToIndexes : public Pass {
       typeToIndex[types[i]] = i;
     }
 
+    TypeBuilder typeBuilder(types.size());
+
     auto getNewType = [&](Type type, bool isStructField) {
       if (type.isBasic()) {
         return type;
       }
-      if (type.isFunction()) {
-        if (isStructField) {
-          // This is exactly what we are looking to change!
-          return Type::i32;
-        }
-        ..
+      if (type.isReference()) {
+        return typeBuilder.getTempRefType(
+          typeBuilder.getTempHeapType(typeToIndex.at(type)),
+          type.getNullability()
+        );
       }
-      .. 
+      if (type.isRtt()) {
+        auto rtt = type.getRtt();
+        auto newRtt = rtt;
+        newRtt.heapType = 
+          typeBuilder.getTempHeapType(typeToIndex.at(type));
+        return typeBuilder.getTempRttType(newRtt);
+      }
+      if (type.isTuple()) {
+        auto& tuple = type.getTuple();
+        auto newTuple = tuple;
+        for (auto& t : newTuple) {
+          t = getNewType(t);
+        }
+        return typeBuilder.getTempTupleType(newTuple);
+      }
+      WASM_UNREACHABLE("bad type");
     };
 
-    TypeBuilder typeBuilder(types.size());
+    auto getNewTypeForStruct = [&](Type type) {
+      if (type.isFunction()) {
+        // This is exactly what we are looking to change!
+        return Type::i32;
+      }
+      return getNewType(type);
+    };
+
     for (Index i = 0; i < types.size(); i++) {
       auto type = types[i];
       if (type.isSignature()) {
@@ -109,7 +132,7 @@ struct VTableToIndexes : public Pass {
         // Start with a copy to get mutability/packing/etc.
         auto newStruct = struct_;
         for (auto& field : newStruct.fields) {
-          field.type = getNewType(field.type);
+          field.type = getNewTypeForStruct(field.type);
         }
         typeBuilder.setHeapType(i, newStruct);
       } else if (type.isArray()) {
@@ -117,7 +140,6 @@ struct VTableToIndexes : public Pass {
         // Start with a copy to get mutability/packing/etc.
         auto newArray = array;
         newArray.element = getNewType(newArray.element);
-        }
         typeBuilder.setHeapType(i, newArray);
       } else {
         WASM_UNREACHABLE("bad type");
