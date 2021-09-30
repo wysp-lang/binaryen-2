@@ -25,10 +25,25 @@
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $func
-   (param $i1 (ref $ignore-1))
-   (param $i2 (ref $ignore-2))
-   (param $m1 (ref $modify-1))
-   (param $m2 (ref $modify-2))
+    (param $i1 (ref $ignore-1))
+    (param $i2 (ref $ignore-2))
+    (param $m1 (ref $modify-1))
+    (param $m2 (ref $modify-2))
+  )
+
+  (func $get
+    (param $m1 (ref $modify-1))
+    (param $m2 (ref $modify-2))
+    (drop
+      (block (result funcref)
+        (struct.get $modify-1 0 (ref.null $modify-1))
+      )
+    )
+    (drop
+      (block (result funcref)
+        (struct.get $modify-2 2 (ref.null $modify-2))
+      )
+    )
   )
 )
 

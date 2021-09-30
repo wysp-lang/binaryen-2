@@ -37,6 +37,7 @@
 
 #include <ir/module-utils.h>
 //#include "ir/subtypes.h" // Needed?
+#include "ir/utils.h"
 #include <pass.h>
 #include <wasm.h>
 #include <wasm-type.h>
@@ -185,6 +186,7 @@ std::cout << "update\n";
           return type;
         }
         if (type.isFunction() || type.isData()) {
+std::cout << "type: " << type << "\n";
           return oldToNewTypes.at(type);
         }
         return type;
@@ -244,6 +246,9 @@ std::cout << "update\n";
     CodeUpdater updater(oldToNewTypes);
     updater.run(runner, &wasm);
     updater.walkModuleCode(&wasm);
+
+    // Propagate types after our changes.
+    ReFinalize().run(runner, &wasm);
 
     // Update global locations that refer to types.
     for (auto& table : wasm.tables) {
