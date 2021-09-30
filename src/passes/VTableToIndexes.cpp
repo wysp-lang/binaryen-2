@@ -188,6 +188,10 @@ struct VTableToIndexes : public Pass {
         return type;
       }
 
+      Signature update(Signature sig) {
+        return Signature(update(sig.params), update(sig.results));
+      }
+
       void visitExpression(Expression* curr) {
         // Update the type to the new one.
         curr->type = update(curr->type);
@@ -216,6 +220,9 @@ struct VTableToIndexes : public Pass {
 #define DELEGATE_FIELD_HEAPTYPE(id, name) \
   cast->name = update(cast->name);
 
+#define DELEGATE_FIELD_SIGNATURE(id, name) \
+  cast->name = update(cast->name);
+
 #define DELEGATE_FIELD_CHILD(id, name)
 #define DELEGATE_FIELD_OPTIONAL_CHILD(id, name)
 #define DELEGATE_FIELD_INT(id, name)
@@ -226,7 +233,6 @@ struct VTableToIndexes : public Pass {
 #define DELEGATE_FIELD_SCOPE_NAME_DEF(id, name)
 #define DELEGATE_FIELD_SCOPE_NAME_USE(id, name)
 #define DELEGATE_FIELD_SCOPE_NAME_USE_VECTOR(id, name)
-#define DELEGATE_FIELD_SIGNATURE(id, name)
 #define DELEGATE_FIELD_ADDRESS(id, name)
 
 #include "wasm-delegations-fields.def"
@@ -236,6 +242,28 @@ struct VTableToIndexes : public Pass {
     CodeUpdater updater(oldToNewTypes);
     updater.run(runner, &wasm);
     updater.walkModuleCode(&wasm);
+
+    // Update global locations that refer to types.
+    for (auto& table : wasm.tables) {
+      table->type = updater.update(table->type);
+    }
+    for (auto& elementSegment : wasm.elementSegments) {
+      elementSegment->type = updater.update(elementSegment->type);
+    }
+    for (auto& global : wasm.globals) {
+      global->type = updater.update(global->type);
+    }
+    for (auto& func : wasm.functions) {
+      func->type = updater.update(func->type);
+    }
+
+    for (auto& kv : oldToNewTypes) {
+      auto old = kv.first;
+      auto new_ = kv.second;
+      if (wasm.typeNames.count(old)) {
+        wasm.typeNames[new_] = wasm.typeNames[old];
+      }
+    }
   }
 };
 
