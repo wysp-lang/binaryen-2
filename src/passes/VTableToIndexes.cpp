@@ -79,13 +79,13 @@ struct VTableToIndexes : public Pass {
 
     TypeBuilder typeBuilder(types.size());
 
-    auto getNewType = [&](Type type, bool isStructField) {
+    std::function<Type (Type)> getNewType = [&](Type type) {
       if (type.isBasic()) {
         return type;
       }
-      if (type.isReference()) {
+      if (type.isRef()) {
         return typeBuilder.getTempRefType(
-          typeBuilder.getTempHeapType(typeToIndex.at(type)),
+          typeBuilder.getTempHeapType(typeToIndex.at(type.getHeapType())),
           type.getNullability()
         );
       }
@@ -93,13 +93,13 @@ struct VTableToIndexes : public Pass {
         auto rtt = type.getRtt();
         auto newRtt = rtt;
         newRtt.heapType = 
-          typeBuilder.getTempHeapType(typeToIndex.at(type));
+          typeBuilder.getTempHeapType(typeToIndex.at(type.getHeapType()));
         return typeBuilder.getTempRttType(newRtt);
       }
       if (type.isTuple()) {
         auto& tuple = type.getTuple();
         auto newTuple = tuple;
-        for (auto& t : newTuple) {
+        for (auto& t : newTuple.types) {
           t = getNewType(t);
         }
         return typeBuilder.getTempTupleType(newTuple);
@@ -107,7 +107,7 @@ struct VTableToIndexes : public Pass {
       WASM_UNREACHABLE("bad type");
     };
 
-    auto getNewTypeForStruct = [&](Type type) {
+    auto getNewTypeForStruct = [&](Type type) -> Type {
       if (type.isFunction()) {
         // This is exactly what we are looking to change!
         return Type::i32;
@@ -126,7 +126,7 @@ struct VTableToIndexes : public Pass {
         for (auto t : sig.results) {
           newResults.push_back(getNewType(t));
         }
-        typeBuilder.setHeapType(i, Signature{newParams, newResults};
+        typeBuilder.setHeapType(i, Signature(typeBuilder.getTempTupleType(newParams), typeBuilder.getTempTupleType(newResults)));
       } else if (type.isStruct()) {
         auto struct_ = type.getStruct();
         // Start with a copy to get mutability/packing/etc.
@@ -139,7 +139,7 @@ struct VTableToIndexes : public Pass {
         auto array = type.getArray();
         // Start with a copy to get mutability/packing/etc.
         auto newArray = array;
-        newArray.element = getNewType(newArray.element);
+        newArray.element.type = getNewType(newArray.element.type);
         typeBuilder.setHeapType(i, newArray);
       } else {
         WASM_UNREACHABLE("bad type");
