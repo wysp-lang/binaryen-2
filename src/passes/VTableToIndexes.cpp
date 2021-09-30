@@ -65,13 +65,24 @@ struct FunctionInfoScanner
 };
 #endif
 
+using HeapTypeMap = std::unordered_map<HeapType, HeapType>;
+
 struct VTableToIndexes : public Pass {
   void run(PassRunner* runner, Module* module) override {
-    // First, rewrite the types to replace function references with i32s.
+    // Create the new types and get a mapping of the old ones to the new.
+    auto oldToNewTypes = mapOldTypesToNew(*module);
+
+    // Update all the types to the new ones.
+    updateTypes(*module, oldToNewTypes);
+  }
+
+  HeapTypeMap mapOldTypesToNew(Module& wasm) {
+    // Collect all the types.
     std::vector<HeapType> types;
     std::unordered_map<HeapType, Index> typeIndices;
-    ModuleUtils::collectHeapTypes(*module, types, typeIndices);
+    ModuleUtils::collectHeapTypes(wasm, types, typeIndices);
 
+    // We will need to map types to their indexes.
     std::unordered_map<HeapType, Index> typeToIndex;
     for (Index i = 0; i < types.size(); i++) {
       typeToIndex[types[i]] = i;
@@ -79,6 +90,9 @@ struct VTableToIndexes : public Pass {
 
     TypeBuilder typeBuilder(types.size());
 
+    // Map an old type to a new type. This is called on the contents of the
+    // temporary heap types, so it basically just needs to map to other temp
+    // heap types.
     std::function<Type (Type)> getNewType = [&](Type type) {
       if (type.isBasic()) {
         return type;
@@ -107,6 +121,9 @@ struct VTableToIndexes : public Pass {
       WASM_UNREACHABLE("bad type");
     };
 
+    // Map an old type to a new type, for a struct field. This does the special
+    // operation we are doing here, which is to replace function referencs with
+    // i32s.
     auto getNewTypeForStruct = [&](Type type) -> Type {
       if (type.isFunction()) {
         // This is exactly what we are looking to change!
@@ -115,6 +132,7 @@ struct VTableToIndexes : public Pass {
       return getNewType(type);
     };
 
+    // Create the temporary heap types.
     for (Index i = 0; i < types.size(); i++) {
       auto type = types[i];
       if (type.isSignature()) {
@@ -145,13 +163,22 @@ struct VTableToIndexes : public Pass {
         WASM_UNREACHABLE("bad type");
       }
     }
+    auto newTypes = typeBuilder.build();
 
+    // Return a mapping of the old types to the new.
+    HeapTypeMap oldToNewTypes;
+    for (Index i = 0; i < types.size(); i++) {
+      oldToNewTypes[types[i]] = newTypes[i];
+    }
+    return oldToNewTypes;
+  }
 
+  void updateTypes(Module& wasm, HeapTypeMap& oldToNewTypes) {
+  }
+};
 
     //SubTypes subTypes(*module);
     //FunctionInfoScanner().run(runner, module);
-  }
-};
 
 } // anonymous namespace
 
