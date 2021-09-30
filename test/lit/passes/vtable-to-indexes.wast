@@ -5,17 +5,30 @@
 
 (module
   ;; These types have nothing we need to change.
+  ;; CHECK:      (type $ref|$ignore-1|_ref|$ignore-2|_ref|$modify-1|_ref|$modify-2|_=>_none (func (param (ref $ignore-1) (ref $ignore-2) (ref $modify-1) (ref $modify-2))))
+
+  ;; CHECK:      (type $ignore-1 (struct (field i32) (field f32)))
   (type $ignore-1 (struct (field i32) (field f32)))
+  ;; CHECK:      (type $ignore-2 (struct (field anyref)))
   (type $ignore-2 (struct (field anyref)))
 
   ;; This type should have its field changed to an i32.
+  ;; CHECK:      (type $modify-1 (struct (field i32)))
   (type $modify-1 (struct (field funcref)))
 
+  ;; This type should have just some of its fields changed.
+  ;; CHECK:      (type $modify-2 (struct (field f64) (field i32) (field (mut i32)) (field i64)))
+  (type $modify-2 (struct (field f64) (field funcref) (field (mut funcref)) (field i64)))
+
   ;; Keep the types alive.
+  ;; CHECK:      (func $func (param $i1 (ref $ignore-1)) (param $i2 (ref $ignore-2)) (param $m1 (ref $modify-1)) (param $m2 (ref $modify-2))
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
   (func $func
-   (param $x (ref $ignore-1))
-   (param $y (ref $ignore-2))
-   (param $y (ref $modify-1))
+   (param $i1 (ref $ignore-1))
+   (param $i2 (ref $ignore-2))
+   (param $m1 (ref $modify-1))
+   (param $m2 (ref $modify-2))
   )
 )
 

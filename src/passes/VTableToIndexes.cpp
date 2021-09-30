@@ -51,9 +51,11 @@ using HeapTypeMap = std::unordered_map<HeapType, HeapType>;
 
 struct VTableToIndexes : public Pass {
   void run(PassRunner* runner, Module* module) override {
+std::cout << "map\n";
     // Create the new types and get a mapping of the old ones to the new.
     auto oldToNewTypes = mapOldTypesToNew(*module);
 
+std::cout << "update\n";
     // Update all the types to the new ones.
     updateTypes(runner, *module, oldToNewTypes);
   }
