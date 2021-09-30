@@ -36,7 +36,7 @@
 //
 
 #include <ir/module-utils.h>
-#include "ir/subtypes.h" // Needed?
+//#include "ir/subtypes.h" // Needed?
 #include <pass.h>
 #include <wasm.h>
 #include <wasm-type.h>
@@ -47,24 +47,6 @@ namespace wasm {
 
 namespace {
 
-#if 0
-struct FunctionInfoScanner
-  : public WalkerPass<PostWalker<FunctionInfoScanner>> {
-  bool isFunctionParallel() override { return true; }
-
-  FunctionInfoScanner(NameInfoMap* infos) : infos(infos) {}
-
-  FunctionInfoScanner* create() override {
-    return new FunctionInfoScanner(infos);
-  }
-
-  void visitLoop(Loop* curr) {
-    // having a loop
-    (*infos)[getFunction()->name].hasLoops = true;
-  }
-};
-#endif
-
 using HeapTypeMap = std::unordered_map<HeapType, HeapType>;
 
 struct VTableToIndexes : public Pass {
@@ -73,7 +55,7 @@ struct VTableToIndexes : public Pass {
     auto oldToNewTypes = mapOldTypesToNew(*module);
 
     // Update all the types to the new ones.
-    updateTypes(*module, oldToNewTypes);
+    updateTypes(runner, *module, oldToNewTypes);
   }
 
   HeapTypeMap mapOldTypesToNew(Module& wasm) {
@@ -173,12 +155,91 @@ struct VTableToIndexes : public Pass {
     return oldToNewTypes;
   }
 
-  void updateTypes(Module& wasm, HeapTypeMap& oldToNewTypes) {
+  void updateTypes(PassRunner* runner, Module& wasm, HeapTypeMap& oldToNewTypes) {
+    struct CodeUpdater
+      : public WalkerPass<PostWalker<CodeUpdater, UnifiedExpressionVisitor<CodeUpdater>>> {
+      bool isFunctionParallel() override { return true; }
+
+      HeapTypeMap& oldToNewTypes;
+
+      CodeUpdater(HeapTypeMap& oldToNewTypes) : oldToNewTypes(oldToNewTypes) {}
+
+      CodeUpdater* create() override {
+        return new CodeUpdater(oldToNewTypes);
+      }
+
+      Type update(Type type) {
+        if (type.isRef()) {
+          return Type(update(type.getHeapType()), type.getNullability());
+        }
+        if (type.isRtt()) {
+          return Type(Rtt(type.getRtt().depth, update(type.getHeapType())));
+        }
+        return type;
+      }
+
+      HeapType update(HeapType type) {
+        if (type.isBasic()) {
+          return type;
+        }
+        if (type.isFunction() || type.isData()) {
+          return oldToNewTypes.at(type);
+        }
+        return type;
+      }
+
+      void visitExpression(Expression* curr) {
+        // Update the type to the new one.
+        curr->type = update(curr->type);
+
+        // If this is a struct.get, then we also update function reference types
+        // to i32.
+        if (auto* get = curr->dynCast<StructGet>()) {
+          if (get->type.isFunction()) {
+            get->type = Type::i32;
+          }
+        }
+
+        // Update any other type fields as well.
+
+#define DELEGATE_ID curr->_id
+
+#define DELEGATE_START(id)                                                     \
+  auto* cast = curr->cast<id>();                                               \
+  WASM_UNUSED(cast);
+
+#define DELEGATE_GET_FIELD(id, name) cast->name
+
+#define DELEGATE_FIELD_TYPE(id, name) \
+  cast->name = update(cast->name);
+
+#define DELEGATE_FIELD_HEAPTYPE(id, name) \
+  cast->name = update(cast->name);
+
+#define DELEGATE_FIELD_CHILD(id, name)
+#define DELEGATE_FIELD_OPTIONAL_CHILD(id, name)
+#define DELEGATE_FIELD_INT(id, name)
+#define DELEGATE_FIELD_INT_ARRAY(id, name)
+#define DELEGATE_FIELD_LITERAL(id, name)
+#define DELEGATE_FIELD_NAME(id, name)
+#define DELEGATE_FIELD_NAME_VECTOR(id, name)
+#define DELEGATE_FIELD_SCOPE_NAME_DEF(id, name)
+#define DELEGATE_FIELD_SCOPE_NAME_USE(id, name)
+#define DELEGATE_FIELD_SCOPE_NAME_USE_VECTOR(id, name)
+#define DELEGATE_FIELD_SIGNATURE(id, name)
+#define DELEGATE_FIELD_ADDRESS(id, name)
+
+#include "wasm-delegations-fields.def"
+      }
+    };
+
+    CodeUpdater updater(oldToNewTypes);
+    updater.run(runner, &wasm);
+    updater.walkModuleCode(&wasm);
   }
 };
 
     //SubTypes subTypes(*module);
-    //FunctionInfoScanner().run(runner, module);
 
 } // anonymous namespace
 
