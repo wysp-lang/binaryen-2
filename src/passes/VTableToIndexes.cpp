@@ -27,13 +27,15 @@
 // struct.gets are altered to load from the table.
 //
 // Assumptions:
-//  * All function reference fields are to be transformed.
+//  * All function reference fields in structs should be transformed.
 //  * Such fields must be written to during creation of a vtable instance, and
-//    with a constant ref.func.
+//    with a constant ref.func, and never written to with struct.set.
 //  * Vtable subtyping is allowed, but not to specialize types of the parent. If
 //    that were done, we'd need to add casts to handle the table no having the
 //    specialized type (it would have the subtype).
 //
+
+#include <mutex>
 
 #include <ir/module-utils.h>
 //#include "ir/subtypes.h" // Needed?
@@ -41,6 +43,7 @@
 #include <pass.h>
 #include <wasm.h>
 #include <wasm-type.h>
+#include <wasm-builder.h>
 
 using namespace std;
 
@@ -48,20 +51,39 @@ namespace wasm {
 
 namespace {
 
-using HeapTypeMap = std::unordered_map<HeapType, HeapType>;
+struct MappingInfo {
+  // Maps old heap types to new ones.
+  std::unordered_map<HeapType, HeapType> oldToNewTypes;
+
+  // For each table, a map of functions in the table to their indexes.
+  std::unordered_map<Name, std::unordered_map<Name, Index>> tableFuncIndexes;
+
+  // Maps each (struct, field index of a function reference) to the table in
+  // which it is declared.
+  std::unordered_map<std::pair<HeapType, Index>, Name> fieldTables;
+
+  // When modifying this data structure in parallel, this mutex must be taken.
+  // Using a mutex is reasonable here since we have few edits to make (only for
+  // struct.news, which are rare).
+  std::mutex mutex;
+};
 
 struct VTableToIndexes : public Pass {
+  MappingInfo mapping;
+
   void run(PassRunner* runner, Module* module) override {
 std::cout << "map\n";
     // Create the new types and get a mapping of the old ones to the new.
-    auto oldToNewTypes = mapOldTypesToNew(*module);
+    mapOldTypesToNew(*module);
+
+    mapFunctionsToTables(runner, *module);
 
 std::cout << "update\n";
     // Update all the types to the new ones.
-    updateTypes(runner, *module, oldToNewTypes);
+    updateModule(runner, *module);
   }
 
-  HeapTypeMap mapOldTypesToNew(Module& wasm) {
+  void mapOldTypesToNew(Module& wasm) {
     // Collect all the types.
     std::vector<HeapType> types;
     std::unordered_map<HeapType, Index> typeIndices;
@@ -150,25 +172,98 @@ std::cout << "update\n";
     }
     auto newTypes = typeBuilder.build();
 
-    // Return a mapping of the old types to the new.
-    HeapTypeMap oldToNewTypes;
     for (Index i = 0; i < types.size(); i++) {
-      oldToNewTypes[types[i]] = newTypes[i];
+      mapping.oldToNewTypes[types[i]] = newTypes[i];
     }
-    return oldToNewTypes;
   }
 
-  void updateTypes(PassRunner* runner, Module& wasm, HeapTypeMap& oldToNewTypes) {
+  void mapFunctionsToTables(PassRunner* runner, Module& wasm) {
+    struct CodeScanner
+      : public WalkerPass<PostWalker<CodeScanner>> {
+      bool isFunctionParallel() override { return true; }
+
+      MappingInfo& mapping;
+
+      CodeScanner(MappingInfo& mapping) : mapping(mapping) {}
+
+      CodeScanner* create() override {
+        return new CodeScanner(mapping);
+      }
+
+      void visitStructNew(StructNew* curr) {
+        for (Index i = 0; i < curr->operands.size(); i++) {
+          auto* operand = curr->operands[i];
+          if (operand->type.isFunction()) {
+            // Note this function so that s
+            auto* refFunc = operand->cast<RefFunc>();
+            auto heapType = curr->type.getHeapType();
+            Index funcIndex;
+
+            // Lock while we are working on the shared mapping data.
+            {
+              std::lock_guard<std::mutex> lock(mapping.mutex);
+              auto fieldTable = getFieldTable(heapType, i);
+              funcIndex = getFuncIndex(fieldTable, refFunc->func);
+            }
+          }
+        }
+      }
+
+      void getFieldTable(HeapType type, Index i) {
+              mapping.fieldTables[{heapType, i}];
+              if (!fieldTable.is()) {
+                fieldTable = computeFieldTable(heapType, i);
+                // Compute the table in which we will store functions for this
+                // field.
+                
+              }
+      }
+
+      void getFuncIndex(Name fieldTable, Name func) {
+        // Get the table info
+        auto& tableInfo = mapping.tableFuncIndexes[
+
+      }
+
+struct MappingInfo {
+  // Maps old heap types to new ones.
+  std::unordered_map<HeapType, HeapType> oldToNewTypes;
+
+  // For each table, a map of functions in the table to their indexes.
+  std::unordered_map<Name, std::unordered_map<Name, Index>> tableFuncIndexes;
+
+  // Maps each (struct, field index of a function reference) to the table in
+  // which it is declared.
+  std::unordered_map<std::pair<HeapType, Index>, Name> fieldTables;
+
+  // When modifying this data structure in parallel, this mutex must be taken.
+  // Using a mutex is reasonable here since we have few edits to make (only for
+  // struct.news, which are rare).
+  std::mutex mutex;
+};
+
+
+
+
+
+    };
+
+    CodeScanner updater(mapping);
+    updater.run(runner, &wasm);
+    updater.walkModuleCode(&wasm);
+  }
+
+  void updateModule(PassRunner* runner, Module& wasm) {
     struct CodeUpdater
       : public WalkerPass<PostWalker<CodeUpdater, UnifiedExpressionVisitor<CodeUpdater>>> {
       bool isFunctionParallel() override { return true; }
 
-      HeapTypeMap& oldToNewTypes;
+      MappingInfo& mapping;
 
-      CodeUpdater(HeapTypeMap& oldToNewTypes) : oldToNewTypes(oldToNewTypes) {}
+      CodeUpdater(MappingInfo& mapping) : mapping(mapping) {}
 
       CodeUpdater* create() override {
-        return new CodeUpdater(oldToNewTypes);
+        return new CodeUpdater(mapping);
       }
 
       Type update(Type type) {
@@ -187,7 +282,7 @@ std::cout << "update\n";
         }
         if (type.isFunction() || type.isData()) {
 std::cout << "type: " << type << "\n";
-          return oldToNewTypes.at(type);
+          return mapping.oldToNewTypes.at(type);
         }
         return type;
       }
@@ -196,17 +291,40 @@ std::cout << "type: " << type << "\n";
         return Signature(update(sig.params), update(sig.results));
       }
 
+      void visitStructGet(StructGet* curr) {
+        if (curr->type.isFunction()) {
+          // Read the i32 index, and get the reference from the table.
+          curr->type = Type::i32;
+          replaceCurrent(
+            Builder(*getModule()).makeTableGet(
+              ..table..,
+              curr
+            )
+          );
+          return;
+        }
+
+        // Otherwise, update the type normally.
+        curr->type = update(curr->type);
+      }
+
+      void visitStructNew(StructNew* curr) {
+        for (auto& operand : curr->operands) {
+          if (operand->type.isFunction()) {
+            auto* refFunc = operand->cast<RefFunc>();
+            auto func = refFunc->func;
+            // Write an i32 index instead.
+            operand = Builder(*getModule()).makeConst(int32_t(..));
+          }
+        }
+
+        curr->type = update(curr->type);
+      }
+
+      // Generic visitor. Specific things were overridden earlier.
       void visitExpression(Expression* curr) {
         // Update the type to the new one.
         curr->type = update(curr->type);
-
-        // If this is a struct.get, then we also update function reference types
-        // to i32.
-        if (auto* get = curr->dynCast<StructGet>()) {
-          if (get->type.isFunction()) {
-            get->type = Type::i32;
-          }
-        }
 
         // Update any other type fields as well.
 
@@ -243,12 +361,12 @@ std::cout << "type: " << type << "\n";
       }
     };
 
-    CodeUpdater updater(oldToNewTypes);
+    CodeUpdater updater(mapping);
     updater.run(runner, &wasm);
     updater.walkModuleCode(&wasm);
 
     // Propagate types after our changes.
-    ReFinalize().run(runner, &wasm);
+    ReFinalize().run(runner, &wasm); // XXX th is is wrong. remove header too
 
     // Update global locations that refer to types.
     for (auto& table : wasm.tables) {
@@ -264,7 +382,7 @@ std::cout << "type: " << type << "\n";
       func->type = updater.update(func->type);
     }
 
-    for (auto& kv : oldToNewTypes) {
+    for (auto& kv : mapping.oldToNewTypes) {
       auto old = kv.first;
       auto new_ = kv.second;
       if (wasm.typeNames.count(old)) {
