@@ -205,18 +205,39 @@ std::cout << "update\n";
               auto fieldTable = getFieldTable(heapType, i);
               funcIndex = getFuncIndex(fieldTable, refFunc->func);
             }
+
+            // Replace the function reference with the proper index.
+            operands[i] = Builder(*getModule()).makeConst(int32_t(funcIndex));
           }
         }
       }
 
       void getFieldTable(HeapType type, Index i) {
-              mapping.fieldTables[{heapType, i}];
-              if (!fieldTable.is()) {
-                fieldTable = computeFieldTable(heapType, i);
-                // Compute the table in which we will store functions for this
-                // field.
-                
-              }
+        auto& fieldTable = mapping.fieldTables[{heapType, i}];
+        if (!fieldTable.is()) {
+          // Compute the table in which we will store functions for this field.
+          // First, find the supertype in which this field was first defined;
+          // all subclasses use the same table for their functions.
+          HeapType parent = heapType;
+          while (1) {
+            HeapType grandParent;
+            if (!parent.getSuperType(grandParent)) {
+              // No more supers, so parent is the topmost one.
+              break;
+            }
+            if (i >= grandParent.getStruct().fields.size()) {
+              // The grand-parent does not have this field, so parent is where
+              // it is first defined.
+              break;
+            }
+            // Otherwise, continue up.
+            parent = grandParent;
+          }
+
+          // We know the proper supertype, and our table is the one it has.
+          auto& parentFieldTable = mapping.fieldTables[{parent, i}];
+          
+        }
       }
 
       void getFuncIndex(Name fieldTable, Name func) {
