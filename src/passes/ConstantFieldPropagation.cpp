@@ -224,8 +224,6 @@ struct FunctionOptimizer : public WalkerPass<PostWalker<FunctionOptimizer>> {
       return;
     }
 
-    // TODO: in -Os, avoid multiple constant values here?
-
     // Looks like we can do this!
     makeConstantExpression(info, curr, builder);
   }
@@ -260,6 +258,15 @@ private:
       replaceCurrent(builder.makeSequence(
         builder.makeDrop(builder.makeRefAs(RefAsNonNull, get->ref)),
         builder.makeConstantExpression(values[0])));
+      return;
+    }
+
+    // When optimizing for size, avoid handling more than a single value, as
+    // we increase code size here: we cannot remove the struct.get or its
+    // contents, and we add a constant for each possible value, plus choices
+    // between them).
+    // TODO: later opts may make this worthwhile, however..?
+    if (getPassOptions().shrinkLevel > 0) {
       return;
     }
 
