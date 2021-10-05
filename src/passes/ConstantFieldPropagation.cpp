@@ -248,10 +248,8 @@ private:
   void makeConstantExpression(const PossibleConstantValues& info,
                               StructGet* get,
                               Builder& builder) {
-    std::vector<Literal> values;
-    for (auto value : info.getConstantValues()) {
-      values.push_back(value);
-    }
+    auto values = info.getConstantValues();
+
     if (values.size() == 1) {
       // Simply return the single constant value here.
       changed = true;
