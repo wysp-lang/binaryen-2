@@ -27,12 +27,16 @@
 //        wasm GC programs we need to check for type escaping.
 //
 
+#include <algorithm>
+
 #include "ir/module-utils.h"
+#include "ir/abstract.h"
 #include "ir/properties.h"
 #include "ir/struct-utils.h"
 #include "ir/type-updating.h"
 #include "ir/utils.h"
 #include "pass.h"
+#include "support/small_vector.h"
 #include "support/unique_deferring_queue.h"
 #include "wasm-builder.h"
 #include "wasm-traversal.h"
@@ -51,6 +55,10 @@ struct PossibleConstantValues {
   // above this causes us to say that the value is unknown.
   static const size_t MaxConstantValues = 2;
 
+  // (Note that we use a small set here, but will never use the flexible storage
+  // that it provides. We are wasting a little space FIXME)
+  using Storage = SmallVector<Literal, MaxConstantValues>;
+
   // Note a written value as we see it, and update our internal knowledge based
   // on it and all previous values noted.
   //
@@ -58,7 +66,7 @@ struct PossibleConstantValues {
   bool note(Literal curr) {
     if (!noted) {
       // This is the first value.
-      values.insert(curr);
+      values.push_back(curr);
       static_assert(MaxConstantValues >= 1, "invalid max values");
       noted = true;
       return true;
@@ -71,7 +79,7 @@ struct PossibleConstantValues {
 
     // This is a subsequent value. Perhaps we have seen it before; if so, we
     // have nothing else to do.
-    if (values.count(curr)) {
+    if (std::find(values.begin(), values.end(), curr) != values.end()) {
       return false;
     }
 
@@ -80,7 +88,7 @@ struct PossibleConstantValues {
     if (values.size() == MaxConstantValues) {
       noteUnknown();
     } else {
-      values.insert(curr);
+      values.push_back(curr);
     }
     return true;
   }
@@ -116,7 +124,7 @@ struct PossibleConstantValues {
     // Both have constant values. Add the values from the other to this one,
     // looking for a change (which may be a new value, or may be that we become
     // non-constant due to too many values).
-    for (auto otherValue : other.values) {
+    for (const auto otherValue : other.values) {
       if (note(otherValue)) {
         return true;
       }
@@ -128,7 +136,7 @@ struct PossibleConstantValues {
   bool isConstant() const { return noted && !values.empty(); }
 
   // Returns the single constant value.
-  std::unordered_set<Literal> getConstantValues() const {
+  Storage getConstantValues() const {
     assert(isConstant());
     return values;
   }
@@ -158,8 +166,7 @@ private:
   // empty. Once |noted| is true, this will contain the values, or, if we found
   // too many constant values or a non-constant value, this will be empty to
   // indicate that.
-  // TODO: use a SmallSet?
-  std::unordered_set<Literal> values;
+  Storage values;
 };
 
 using PCVStructValuesMap = StructValuesMap<PossibleConstantValues>;
@@ -219,17 +226,8 @@ struct FunctionOptimizer : public WalkerPass<PostWalker<FunctionOptimizer>> {
 
     // TODO: in -Os, avoid multiple constant values here?
 
-    // Looks like we can do this! Replace the get with a trap on a null reference using a
-    // ref.as_non_null (we need to trap as the get would have done so), plus the
-    // constant value. (Leave it to further optimizations to get rid of the
-    // ref.)
-    auto* constantExpression = makeConstantExpression(info, curr, builder);
-    if (constantExpression) {
-      replaceCurrent(builder.makeSequence(
-        builder.makeDrop(builder.makeRefAs(RefAsNonNull, curr->ref)),
-        constantExpression));
-      changed = true;
-    }
+    // Looks like we can do this!
+    makeConstantExpression(info, curr, builder);
   }
 
   void doWalkFunction(Function* func) {
@@ -247,104 +245,59 @@ private:
 
   bool changed = false;
 
-  Expression* makeConstantExpression(const PossibleConstantValues& info,
+  void makeConstantExpression(const PossibleConstantValues& info,
                                      StructGet* get,
                                      Builder& builder) {
-    auto values = info.getConstantValues();
+    std::vector<Literal> values;
+    for (auto value : info.getConstantValues()) {
+      values.push_back(value);
+    }
     if (values.size() == 1) {
       // Simply return the single constant value here.
-      return builder.makeConstantExpression(*values.begin());
+      changed = true;
+      // Replace the get with a trap on a null reference using a
+      // ref.as_non_null (we need to trap as the get would have done so), plus the
+      // constant value. (Leave it to further optimizations to get rid of the
+      // ref.)
+      replaceCurrent(builder.makeSequence(
+        builder.makeDrop(builder.makeRefAs(RefAsNonNull, get->ref)),
+        builder.makeConstantExpression(values[0])));
+      return;
     }
-
-    // There is more than one constant value. Emit a "select chain" for it, like
-    // this:
-    //
-    //    (struct.get (ref))
-    // =>
-    //    (select
-    //      (value1)
-    //      (value2)
-    //      (are.equal (struct.get) (value1)))
-    //
-    // If there are more values then two, then we recurse into the select's
-    // "else" arm:
-    //
-    //    (select
-    //      (value1)
-    //      (select
-    //        (value2)
-    //        (value3)
-    //        (are.equal (struct.get) (value2)))
-    //      (are.equal (struct.get) (value1)))
 
     auto type = get->type;
 
-    // We will need to make comparisons in order to pick the right value, so if
-    // the type prevents that, give up.
-    // TODO: Perhaps modify the field to contain an enum here and use a table.
-    if (!Type::isSubType(type, Type::eqref)) {
-std::cout << "so sad " << type << '\n'; // function ref types are not eqref :( so we MUST use an enum
-      return nullptr;
-    }
-
-    // If there are more than 2 values, then we will need the value of the
-    // struct.get more than once. If we can't use a local for that, give up. 
-    if (values.size() > 2 && !TypeUpdating::canHandleAsLocal(type)) {
-      return nullptr;
-    }
-
-    // If we do need a local, we will use this type. Note that we don't need to
-    // do anything more than this: if the type was non-nullable, then we just
-    // turned it into a nullable type, but that is fine: we don't need to turn
-    // it back into a non-nullable one because we know exactly what the uses of
-    // the type will be, which are simple comparisons in the select chain.
-    auto localType = TypeUpdating::getValidLocalType(type, getModule()->features);
-
-    // Given a constant expression, make a check for it, that is, that returns
-    // i32:1 if an input value is indeed that value.
-    auto makeCheck = [&](Expression* constant, Expression* input) -> Expression* {
-      if (type.isInteger() || type.isFloat()) {
-        return builder.makeBinary(Abstract::getBinary(type, Abstract::Eq), input, constant);
-      }
+    if (values.size() == 2) {
       if (type.isRef()) {
-        return builder.makeRefEq(input, constant);
-      }
-      WASM_UNREACHABLE("bad type for makeCheck");
-    };
-
-    Expression* ret = nullptr;
-    Index tempLocal;
-    auto iter = values.begin();
-    for (Index i = 0; i < values.size(); i++, iter++) {
-      auto value = *iter;
-      auto* currExpr = builder.makeConstantExpression(value);
-      if (i == 0) {
-        // This is the first item.
-        ret = currExpr;
-        continue;
+        // We must do a comparison to pick the value at runtime. Without the
+        // ability to do that, we must give up. This is the common case for
+        // references, as funcrefs are not comparable, and other refs like
+        // data do not really have constant values we can emit here.
+        return;
       }
 
-      // This is a subsequent item, create a select. First, create the input
-      // value for the select. This is the value that the struct.get returns,
-      // but if we need it more than once we'll end up using a local.
-      Expression* input = nullptr;
-      if (i == 1) {
-        input = get;
-        if (values.size() > 2) {
-          // We will have further uses of the input. Tee it to a local.
-          // TODO: nullability and defaultability.
-          tempLocal = builder.addVar(getFunction(), localType);
-          input = builder.makeLocalTee(tempLocal, input, localType);
-        }
-      } else {
-        // This is a reuse of the original input.
-        input = builder.makeLocalGet(tempLocal, localType);
-      }
-      ret = builder.makeSelect(makeCheck(currExpr, input),
-                               currExpr,
-                               ret);
+      changed = true;
+
+      // Emit a select between the two possible values, that is:
+      //
+      //  get_value == V1 ? V1 : V2
+      //
+      // This is a little odd-looking, but it emits an expression that has
+      // exactly one of the two possible values, and at the right times, which
+      // allows later optimizations to specialize.
+      replaceCurrent(builder.makeSelect(
+        builder.makeBinary(
+          Abstract::getBinary(type, Abstract::Eq),
+          get,
+          builder.makeConstantExpression(values[0])
+        ),
+        builder.makeConstantExpression(values[0]),
+        builder.makeConstantExpression(values[1])
+      ));
+      return;
     }
-    return ret;
+
+    // TODO: 3+ values
   }
 };
 

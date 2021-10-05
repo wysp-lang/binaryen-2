@@ -138,9 +138,11 @@ public:
   // iteration
 
   template<typename Parent, typename Iterator> struct IteratorBase {
-    typedef T value_type;
-    typedef long difference_type;
-    typedef T& reference;
+    using iterator_category = std::forward_iterator_tag;
+    using difference_type = long;
+    using value_type = T;
+    using pointer = const value_type*;
+    using reference = const value_type&;
 
     Parent* parent;
     size_t index;
