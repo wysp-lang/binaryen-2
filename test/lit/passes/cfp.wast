@@ -237,8 +237,8 @@
   )
 )
 
-;; Different values assigned in the same function, in different struct.news,
-;; so we cannot optimize the struct.get away.
+;; Two different values assigned in the same function, in different struct.news.
+;; We can emit a select between them.
 (module
   ;; CHECK:      (type $struct (struct (field f32)))
   (type $struct (struct f32))
@@ -258,8 +258,15 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $struct 0
-  ;; CHECK-NEXT:    (ref.null $struct)
+  ;; CHECK-NEXT:   (select
+  ;; CHECK-NEXT:    (f32.const 42)
+  ;; CHECK-NEXT:    (f32.const 1337)
+  ;; CHECK-NEXT:    (f32.eq
+  ;; CHECK-NEXT:     (struct.get $struct 0
+  ;; CHECK-NEXT:      (ref.null $struct)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (f32.const 42)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -284,7 +291,7 @@
   )
 )
 
-;; Different values assigned in different functions, and one is a struct.set.
+;; Two different values assigned in different functions, and one is a struct.set.
 (module
   ;; CHECK:      (type $struct (struct (field (mut f32))))
   (type $struct (struct (mut f32)))
@@ -320,8 +327,15 @@
   )
   ;; CHECK:      (func $get
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $struct 0
-  ;; CHECK-NEXT:    (ref.null $struct)
+  ;; CHECK-NEXT:   (select
+  ;; CHECK-NEXT:    (f32.const 42)
+  ;; CHECK-NEXT:    (f32.const 1337)
+  ;; CHECK-NEXT:    (f32.eq
+  ;; CHECK-NEXT:     (struct.get $struct 0
+  ;; CHECK-NEXT:      (ref.null $struct)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (f32.const 42)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -766,8 +780,8 @@
   )
 )
 
-;; Subtyping: Create both a subtype and a supertype, with different constants
-;;            for the shared field, preventing optimization, as a get of the
+;; Subtyping: Create both a subtype and a supertype, with two different constants
+;;            for the shared field. Both values are possible, as a get of the
 ;;            supertype may receive an instance of the subtype.
 (module
   ;; CHECK:      (type $struct (struct (field i32)))
@@ -809,8 +823,15 @@
   )
   ;; CHECK:      (func $get
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $struct 0
-  ;; CHECK-NEXT:    (ref.null $struct)
+  ;; CHECK-NEXT:   (select
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:    (i32.eq
+  ;; CHECK-NEXT:     (struct.get $struct 0
+  ;; CHECK-NEXT:      (ref.null $struct)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -887,7 +908,7 @@
   )
 )
 
-;; As above, but add a set of $struct. The set prevents the optimization.
+;; As above, but add a set of $struct, so we have two possible values.
 (module
   ;; CHECK:      (type $struct (struct (field (mut i32))))
   (type $struct (struct (mut i32)))
@@ -937,8 +958,15 @@
   )
   ;; CHECK:      (func $get
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $substruct 0
-  ;; CHECK-NEXT:    (ref.null $substruct)
+  ;; CHECK-NEXT:   (select
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (i32.eq
+  ;; CHECK-NEXT:     (struct.get $substruct 0
+  ;; CHECK-NEXT:      (ref.null $substruct)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i32.const 20)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -1085,8 +1113,8 @@
   )
 )
 
-;; Multi-level subtyping with conflicts. The even-numbered fields will get
-;; different values in the sub-most type. Create the top and bottom types, but
+;; Multi-level subtyping with multiple values. The even-numbered fields will get
+;; two values in the sub-most type. Create the top and bottom types, but
 ;; not the middle one.
 (module
   ;; CHECK:      (type $struct3 (struct (field i32) (field i32) (field f64) (field f64) (field anyref) (field anyref)) (extends $struct2))
@@ -1155,8 +1183,15 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $struct1 1
-  ;; CHECK-NEXT:    (ref.null $struct1)
+  ;; CHECK-NEXT:   (select
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:    (i32.const 999)
+  ;; CHECK-NEXT:    (i32.eq
+  ;; CHECK-NEXT:     (struct.get $struct1 1
+  ;; CHECK-NEXT:      (ref.null $struct1)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i32.const 20)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
@@ -1320,8 +1355,8 @@
   )
 )
 
-;; Multi-level subtyping with a different value in the middle of the chain. We
-;; can only optimize $struct3.
+;; Multi-level subtyping with two values in the middle of the chain. Only
+;; $struct3 can be optimized without a select between two values.
 (module
   ;; CHECK:      (type $struct1 (struct (field (mut i32))))
   (type $struct1 (struct (mut i32)))
@@ -1380,13 +1415,27 @@
   )
   ;; CHECK:      (func $get
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $struct1 0
-  ;; CHECK-NEXT:    (ref.null $struct1)
+  ;; CHECK-NEXT:   (select
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (i32.const 9999)
+  ;; CHECK-NEXT:    (i32.eq
+  ;; CHECK-NEXT:     (struct.get $struct1 0
+  ;; CHECK-NEXT:      (ref.null $struct1)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $struct2 0
-  ;; CHECK-NEXT:    (ref.null $struct2)
+  ;; CHECK-NEXT:   (select
+  ;; CHECK-NEXT:    (i32.const 9999)
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (i32.eq
+  ;; CHECK-NEXT:     (struct.get $struct2 0
+  ;; CHECK-NEXT:      (ref.null $struct2)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i32.const 9999)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
@@ -1420,8 +1469,8 @@
   )
 )
 
-;; As above, but add not just a new of the middle class with a different value
-;; but also a set. That prevents all optimizations.
+;; As above, but add not just a new of the middle class with a second value
+;; but also a set. We must handle two values here.
 (module
   ;; CHECK:      (type $struct2 (struct (field (mut i32)) (field f64)) (extends $struct1))
   (type $struct2 (struct (mut i32) f64) (extends $struct1))
@@ -1491,18 +1540,39 @@
   )
   ;; CHECK:      (func $get
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $struct1 0
-  ;; CHECK-NEXT:    (ref.null $struct1)
+  ;; CHECK-NEXT:   (select
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (i32.const 9999)
+  ;; CHECK-NEXT:    (i32.eq
+  ;; CHECK-NEXT:     (struct.get $struct1 0
+  ;; CHECK-NEXT:      (ref.null $struct1)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $struct2 0
-  ;; CHECK-NEXT:    (ref.null $struct2)
+  ;; CHECK-NEXT:   (select
+  ;; CHECK-NEXT:    (i32.const 9999)
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (i32.eq
+  ;; CHECK-NEXT:     (struct.get $struct2 0
+  ;; CHECK-NEXT:      (ref.null $struct2)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i32.const 9999)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $struct3 0
-  ;; CHECK-NEXT:    (ref.null $struct3)
+  ;; CHECK-NEXT:   (select
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (i32.const 9999)
+  ;; CHECK-NEXT:    (i32.eq
+  ;; CHECK-NEXT:     (struct.get $struct3 0
+  ;; CHECK-NEXT:      (ref.null $struct3)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -1651,7 +1721,7 @@
 
 ;; Never create A, but have a set to its field. A subtype B has no creates nor
 ;; sets, and the final subtype C has a create and a get. The set to A should
-;; apply to it, preventing optimization.
+;; apply to it, meaning there are two possible values and we emit a select.
 (module
   ;; CHECK:      (type $C (struct (field (mut i32))) (extends $B))
   (type $C (struct (mut i32)) (extends $B))
@@ -1698,8 +1768,15 @@
   )
   ;; CHECK:      (func $get (param $c (ref $C))
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $C 0
-  ;; CHECK-NEXT:    (local.get $c)
+  ;; CHECK-NEXT:   (select
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:    (i32.eq
+  ;; CHECK-NEXT:     (struct.get $C 0
+  ;; CHECK-NEXT:      (local.get $c)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -1872,3 +1949,62 @@
     )
   )
 )
+
+;; Two different values assigned in the same function, in different struct.news.
+;; We can normally emit a select between them, but these are funcrefs which do
+;; not allow comparisons, so we cannot optimize.
+(module
+  ;; CHECK:      (type $struct (struct (field funcref)))
+  (type $struct (struct funcref))
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (func $test
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new_with_rtt $struct
+  ;; CHECK-NEXT:    (f32.const 42)
+  ;; CHECK-NEXT:    (rtt.canon $struct)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new_with_rtt $struct
+  ;; CHECK-NEXT:    (f32.const 1337)
+  ;; CHECK-NEXT:    (rtt.canon $struct)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (select
+  ;; CHECK-NEXT:    (f32.const 42)
+  ;; CHECK-NEXT:    (f32.const 1337)
+  ;; CHECK-NEXT:    (f32.eq
+  ;; CHECK-NEXT:     (struct.get $struct 0
+  ;; CHECK-NEXT:      (ref.null $struct)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (f32.const 42)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $test
+    (drop
+      (struct.new_with_rtt $struct
+        (ref.func $test1)
+        (rtt.canon $struct)
+      )
+    )
+    (drop
+      (struct.new_with_rtt $struct
+        (ref.func $test2)
+        (rtt.canon $struct)
+      )
+    )
+    (drop
+      (struct.get $struct 0
+        (ref.null $struct)
+      )
+    )
+  )
+
+  (func $test1)
+  (func $test2)
+)
+
