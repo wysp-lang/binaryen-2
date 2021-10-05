@@ -15,12 +15,20 @@ full changeset diff at the end of each section.
 Current Trunk
 -------------
 
+v102
+----
+
+- Add `BinaryenUpdateMaps` to the C API.
+
 - Adds a TrapsNeverHappen mode (#4059). This has many of the benefits of
   IgnoreImplicitTraps, but can be used safely in more cases. IgnoreImplicitTraps
   is now deprecated.
 
 - Adds type argument for BinaryenAddTable method (#4107). For the binaryen.js api
   this parameter is optional and by default is set to funcref type.
+
+- Replace `BinaryenExpressionGetSideEffects`'s features parameter with a module
+  parameter.
 
 v101
 ----

@@ -560,10 +560,9 @@ enum BrOnOp {
 // Expressions
 //
 // Note that little is provided in terms of constructors for these. The
-// rationale is that writing  new Something(a, b, c, d, e)  is not the clearest,
-// and it would be better to write   new Something(name=a, leftOperand=b...
-// etc., but C++ lacks named operands, so in asm2wasm etc. you will see things
-// like
+// rationale is that writing `new Something(a, b, c, d, e)` is not the clearest,
+// and it would be better to write new `Something(name=a, leftOperand=b...`
+// etc., but C++ lacks named operands so you will see things like
 //   auto x = new Something();
 //   x->name = a;
 //   x->leftOperand = b;
@@ -625,6 +624,7 @@ public:
     RefIsId,
     RefFuncId,
     RefEqId,
+    TableGetId,
     TryId,
     ThrowId,
     RethrowId,
@@ -642,6 +642,7 @@ public:
     StructGetId,
     StructSetId,
     ArrayNewId,
+    ArrayInitId,
     ArrayGetId,
     ArraySetId,
     ArrayLenId,
@@ -1264,6 +1265,17 @@ public:
   void finalize();
 };
 
+class TableGet : public SpecificExpression<Expression::TableGetId> {
+public:
+  TableGet(MixedArena& allocator) {}
+
+  Name table;
+
+  Expression* index;
+
+  void finalize();
+};
+
 class Try : public SpecificExpression<Expression::TryId> {
 public:
   Try(MixedArena& allocator) : catchTags(allocator), catchBodies(allocator) {}
@@ -1356,9 +1368,17 @@ public:
   RefTest(MixedArena& allocator) {}
 
   Expression* ref;
-  Expression* rtt;
+
+  // If rtt is provided then this is a dynamic test with an rtt. If nullptr then
+  // this is a static cast and intendedType is set, and it contains the type we
+  // intend to cast to.
+  Expression* rtt = nullptr;
+  HeapType intendedType;
 
   void finalize();
+
+  // Returns the type we intend to cast to.
+  HeapType getIntendedType();
 };
 
 class RefCast : public SpecificExpression<Expression::RefCastId> {
@@ -1366,9 +1386,15 @@ public:
   RefCast(MixedArena& allocator) {}
 
   Expression* ref;
-  Expression* rtt;
+
+  // See above with RefTest.
+  Expression* rtt = nullptr;
+  HeapType intendedType;
 
   void finalize();
+
+  // Returns the type we intend to cast to.
+  HeapType getIntendedType();
 };
 
 class BrOn : public SpecificExpression<Expression::BrOnId> {
@@ -1379,8 +1405,10 @@ public:
   Name name;
   Expression* ref;
 
-  // BrOnCast* has an rtt that is used in the cast.
-  Expression* rtt;
+  // BrOnCast* has, like RefCast and RefTest, either an rtt or a static intended
+  // type.
+  Expression* rtt = nullptr;
+  HeapType intendedType;
 
   // TODO: BrOnNull also has an optional extra value in the spec, which we do
   //       not support. See also the discussion on
@@ -1389,6 +1417,9 @@ public:
   //       Break or a new class of its own.
 
   void finalize();
+
+  // Returns the type we intend to cast to. Relevant only for the cast variants.
+  HeapType getIntendedType();
 
   // Returns the type sent on the branch, if it is taken.
   Type getSentType();
@@ -1419,7 +1450,10 @@ class StructNew : public SpecificExpression<Expression::StructNewId> {
 public:
   StructNew(MixedArena& allocator) : operands(allocator) {}
 
-  Expression* rtt;
+  // A dynamic StructNew has an rtt, while a static one declares the type using
+  // the type field.
+  Expression* rtt = nullptr;
+
   // A struct.new_with_default has empty operands. This does leave the case of a
   // struct with no fields ambiguous, but it doesn't make a difference in that
   // case, and binaryen doesn't guarantee roundtripping binaries anyhow.
@@ -1462,9 +1496,25 @@ public:
   // used.
   Expression* init = nullptr;
   Expression* size;
-  Expression* rtt;
+
+  // A dynamic ArrayNew has an rtt, while a static one declares the type using
+  // the type field.
+  Expression* rtt = nullptr;
 
   bool isWithDefault() { return !init; }
+
+  void finalize();
+};
+
+class ArrayInit : public SpecificExpression<Expression::ArrayInitId> {
+public:
+  ArrayInit(MixedArena& allocator) : values(allocator) {}
+
+  ExpressionList values;
+
+  // A dynamic ArrayInit has an rtt, while a static one declares the type using
+  // the type field.
+  Expression* rtt = nullptr;
 
   void finalize();
 };
@@ -1823,8 +1873,10 @@ public:
 // The optional "dylink" section is used in dynamic linking.
 class DylinkSection {
 public:
+  bool isLegacy = false;
   Index memorySize, memoryAlignment, tableSize, tableAlignment;
   std::vector<Name> neededDynlibs;
+  std::vector<char> tail;
 };
 
 class Module {

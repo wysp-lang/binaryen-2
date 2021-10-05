@@ -161,6 +161,7 @@ BINARYEN_API BinaryenFeatures BinaryenFeatureMultivalue(void);
 BINARYEN_API BinaryenFeatures BinaryenFeatureGC(void);
 BINARYEN_API BinaryenFeatures BinaryenFeatureMemory64(void);
 BINARYEN_API BinaryenFeatures BinaryenFeatureTypedFunctionReferences(void);
+BINARYEN_API BinaryenFeatures BinaryenFeatureRelaxedSIMD(void);
 BINARYEN_API BinaryenFeatures BinaryenFeatureAll(void);
 
 // Modules
@@ -2253,6 +2254,10 @@ BINARYEN_API bool BinaryenModuleValidate(BinaryenModuleRef module);
 // global optimize and shrink level.
 BINARYEN_API void BinaryenModuleOptimize(BinaryenModuleRef module);
 
+// Updates the internal name mapping logic in a module. This must be called
+// after renaming module elements.
+BINARYEN_API void BinaryenModuleUpdateMaps(BinaryenModuleRef module);
+
 // Gets the currently set optimize level. Applies to all modules, globally.
 // 0, 1, 2 correspond to -O0, -O1, -O2 (default), etc.
 BINARYEN_API int BinaryenGetOptimizeLevel(void);
@@ -2628,7 +2633,7 @@ BINARYEN_API BinaryenSideEffects BinaryenSideEffectDanglingPop(void);
 BINARYEN_API BinaryenSideEffects BinaryenSideEffectAny(void);
 
 BINARYEN_API BinaryenSideEffects BinaryenExpressionGetSideEffects(
-  BinaryenExpressionRef expr, BinaryenFeatures features);
+  BinaryenExpressionRef expr, BinaryenModuleRef module);
 
 //
 // ========== CFG / Relooper ==========

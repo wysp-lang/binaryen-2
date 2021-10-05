@@ -135,6 +135,7 @@ void ReFinalize::visitRefFunc(RefFunc* curr) {
   // this class has been meant to do.
 }
 void ReFinalize::visitRefEq(RefEq* curr) { curr->finalize(); }
+void ReFinalize::visitTableGet(TableGet* curr) { curr->finalize(); }
 void ReFinalize::visitTry(Try* curr) { curr->finalize(); }
 void ReFinalize::visitThrow(Throw* curr) { curr->finalize(); }
 void ReFinalize::visitRethrow(Rethrow* curr) { curr->finalize(); }
@@ -162,6 +163,7 @@ void ReFinalize::visitStructNew(StructNew* curr) { curr->finalize(); }
 void ReFinalize::visitStructGet(StructGet* curr) { curr->finalize(); }
 void ReFinalize::visitStructSet(StructSet* curr) { curr->finalize(); }
 void ReFinalize::visitArrayNew(ArrayNew* curr) { curr->finalize(); }
+void ReFinalize::visitArrayInit(ArrayInit* curr) { curr->finalize(); }
 void ReFinalize::visitArrayGet(ArrayGet* curr) { curr->finalize(); }
 void ReFinalize::visitArraySet(ArraySet* curr) { curr->finalize(); }
 void ReFinalize::visitArrayLen(ArrayLen* curr) { curr->finalize(); }

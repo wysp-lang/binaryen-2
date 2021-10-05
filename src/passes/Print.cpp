@@ -286,6 +286,12 @@ static std::ostream& printType(std::ostream& o, Type type, Module* wasm) {
   return o;
 }
 
+static std::ostream&
+printHeapType(std::ostream& o, HeapType type, Module* wasm) {
+  TypeNamePrinter(o, wasm).print(type);
+  return o;
+}
+
 static std::ostream& printPrefixedTypes(std::ostream& o,
                                         const char* prefix,
                                         Type type,
@@ -1811,7 +1817,7 @@ struct PrintExpressionContents
   void visitMemoryGrow(MemoryGrow* curr) { printMedium(o, "memory.grow"); }
   void visitRefNull(RefNull* curr) {
     printMedium(o, "ref.null ");
-    TypeNamePrinter(o, wasm).print(curr->type.getHeapType());
+    printHeapType(o, curr->type.getHeapType(), wasm);
   }
   void visitRefIs(RefIs* curr) {
     switch (curr->op) {
@@ -1836,6 +1842,10 @@ struct PrintExpressionContents
     printName(curr->func, o);
   }
   void visitRefEq(RefEq* curr) { printMedium(o, "ref.eq"); }
+  void visitTableGet(TableGet* curr) {
+    printMedium(o, "table.get ");
+    printName(curr->table, o);
+  }
   void visitTry(Try* curr) {
     printMedium(o, "try");
     if (curr->name.is()) {
@@ -1881,8 +1891,22 @@ struct PrintExpressionContents
       printMedium(o, "call_ref");
     }
   }
-  void visitRefTest(RefTest* curr) { printMedium(o, "ref.test"); }
-  void visitRefCast(RefCast* curr) { printMedium(o, "ref.cast"); }
+  void visitRefTest(RefTest* curr) {
+    if (curr->rtt) {
+      printMedium(o, "ref.test");
+    } else {
+      printMedium(o, "ref.test_static ");
+      printHeapType(o, curr->intendedType, wasm);
+    }
+  }
+  void visitRefCast(RefCast* curr) {
+    if (curr->rtt) {
+      printMedium(o, "ref.cast");
+    } else {
+      printMedium(o, "ref.cast_static ");
+      printHeapType(o, curr->intendedType, wasm);
+    }
+  }
   void visitBrOn(BrOn* curr) {
     switch (curr->op) {
       case BrOnNull:
@@ -1892,10 +1916,26 @@ struct PrintExpressionContents
         printMedium(o, "br_on_non_null ");
         break;
       case BrOnCast:
-        printMedium(o, "br_on_cast ");
+        if (curr->rtt) {
+          printMedium(o, "br_on_cast ");
+        } else {
+          printMedium(o, "br_on_cast_static ");
+          printName(curr->name, o);
+          o << ' ';
+          printHeapType(o, curr->intendedType, wasm);
+          return;
+        }
         break;
       case BrOnCastFail:
-        printMedium(o, "br_on_cast_fail ");
+        if (curr->rtt) {
+          printMedium(o, "br_on_cast_fail ");
+        } else {
+          printMedium(o, "br_on_cast_static_fail ");
+          printName(curr->name, o);
+          o << ' ';
+          printHeapType(o, curr->intendedType, wasm);
+          return;
+        }
         break;
       case BrOnFunc:
         printMedium(o, "br_on_func ");
@@ -1949,15 +1989,18 @@ struct PrintExpressionContents
   }
 
   void visitStructNew(StructNew* curr) {
-    if (printUnreachableReplacement(curr->rtt)) {
+    if (printUnreachableReplacement(curr)) {
       return;
     }
-    printMedium(o, "struct.new_");
+    printMedium(o, "struct.new");
     if (curr->isWithDefault()) {
-      o << "default_";
+      printMedium(o, "_default");
     }
-    o << "with_rtt ";
-    TypeNamePrinter(o, wasm).print(curr->rtt->type.getHeapType());
+    if (curr->rtt) {
+      printMedium(o, "_with_rtt");
+    }
+    o << ' ';
+    TypeNamePrinter(o, wasm).print(curr->type.getHeapType());
   }
 
   void printFieldName(HeapType type, Index index) {
@@ -1999,12 +2042,29 @@ struct PrintExpressionContents
     printFieldName(heapType, curr->index);
   }
   void visitArrayNew(ArrayNew* curr) {
-    printMedium(o, "array.new_");
-    if (curr->isWithDefault()) {
-      o << "default_";
+    if (printUnreachableReplacement(curr)) {
+      return;
     }
-    o << "with_rtt ";
-    TypeNamePrinter(o, wasm).print(curr->rtt->type.getHeapType());
+    printMedium(o, "array.new");
+    if (curr->isWithDefault()) {
+      printMedium(o, "_default");
+    }
+    if (curr->rtt) {
+      printMedium(o, "_with_rtt");
+    }
+    o << ' ';
+    TypeNamePrinter(o, wasm).print(curr->type.getHeapType());
+  }
+  void visitArrayInit(ArrayInit* curr) {
+    if (printUnreachableReplacement(curr)) {
+      return;
+    }
+    printMedium(o, "array.init");
+    if (!curr->rtt) {
+      printMedium(o, "_static");
+    }
+    o << ' ';
+    TypeNamePrinter(o, wasm).print(curr->type.getHeapType());
   }
   void visitArrayGet(ArrayGet* curr) {
     if (printUnreachableReplacement(curr->ref)) {
@@ -2735,12 +2795,9 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
     }
   }
   void visitElementSegment(ElementSegment* curr) {
-    bool allElementsRefFunc =
-      std::all_of(curr->data.begin(), curr->data.end(), [](Expression* entry) {
-        return entry->is<RefFunc>();
-      });
+    bool usesExpressions = TableUtils::usesExpressions(curr, currModule);
     auto printElemType = [&]() {
-      if (allElementsRefFunc) {
+      if (!usesExpressions) {
         o << "func";
       } else {
         printType(o, curr->type, currModule);
@@ -2758,7 +2815,7 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
     }
 
     if (curr->table.is()) {
-      if (!allElementsRefFunc || currModule->tables.size() > 1) {
+      if (usesExpressions || currModule->tables.size() > 1) {
         // tableuse
         o << " (table ";
         printName(curr->table, o);
@@ -2768,7 +2825,7 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
       o << ' ';
       visit(curr->offset);
 
-      if (!allElementsRefFunc || currModule->tables.size() > 1) {
+      if (usesExpressions || currModule->tables.size() > 1) {
         o << ' ';
         printElemType();
       }
@@ -2777,7 +2834,7 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
       printElemType();
     }
 
-    if (allElementsRefFunc) {
+    if (!usesExpressions) {
       for (auto* entry : curr->data) {
         auto* refFunc = entry->cast<RefFunc>();
         o << ' ';
@@ -2890,6 +2947,10 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
                         << dylinkSection->tableAlignment << '\n';
     for (auto& neededDynlib : dylinkSection->neededDynlibs) {
       doIndent(o, indent) << ";;   needed dynlib: " << neededDynlib << '\n';
+    }
+    if (dylinkSection->tail.size()) {
+      doIndent(o, indent) << ";;   extra dylink data, size "
+                          << dylinkSection->tail.size() << "\n";
     }
   }
   void visitModule(Module* curr) {

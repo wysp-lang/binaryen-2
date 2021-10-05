@@ -195,6 +195,12 @@ public:
   // Returns the type size in bytes. Only single types are supported.
   unsigned getByteSize() const;
 
+  // Returns whether the type has a size in bytes. This is the same as whether
+  // it can be stored in linear memory. Things like references do not have this
+  // property, while numbers do. Tuples may or may not depending on their
+  // contents.
+  unsigned hasByteSize() const;
+
   // Reinterpret an integer type to a float type with the same size and vice
   // versa. Only single integer and float types are supported.
   Type reinterpret() const;
@@ -257,11 +263,14 @@ public:
 
   std::string toString() const;
 
-  struct Iterator : std::iterator<std::random_access_iterator_tag,
-                                  Type,
-                                  long,
-                                  Type*,
-                                  const Type&> {
+  struct Iterator {
+    // Iterator traits
+    using iterator_category = std::random_access_iterator_tag;
+    using value_type = Type;
+    using difference_type = std::ptrdiff_t;
+    using pointer = const Type*;
+    using reference = const Type&;
+
     const Type* parent;
     size_t index;
     Iterator(const Type* parent, size_t index) : parent(parent), index(index) {}

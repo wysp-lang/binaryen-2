@@ -46,12 +46,6 @@
 
 namespace wasm {
 
-Name I32_EXPR = "i32.expr";
-Name I64_EXPR = "i64.expr";
-Name F32_EXPR = "f32.expr";
-Name F64_EXPR = "f64.expr";
-Name ANY_EXPR = "any.expr";
-
 // Useful information about locals
 struct LocalInfo {
   static const Index kUnknown = Index(-1);
@@ -101,8 +95,8 @@ struct LocalScanner : PostWalker<LocalScanner> {
       return;
     }
     // an integer var, worth processing
-    auto* value = Properties::getFallthrough(
-      curr->value, passOptions, getModule()->features);
+    auto* value =
+      Properties::getFallthrough(curr->value, passOptions, *getModule());
     auto& info = localInfo[curr->index];
     info.maxBits = std::max(info.maxBits, Bits::getMaxBits(value, this));
     auto signExtBits = LocalInfo::kUnknown;
@@ -213,8 +207,6 @@ struct OptimizeInstructions
 
   bool fastMath;
 
-  bool refinalize = false;
-
   void doWalkFunction(Function* func) {
     fastMath = getPassOptions().fastMath;
 
@@ -227,11 +219,6 @@ struct OptimizeInstructions
 
     // Main walk.
     super::doWalkFunction(func);
-
-    // If we need to update parent types, do so.
-    if (refinalize) {
-      ReFinalize().walkFunctionInModule(func, getModule());
-    }
 
     // Final optimizations.
     {
@@ -275,7 +262,7 @@ struct OptimizeInstructions
   }
 
   EffectAnalyzer effects(Expression* expr) {
-    return EffectAnalyzer(getPassOptions(), getModule()->features, expr);
+    return EffectAnalyzer(getPassOptions(), *getModule(), expr);
   }
 
   decltype(auto) pure(Expression** binder) {
@@ -284,8 +271,7 @@ struct OptimizeInstructions
   }
 
   bool canReorder(Expression* a, Expression* b) {
-    return EffectAnalyzer::canReorder(
-      getPassOptions(), getModule()->features, a, b);
+    return EffectAnalyzer::canReorder(getPassOptions(), *getModule(), a, b);
   }
 
   void visitBinary(Binary* curr) {
@@ -423,6 +409,38 @@ struct OptimizeInstructions
         }
       }
       {
+        // -x * -y   ==>   x * y
+        //   where  x, y  are integers
+        Binary* bin;
+        Expression *x, *y;
+        if (matches(curr,
+                    binary(&bin,
+                           Mul,
+                           binary(Sub, ival(0), any(&x)),
+                           binary(Sub, ival(0), any(&y))))) {
+          bin->left = x;
+          bin->right = y;
+          return replaceCurrent(curr);
+        }
+      }
+      {
+        // -x * y   ==>   -(x * y)
+        // x * -y   ==>   -(x * y)
+        //   where  x, y  are integers
+        Expression *x, *y;
+        if ((matches(curr,
+                     binary(Mul, binary(Sub, ival(0), any(&x)), any(&y))) ||
+             matches(curr,
+                     binary(Mul, any(&x), binary(Sub, ival(0), any(&y))))) &&
+            !x->is<Const>() && !y->is<Const>()) {
+          Builder builder(*getModule());
+          return replaceCurrent(
+            builder.makeBinary(Abstract::getBinary(curr->type, Sub),
+                               builder.makeConst(Literal::makeZero(curr->type)),
+                               builder.makeBinary(curr->op, x, y)));
+        }
+      }
+      {
         if (getModule()->features.hasSignExt()) {
           Const *c1, *c2;
           Expression* x;
@@ -470,9 +488,9 @@ struct OptimizeInstructions
       Index extraLeftShifts;
       auto bits = Properties::getAlmostSignExtBits(curr, extraLeftShifts);
       if (extraLeftShifts == 0) {
-        if (auto* load = Properties::getFallthrough(
-                           ext, getPassOptions(), getModule()->features)
-                           ->dynCast<Load>()) {
+        if (auto* load =
+              Properties::getFallthrough(ext, getPassOptions(), *getModule())
+                ->dynCast<Load>()) {
           // pattern match a load of 8 bits and a sign extend using a shl of
           // 24 then shr_s of 24 as well, etc.
           if (LoadUtils::canBeSigned(load) &&
@@ -1029,21 +1047,36 @@ struct OptimizeInstructions
   }
 
   void visitLocalSet(LocalSet* curr) {
-    //   (local.tee (ref.as_non_null ..))
-    // can be reordered to
-    //   (ref.as_non_null (local.tee ..))
-    // if the local is nullable (which it must be until some form of let is
-    // added). The reordering allows the ref.as to be potentially optimized
-    // further based on where the value flows to.
-    if (curr->isTee()) {
-      if (auto* as = curr->value->dynCast<RefAs>()) {
-        if (as->op == RefAsNonNull &&
-            getFunction()->getLocalType(curr->index).isNullable()) {
+    // Interactions between local.set/tee and ref.as_non_null can be optimized
+    // in some cases, by removing or moving the ref.as_non_null operation. In
+    // all cases, we only do this when we do *not* allow non-nullable locals. If
+    // we do allow such locals, then (1) this local might be non-nullable, so we
+    // can't remove or move a ref.as_non_null flowing into a local.set/tee, and
+    // (2) even if the local were nullable, if we change things we might prevent
+    // the LocalSubtyping pass from turning it into a non-nullable local later.
+    if (auto* as = curr->value->dynCast<RefAs>()) {
+      if (as->op == RefAsNonNull && !getModule()->features.hasGCNNLocals()) {
+        //   (local.tee (ref.as_non_null ..))
+        // =>
+        //   (ref.as_non_null (local.tee ..))
+        //
+        // The reordering allows the ref.as to be potentially optimized further
+        // based on where the value flows to.
+        if (curr->isTee()) {
           curr->value = as->value;
           curr->finalize();
           as->value = curr;
           as->finalize();
           replaceCurrent(as);
+          return;
+        }
+
+        // Otherwise, if this is not a tee, then no value falls through. The
+        // ref.as_non_null acts as a null check here, basically. If we are
+        // ignoring such traps, we can remove it.
+        auto passOptions = getPassOptions();
+        if (passOptions.ignoreImplicitTraps || passOptions.trapsNeverHappen) {
+          curr->value = as->value;
         }
       }
     }
@@ -1133,6 +1166,16 @@ struct OptimizeInstructions
     }
   }
 
+  void visitMemoryFill(MemoryFill* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+    assert(getModule()->features.hasBulkMemory());
+    if (auto* ret = optimizeMemoryFill(curr)) {
+      return replaceCurrent(ret);
+    }
+  }
+
   void visitCallRef(CallRef* curr) {
     if (curr->target->type == Type::unreachable) {
       // The call_ref is not reached; leave this for DCE.
@@ -1147,15 +1190,28 @@ struct OptimizeInstructions
       return;
     }
 
+    if (auto* get = curr->target->dynCast<TableGet>()) {
+      // (call_ref ..args.. (table.get $table (index))
+      //   =>
+      // (call_indirect $table ..args.. (index))
+      replaceCurrent(Builder(*getModule())
+                       .makeCallIndirect(get->table,
+                                         get->index,
+                                         curr->operands,
+                                         get->type.getHeapType().getSignature(),
+                                         curr->isReturn));
+      return;
+    }
+
     auto features = getModule()->features;
 
     // It is possible the target is not a function reference, but we can infer
     // the fallthrough value there. It takes more work to optimize this case,
     // but it is pretty important to allow a call_ref to become a fast direct
     // call, so make the effort.
-    if (auto* ref =
-          Properties::getFallthrough(curr->target, getPassOptions(), features)
-            ->dynCast<RefFunc>()) {
+    if (auto* ref = Properties::getFallthrough(
+                      curr->target, getPassOptions(), *getModule())
+                      ->dynCast<RefFunc>()) {
       // Check if the fallthrough make sense. We may have cast it to a different
       // type, which would be a problem - we'd be replacing a call_ref to one
       // type with a direct call to a function of another type. That would trap
@@ -1291,97 +1347,135 @@ struct OptimizeInstructions
     Builder builder(*getModule());
     auto passOptions = getPassOptions();
 
-    auto fallthrough = Properties::getFallthrough(
-      curr->ref, getPassOptions(), getModule()->features);
+    auto fallthrough =
+      Properties::getFallthrough(curr->ref, getPassOptions(), *getModule());
 
-    // If the value is a null, it will just flow through, and we do not need the
-    // cast. However, if that would change the type, then things are less
+    auto intendedType = curr->getIntendedType();
+
+    // If the value is a null, it will just flow through, and we do not need
+    // the cast. However, if that would change the type, then things are less
     // simple: if the original type was non-nullable, replacing it with a null
     // would change the type, which can happen in e.g.
     //   (ref.cast (ref.as_non_null (.. (ref.null)
     if (fallthrough->is<RefNull>()) {
-      // Replace the expression with drops of the inputs, and a null. Note that
-      // we provide a null of the type the outside expects - that of the rtt,
-      // which is what was cast to.
-      Expression* rep =
-        builder.makeBlock({builder.makeDrop(curr->ref),
-                           builder.makeDrop(curr->rtt),
-                           builder.makeRefNull(curr->rtt->type.getHeapType())});
+      // Replace the expression with drops of the inputs, and a null. Note
+      // that we provide a null of the previous type, so that we do not alter
+      // the type received by our parent.
+      std::vector<Expression*> items;
+      items.push_back(builder.makeDrop(curr->ref));
+      if (curr->rtt) {
+        items.push_back(builder.makeDrop(curr->rtt));
+      }
+      items.push_back(builder.makeRefNull(intendedType));
+      Expression* rep = builder.makeBlock(items);
       if (curr->ref->type.isNonNullable()) {
-        // Avoid a type change by forcing to be non-nullable. In practice, this
-        // would have trapped before we get here, so this is just for
+        // Avoid a type change by forcing to be non-nullable. In practice,
+        // this would have trapped before we get here, so this is just for
         // validation.
         rep = builder.makeRefAs(RefAsNonNull, rep);
       }
       replaceCurrent(rep);
       return;
-      // TODO: The optimal ordering of this and the other ref.as_non_null stuff
-      //       later down in this functions is unclear and may be worth looking
-      //       into.
+      // TODO: The optimal ordering of this and the other ref.as_non_null
+      //       stuff later down in this functions is unclear and may be worth
+      //       looking into.
     }
 
     // For the cast to be able to succeed, the value being cast must be a
     // subtype of the desired type, as RTT subtyping is a subset of static
     // subtyping. For example, trying to cast an array to a struct would be
     // incompatible.
-    if (!canBeCastTo(curr->ref->type.getHeapType(),
-                     curr->rtt->type.getHeapType())) {
+    if (!canBeCastTo(curr->ref->type.getHeapType(), intendedType)) {
       // This cast cannot succeed. If the input is not a null, it will
       // definitely trap.
       if (fallthrough->type.isNonNullable()) {
-        // Our type will now be unreachable; update the parents.
-        refinalize = true;
-        replaceCurrent(builder.makeBlock({builder.makeDrop(curr->ref),
-                                          builder.makeDrop(curr->rtt),
-                                          builder.makeUnreachable()}));
+        // Make sure to emit a block with the same type as us; leave updating
+        // types for other passes.
+        std::vector<Expression*> items;
+        items.push_back(builder.makeDrop(curr->ref));
+        if (curr->rtt) {
+          items.push_back(builder.makeDrop(curr->rtt));
+        }
+        items.push_back(builder.makeUnreachable());
+        replaceCurrent(builder.makeBlock(items, curr->type));
         return;
       }
-      // Otherwise, we are not sure what it is, and need to wait for runtime to
-      // see if it is a null or not. (We've already handled the case where we
-      // can see the value is definitely a null at compile time, earlier.)
+      // Otherwise, we are not sure what it is, and need to wait for runtime
+      // to see if it is a null or not. (We've already handled the case where
+      // we can see the value is definitely a null at compile time, earlier.)
     }
 
-    if (passOptions.ignoreImplicitTraps || passOptions.trapsNeverHappen) {
+    if (passOptions.ignoreImplicitTraps || passOptions.trapsNeverHappen ||
+        !curr->rtt) {
       // Aside from the issue of type incompatibility as mentioned above, the
       // cast can trap if the types *are* compatible but it happens to be the
       // case at runtime that the value is not of the desired subtype. If we
-      // do not consider such traps possible, we can ignore that. Note, though,
-      // that we cannot do this if we cannot replace the current type with the
-      // reference's type.
-      if (HeapType::isSubType(curr->ref->type.getHeapType(),
-                              curr->rtt->type.getHeapType())) {
-        replaceCurrent(getResultOfFirst(curr->ref,
-                                        builder.makeDrop(curr->rtt),
-                                        getFunction(),
-                                        getModule(),
-                                        passOptions));
+      // do not consider such traps possible, we can ignore that. (Note,
+      // though, that we cannot do this if we cannot replace the current type
+      // with the reference's type.) We can also do this if this is a static
+      // cast: in that case, all we need to know about are the types.
+      if (HeapType::isSubType(curr->ref->type.getHeapType(), intendedType)) {
+        if (curr->rtt) {
+          replaceCurrent(getResultOfFirst(curr->ref,
+                                          builder.makeDrop(curr->rtt),
+                                          getFunction(),
+                                          getModule(),
+                                          passOptions));
+        } else {
+          replaceCurrent(curr->ref);
+        }
         return;
       }
     }
 
-    auto features = getModule()->features;
-
-    // Repeated identical ref.cast operations are unnecessary, if using the
-    // exact same rtt - the result will be the same. Find the immediate child
-    // cast, if there is one, and see if it is identical.
+    // Repeated identical ref.cast operations are unnecessary. First, find the
+    // immediate child cast, if there is one.
     // TODO: Look even further through incompatible casts?
     auto* ref = curr->ref;
     while (!ref->is<RefCast>()) {
       auto* last = ref;
-      // RefCast falls through the value, so instead of calling getFallthrough()
-      // to look through all fallthroughs, we must iterate manually. Keep going
-      // until we reach either the end of things falling-through, or a cast.
-      ref = Properties::getImmediateFallthrough(ref, passOptions, features);
+      // RefCast falls through the value, so instead of calling
+      // getFallthrough() to look through all fallthroughs, we must iterate
+      // manually. Keep going until we reach either the end of things
+      // falling-through, or a cast.
+      ref = Properties::getImmediateFallthrough(ref, passOptions, *getModule());
       if (ref == last) {
         break;
       }
     }
     if (auto* child = ref->dynCast<RefCast>()) {
-      // Check if the casts are identical.
-      if (ExpressionAnalyzer::equal(curr->rtt, child->rtt) &&
-          !EffectAnalyzer(passOptions, features, curr->rtt).hasSideEffects()) {
-        replaceCurrent(curr->ref);
-        return;
+      if (curr->rtt && child->rtt) {
+        // Check if the casts are identical.
+        if (ExpressionAnalyzer::equal(curr->rtt, child->rtt) &&
+            !EffectAnalyzer(passOptions, *getModule(), curr->rtt)
+               .hasSideEffects()) {
+          replaceCurrent(curr->ref);
+          return;
+        }
+      } else if (!curr->rtt && !child->rtt) {
+        // Repeated static casts can be removed, leaving just the most demanding
+        // of them.
+        auto childIntendedType = child->getIntendedType();
+        if (HeapType::isSubType(intendedType, childIntendedType)) {
+          // Skip the child.
+          curr->ref = child->ref;
+          return;
+        } else if (HeapType::isSubType(childIntendedType, intendedType)) {
+          // Skip the parent.
+          replaceCurrent(child);
+          return;
+        } else {
+          // The types are not compatible, so if the input is not null, this
+          // will trap.
+          if (!curr->type.isNullable()) {
+            // Make sure to emit a block with the same type as us; leave
+            // updating types for other passes.
+            replaceCurrent(builder.makeBlock(
+              {builder.makeDrop(child->ref), builder.makeUnreachable()},
+              curr->type));
+            return;
+          }
+        }
       }
     }
 
@@ -1416,14 +1510,34 @@ struct OptimizeInstructions
   }
 
   void visitRefTest(RefTest* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+
+    Builder builder(*getModule());
+
+    auto refType = curr->ref->type.getHeapType();
+    auto intendedType = curr->getIntendedType();
+
     // See above in RefCast.
-    if (!canBeCastTo(curr->ref->type.getHeapType(),
-                     curr->rtt->type.getHeapType())) {
+    if (!canBeCastTo(refType, intendedType)) {
       // This test cannot succeed, and will definitely return 0.
-      Builder builder(*getModule());
-      replaceCurrent(builder.makeBlock({builder.makeDrop(curr->ref),
-                                        builder.makeDrop(curr->rtt),
-                                        builder.makeConst(int32_t(0))}));
+      std::vector<Expression*> items;
+      items.push_back(builder.makeDrop(curr->ref));
+      if (curr->rtt) {
+        items.push_back(builder.makeDrop(curr->rtt));
+      }
+      items.push_back(builder.makeConst(int32_t(0)));
+      replaceCurrent(builder.makeBlock(items));
+      return;
+    }
+
+    if (!curr->rtt && curr->ref->type.isNonNullable() &&
+        HeapType::isSubType(refType, intendedType)) {
+      // This static test will definitely succeed.
+      replaceCurrent(builder.makeBlock(
+        {builder.makeDrop(curr->ref), builder.makeConst(int32_t(1))}));
+      return;
     }
   }
 
@@ -1511,8 +1625,11 @@ struct OptimizeInstructions
       // drop, which is no worse, and the value and the drop can be optimized
       // out later if the value has no side effects.
       Builder builder(*getModule());
-      replaceCurrent(builder.makeSequence(builder.makeDrop(curr->value),
-                                          builder.makeUnreachable()));
+      // Make sure to emit a block with the same type as us; leave updating
+      // types for other passes.
+      replaceCurrent(builder.makeBlock(
+        {builder.makeDrop(curr->value), builder.makeUnreachable()},
+        curr->type));
       return;
     }
 
@@ -1544,23 +1661,22 @@ private:
     // also ok to have side effects here, if we can remove them, as we are also
     // checking if we can remove the two inputs anyhow.)
     auto passOptions = getPassOptions();
-    auto features = getModule()->features;
-    if (EffectAnalyzer(passOptions, features, left)
+    if (EffectAnalyzer(passOptions, *getModule(), left)
           .hasUnremovableSideEffects() ||
-        EffectAnalyzer(passOptions, features, right)
+        EffectAnalyzer(passOptions, *getModule(), right)
           .hasUnremovableSideEffects()) {
       return false;
     }
 
     // Ignore extraneous things and compare them structurally.
-    left = Properties::getFallthrough(left, passOptions, features);
-    right = Properties::getFallthrough(right, passOptions, features);
+    left = Properties::getFallthrough(left, passOptions, *getModule());
+    right = Properties::getFallthrough(right, passOptions, *getModule());
     if (!ExpressionAnalyzer::equal(left, right)) {
       return false;
     }
     // To be equal, they must also be known to return the same result
     // deterministically.
-    if (Properties::isIntrinsicallyNondeterministic(left, features)) {
+    if (Properties::isGenerative(left, getModule()->features)) {
       return false;
     }
     return true;
@@ -1796,6 +1912,25 @@ private:
         }
       }
     }
+    if (curr->type == Type::i32 &&
+        Bits::getMaxBits(curr->condition, this) <= 1 &&
+        Bits::getMaxBits(curr->ifTrue, this) <= 1 &&
+        Bits::getMaxBits(curr->ifFalse, this) <= 1) {
+      // The condition and both arms are i32 booleans, which allows us to do
+      // boolean optimizations.
+      Expression* x;
+      Expression* y;
+
+      // x ? y : 0   ==>   x & y
+      if (matches(curr, select(any(&y), ival(0), any(&x)))) {
+        return builder.makeBinary(AndInt32, y, x);
+      }
+
+      // x ? 1 : y   ==>   x | y
+      if (matches(curr, select(ival(1), any(&y), any(&x)))) {
+        return builder.makeBinary(OrInt32, y, x);
+      }
+    }
     {
       // Sides are identical, fold
       Expression *ifTrue, *ifFalse, *c;
@@ -1916,7 +2051,6 @@ private:
         if (!curr->type.isInteger()) {
           return;
         }
-        FeatureSet features = getModule()->features;
         auto type = curr->type;
         auto* left = curr->left->dynCast<Const>();
         auto* right = curr->right->dynCast<Const>();
@@ -1938,7 +2072,7 @@ private:
           // shift has side effects
           if (((left && left->value.isZero()) ||
                (right && Bits::getEffectiveShifts(right) == 0)) &&
-              !EffectAnalyzer(passOptions, features, curr->right)
+              !EffectAnalyzer(passOptions, *getModule(), curr->right)
                  .hasSideEffects()) {
             replaceCurrent(curr->left);
             return;
@@ -1947,13 +2081,13 @@ private:
           // multiplying by zero is a zero, unless the other side has side
           // effects
           if (left && left->value.isZero() &&
-              !EffectAnalyzer(passOptions, features, curr->right)
+              !EffectAnalyzer(passOptions, *getModule(), curr->right)
                  .hasSideEffects()) {
             replaceCurrent(left);
             return;
           }
           if (right && right->value.isZero() &&
-              !EffectAnalyzer(passOptions, features, curr->left)
+              !EffectAnalyzer(passOptions, *getModule(), curr->left)
                  .hasSideEffects()) {
             replaceCurrent(right);
             return;
@@ -2224,6 +2358,24 @@ private:
     if (matches(curr, binary(Mul, pure(&left), ival(0))) ||
         matches(curr, binary(And, pure(&left), ival(0)))) {
       return right;
+    }
+    // -x * C   ==>    x * -C,   if  shrinkLevel != 0  or  C != C_pot
+    // -x * C   ==>   -(x * C),  otherwise
+    //    where  x, C  are integers
+    Binary* inner;
+    if (matches(
+          curr,
+          binary(Mul, binary(&inner, Sub, ival(0), any(&left)), ival()))) {
+      if (getPassOptions().shrinkLevel != 0 ||
+          !Bits::isPowerOf2(right->value.getInteger())) {
+        right->value = right->value.neg();
+        curr->left = left;
+        return curr;
+      } else {
+        curr->left = left;
+        Const* zero = inner->left->cast<Const>();
+        return builder.makeBinary(inner->op, zero, curr);
+      }
     }
     // x == 0   ==>   eqz x
     if (matches(curr, binary(Eq, any(&left), ival(0)))) {
@@ -2687,8 +2839,7 @@ private:
     if (type.isInteger()) {
       if (auto* inner = outer->right->dynCast<Binary>()) {
         if (outer->op == inner->op) {
-          if (!EffectAnalyzer(
-                 getPassOptions(), getModule()->features, outer->left)
+          if (!EffectAnalyzer(getPassOptions(), *getModule(), outer->left)
                  .hasSideEffects()) {
             if (ExpressionAnalyzer::equal(inner->left, outer->left)) {
               // x - (x - y)  ==>   y
@@ -2730,8 +2881,7 @@ private:
       }
       if (auto* inner = outer->left->dynCast<Binary>()) {
         if (outer->op == inner->op) {
-          if (!EffectAnalyzer(
-                 getPassOptions(), getModule()->features, outer->right)
+          if (!EffectAnalyzer(getPassOptions(), *getModule(), outer->right)
                  .hasSideEffects()) {
             if (ExpressionAnalyzer::equal(inner->right, outer->right)) {
               // (x ^ y) ^ y  ==>   x
@@ -2806,7 +2956,7 @@ private:
 
     // memory.copy(dst, src, C)  ==>  store(dst, load(src))
     if (auto* csize = memCopy->size->dynCast<Const>()) {
-      auto bytes = csize->value.geti32();
+      auto bytes = csize->value.getInteger();
       Builder builder(*getModule());
 
       switch (bytes) {
@@ -2859,6 +3009,127 @@ private:
         }
       }
     }
+    return nullptr;
+  }
+
+  Expression* optimizeMemoryFill(MemoryFill* memFill) {
+    if (memFill->type == Type::unreachable) {
+      return nullptr;
+    }
+
+    if (!memFill->size->is<Const>()) {
+      return nullptr;
+    }
+
+    PassOptions options = getPassOptions();
+    Builder builder(*getModule());
+
+    auto* csize = memFill->size->cast<Const>();
+    auto bytes = csize->value.getInteger();
+
+    if (bytes == 0LL &&
+        (options.ignoreImplicitTraps || options.trapsNeverHappen)) {
+      // memory.fill(d, v, 0)  ==>  { drop(d), drop(v) }
+      return builder.makeBlock(
+        {builder.makeDrop(memFill->dest), builder.makeDrop(memFill->value)});
+    }
+
+    const uint32_t offset = 0, align = 1;
+
+    if (auto* cvalue = memFill->value->dynCast<Const>()) {
+      uint32_t value = cvalue->value.geti32() & 0xFF;
+      // memory.fill(d, C1, C2)  ==>
+      //   store(d, (C1 & 0xFF) * (-1U / max(bytes)))
+      switch (bytes) {
+        case 1: {
+          return builder.makeStore(1, // bytes
+                                   offset,
+                                   align,
+                                   memFill->dest,
+                                   builder.makeConst<uint32_t>(value),
+                                   Type::i32);
+        }
+        case 2: {
+          return builder.makeStore(2,
+                                   offset,
+                                   align,
+                                   memFill->dest,
+                                   builder.makeConst<uint32_t>(value * 0x0101U),
+                                   Type::i32);
+        }
+        case 4: {
+          // transform only when "value" or shrinkLevel equal to zero due to
+          // it could increase size by several bytes
+          if (value == 0 || options.shrinkLevel == 0) {
+            return builder.makeStore(
+              4,
+              offset,
+              align,
+              memFill->dest,
+              builder.makeConst<uint32_t>(value * 0x01010101U),
+              Type::i32);
+          }
+          break;
+        }
+        case 8: {
+          // transform only when "value" or shrinkLevel equal to zero due to
+          // it could increase size by several bytes
+          if (value == 0 || options.shrinkLevel == 0) {
+            return builder.makeStore(
+              8,
+              offset,
+              align,
+              memFill->dest,
+              builder.makeConst<uint64_t>(value * 0x0101010101010101ULL),
+              Type::i64);
+          }
+          break;
+        }
+        case 16: {
+          if (options.shrinkLevel == 0) {
+            if (getModule()->features.hasSIMD()) {
+              uint8_t values[16];
+              std::fill_n(values, 16, (uint8_t)value);
+              return builder.makeStore(16,
+                                       offset,
+                                       align,
+                                       memFill->dest,
+                                       builder.makeConst<uint8_t[16]>(values),
+                                       Type::v128);
+            } else {
+              // { i64.store(d, C', 0), i64.store(d, C', 8) }
+              auto destType = memFill->dest->type;
+              Index tempLocal = builder.addVar(getFunction(), destType);
+              return builder.makeBlock({
+                builder.makeStore(
+                  8,
+                  offset,
+                  align,
+                  builder.makeLocalTee(tempLocal, memFill->dest, destType),
+                  builder.makeConst<uint64_t>(value * 0x0101010101010101ULL),
+                  Type::i64),
+                builder.makeStore(
+                  8,
+                  offset + 8,
+                  align,
+                  builder.makeLocalGet(tempLocal, destType),
+                  builder.makeConst<uint64_t>(value * 0x0101010101010101ULL),
+                  Type::i64),
+              });
+            }
+          }
+          break;
+        }
+        default: {
+        }
+      }
+    }
+    // memory.fill(d, v, 1)  ==>  store8(d, v)
+    if (bytes == 1LL) {
+      return builder.makeStore(
+        1, offset, align, memFill->dest, memFill->value, Type::i32);
+    }
+
     return nullptr;
   }
 
@@ -3132,14 +3403,9 @@ private:
         curr->ifTrue->type != Type::unreachable &&
         curr->ifFalse->type != Type::unreachable) {
       Unary* un;
-      Expression* x;
       Const* c;
       auto check = [&](Expression* a, Expression* b) {
-        if (matches(a, unary(&un, EqZ, any(&x))) && matches(b, ival(&c))) {
-          auto value = c->value.getInteger();
-          return value == 0 || value == 1;
-        }
-        return false;
+        return matches(b, bval(&c)) && matches(a, unary(&un, EqZ, any()));
       };
       if (check(curr->ifTrue, curr->ifFalse) ||
           check(curr->ifFalse, curr->ifTrue)) {
@@ -3263,9 +3529,8 @@ private:
             // the side effects execute once, so there is no problem.
             // TODO: handle certain side effects when possible in select
             bool validEffects = std::is_same<T, If>::value ||
-                                !ShallowEffectAnalyzer(getPassOptions(),
-                                                       getModule()->features,
-                                                       curr->ifTrue)
+                                !ShallowEffectAnalyzer(
+                                   getPassOptions(), *getModule(), curr->ifTrue)
                                    .hasSideEffects();
 
             // In addition, check for specific limitations of select.

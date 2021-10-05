@@ -74,6 +74,7 @@
 
 #include <ir/branch-utils.h>
 #include <ir/effects.h>
+#include <ir/iteration.h>
 #include <ir/utils.h>
 #include <pass.h>
 #include <wasm-builder.h>
@@ -113,7 +114,7 @@ struct ProblemFinder
           brIfs++;
         }
         // if the value has side effects, we can't remove it
-        if (EffectAnalyzer(passOptions, getModule()->features, br->value)
+        if (EffectAnalyzer(passOptions, *getModule(), br->value)
               .hasSideEffects()) {
           foundProblem = true;
         }
@@ -397,7 +398,9 @@ void BreakValueDropper::visitBlock(Block* curr) {
   optimizeBlock(curr, getModule(), passOptions, branchInfo);
 }
 
-struct MergeBlocks : public WalkerPass<PostWalker<MergeBlocks>> {
+struct MergeBlocks
+  : public WalkerPass<
+      PostWalker<MergeBlocks, UnifiedExpressionVisitor<MergeBlocks>>> {
   bool isFunctionParallel() override { return true; }
 
   Pass* create() override { return new MergeBlocks; }
@@ -434,18 +437,17 @@ struct MergeBlocks : public WalkerPass<PostWalker<MergeBlocks>> {
     if (!child) {
       return outer;
     }
-    FeatureSet features = getModule()->features;
     if ((dependency1 && *dependency1) || (dependency2 && *dependency2)) {
       // there are dependencies, things we must be reordered through. make sure
       // no problems there
-      EffectAnalyzer childEffects(getPassOptions(), features, child);
+      EffectAnalyzer childEffects(getPassOptions(), *getModule(), child);
       if (dependency1 && *dependency1 &&
-          EffectAnalyzer(getPassOptions(), features, *dependency1)
+          EffectAnalyzer(getPassOptions(), *getModule(), *dependency1)
             .invalidates(childEffects)) {
         return outer;
       }
       if (dependency2 && *dependency2 &&
-          EffectAnalyzer(getPassOptions(), features, *dependency2)
+          EffectAnalyzer(getPassOptions(), *getModule(), *dependency2)
             .invalidates(childEffects)) {
         return outer;
       }
@@ -465,8 +467,14 @@ struct MergeBlocks : public WalkerPass<PostWalker<MergeBlocks>> {
           // fancy here
           return outer;
         }
-        // we are going to replace the block with the final element, so they
-        // should be identically typed
+        // We are going to replace the block with the final element, so they
+        // should be identically typed. Note that we could check for subtyping
+        // here, but it would not help in the general case: we know that this
+        // block has no breaks (as confirmed above), and so the local-subtyping
+        // pass will turn its type into that of its final element, if the final
+        // element has a more specialized type. (If we did want to handle that,
+        // we'd need to then run a ReFinalize after everything, which would add
+        // more complexity here.)
         if (block->type != back->type) {
           return outer;
         }
@@ -492,64 +500,54 @@ struct MergeBlocks : public WalkerPass<PostWalker<MergeBlocks>> {
     return outer;
   }
 
-  void visitUnary(Unary* curr) { optimize(curr, curr->value); }
-  void visitLocalSet(LocalSet* curr) { optimize(curr, curr->value); }
-  void visitLoad(Load* curr) { optimize(curr, curr->ptr); }
-  void visitReturn(Return* curr) { optimize(curr, curr->value); }
+  // Default optimizations for simple cases. Complex things are overridden
+  // below.
+  void visitExpression(Expression* curr) {
+    // Control flow need special handling. Those we can optimize are handled
+    // below.
+    if (Properties::isControlFlowStructure(curr)) {
+      return;
+    }
 
-  void visitBinary(Binary* curr) {
-    optimize(curr, curr->right, optimize(curr, curr->left), &curr->left);
+    ChildIterator iterator(curr);
+    auto& children = iterator.children;
+    if (children.size() == 1) {
+      optimize(curr, *children[0]);
+    } else if (children.size() == 2) {
+      optimize(curr, *children[0], optimize(curr, *children[1]), children[1]);
+    } else if (children.size() == 3) {
+      optimizeTernary(curr, *children[2], *children[1], *children[0]);
+    }
   }
-  void visitStore(Store* curr) {
-    optimize(curr, curr->value, optimize(curr, curr->ptr), &curr->ptr);
-  }
-  void visitAtomicRMW(AtomicRMW* curr) {
-    optimize(curr, curr->value, optimize(curr, curr->ptr), &curr->ptr);
-  }
+
   void optimizeTernary(Expression* curr,
                        Expression*& first,
                        Expression*& second,
                        Expression*& third) {
     // TODO: for now, just stop when we see any side effect. instead, we could
     //       check effects carefully for reordering
-    FeatureSet features = getModule()->features;
     Block* outer = nullptr;
-    if (EffectAnalyzer(getPassOptions(), features, first).hasSideEffects()) {
+    if (EffectAnalyzer(getPassOptions(), *getModule(), first)
+          .hasSideEffects()) {
       return;
     }
     outer = optimize(curr, first, outer);
-    if (EffectAnalyzer(getPassOptions(), features, second).hasSideEffects()) {
+    if (EffectAnalyzer(getPassOptions(), *getModule(), second)
+          .hasSideEffects()) {
       return;
     }
     outer = optimize(curr, second, outer);
-    if (EffectAnalyzer(getPassOptions(), features, third).hasSideEffects()) {
+    if (EffectAnalyzer(getPassOptions(), *getModule(), third)
+          .hasSideEffects()) {
       return;
     }
     optimize(curr, third, outer);
-  }
-  void visitAtomicCmpxchg(AtomicCmpxchg* curr) {
-    optimizeTernary(curr, curr->ptr, curr->expected, curr->replacement);
-  }
-
-  void visitSelect(Select* curr) {
-    optimizeTernary(curr, curr->ifTrue, curr->ifFalse, curr->condition);
-  }
-
-  void visitDrop(Drop* curr) { optimize(curr, curr->value); }
-
-  void visitBreak(Break* curr) {
-    optimize(curr, curr->condition, optimize(curr, curr->value), &curr->value);
-  }
-
-  void visitSwitch(Switch* curr) {
-    optimize(curr, curr->condition, optimize(curr, curr->value), &curr->value);
   }
 
   template<typename T> void handleCall(T* curr) {
     Block* outer = nullptr;
     for (Index i = 0; i < curr->operands.size(); i++) {
-      if (EffectAnalyzer(
-            getPassOptions(), getModule()->features, curr->operands[i])
+      if (EffectAnalyzer(getPassOptions(), *getModule(), curr->operands[i])
             .hasSideEffects()) {
         return;
       }
@@ -560,16 +558,15 @@ struct MergeBlocks : public WalkerPass<PostWalker<MergeBlocks>> {
   void visitCall(Call* curr) { handleCall(curr); }
 
   template<typename T> void handleNonDirectCall(T* curr) {
-    FeatureSet features = getModule()->features;
     Block* outer = nullptr;
     for (Index i = 0; i < curr->operands.size(); i++) {
-      if (EffectAnalyzer(getPassOptions(), features, curr->operands[i])
+      if (EffectAnalyzer(getPassOptions(), *getModule(), curr->operands[i])
             .hasSideEffects()) {
         return;
       }
       outer = optimize(curr, curr->operands[i], outer);
     }
-    if (EffectAnalyzer(getPassOptions(), features, curr->target)
+    if (EffectAnalyzer(getPassOptions(), *getModule(), curr->target)
           .hasSideEffects()) {
       return;
     }
@@ -583,8 +580,7 @@ struct MergeBlocks : public WalkerPass<PostWalker<MergeBlocks>> {
   void visitThrow(Throw* curr) {
     Block* outer = nullptr;
     for (Index i = 0; i < curr->operands.size(); i++) {
-      if (EffectAnalyzer(
-            getPassOptions(), getModule()->features, curr->operands[i])
+      if (EffectAnalyzer(getPassOptions(), *getModule(), curr->operands[i])
             .hasSideEffects()) {
         return;
       }

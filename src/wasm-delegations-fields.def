@@ -76,6 +76,8 @@
 //
 // DELEGATE_FIELD_TYPE(id, name) - called for a Type.
 //
+// DELEGATE_FIELD_HEAPTYPE(id, name) - called for a HeapType.
+//
 // DELEGATE_FIELD_ADDRESS(id, name) - called for an Address.
 
 #ifndef DELEGATE_START
@@ -164,6 +166,10 @@
 
 #ifndef DELEGATE_FIELD_TYPE
 #error please define DELEGATE_FIELD_TYPE(id, name)
+#endif
+
+#ifndef DELEGATE_FIELD_HEAPTYPE
+#error please define DELEGATE_FIELD_HEAPTYPE(id, name)
 #endif
 
 #ifndef DELEGATE_FIELD_ADDRESS
@@ -298,7 +304,7 @@ switch (DELEGATE_ID) {
     DELEGATE_FIELD_CHILD(AtomicCmpxchg, ptr);
     DELEGATE_FIELD_INT(AtomicCmpxchg, bytes);
     DELEGATE_FIELD_ADDRESS(AtomicCmpxchg, offset);
-    DELEGATE_END(AtomicCmpxchgId);
+    DELEGATE_END(AtomicCmpxchg);
     break;
   }
   case Expression::Id::AtomicWaitId: {
@@ -472,7 +478,6 @@ switch (DELEGATE_ID) {
   }
   case Expression::Id::RefNullId: {
     DELEGATE_START(RefNull);
-    DELEGATE_FIELD_TYPE(RefNull, type);
     DELEGATE_END(RefNull);
     break;
   }
@@ -494,6 +499,13 @@ switch (DELEGATE_ID) {
     DELEGATE_FIELD_CHILD(RefEq, right);
     DELEGATE_FIELD_CHILD(RefEq, left);
     DELEGATE_END(RefEq);
+    break;
+  }
+  case Expression::Id::TableGetId: {
+    DELEGATE_START(TableGet);
+    DELEGATE_FIELD_CHILD(TableGet, index);
+    DELEGATE_FIELD_NAME(TableGet, table);
+    DELEGATE_END(TableGet);
     break;
   }
   case Expression::Id::TryId: {
@@ -570,14 +582,16 @@ switch (DELEGATE_ID) {
   }
   case Expression::Id::RefTestId: {
     DELEGATE_START(RefTest);
-    DELEGATE_FIELD_CHILD(RefTest, rtt);
+    DELEGATE_FIELD_HEAPTYPE(RefTest, intendedType);
+    DELEGATE_FIELD_OPTIONAL_CHILD(RefTest, rtt);
     DELEGATE_FIELD_CHILD(RefTest, ref);
     DELEGATE_END(RefTest);
     break;
   }
   case Expression::Id::RefCastId: {
     DELEGATE_START(RefCast);
-    DELEGATE_FIELD_CHILD(RefCast, rtt);
+    DELEGATE_FIELD_HEAPTYPE(RefCast, intendedType);
+    DELEGATE_FIELD_OPTIONAL_CHILD(RefCast, rtt);
     DELEGATE_FIELD_CHILD(RefCast, ref);
     DELEGATE_END(RefCast);
     break;
@@ -586,6 +600,7 @@ switch (DELEGATE_ID) {
     DELEGATE_START(BrOn);
     DELEGATE_FIELD_INT(BrOn, op);
     DELEGATE_FIELD_SCOPE_NAME_USE(BrOn, name);
+    DELEGATE_FIELD_HEAPTYPE(BrOn, intendedType);
     DELEGATE_FIELD_OPTIONAL_CHILD(BrOn, rtt);
     DELEGATE_FIELD_CHILD(BrOn, ref);
     DELEGATE_END(BrOn);
@@ -605,7 +620,7 @@ switch (DELEGATE_ID) {
   }
   case Expression::Id::StructNewId: {
     DELEGATE_START(StructNew);
-    DELEGATE_FIELD_CHILD(StructNew, rtt);
+    DELEGATE_FIELD_OPTIONAL_CHILD(StructNew, rtt);
     DELEGATE_FIELD_CHILD_VECTOR(StructNew, operands);
     DELEGATE_END(StructNew);
     break;
@@ -628,10 +643,17 @@ switch (DELEGATE_ID) {
   }
   case Expression::Id::ArrayNewId: {
     DELEGATE_START(ArrayNew);
-    DELEGATE_FIELD_CHILD(ArrayNew, rtt);
+    DELEGATE_FIELD_OPTIONAL_CHILD(ArrayNew, rtt);
     DELEGATE_FIELD_CHILD(ArrayNew, size);
     DELEGATE_FIELD_OPTIONAL_CHILD(ArrayNew, init);
     DELEGATE_END(ArrayNew);
+    break;
+  }
+  case Expression::Id::ArrayInitId: {
+    DELEGATE_START(ArrayInit);
+    DELEGATE_FIELD_OPTIONAL_CHILD(ArrayInit, rtt);
+    DELEGATE_FIELD_CHILD_VECTOR(ArrayInit, values);
+    DELEGATE_END(ArrayInit);
     break;
   }
   case Expression::Id::ArrayGetId: {
@@ -691,5 +713,6 @@ switch (DELEGATE_ID) {
 #undef DELEGATE_FIELD_SCOPE_NAME_USE_VECTOR
 #undef DELEGATE_FIELD_SIGNATURE
 #undef DELEGATE_FIELD_TYPE
+#undef DELEGATE_FIELD_HEAPTYPE
 #undef DELEGATE_FIELD_ADDRESS
 #undef DELEGATE_GET_FIELD

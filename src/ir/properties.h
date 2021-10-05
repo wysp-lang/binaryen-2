@@ -250,9 +250,11 @@ inline Index getZeroExtBits(Expression* curr) {
 // child of this expression. See getFallthrough for a method that looks all the
 // way to the final value falling through, potentially through multiple
 // intermediate expressions.
+//
+// TODO: Receive a Module instead of FeatureSet, to pass to EffectAnalyzer?
 inline Expression* getImmediateFallthrough(Expression* curr,
                                            const PassOptions& passOptions,
-                                           FeatureSet features) {
+                                           Module& module) {
   // If the current node is unreachable, there is no value
   // falling through.
   if (curr->type == Type::unreachable) {
@@ -283,7 +285,7 @@ inline Expression* getImmediateFallthrough(Expression* curr,
       return br->value;
     }
   } else if (auto* tryy = curr->dynCast<Try>()) {
-    if (!EffectAnalyzer(passOptions, features, tryy->body).throws) {
+    if (!EffectAnalyzer(passOptions, module, tryy->body).throws) {
       return tryy->body;
     }
   } else if (auto* as = curr->dynCast<RefCast>()) {
@@ -300,9 +302,9 @@ inline Expression* getImmediateFallthrough(Expression* curr,
 // find the final value that falls through.
 inline Expression* getFallthrough(Expression* curr,
                                   const PassOptions& passOptions,
-                                  FeatureSet features) {
+                                  Module& module) {
   while (1) {
-    auto* next = getImmediateFallthrough(curr, passOptions, features);
+    auto* next = getImmediateFallthrough(curr, passOptions, module);
     if (next == curr) {
       return curr;
     }
@@ -338,6 +340,7 @@ inline Index getNumChildren(Expression* curr) {
 #define DELEGATE_FIELD_SCOPE_NAME_USE_VECTOR(id, name)
 #define DELEGATE_FIELD_SIGNATURE(id, name)
 #define DELEGATE_FIELD_TYPE(id, name)
+#define DELEGATE_FIELD_HEAPTYPE(id, name)
 #define DELEGATE_FIELD_ADDRESS(id, name)
 
 #include "wasm-delegations-fields.def"
@@ -370,11 +373,10 @@ inline bool canEmitSelectWithArms(Expression* ifTrue, Expression* ifFalse) {
   return ifTrue->type.isSingle() && ifFalse->type.isSingle();
 }
 
-// An intrinsically-nondeterministic expression is one that can return different
-// results for the same inputs, and that difference is *not* explained by
-// other expressions that interact with this one. Hence the cause of
-// nondeterminism can be said to be "intrinsic" - it is internal and inherent in
-// the expression.
+// A "generative" expression is one that can generate different results for the
+// same inputs, and that difference is *not* explained by other expressions that
+// interact with this one. This is an intrinsic/internal property of the
+// expression.
 //
 // To see the issue more concretely, consider these:
 //
@@ -394,26 +396,26 @@ inline bool canEmitSelectWithArms(Expression* ifTrue, Expression* ifFalse) {
 // allocations, though, it doesn't matter what is in "..": there is nothing
 // in the wasm that we can check to find out if the results are the same or
 // not. (In fact, in this case they are always not the same.) So the
-// nondeterminism is "intrinsic."
+// generativity is "intrinsic" to the expression and it is because each call to
+// struct.new generates a new value.
 //
-// Thus, loads are nondeterministic but not intrinsically so, while GC
-// allocations are actual examples of intrinsically nondeterministic
-// instructions. If wasm were to add "get current time" or "get a random number"
-// instructions then those would also be intrinsically nondeterministic.
+// Thus, loads are nondeterministic but not generative, while GC allocations
+// are in fact generative. Note that "generative" need not mean "allocation" as
+// if wasm were to add "get current time" or "get a random number" instructions
+// then those would also be generative - generating a new current time value or
+// a new random number on each execution, respectively.
 //
-//  * Note that NaN nondeterminism is ignored here. Technically that allows e.g.
-//    an f32.add to be nondeterministic, but it is a valid wasm implementation
-//    to have deterministic NaN behavior, and we optimize under that assumption.
-//    So NaN nondeterminism does not cause anything to be intrinsically
-//    nondeterministic.
+//  * Note that NaN nondeterminism is ignored here. It is a valid wasm
+//    implementation to have deterministic NaN behavior, and we optimize under
+//    that simplifying assumption.
 //  * Note that calls are ignored here. In theory this concept could be defined
-//    either way for them (that is, we could potentially define them as either
-//    intrinsically nondeterministic, or not, and each could make sense in its
-//    own way). It is simpler to ignore them here, which means we only consider
-//    the behavior of the expression provided here (including its chldren), and
-//    not external code.
+//    either way for them - that is, we could potentially define them as
+//    generative, as they might contain such an instruction, or we could define
+//    this property as only looking at code in the current function. We choose
+//    the latter because calls are already handled best in other manners (using
+//    EffectAnalyzer).
 //
-bool isIntrinsicallyNondeterministic(Expression* curr, FeatureSet features);
+bool isGenerative(Expression* curr, FeatureSet features);
 
 } // namespace Properties
 

@@ -17,6 +17,7 @@
 #ifndef wasm_ir_effects_h
 #define wasm_ir_effects_h
 
+#include "ir/intrinsics.h"
 #include "pass.h"
 #include "wasm-traversal.h"
 
@@ -27,11 +28,12 @@ namespace wasm {
 class EffectAnalyzer {
 public:
   EffectAnalyzer(const PassOptions& passOptions,
-                 FeatureSet features,
+                 Module& module,
                  Expression* ast = nullptr)
     : ignoreImplicitTraps(passOptions.ignoreImplicitTraps),
       trapsNeverHappen(passOptions.trapsNeverHappen),
-      debugInfo(passOptions.debugInfo), features(features) {
+      debugInfo(passOptions.debugInfo), module(module),
+      features(module.features) {
     if (ast) {
       walk(ast);
     }
@@ -40,6 +42,7 @@ public:
   bool ignoreImplicitTraps;
   bool trapsNeverHappen;
   bool debugInfo;
+  Module& module;
   FeatureSet features;
 
   // Walk an expression and all its children.
@@ -167,7 +170,7 @@ public:
   // and gets the result that there are no unremovable side effects, then it
   // must either
   //
-  //  1. Remove any side effects present, if any, so they no longer exists.
+  //  1. Remove any side effects present, if any, so they no longer exist.
   //  2. Keep the code exactly where it is.
   //
   // If instead of 1&2 a pass kept the side effect and also reordered the code
@@ -391,6 +394,11 @@ private:
     }
 
     void visitCall(Call* curr) {
+      // call.without.effects has no effects.
+      if (Intrinsics(parent.module).isCallWithoutEffects(curr)) {
+        return;
+      }
+
       parent.calls = true;
       // When EH is enabled, any call can throw.
       if (parent.features.hasExceptionHandling() && parent.tryDepth == 0) {
@@ -581,6 +589,11 @@ private:
     void visitRefIs(RefIs* curr) {}
     void visitRefFunc(RefFunc* curr) {}
     void visitRefEq(RefEq* curr) {}
+    void visitTableGet(TableGet* curr) {
+      // TODO: track readsTable/writesTable, like memory?
+      // Traps when the index is out of bounds for the table.
+      parent.implicitTrap = true;
+    }
     void visitTry(Try* curr) {}
     void visitThrow(Throw* curr) {
       if (parent.tryDepth == 0) {
@@ -640,6 +653,7 @@ private:
       }
     }
     void visitArrayNew(ArrayNew* curr) {}
+    void visitArrayInit(ArrayInit* curr) {}
     void visitArrayGet(ArrayGet* curr) {
       parent.readsArray = true;
       // traps when the arg is null or the index out of bounds
@@ -657,6 +671,8 @@ private:
       }
     }
     void visitArrayCopy(ArrayCopy* curr) {
+      parent.readsArray = true;
+      parent.writesArray = true;
       // traps when a ref is null, or when out of bounds.
       parent.implicitTrap = true;
     }
@@ -672,11 +688,11 @@ public:
   // Helpers
 
   static bool canReorder(const PassOptions& passOptions,
-                         FeatureSet features,
+                         Module& module,
                          Expression* a,
                          Expression* b) {
-    EffectAnalyzer aEffects(passOptions, features, a);
-    EffectAnalyzer bEffects(passOptions, features, b);
+    EffectAnalyzer aEffects(passOptions, module, a);
+    EffectAnalyzer bEffects(passOptions, module, b);
     return !aEffects.invalidates(bEffects);
   }
 
@@ -767,9 +783,9 @@ private:
 class ShallowEffectAnalyzer : public EffectAnalyzer {
 public:
   ShallowEffectAnalyzer(const PassOptions& passOptions,
-                        FeatureSet features,
+                        Module& module,
                         Expression* ast = nullptr)
-    : EffectAnalyzer(passOptions, features) {
+    : EffectAnalyzer(passOptions, module) {
     if (ast) {
       visit(ast);
     }

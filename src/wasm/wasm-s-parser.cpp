@@ -21,6 +21,7 @@
 #include <limits>
 
 #include "ir/branch-utils.h"
+#include "ir/table-utils.h"
 #include "shared-constants.h"
 #include "support/string.h"
 #include "wasm-binary.h"
@@ -1235,6 +1236,15 @@ Type SExpressionWasmBuilder::stringToLaneType(const char* str) {
   return Type::none;
 }
 
+HeapType SExpressionWasmBuilder::getFunctionType(Name name, Element& s) {
+  auto iter = functionTypes.find(name);
+  if (iter == functionTypes.end()) {
+    throw ParseException(
+      "invalid call target: " + std::string(name.str), s.line, s.col);
+  }
+  return iter->second;
+}
+
 Function::DebugLocation
 SExpressionWasmBuilder::getDebugLocation(const SourceLocation& loc) {
   IString file = loc.filename;
@@ -2258,7 +2268,7 @@ Expression* SExpressionWasmBuilder::makeCall(Element& s, bool isReturn) {
   auto target = getFunctionName(*s[1]);
   auto ret = allocator.alloc<Call>();
   ret->target = target;
-  ret->type = functionTypes[ret->target].getSignature().results;
+  ret->type = getFunctionType(ret->target, s).getSignature().results;
   parseCallOperands(s, 2, s.size(), ret);
   ret->isReturn = isReturn;
   ret->finalize();
@@ -2395,7 +2405,7 @@ Expression* SExpressionWasmBuilder::makeRefFunc(Element& s) {
   ret->func = func;
   // To support typed function refs, we give the reference not just a general
   // funcref, but a specific subtype with the actual signature.
-  ret->finalize(Type(functionTypes[func], NonNullable));
+  ret->finalize(Type(getFunctionType(func, s), NonNullable));
   return ret;
 }
 
@@ -2405,6 +2415,16 @@ Expression* SExpressionWasmBuilder::makeRefEq(Element& s) {
   ret->right = parseExpression(s[2]);
   ret->finalize();
   return ret;
+}
+
+Expression* SExpressionWasmBuilder::makeTableGet(Element& s) {
+  auto tableName = s[1]->str();
+  auto* index = parseExpression(s[2]);
+  auto* table = wasm.getTableOrNull(tableName);
+  if (!table) {
+    throw ParseException("invalid table name in table.get", s.line, s.col);
+  }
+  return Builder(wasm).makeTableGet(tableName, index, table->type);
 }
 
 // try can be either in the form of try-catch or try-delegate.
@@ -2573,10 +2593,22 @@ Expression* SExpressionWasmBuilder::makeRefTest(Element& s) {
   return Builder(wasm).makeRefTest(ref, rtt);
 }
 
+Expression* SExpressionWasmBuilder::makeRefTestStatic(Element& s) {
+  auto heapType = parseHeapType(*s[1]);
+  auto* ref = parseExpression(*s[2]);
+  return Builder(wasm).makeRefTest(ref, heapType);
+}
+
 Expression* SExpressionWasmBuilder::makeRefCast(Element& s) {
   auto* ref = parseExpression(*s[1]);
   auto* rtt = parseExpression(*s[2]);
   return Builder(wasm).makeRefCast(ref, rtt);
+}
+
+Expression* SExpressionWasmBuilder::makeRefCastStatic(Element& s) {
+  auto heapType = parseHeapType(*s[1]);
+  auto* ref = parseExpression(*s[2]);
+  return Builder(wasm).makeRefCast(ref, heapType);
 }
 
 Expression* SExpressionWasmBuilder::makeBrOn(Element& s, BrOnOp op) {
@@ -2588,6 +2620,13 @@ Expression* SExpressionWasmBuilder::makeBrOn(Element& s, BrOnOp op) {
   }
   return ValidatingBuilder(wasm, s.line, s.col)
     .validateAndMakeBrOn(op, name, ref, rtt);
+}
+
+Expression* SExpressionWasmBuilder::makeBrOnStatic(Element& s, BrOnOp op) {
+  auto name = getLabel(*s[1]);
+  auto heapType = parseHeapType(*s[2]);
+  auto* ref = parseExpression(*s[3]);
+  return Builder(wasm).makeBrOn(op, name, ref, heapType);
 }
 
 Expression* SExpressionWasmBuilder::makeRttCanon(Element& s) {
@@ -2621,6 +2660,21 @@ Expression* SExpressionWasmBuilder::makeStructNew(Element& s, bool default_) {
   auto* rtt = parseExpression(*s[s.size() - 1]);
   validateHeapTypeUsingChild(rtt, heapType, s);
   return Builder(wasm).makeStructNew(rtt, operands);
+}
+
+Expression* SExpressionWasmBuilder::makeStructNewStatic(Element& s,
+                                                        bool default_) {
+  auto heapType = parseHeapType(*s[1]);
+  auto numOperands = s.size() - 2;
+  if (default_ && numOperands > 0) {
+    throw ParseException("arguments provided for struct.new", s.line, s.col);
+  }
+  std::vector<Expression*> operands;
+  operands.resize(numOperands);
+  for (Index i = 0; i < numOperands; i++) {
+    operands[i] = parseExpression(*s[i + 2]);
+  }
+  return Builder(wasm).makeStructNew(heapType, operands);
 }
 
 Index SExpressionWasmBuilder::getStructIndex(Element& type, Element& field) {
@@ -2677,6 +2731,40 @@ Expression* SExpressionWasmBuilder::makeArrayNew(Element& s, bool default_) {
   auto* rtt = parseExpression(*s[i++]);
   validateHeapTypeUsingChild(rtt, heapType, s);
   return Builder(wasm).makeArrayNew(rtt, size, init);
+}
+
+Expression* SExpressionWasmBuilder::makeArrayNewStatic(Element& s,
+                                                       bool default_) {
+  auto heapType = parseHeapType(*s[1]);
+  Expression* init = nullptr;
+  size_t i = 2;
+  if (!default_) {
+    init = parseExpression(*s[i++]);
+  }
+  auto* size = parseExpression(*s[i++]);
+  return Builder(wasm).makeArrayNew(heapType, size, init);
+}
+
+Expression* SExpressionWasmBuilder::makeArrayInit(Element& s) {
+  auto heapType = parseHeapType(*s[1]);
+  size_t i = 2;
+  std::vector<Expression*> values;
+  while (i < s.size() - 1) {
+    values.push_back(parseExpression(*s[i++]));
+  }
+  auto* rtt = parseExpression(*s[i++]);
+  validateHeapTypeUsingChild(rtt, heapType, s);
+  return Builder(wasm).makeArrayInit(rtt, values);
+}
+
+Expression* SExpressionWasmBuilder::makeArrayInitStatic(Element& s) {
+  auto heapType = parseHeapType(*s[1]);
+  size_t i = 2;
+  std::vector<Expression*> values;
+  while (i < s.size()) {
+    values.push_back(parseExpression(*s[i++]));
+  }
+  return Builder(wasm).makeArrayInit(heapType, values);
 }
 
 Expression* SExpressionWasmBuilder::makeArrayGet(Element& s, bool signed_) {
@@ -3368,6 +3456,11 @@ void SExpressionWasmBuilder::parseElem(Element& s, Table* table) {
     segment->table = table->name;
   }
 
+  // We may be post-MVP also due to type reasons or otherwise, as detected by
+  // the utility function for Binaryen IR.
+  usesExpressions =
+    usesExpressions || TableUtils::usesExpressions(segment.get(), &wasm);
+
   parseElemFinish(s, segment, i, usesExpressions);
 }
 
@@ -3377,30 +3470,29 @@ ElementSegment* SExpressionWasmBuilder::parseElemFinish(
   Index i,
   bool usesExpressions) {
 
-  if (usesExpressions) {
-    for (; i < s.size(); i++) {
-      if (!s[i]->isList()) {
-        throw ParseException("expected a ref.* expression.");
-      }
-      auto& inner = *s[i];
-      if (elementStartsWith(inner, ITEM)) {
-        if (inner[1]->isList()) {
-          // (item (ref.func $f))
-          segment->data.push_back(parseExpression(inner[1]));
-        } else {
-          // (item ref.func $f)
-          inner.list().removeAt(0);
-          segment->data.push_back(parseExpression(inner));
-        }
-      } else {
-        segment->data.push_back(parseExpression(inner));
-      }
-    }
-  } else {
-    for (; i < s.size(); i++) {
+  for (; i < s.size(); i++) {
+    if (!s[i]->isList()) {
+      // An MVP-style declaration: just a function name.
       auto func = getFunctionName(*s[i]);
       segment->data.push_back(
         Builder(wasm).makeRefFunc(func, functionTypes[func]));
+      continue;
+    }
+    if (!usesExpressions) {
+      throw ParseException("expected an MVP-style $funcname in elem.");
+    }
+    auto& inner = *s[i];
+    if (elementStartsWith(inner, ITEM)) {
+      if (inner[1]->isList()) {
+        // (item (ref.func $f))
+        segment->data.push_back(parseExpression(inner[1]));
+      } else {
+        // (item ref.func $f)
+        inner.list().removeAt(0);
+        segment->data.push_back(parseExpression(inner));
+      }
+    } else {
+      segment->data.push_back(parseExpression(inner));
     }
   }
   return wasm.addElementSegment(std::move(segment));

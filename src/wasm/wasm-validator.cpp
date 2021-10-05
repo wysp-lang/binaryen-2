@@ -21,6 +21,7 @@
 
 #include "ir/features.h"
 #include "ir/global-utils.h"
+#include "ir/intrinsics.h"
 #include "ir/module-utils.h"
 #include "ir/stack-utils.h"
 #include "ir/utils.h"
@@ -363,6 +364,7 @@ public:
   void visitRefIs(RefIs* curr);
   void visitRefFunc(RefFunc* curr);
   void visitRefEq(RefEq* curr);
+  void visitTableGet(TableGet* curr);
   void noteDelegate(Name name, Expression* curr);
   void noteRethrow(Name name, Expression* curr);
   void visitTry(Try* curr);
@@ -382,6 +384,7 @@ public:
   void visitStructGet(StructGet* curr);
   void visitStructSet(StructSet* curr);
   void visitArrayNew(ArrayNew* curr);
+  void visitArrayInit(ArrayInit* curr);
   void visitArrayGet(ArrayGet* curr);
   void visitArraySet(ArraySet* curr);
   void visitArrayLen(ArrayLen* curr);
@@ -2029,6 +2032,20 @@ void FunctionValidator::visitRefEq(RefEq* curr) {
                   "ref.eq's right argument should be a subtype of eqref");
 }
 
+void FunctionValidator::visitTableGet(TableGet* curr) {
+  shouldBeTrue(getModule()->features.hasReferenceTypes(),
+               curr,
+               "table.get requires reference types to be enabled");
+  shouldBeEqualOrFirstIsUnreachable(
+    curr->index->type, Type(Type::i32), curr, "table.get index must be an i32");
+  auto* table = getModule()->getTableOrNull(curr->table);
+  if (shouldBeTrue(!!table, curr, "table.get table must exist") &&
+      curr->type != Type::unreachable) {
+    shouldBeEqual(
+      curr->type, table->type, curr, "table.get must have same type as table.");
+  }
+}
+
 void FunctionValidator::noteDelegate(Name name, Expression* curr) {
   if (name != DELEGATE_CALLER_TARGET) {
     shouldBeTrue(delegateTargetNames.count(name) != 0,
@@ -2217,9 +2234,20 @@ void FunctionValidator::visitRefTest(RefTest* curr) {
     shouldBeTrue(
       curr->ref->type.isRef(), curr, "ref.test ref must have ref type");
   }
-  if (curr->rtt->type != Type::unreachable) {
-    shouldBeTrue(
-      curr->rtt->type.isRtt(), curr, "ref.test rtt must have rtt type");
+  if (curr->rtt) {
+    if (curr->rtt->type != Type::unreachable) {
+      shouldBeTrue(
+        curr->rtt->type.isRtt(), curr, "ref.test rtt must have rtt type");
+    }
+    shouldBeEqual(curr->intendedType,
+                  HeapType(),
+                  curr,
+                  "dynamic ref.test must not use intendedType field");
+  } else {
+    shouldBeUnequal(curr->intendedType,
+                    HeapType(),
+                    curr,
+                    "static ref.test must set intendedType field");
   }
 }
 
@@ -2230,9 +2258,20 @@ void FunctionValidator::visitRefCast(RefCast* curr) {
     shouldBeTrue(
       curr->ref->type.isRef(), curr, "ref.cast ref must have ref type");
   }
-  if (curr->rtt->type != Type::unreachable) {
-    shouldBeTrue(
-      curr->rtt->type.isRtt(), curr, "ref.cast rtt must have rtt type");
+  if (curr->rtt) {
+    if (curr->rtt->type != Type::unreachable) {
+      shouldBeTrue(
+        curr->rtt->type.isRtt(), curr, "ref.cast rtt must have rtt type");
+    }
+    shouldBeEqual(curr->intendedType,
+                  HeapType(),
+                  curr,
+                  "dynamic ref.cast must not use intendedType field");
+  } else {
+    shouldBeUnequal(curr->intendedType,
+                    HeapType(),
+                    curr,
+                    "static ref.cast must set intendedType field");
   }
 }
 
@@ -2245,14 +2284,29 @@ void FunctionValidator::visitBrOn(BrOn* curr) {
       curr->ref->type.isRef(), curr, "br_on_cast ref must have ref type");
   }
   if (curr->op == BrOnCast || curr->op == BrOnCastFail) {
-    // Note that an unreachable rtt is not supported: the text and binary
-    // formats do not provide the type, so if it's unreachable we should not
-    // even create a br_on_cast in such a case, as we'd have no idea what it
-    // casts to.
-    shouldBeTrue(
-      curr->rtt->type.isRtt(), curr, "br_on_cast rtt must have rtt type");
+    if (curr->rtt) {
+      // Note that an unreachable rtt is not supported: the text and binary
+      // formats do not provide the type, so if it's unreachable we should not
+      // even create a br_on_cast in such a case, as we'd have no idea what it
+      // casts to.
+      shouldBeTrue(
+        curr->rtt->type.isRtt(), curr, "br_on_cast rtt must have rtt type");
+      shouldBeEqual(curr->intendedType,
+                    HeapType(),
+                    curr,
+                    "dynamic br_on_cast* must not use intendedType field");
+    } else {
+      shouldBeUnequal(curr->intendedType,
+                      HeapType(),
+                      curr,
+                      "static br_on_cast* must set intendedType field");
+    }
   } else {
     shouldBeTrue(curr->rtt == nullptr, curr, "non-cast BrOn must not have rtt");
+    shouldBeEqual(curr->intendedType,
+                  HeapType(),
+                  curr,
+                  "non-cast br_on* must not set intendedType field");
   }
   noteBreak(curr->name, curr->getSentType(), curr);
 }
@@ -2293,11 +2347,19 @@ void FunctionValidator::visitStructNew(StructNew* curr) {
   if (curr->type == Type::unreachable) {
     return;
   }
-  if (!shouldBeTrue(
-        curr->rtt->type.isRtt(), curr, "struct.new rtt must be rtt")) {
-    return;
+  if (curr->rtt) {
+    if (!shouldBeTrue(
+          curr->rtt->type.isRtt(), curr, "struct.new rtt must be rtt")) {
+      return;
+    }
   }
-  auto heapType = curr->rtt->type.getHeapType();
+  auto heapType = curr->type.getHeapType();
+  if (curr->rtt) {
+    shouldBeEqual(curr->rtt->type.getHeapType(),
+                  heapType,
+                  curr,
+                  "struct.new heap type must match rtt");
+  }
   if (!shouldBeTrue(
         heapType.isStruct(), curr, "struct.new heap type must be struct")) {
     return;
@@ -2389,11 +2451,19 @@ void FunctionValidator::visitArrayNew(ArrayNew* curr) {
   if (curr->type == Type::unreachable) {
     return;
   }
-  if (!shouldBeTrue(
-        curr->rtt->type.isRtt(), curr, "array.new rtt must be rtt")) {
-    return;
+  if (curr->rtt) {
+    if (!shouldBeTrue(
+          curr->rtt->type.isRtt(), curr, "array.new rtt must be rtt")) {
+      return;
+    }
   }
-  auto heapType = curr->rtt->type.getHeapType();
+  auto heapType = curr->type.getHeapType();
+  if (curr->rtt) {
+    shouldBeEqual(curr->rtt->type.getHeapType(),
+                  heapType,
+                  curr,
+                  "array.new heap type must match rtt");
+  }
   if (!shouldBeTrue(
         heapType.isArray(), curr, "array.new heap type must be array")) {
     return;
@@ -2413,6 +2483,39 @@ void FunctionValidator::visitArrayNew(ArrayNew* curr) {
                     element.type,
                     curr,
                     "array.new init must have proper type");
+  }
+}
+
+void FunctionValidator::visitArrayInit(ArrayInit* curr) {
+  shouldBeTrue(getModule()->features.hasGC(),
+               curr,
+               "array.init requires gc to be enabled");
+  if (curr->type == Type::unreachable) {
+    return;
+  }
+  if (curr->rtt) {
+    if (!shouldBeTrue(
+          curr->rtt->type.isRtt(), curr, "array.init rtt must be rtt")) {
+      return;
+    }
+  }
+  auto heapType = curr->type.getHeapType();
+  if (curr->rtt) {
+    shouldBeEqual(curr->rtt->type.getHeapType(),
+                  heapType,
+                  curr,
+                  "array.init heap type must match rtt");
+  }
+  if (!shouldBeTrue(
+        heapType.isArray(), curr, "array.init heap type must be array")) {
+    return;
+  }
+  const auto& element = heapType.getArray().element;
+  for (auto* value : curr->values) {
+    shouldBeSubType(value->type,
+                    element.type,
+                    curr,
+                    "array.init value must have proper type");
   }
 }
 
@@ -2678,6 +2781,16 @@ static void validateImports(Module& module, ValidationInfo& info) {
                              curr->name,
                              "Imported function must not have i64 results");
       }
+    }
+
+    if (Intrinsics(module).isCallWithoutEffects(curr)) {
+      auto lastParam = curr->getParams();
+      if (lastParam.isTuple()) {
+        lastParam = lastParam.getTuple().types.back();
+      }
+      info.shouldBeTrue(lastParam.isFunction(),
+                        curr->name,
+                        "call.if.used's last param must be a function");
     }
   });
   ModuleUtils::iterImportedGlobals(module, [&](Global* curr) {

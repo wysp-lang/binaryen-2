@@ -109,6 +109,7 @@ function initializeConstants() {
     'StructGet',
     'StructSet',
     'ArrayNew',
+    'ArrayInit',
     'ArrayGet',
     'ArraySet',
     'ArrayLen'
@@ -143,6 +144,7 @@ function initializeConstants() {
     'GC',
     'Memory64',
     'TypedFunctionReferences',
+    'RelaxedSIMD',
     'All'
   ].forEach(name => {
     Module['Features'][name] = Module['_BinaryenFeature' + name]();
@@ -3128,8 +3130,8 @@ Module['getExpressionInfo'] = function(expr) {
 };
 
 // Gets the side effects of the specified expression
-Module['getSideEffects'] = function(expr, features) {
-  return Module['_BinaryenExpressionGetSideEffects'](expr, features);
+Module['getSideEffects'] = function(expr, module) {
+  return Module['_BinaryenExpressionGetSideEffects'](expr, module);
 };
 
 Module['createType'] = function(types) {

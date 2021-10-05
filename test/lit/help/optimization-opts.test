@@ -87,6 +87,10 @@
 ;; CHECK-NEXT:
 ;; CHECK-NEXT:   --disable-gc-nn-locals                        Disable GC non-null locals
 ;; CHECK-NEXT:
+;; CHECK-NEXT:   --enable-relaxed-simd                         Enable relaxed SIMD
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --disable-relaxed-simd                        Disable relaxed SIMD
+;; CHECK-NEXT:
 ;; CHECK-NEXT:   --no-validation,-n                            Disables validation, assumes
 ;; CHECK-NEXT:                                                 inputs are correct
 ;; CHECK-NEXT:
@@ -155,6 +159,11 @@
 ;; CHECK-NEXT:
 ;; CHECK-NEXT:   --inline-functions-with-loops,-ifwl           Allow inlining functions with
 ;; CHECK-NEXT:                                                 loops
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --partial-inlining-ifs,-pii                   Number of ifs allowed in partial
+;; CHECK-NEXT:                                                 inlining (zero means partial
+;; CHECK-NEXT:                                                 inlining is disabled) (default:
+;; CHECK-NEXT:                                                 0)
 ;; CHECK-NEXT:
 ;; CHECK-NEXT:   --ignore-implicit-traps,-iit                  Optimize under the helpful
 ;; CHECK-NEXT:                                                 assumption that no surprising
@@ -284,6 +293,8 @@
 ;; CHECK-NEXT:                                                 to intercept all loads and
 ;; CHECK-NEXT:                                                 stores
 ;; CHECK-NEXT:
+;; CHECK-NEXT:   --intrinsic-lowering                          lower away binaryen intrinsics
+;; CHECK-NEXT:
 ;; CHECK-NEXT:   --legalize-js-interface                       legalizes i64 types on the
 ;; CHECK-NEXT:                                                 import/export boundary
 ;; CHECK-NEXT:
@@ -347,6 +358,9 @@
 ;; CHECK-NEXT:   --no-exit-runtime                             removes calls to atexit(), which
 ;; CHECK-NEXT:                                                 is valid if the C runtime will
 ;; CHECK-NEXT:                                                 never be exited
+;; CHECK-NEXT:
+;; CHECK-NEXT:   --once-reduction                              reduces calls to code that only
+;; CHECK-NEXT:                                                 runs once
 ;; CHECK-NEXT:
 ;; CHECK-NEXT:   --optimize-added-constants                    optimizes added constants into
 ;; CHECK-NEXT:                                                 load/store offsets

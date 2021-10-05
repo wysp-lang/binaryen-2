@@ -62,6 +62,7 @@ template<typename T> void operateOnScopeNameUses(Expression* expr, T func) {
 #define DELEGATE_FIELD_SCOPE_NAME_DEF(id, name)
 #define DELEGATE_FIELD_SIGNATURE(id, name)
 #define DELEGATE_FIELD_TYPE(id, name)
+#define DELEGATE_FIELD_HEAPTYPE(id, name)
 #define DELEGATE_FIELD_ADDRESS(id, name)
 #define DELEGATE_FIELD_CHILD_VECTOR(id, name)
 #define DELEGATE_FIELD_INT_ARRAY(id, name)
@@ -125,6 +126,7 @@ template<typename T> void operateOnScopeNameDefs(Expression* expr, T func) {
 #define DELEGATE_FIELD_NAME_VECTOR(id, name)
 #define DELEGATE_FIELD_SIGNATURE(id, name)
 #define DELEGATE_FIELD_TYPE(id, name)
+#define DELEGATE_FIELD_HEAPTYPE(id, name)
 #define DELEGATE_FIELD_ADDRESS(id, name)
 #define DELEGATE_FIELD_CHILD_VECTOR(id, name)
 #define DELEGATE_FIELD_INT_ARRAY(id, name)
@@ -234,6 +236,28 @@ inline NameSet getBranchTargets(Expression* ast) {
   Scanner scanner;
   scanner.walk(ast);
   return scanner.targets;
+}
+
+// Check if an expression defines a particular name as a branch target anywhere
+// inside it.
+inline bool hasBranchTarget(Expression* ast, Name target) {
+  struct Scanner
+    : public PostWalker<Scanner, UnifiedExpressionVisitor<Scanner>> {
+    Name target;
+    bool has = false;
+
+    void visitExpression(Expression* curr) {
+      operateOnScopeNameDefs(curr, [&](Name& name) {
+        if (name == target) {
+          has = true;
+        }
+      });
+    }
+  };
+  Scanner scanner;
+  scanner.target = target;
+  scanner.walk(ast);
+  return scanner.has;
 }
 
 // Get the name of the branch target that is defined in the expression, or an

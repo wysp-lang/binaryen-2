@@ -346,8 +346,8 @@ enum SegmentFlag {
   // Bit 1 if active: 0 = index 0, 1 = index given
   HasIndex = 1 << 1,
   // Table element segments only:
-  // Bit 2: 0 = elemType is funcref and vector of func indexes given
-  //        1 = elemType is given and vector of ref expressions is given
+  // Bit 2: 0 = elemType is funcref and a vector of func indexes given
+  //        1 = elemType is given and a vector of ref expressions is given
   UsesExpressions = 1 << 2
 };
 
@@ -403,6 +403,7 @@ namespace UserSections {
 extern const char* Name;
 extern const char* SourceMapUrl;
 extern const char* Dylink;
+extern const char* Dylink0;
 extern const char* Linking;
 extern const char* Producers;
 extern const char* TargetFeatures;
@@ -421,6 +422,7 @@ extern const char* MultivalueFeature;
 extern const char* GCFeature;
 extern const char* Memory64Feature;
 extern const char* TypedFunctionReferencesFeature;
+extern const char* RelaxedSIMDFeature;
 
 enum Subsection {
   NameModule = 0,
@@ -435,7 +437,10 @@ enum Subsection {
   NameElem = 8,
   NameData = 9,
   // see: https://github.com/WebAssembly/gc/issues/193
-  NameField = 10
+  NameField = 10,
+
+  DylinkMemInfo = 1,
+  DylinkNeeded = 2,
 };
 
 } // namespace UserSections
@@ -468,6 +473,8 @@ enum ASTNodes {
   LocalTee = 0x22,
   GlobalGet = 0x23,
   GlobalSet = 0x24,
+
+  TableGet = 0x25,
 
   I32LoadMem = 0x28,
   I64LoadMem = 0x29,
@@ -1048,6 +1055,8 @@ enum ASTNodes {
   StructGetS = 0x04,
   StructGetU = 0x05,
   StructSet = 0x06,
+  StructNew = 0x07,
+  StructNewDefault = 0x08,
   ArrayNewWithRtt = 0x11,
   ArrayNewDefaultWithRtt = 0x12,
   ArrayGet = 0x13,
@@ -1056,6 +1065,10 @@ enum ASTNodes {
   ArraySet = 0x16,
   ArrayLen = 0x17,
   ArrayCopy = 0x18,
+  ArrayInit = 0x19,
+  ArrayInitStatic = 0x1a,
+  ArrayNew = 0x1b,
+  ArrayNewDefault = 0x1c,
   I31New = 0x20,
   I31GetS = 0x21,
   I31GetU = 0x22,
@@ -1066,6 +1079,10 @@ enum ASTNodes {
   RefCast = 0x41,
   BrOnCast = 0x42,
   BrOnCastFail = 0x43,
+  RefTestStatic = 0x44,
+  RefCastStatic = 0x45,
+  BrOnCastStatic = 0x46,
+  BrOnCastStaticFail = 0x47,
   RefIsFunc = 0x50,
   RefIsData = 0x51,
   RefIsI31 = 0x52,
@@ -1229,6 +1246,7 @@ public:
   void writeUserSection(const UserSection& section);
   void writeFeaturesSection();
   void writeDylinkSection();
+  void writeLegacyDylinkSection();
 
   void initializeDebugInfo();
   void writeSourceMapProlog();
@@ -1242,6 +1260,7 @@ public:
   void writeInlineString(const char* name);
   void writeEscapedName(const char* name);
   void writeInlineBuffer(const char* data, size_t size);
+  void writeData(const char* data, size_t size);
 
   struct Buffer {
     const char* data;
@@ -1250,12 +1269,6 @@ public:
     Buffer(const char* data, size_t size, size_t pointerLocation)
       : data(data), size(size), pointerLocation(pointerLocation) {}
   };
-
-  std::vector<Buffer> buffersToWrite;
-
-  void emitBuffer(const char* data, size_t size);
-  void emitString(const char* str);
-  void finishUp();
 
   Module* getModule() { return wasm; }
 
@@ -1561,6 +1574,7 @@ public:
   void readNames(size_t);
   void readFeatures(size_t);
   void readDylink(size_t);
+  void readDylink0(size_t);
 
   // Debug information reading helpers
   void setDebugLocations(std::istream* sourceMap_) { sourceMap = sourceMap_; }
@@ -1631,6 +1645,7 @@ public:
   bool maybeVisitStructGet(Expression*& out, uint32_t code);
   bool maybeVisitStructSet(Expression*& out, uint32_t code);
   bool maybeVisitArrayNew(Expression*& out, uint32_t code);
+  bool maybeVisitArrayInit(Expression*& out, uint32_t code);
   bool maybeVisitArrayGet(Expression*& out, uint32_t code);
   bool maybeVisitArraySet(Expression*& out, uint32_t code);
   bool maybeVisitArrayLen(Expression*& out, uint32_t code);
@@ -1646,6 +1661,7 @@ public:
   void visitRefIs(RefIs* curr, uint8_t code);
   void visitRefFunc(RefFunc* curr);
   void visitRefEq(RefEq* curr);
+  void visitTableGet(TableGet* curr);
   void visitTryOrTryInBlock(Expression*& out);
   void visitThrow(Throw* curr);
   void visitRethrow(Rethrow* curr);
