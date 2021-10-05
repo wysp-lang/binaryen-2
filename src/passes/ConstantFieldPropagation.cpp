@@ -29,8 +29,8 @@
 
 #include <algorithm>
 
-#include "ir/module-utils.h"
 #include "ir/abstract.h"
+#include "ir/module-utils.h"
 #include "ir/properties.h"
 #include "ir/struct-utils.h"
 #include "ir/type-updating.h"
@@ -246,8 +246,8 @@ private:
   bool changed = false;
 
   void makeConstantExpression(const PossibleConstantValues& info,
-                                     StructGet* get,
-                                     Builder& builder) {
+                              StructGet* get,
+                              Builder& builder) {
     std::vector<Literal> values;
     for (auto value : info.getConstantValues()) {
       values.push_back(value);
@@ -256,9 +256,9 @@ private:
       // Simply return the single constant value here.
       changed = true;
       // Replace the get with a trap on a null reference using a
-      // ref.as_non_null (we need to trap as the get would have done so), plus the
-      // constant value. (Leave it to further optimizations to get rid of the
-      // ref.)
+      // ref.as_non_null (we need to trap as the get would have done so), plus
+      // the constant value. (Leave it to further optimizations to get rid of
+      // the ref.)
       replaceCurrent(builder.makeSequence(
         builder.makeDrop(builder.makeRefAs(RefAsNonNull, get->ref)),
         builder.makeConstantExpression(values[0])));
@@ -286,14 +286,11 @@ private:
       // exactly one of the two possible values, and at the right times, which
       // allows later optimizations to specialize.
       replaceCurrent(builder.makeSelect(
-        builder.makeBinary(
-          Abstract::getBinary(type, Abstract::Eq),
-          get,
-          builder.makeConstantExpression(values[0])
-        ),
+        builder.makeBinary(Abstract::getBinary(type, Abstract::Eq),
+                           get,
+                           builder.makeConstantExpression(values[0])),
         builder.makeConstantExpression(values[0]),
-        builder.makeConstantExpression(values[1])
-      ));
+        builder.makeConstantExpression(values[1])));
       return;
     }
 
