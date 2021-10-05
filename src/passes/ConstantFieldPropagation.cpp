@@ -49,7 +49,7 @@ namespace {
 struct PossibleConstantValues {
   // The maximum amount of constant values we are willing to tolerate. Anything
   // above this causes us to say that the value is unknown.
-  static const size_t MaxConstantValues = 3;
+  static const size_t MaxConstantValues = 2;
 
   // Note a written value as we see it, and update our internal knowledge based
   // on it and all previous values noted.
