@@ -1958,29 +1958,24 @@
   (type $struct (struct funcref))
   ;; CHECK:      (type $none_=>_none (func))
 
+  ;; CHECK:      (elem declare func $test1 $test2)
+
   ;; CHECK:      (func $test
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (struct.new_with_rtt $struct
-  ;; CHECK-NEXT:    (f32.const 42)
+  ;; CHECK-NEXT:    (ref.func $test1)
   ;; CHECK-NEXT:    (rtt.canon $struct)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (struct.new_with_rtt $struct
-  ;; CHECK-NEXT:    (f32.const 1337)
+  ;; CHECK-NEXT:    (ref.func $test2)
   ;; CHECK-NEXT:    (rtt.canon $struct)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (select
-  ;; CHECK-NEXT:    (f32.const 42)
-  ;; CHECK-NEXT:    (f32.const 1337)
-  ;; CHECK-NEXT:    (f32.eq
-  ;; CHECK-NEXT:     (struct.get $struct 0
-  ;; CHECK-NEXT:      (ref.null $struct)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (f32.const 42)
-  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   (struct.get $struct 0
+  ;; CHECK-NEXT:    (ref.null $struct)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -2004,7 +1999,13 @@
     )
   )
 
+  ;; CHECK:      (func $test1
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
   (func $test1)
+  ;; CHECK:      (func $test2
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
   (func $test2)
 )
 
