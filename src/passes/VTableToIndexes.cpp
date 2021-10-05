@@ -51,100 +51,96 @@ namespace wasm {
 
 namespace {
 
-struct MappingInfo {
-  // Maps old heap types to new ones.
-  std::unordered_map<HeapType, HeapType> oldToNewTypes;
-
-  // For each table, a map of functions in the table to their indexes.
-  std::unordered_map<Name, std::unordered_map<Name, Index>> tableFuncIndexes;
-
-  // Maps each (struct, field index of a function reference) to the table in
-  // which it is declared.
-  std::unordered_map<std::pair<HeapType, Index>, Name> fieldTables;
-
-  // When modifying this data structure in parallel, this mutex must be taken.
-  // Using a mutex is reasonable here since we have few edits to make (only for
-  // struct.news, which are rare).
-  std::mutex mutex;
-};
-
 struct VTableToIndexes : public Pass {
-  MappingInfo mapping;
-
   void run(PassRunner* runner, Module* module) override {
+    // Map functions written to struct fields to indexes that can be written to
+    // them instead. This includes creating the tables and fixing up struct
+    // operations to access the tables.
+    mapFunctionsToTables(runner, *module);
+
     // Replace function fields in structs with i32s. This just does the type
     // changes.
     updateFieldTypes(*module);
-
-    // Map functions written to struct fields to indexes that can be written to
-    // them instead. This updates the mapping info.
-    mapFunctionsToTables(runner, *module);
-
-    // Create the tables.
-    createTables(*module);
-
-    // Fix up struct operations that used to be on function references to now
-    // contain indexes.
-    updateStructOperations(*module);
-  }
-
-  void updateFieldTypes(Module& wasm) {
-    class TypeRewriter : public GlobalTypeRewriter {
-    public:
-      virtual void modifyStruct(HeapType oldStructType, Struct& struct_) {
-        for (auto& field : struct_.fields) {
-          if (field.type.isFunction()) {
-            // This is exactly what we are looking to change!
-            return Type::i32;
-          }
-        }
-      }
-    };
-
-    TypeRewriter(wasm).update();
   }
 
   void mapFunctionsToTables(PassRunner* runner, Module& wasm) {
-    struct CodeScanner
-      : public WalkerPass<PostWalker<CodeScanner>> {
+    struct MappingInfo {
+      // Maps each (struct, field index of a function reference) to the table in
+      // which it is declared.
+      std::unordered_map<std::pair<HeapType, Index>, Name> fieldTables;
+
+      // For each table, a map of functions in the table to their indexes.
+      std::unordered_map<Name, std::unordered_map<Name, Index>> tableFuncIndexes;
+
+      // When modifying this data structure in parallel, or doing global
+      // operations on the module, this mutex must be taken.
+      // TODO: optimize
+      std::mutex mutex;
+    } mappingInfo;
+
+    struct Mapper
+      : public WalkerPass<PostWalker<Mapper>> {
       bool isFunctionParallel() override { return true; }
 
       MappingInfo& mapping;
 
-      CodeScanner(MappingInfo& mapping) : mapping(mapping) {}
+      Mapper(MappingInfo& mapping) : mapping(mapping) {}
 
-      CodeScanner* create() override {
-        return new CodeScanner(mapping);
+      Mapper* create() override {
+        return new Mapper(mapping);
       }
 
       void visitStructNew(StructNew* curr) {
         for (Index i = 0; i < curr->operands.size(); i++) {
           auto* operand = curr->operands[i];
-          if (operand->type.isFunction()) {
-            // Note this function so that s
-            auto* refFunc = operand->cast<RefFunc>();
-            auto heapType = curr->type.getHeapType();
-            Index funcIndex;
-
-            // Lock while we are working on the shared mapping data.
-            {
-              std::lock_guard<std::mutex> lock(mapping.mutex);
-              auto fieldTable = getFieldTable(heapType, i);
-              funcIndex = getFuncIndex(fieldTable, refFunc->func);
-            }
-
-            // Replace the function reference with the proper index.
-            operands[i] = Builder(*getModule()).makeConst(int32_t(funcIndex));
+          if (!operand->type.isFunction()) {
+            continue;
           }
+
+          auto* refFunc = operand->cast<RefFunc>();
+          auto heapType = curr->type.getHeapType();
+          Index funcIndex;
+
+          // Lock while we are working on the shared mapping data.
+          {
+            std::lock_guard<std::mutex> lock(mapping.mutex);
+            auto fieldTable = getFieldTable(heapType, i);
+            funcIndex = getFuncIndex(fieldTable, refFunc->func);
+          }
+
+          // Replace the function reference with the proper index.
+          operands[i] = Builder(*getModule()).makeConst(int32_t(funcIndex));
         }
       }
 
-      void getFieldTable(HeapType type, Index i) {
+      void visitStructGet(StructGet* curr) {
+        if (!curr->type.isFunction()) {
+          return;
+        }
+
+        Name fieldTable;
+
+        // Lock while we are working on the shared mapping data.
+        {
+          std::lock_guard<std::mutex> lock(mapping.mutex);
+          fieldTable = getFieldTable(heapType, i);
+        }
+
+        // We now have type i32, as the field will contain an index.
+        curr->type = Type::i32;
+
+        replaceCurrent(
+          Builder(*getModule()).makeTableGet(fieldTable, curr)
+        );
+      }
+
+      Name getFieldTable(HeapType type, Index i) {
         auto& fieldTable = mapping.fieldTables[{heapType, i}];
         if (!fieldTable.is()) {
           // Compute the table in which we will store functions for this field.
           // First, find the supertype in which this field was first defined;
           // all subclasses use the same table for their functions.
+          // TODO: more memoization here
           HeapType parent = heapType;
           while (1) {
             HeapType grandParent;
@@ -163,21 +159,76 @@ struct VTableToIndexes : public Pass {
 
           // We know the proper supertype, and our table is the one it has.
           auto& parentFieldTable = mapping.fieldTables[{parent, i}];
-          
+          if (!parentFieldTable.is()) {
+            // This is the first time we need a table for this parent; do so
+            // now.
+            parentFieldTable = Names::getValidTableName(*getModule());
+            // TODO: better than funcref
+            getModule()->addTable(Builder::makeTable(parentFieldTable));
+          }
+
+          // Copy from the parent;
+          fieldTable = parentFieldTable;
         }
+
+        return fieldTable;
       }
 
-      void getFuncIndex(Name fieldTable, Name func) {
-        // Get the table info
-        auto& tableInfo = mapping.tableFuncIndexes[
+      // Returns the index of a function in a table. If not already present
+      // there, this allocates a new entry in the table.
+      Index getFuncIndex(Name fieldTable, Name func) {
+        auto& tableInfo = mapping.tableFuncIndexes[fieldTable];
+        if (tableInfo.count(func)) {
+          return tableInfo[func];
+        }
 
+        auto ret = tableInfo.size();
+        tableInfo[func] = ret;
+        getModule()->getTable
+        return ret;
       }
     };
 
-    CodeScanner updater(mapping);
-    updater.run(runner, &wasm);
-    updater.walkModuleCode(&wasm);
+    Mapper mapper(mapping);
+    mapper.run(runner, &wasm);
+    mapper.walkModuleCode(&wasm);
   }
+
+  void updateFieldTypes(Module& wasm) {
+    class TypeRewriter : public GlobalTypeRewriter {
+    public:
+      virtual void modifyStruct(HeapType oldStructType, Struct& struct_) {
+        for (auto& field : struct_.fields) {
+          if (field.type.isFunction()) {
+            // This is exactly what we are looking to change!
+            return Type::i32;
+          }
+        }
+      }
+    };
+
+    TypeRewriter(wasm).update();
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// OLD CODE
 
   void updateModule(PassRunner* runner, Module& wasm) {
     struct CodeUpdater
