@@ -165,6 +165,7 @@ struct VTableToIndexes : public Pass {
             parentFieldTable = Names::getValidTableName(*getModule());
             // TODO: better than funcref
             getModule()->addTable(Builder::makeTable(parentFieldTable));
+            TODO make a singleton element segment too
           }
 
           // Copy from the parent;
@@ -182,10 +183,10 @@ struct VTableToIndexes : public Pass {
           return tableInfo[func];
         }
 
-        auto ret = tableInfo.size();
-        tableInfo[func] = ret;
-        getModule()->getTable
-        return ret;
+        auto index = tableInfo.size();
+        tableInfo[func] = index;
+        getModule()->getTable  TODO
+        return index;
       }
     };
 
