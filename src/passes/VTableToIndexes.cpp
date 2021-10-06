@@ -182,6 +182,10 @@ struct VTableToIndexes : public Pass {
             // now.
             parentFieldTable = Names::getValidTableName(*getModule(), "v-table");
             auto fieldType = type.getStruct().fields[i].type;
+            if (fieldType.isNonNullable()) {
+              // Non-nullable types are not allowed in tables yet.
+              fieldType = Type(fieldType.getHeapType(), Nullable);
+            }
             getModule()->addTable(Builder::makeTable(parentFieldTable, fieldType));
             Name segmentName = Names::getValidElementSegmentName(*getModule(),
               parentFieldTable.str + std::string("$segment"));

@@ -346,10 +346,11 @@
 )
 
 (module
+  ;; Test that we update struct.new in global locations.
+
   ;; CHECK:      (type $modify (struct (field i32)))
   (type $modify (struct (field funcref)))
 
-  ;; Test that we update globals
   ;; CHECK:      (type $none_=>_none (func))
 
   ;; CHECK:      (global $global (ref $modify) (struct.new $modify
@@ -369,3 +370,31 @@
   (func $foo)
 )
 
+(module
+  ;; Test that we do not emit non-nullable tables (which wasm does not allow).
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $modify (struct (field i32)))
+  (type $modify (struct (field (ref func))))
+
+  ;; Test that we update globals
+  ;; CHECK:      (table $v-table 1 1 funcref)
+
+  ;; CHECK:      (elem (i32.const 0) $foo)
+
+  ;; CHECK:      (func $foo
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $modify
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $foo
+    (drop
+      (struct.new $modify
+        (ref.func $foo)
+      )
+    )
+  )
+)
