@@ -42,9 +42,9 @@
 #include <ir/type-updating.h>
 #include <ir/utils.h>
 #include <pass.h>
-#include <wasm.h>
-#include <wasm-type.h>
 #include <wasm-builder.h>
+#include <wasm-type.h>
+#include <wasm.h>
 
 using namespace std;
 
@@ -87,17 +87,14 @@ struct VTableToIndexes : public Pass {
       std::mutex mutex;
     } mappingInfo;
 
-    struct Mapper
-      : public WalkerPass<PostWalker<Mapper>> {
+    struct Mapper : public WalkerPass<PostWalker<Mapper>> {
       bool isFunctionParallel() override { return true; }
 
       MappingInfo& mapping;
 
       Mapper(MappingInfo& mapping) : mapping(mapping) {}
 
-      Mapper* create() override {
-        return new Mapper(mapping);
-      }
+      Mapper* create() override { return new Mapper(mapping); }
 
       void visitStructNew(StructNew* curr) {
         for (Index i = 0; i < curr->operands.size(); i++) {
@@ -118,7 +115,8 @@ struct VTableToIndexes : public Pass {
           }
 
           // Replace the function reference with the proper index.
-          curr->operands[i] = Builder(*getModule()).makeConst(int32_t(funcIndex));
+          curr->operands[i] =
+            Builder(*getModule()).makeConst(int32_t(funcIndex));
         }
       }
 
@@ -146,9 +144,7 @@ struct VTableToIndexes : public Pass {
         // We now have type i32, as the field will contain an index.
         curr->type = Type::i32;
 
-        replaceCurrent(
-          Builder(*getModule()).makeTableGet(table, curr, type)
-        );
+        replaceCurrent(Builder(*getModule()).makeTableGet(table, curr, type));
       }
 
       // This must be called with the mutex held.
@@ -180,23 +176,22 @@ struct VTableToIndexes : public Pass {
           if (!parentFieldTable.is()) {
             // This is the first time we need a table for this parent; do so
             // now.
-            parentFieldTable = Names::getValidTableName(*getModule(), "v-table");
+            parentFieldTable =
+              Names::getValidTableName(*getModule(), "v-table");
             auto fieldType = type.getStruct().fields[i].type;
             if (fieldType.isNonNullable()) {
               // Non-nullable types are not allowed in tables yet.
               fieldType = Type(fieldType.getHeapType(), Nullable);
             }
-            getModule()->addTable(Builder::makeTable(parentFieldTable, fieldType));
-            Name segmentName = Names::getValidElementSegmentName(*getModule(),
-              parentFieldTable.str + std::string("$segment"));
-            getModule()->addElementSegment(
-              Builder::makeElementSegment(
-                segmentName,
-                parentFieldTable,
-                Builder(*getModule()).makeConst(int32_t(0)),
-                fieldType
-              )
-            );
+            getModule()->addTable(
+              Builder::makeTable(parentFieldTable, fieldType));
+            Name segmentName = Names::getValidElementSegmentName(
+              *getModule(), parentFieldTable.str + std::string("$segment"));
+            getModule()->addElementSegment(Builder::makeElementSegment(
+              segmentName,
+              parentFieldTable,
+              Builder(*getModule()).makeConst(int32_t(0)),
+              fieldType));
             mapping.tableInfos[parentFieldTable].segmentName = segmentName;
           }
 
@@ -224,8 +219,8 @@ struct VTableToIndexes : public Pass {
         table->initial = table->max = index + 1;
         auto* segment = getModule()->getElementSegment(tableInfo.segmentName);
         segment->data.push_back(
-          Builder(*getModule()).makeRefFunc(func, getModule()->getFunction(func)->type)
-        );
+          Builder(*getModule())
+            .makeRefFunc(func, getModule()->getFunction(func)->type));
         return index;
       }
     };
