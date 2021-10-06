@@ -5,7 +5,15 @@
 
 (module
   ;; These types have nothing we need to change.
+  ;; CHECK:      (type $modify-2 (struct (field f64) (field i32) (field (mut i32)) (field i64)))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $modify-1 (struct (field i32)))
+
   ;; CHECK:      (type $ref|$ignore-1|_ref|$ignore-2|_ref|$modify-1|_ref|$modify-2|_=>_none (func (param (ref $ignore-1) (ref $ignore-2) (ref $modify-1) (ref $modify-2))))
+
+  ;; CHECK:      (type $ref|$modify-1|_ref|$modify-2|_=>_none (func (param (ref $modify-1) (ref $modify-2))))
 
   ;; CHECK:      (type $ignore-1 (struct (field i32) (field f32)))
   (type $ignore-1 (struct (field i32) (field f32)))
@@ -13,14 +21,24 @@
   (type $ignore-2 (struct (field anyref)))
 
   ;; This type should have its field changed to an i32.
-  ;; CHECK:      (type $modify-1 (struct (field i32)))
   (type $modify-1 (struct (field funcref)))
 
   ;; This type should have just some of its fields changed.
-  ;; CHECK:      (type $modify-2 (struct (field f64) (field i32) (field (mut i32)) (field i64)))
   (type $modify-2 (struct (field f64) (field funcref) (field (mut funcref)) (field i64)))
 
   ;; Keep the types alive.
+  ;; CHECK:      (table $v-table 1 1 funcref)
+
+  ;; CHECK:      (table $v-table_0 2 2 funcref)
+
+  ;; CHECK:      (table $v-table_1 3 3 funcref)
+
+  ;; CHECK:      (elem $v-table$segment (table $v-table) (i32.const 0) func $helper1)
+
+  ;; CHECK:      (elem $v-table_0$segment (table $v-table_0) (i32.const 0) func $helper2 $helper3)
+
+  ;; CHECK:      (elem $v-table_1$segment (table $v-table_1) (i32.const 0) func $helper3 $helper4 $helper5)
+
   ;; CHECK:      (func $func (param $i1 (ref $ignore-1)) (param $i2 (ref $ignore-2)) (param $m1 (ref $modify-1)) (param $m2 (ref $modify-2))
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
@@ -31,6 +49,117 @@
     (param $m2 (ref $modify-2))
   )
 
+  ;; CHECK:      (func $new
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $modify-1
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $modify-1
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $modify-2
+  ;; CHECK-NEXT:    (f64.const 3.14159)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i64.const 1337)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $modify-2
+  ;; CHECK-NEXT:    (f64.const 3.14159)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:    (i64.const 1337)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $modify-2
+  ;; CHECK-NEXT:    (f64.const 3.14159)
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:    (i64.const 1337)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $new
+    ;; Create some structs and write to their fields.
+    (drop
+      (struct.new $modify-1
+        (ref.func $helper1)
+      )
+    )
+    (drop
+      (struct.new $modify-1
+        ;; Write the same function a second time here.
+        (ref.func $helper1)
+      )
+    )
+    (drop
+      (struct.new $modify-2
+        (f64.const 3.14159)
+        ;; Write different functions to different fields, which will become
+        ;; different tables.
+        (ref.func $helper2)
+        (ref.func $helper3)
+        (i64.const 1337)
+      )
+    )
+    (drop
+      (struct.new $modify-2
+        (f64.const 3.14159)
+        ;; Write helper3 to the first field now, so the function should appear
+        ;; in both tables.
+        (ref.func $helper3)
+        ;; Write a new function to the second table.
+        (ref.func $helper4)
+        (i64.const 1337)
+      )
+    )
+    (drop
+      (struct.new $modify-2
+        (f64.const 3.14159)
+        ;; Repeat from before.
+        (ref.func $helper3)
+        ;; Write yet another new function to the second table.
+        (ref.func $helper5)
+        (i64.const 1337)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $get (param $m1 (ref $modify-1)) (param $m2 (ref $modify-2))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block $block (result funcref)
+  ;; CHECK-NEXT:    (table.get $v-table
+  ;; CHECK-NEXT:     (struct.get $modify-1 0
+  ;; CHECK-NEXT:      (ref.null $modify-1)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block $block0 (result funcref)
+  ;; CHECK-NEXT:    (table.get $v-table_0
+  ;; CHECK-NEXT:     (struct.get $modify-2 1
+  ;; CHECK-NEXT:      (ref.null $modify-2)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block $block1 (result funcref)
+  ;; CHECK-NEXT:    (table.get $v-table_1
+  ;; CHECK-NEXT:     (struct.get $modify-2 2
+  ;; CHECK-NEXT:      (ref.null $modify-2)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
   (func $get
     (param $m1 (ref $modify-1))
     (param $m2 (ref $modify-2))
@@ -41,10 +170,36 @@
     )
     (drop
       (block (result funcref)
+        (struct.get $modify-2 1 (ref.null $modify-2))
+      )
+    )
+    (drop
+      (block (result funcref)
         (struct.get $modify-2 2 (ref.null $modify-2))
       )
     )
   )
+
+  ;; CHECK:      (func $helper1
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $helper1)
+  ;; CHECK:      (func $helper2
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $helper2)
+  ;; CHECK:      (func $helper3
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $helper3)
+  ;; CHECK:      (func $helper4
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $helper4)
+  ;; CHECK:      (func $helper5
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $helper5)
 )
 
 ;; Don't crash on an empty module

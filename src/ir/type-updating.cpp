@@ -26,6 +26,10 @@ GlobalTypeRewriter::GlobalTypeRewriter(Module& wasm) : wasm(wasm) {}
 
 void GlobalTypeRewriter::update() {
   ModuleUtils::collectHeapTypes(wasm, types, typeIndices);
+  if (types.size() == 0) {
+    return;
+  }
+
   typeBuilder.grow(types.size());
 
   // Create the temporary heap types.
