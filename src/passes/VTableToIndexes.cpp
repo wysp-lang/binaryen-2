@@ -38,8 +38,9 @@
 #include <mutex>
 
 #include <ir/module-utils.h>
-#include "ir/type-updating.h"
-#include "ir/utils.h"
+#include <ir/names.h>
+#include <ir/type-updating.h>
+#include <ir/utils.h>
 #include <pass.h>
 #include <wasm.h>
 #include <wasm-type.h>
@@ -74,7 +75,7 @@ struct VTableToIndexes : public Pass {
         Name segmentName;
 
         // A map of functions in the table to their indexes.
-        std::unordered_map<Name, Index>> funcIndexes;
+        std::unordered_map<Name, Index> funcIndexes;
       };
 
       // Information for all the tables.
@@ -112,12 +113,18 @@ struct VTableToIndexes : public Pass {
           // Lock while we are working on the shared mapping data.
           {
             std::lock_guard<std::mutex> lock(mapping.mutex);
-            auto fieldTable = getFieldTable(heapType, i);
-            funcIndex = getFuncIndex(fieldTable, refFunc->func);
+            auto table = getFieldTable(heapType, i);
+            funcIndex = getFuncIndex(table, refFunc->func);
           }
 
           // Replace the function reference with the proper index.
-          operands[i] = Builder(*getModule()).makeConst(int32_t(funcIndex));
+          curr->operands[i] = Builder(*getModule()).makeConst(int32_t(funcIndex));
+        }
+      }
+
+      void visitStructSet(StructSet* curr) {
+        if (curr->value->type.isFunction()) {
+          Fatal() << "VTableToIndexes assumes no sets of funcs";
         }
       }
 
@@ -126,30 +133,33 @@ struct VTableToIndexes : public Pass {
           return;
         }
 
-        Name fieldTable;
+        Name table;
+        Type type;
 
         // Lock while we are working on the shared mapping data.
         {
           std::lock_guard<std::mutex> lock(mapping.mutex);
-          fieldTable = getFieldTable(heapType, i);
+          table = getFieldTable(curr->ref->type.getHeapType(), curr->index);
+          type = getModule()->getTable(table)->type;
         }
 
         // We now have type i32, as the field will contain an index.
         curr->type = Type::i32;
 
         replaceCurrent(
-          Builder(*getModule()).makeTableGet(fieldTable, curr)
+          Builder(*getModule()).makeTableGet(table, curr, type)
         );
       }
 
+      // This must be called with the mutex held.
       Name getFieldTable(HeapType type, Index i) {
-        auto& fieldTable = mapping.fieldTables[{heapType, i}];
+        auto& fieldTable = mapping.fieldTables[{type, i}];
         if (!fieldTable.is()) {
           // Compute the table in which we will store functions for this field.
           // First, find the supertype in which this field was first defined;
           // all subclasses use the same table for their functions.
           // TODO: more memoization here
-          HeapType parent = heapType;
+          HeapType parent = type;
           while (1) {
             HeapType grandParent;
             if (!parent.getSuperType(grandParent)) {
@@ -171,9 +181,8 @@ struct VTableToIndexes : public Pass {
             // This is the first time we need a table for this parent; do so
             // now.
             parentFieldTable = Names::getValidTableName(*getModule(), "v-table");
-            auto fieldType = heapType.getStruct().fields[i].type;
-            getModule()->addTable(Builder::makeTable(parentFieldTable),
-                                  fieldType);
+            auto fieldType = type.getStruct().fields[i].type;
+            getModule()->addTable(Builder::makeTable(parentFieldTable, fieldType));
             Name segmentName = Names::getValidElementSegmentName(*getModule(),
               parentFieldTable.str + std::string("$segment"));
             getModule()->addElementSegment(
@@ -184,7 +193,7 @@ struct VTableToIndexes : public Pass {
                 fieldType
               )
             );
-            tableInfos[parentFieldTable].segmentName = segmentName;
+            mapping.tableInfos[parentFieldTable].segmentName = segmentName;
           }
 
           // Copy from the parent;
@@ -196,8 +205,9 @@ struct VTableToIndexes : public Pass {
 
       // Returns the index of a function in a table. If not already present
       // there, this allocates a new entry in the table.
-      Index getFuncIndex(Name table, Name func) {
-        auto& tableInfo = mapping.tableInfos[table];
+      // This must be called with the mutex held.
+      Index getFuncIndex(Name tableName, Name func) {
+        auto& tableInfo = mapping.tableInfos[tableName];
         auto& funcIndexes = tableInfo.funcIndexes;
         if (funcIndexes.count(func)) {
           return funcIndexes[func];
@@ -206,17 +216,17 @@ struct VTableToIndexes : public Pass {
         // Enlarge the table, add to the segment, and update the info.
         auto index = funcIndexes.size();
         funcIndexes[func] = index;
-        auto* table = getModule()->getTable(table);
+        auto* table = getModule()->getTable(tableName);
         table->initial = table->max = index + 1;
         auto* segment = getModule()->getElementSegment(tableInfo.segmentName);
         segment->data.push_back(
-          Builder(*getModule()).makeRefFunc(func)
+          Builder(*getModule()).makeRefFunc(func, getModule()->getFunction(func)->type)
         );
         return index;
       }
     };
 
-    Mapper mapper(mapping);
+    Mapper mapper(mappingInfo);
     mapper.run(runner, &wasm);
     mapper.walkModuleCode(&wasm);
   }
@@ -224,11 +234,13 @@ struct VTableToIndexes : public Pass {
   void updateFieldTypes(Module& wasm) {
     class TypeRewriter : public GlobalTypeRewriter {
     public:
+      TypeRewriter(Module& wasm) : GlobalTypeRewriter(wasm) {}
+
       virtual void modifyStruct(HeapType oldStructType, Struct& struct_) {
         for (auto& field : struct_.fields) {
           if (field.type.isFunction()) {
             // This is exactly what we are looking to change!
-            return Type::i32;
+            field.type = Type::i32;
           }
         }
       }
@@ -237,7 +249,7 @@ struct VTableToIndexes : public Pass {
     TypeRewriter(wasm).update();
   }
 
-
+#if 0
 
 
 
@@ -330,9 +342,10 @@ std::cout << "type: " << type << "\n";
     updater.run(runner, &wasm);
     updater.walkModuleCode(&wasm);
   }
-};
+#endif
 
-    //SubTypes subTypes(*module);
+
+};
 
 } // anonymous namespace
 
