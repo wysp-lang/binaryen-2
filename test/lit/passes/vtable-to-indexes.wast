@@ -5,28 +5,20 @@
 
 (module
   ;; These types have nothing we need to change.
-  ;; CHECK:      (type $modify-2 (struct (field f64) (field i32) (field (mut i32)) (field i64)))
-
-  ;; CHECK:      (type $none_=>_none (func))
-
-  ;; CHECK:      (type $modify-1 (struct (field i32)))
-
-  ;; CHECK:      (type $ref|$ignore-1|_ref|$ignore-2|_ref|$modify-1|_ref|$modify-2|_=>_none (func (param (ref $ignore-1) (ref $ignore-2) (ref $modify-1) (ref $modify-2))))
-
-  ;; CHECK:      (type $ref|$modify-1|_ref|$modify-2|_=>_none (func (param (ref $modify-1) (ref $modify-2))))
-
-  ;; CHECK:      (type $ignore-1 (struct (field i32) (field f32)))
   (type $ignore-1 (struct (field i32) (field f32)))
-  ;; CHECK:      (type $ignore-2 (struct (field anyref)))
   (type $ignore-2 (struct (field anyref)))
 
   ;; This type should have its field changed to an i32.
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $modify-2 (struct (field f64) (field i32) (field (mut i32)) (field i64)))
+
+  ;; CHECK:      (type $modify-1 (struct (field i32)))
   (type $modify-1 (struct (field funcref)))
 
   ;; This type should have just some of its fields changed.
   (type $modify-2 (struct (field f64) (field funcref) (field (mut funcref)) (field i64)))
 
-  ;; Keep the types alive.
   ;; CHECK:      (table $v-table 1 1 funcref)
 
   ;; CHECK:      (table $v-table_0 2 2 funcref)
@@ -38,16 +30,6 @@
   ;; CHECK:      (elem $v-table_0$segment (table $v-table_0) (i32.const 0) func $helper2 $helper3)
 
   ;; CHECK:      (elem $v-table_1$segment (table $v-table_1) (i32.const 0) func $helper3 $helper4 $helper5)
-
-  ;; CHECK:      (func $func (param $i1 (ref $ignore-1)) (param $i2 (ref $ignore-2)) (param $m1 (ref $modify-1)) (param $m2 (ref $modify-2))
-  ;; CHECK-NEXT:  (nop)
-  ;; CHECK-NEXT: )
-  (func $func
-    (param $i1 (ref $ignore-1))
-    (param $i2 (ref $ignore-2))
-    (param $m1 (ref $modify-1))
-    (param $m2 (ref $modify-2))
-  )
 
   ;; CHECK:      (func $new
   ;; CHECK-NEXT:  (drop
@@ -131,7 +113,7 @@
     )
   )
 
-  ;; CHECK:      (func $get (param $m1 (ref $modify-1)) (param $m2 (ref $modify-2))
+  ;; CHECK:      (func $get
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (block $block (result funcref)
   ;; CHECK-NEXT:    (table.get $v-table
@@ -161,8 +143,6 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   (func $get
-    (param $m1 (ref $modify-1))
-    (param $m2 (ref $modify-2))
     (drop
       (block (result funcref)
         (struct.get $modify-1 0 (ref.null $modify-1))
@@ -205,3 +185,169 @@
 ;; Don't crash on an empty module
 (module
 )
+
+;; Subtyping: verify that subtypes all share the same table for each field.
+(module
+  ;; Each type adds a new funcref field.
+  ;; CHECK:      (type $C (struct (field i32) (field i32) (field i32)))
+
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (type $B (struct (field i32) (field i32)))
+
+  ;; CHECK:      (type $A (struct (field i32)))
+  (type $A (struct (field funcref)))
+  (type $B (struct (field funcref) (field funcref)) (extends $A))
+  (type $C (struct (field funcref) (field funcref) (field funcref)) (extends $B))
+
+  ;; CHECK:      (table $v-table 1 1 funcref)
+
+  ;; CHECK:      (table $v-table_0 1 1 funcref)
+
+  ;; CHECK:      (table $v-table_1 1 1 funcref)
+
+  ;; CHECK:      (table $v-table_2 1 1 funcref)
+
+  ;; CHECK:      (table $v-table_3 1 1 funcref)
+
+  ;; CHECK:      (table $v-table_4 1 1 funcref)
+
+  ;; CHECK:      (elem $v-table$segment (table $v-table) (i32.const 0) func $helper1)
+
+  ;; CHECK:      (elem $v-table_0$segment (table $v-table_0) (i32.const 0) func $helper2)
+
+  ;; CHECK:      (elem $v-table_1$segment (table $v-table_1) (i32.const 0) func $helper3)
+
+  ;; CHECK:      (elem $v-table_2$segment (table $v-table_2) (i32.const 0) func $helper2)
+
+  ;; CHECK:      (elem $v-table_3$segment (table $v-table_3) (i32.const 0) func $helper3)
+
+  ;; CHECK:      (elem $v-table_4$segment (table $v-table_4) (i32.const 0) func $helper4)
+
+  ;; CHECK:      (func $new
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $A
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $B
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $C
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $new
+    ;; Create some structs and write to their fields.
+    (drop
+      (struct.new $A
+        (ref.func $helper1)
+      )
+    )
+    (drop
+      (struct.new $B
+        (ref.func $helper2)
+        (ref.func $helper3)
+      )
+    )
+    (drop
+      (struct.new $C
+        ;; Reuse the middle struct's references. We should share not just the
+        ;; table but also the indexes.
+        (ref.func $helper2)
+        (ref.func $helper3)
+        (ref.func $helper4)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $get
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (table.get $v-table
+  ;; CHECK-NEXT:    (struct.get $A 0
+  ;; CHECK-NEXT:     (ref.null $A)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (table.get $v-table_0
+  ;; CHECK-NEXT:    (struct.get $B 0
+  ;; CHECK-NEXT:     (ref.null $B)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (table.get $v-table_1
+  ;; CHECK-NEXT:    (struct.get $B 1
+  ;; CHECK-NEXT:     (ref.null $B)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (table.get $v-table_2
+  ;; CHECK-NEXT:    (struct.get $C 0
+  ;; CHECK-NEXT:     (ref.null $C)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (table.get $v-table_3
+  ;; CHECK-NEXT:    (struct.get $C 1
+  ;; CHECK-NEXT:     (ref.null $C)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (table.get $v-table_4
+  ;; CHECK-NEXT:    (struct.get $C 2
+  ;; CHECK-NEXT:     (ref.null $C)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $get
+    (drop
+      (struct.get $A 0 (ref.null $A))
+    )
+    (drop
+      (struct.get $B 0 (ref.null $B))
+    )
+    (drop
+      (struct.get $B 1 (ref.null $B))
+    )
+    (drop
+      (struct.get $C 0 (ref.null $C))
+    )
+    (drop
+      (struct.get $C 1 (ref.null $C))
+    )
+    (drop
+      (struct.get $C 2 (ref.null $C))
+    )
+  )
+
+  ;; CHECK:      (func $helper1
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $helper1)
+  ;; CHECK:      (func $helper2
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $helper2)
+  ;; CHECK:      (func $helper3
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $helper3)
+  ;; CHECK:      (func $helper4
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $helper4)
+)
+
