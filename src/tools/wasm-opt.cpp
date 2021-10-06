@@ -79,8 +79,8 @@ class ConvergenceMonitor {
 
   // While the number of functions decreases it is probably worth converging,
   // even if code size increases, as the removed functions were likely inlined.
-  // This should not lead to infinite recursion since the optimize does not
-  // create new functions as it goes.
+  // This should not lead to infinite recursion since the optimizer only very
+  // rarely creates new functions.
   Index funcs;
 
   // While the number of functions decreases it is probably worth converging,
@@ -412,9 +412,10 @@ int main(int argc, const char* argv[]) {
         }
       }
     };
-    runPasses();
 
-    if (converge) {
+    if (!converge) {
+      runPasses();
+    } else {
       ConvergenceMonitor monitor(wasm, options.passOptions);
       do {
         runPasses();
