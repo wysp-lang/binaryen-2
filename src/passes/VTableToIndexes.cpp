@@ -69,8 +69,16 @@ struct VTableToIndexes : public Pass {
       // which it is declared.
       std::unordered_map<std::pair<HeapType, Index>, Name> fieldTables;
 
-      // For each table, a map of functions in the table to their indexes.
-      std::unordered_map<Name, std::unordered_map<Name, Index>> tableFuncIndexes;
+      struct TableInfo {
+        // The name of the singleton segment for the table.
+        Name segmentName;
+
+        // A map of functions in the table to their indexes.
+        std::unordered_map<Name, Index>> funcIndexes;
+      };
+
+      // Information for all the tables.
+      std::unordered_map<Name, TableInfo> tableInfos;
 
       // When modifying this data structure in parallel, or doing global
       // operations on the module, this mutex must be taken.
@@ -162,10 +170,21 @@ struct VTableToIndexes : public Pass {
           if (!parentFieldTable.is()) {
             // This is the first time we need a table for this parent; do so
             // now.
-            parentFieldTable = Names::getValidTableName(*getModule());
-            // TODO: better than funcref
-            getModule()->addTable(Builder::makeTable(parentFieldTable));
-            TODO make a singleton element segment too
+            parentFieldTable = Names::getValidTableName(*getModule(), "v-table");
+            auto fieldType = heapType.getStruct().fields[i].type;
+            getModule()->addTable(Builder::makeTable(parentFieldTable),
+                                  fieldType);
+            Name segmentName = Names::getValidElementSegmentName(*getModule(),
+              parentFieldTable.str + std::string("$segment"));
+            getModule()->addElementSegment(
+              Builder::makeElementSegment(
+                segmentName,
+                parentFieldTable,
+                Builder(*getModule()).makeConst(int32_t(0)),
+                fieldType
+              )
+            );
+            tableInfos[parentFieldTable].segmentName = segmentName;
           }
 
           // Copy from the parent;
@@ -177,15 +196,22 @@ struct VTableToIndexes : public Pass {
 
       // Returns the index of a function in a table. If not already present
       // there, this allocates a new entry in the table.
-      Index getFuncIndex(Name fieldTable, Name func) {
-        auto& tableInfo = mapping.tableFuncIndexes[fieldTable];
-        if (tableInfo.count(func)) {
-          return tableInfo[func];
+      Index getFuncIndex(Name table, Name func) {
+        auto& tableInfo = mapping.tableInfos[table];
+        auto& funcIndexes = tableInfo.funcIndexes;
+        if (funcIndexes.count(func)) {
+          return funcIndexes[func];
         }
 
-        auto index = tableInfo.size();
-        tableInfo[func] = index;
-        getModule()->getTable  TODO
+        // Enlarge the table, add to the segment, and update the info.
+        auto index = funcIndexes.size();
+        funcIndexes[func] = index;
+        auto* table = getModule()->getTable(table);
+        table->initial = table->max = index + 1;
+        auto* segment = getModule()->getElementSegment(tableInfo.segmentName);
+        segment->data.push_back(
+          Builder(*getModule()).makeRefFunc(func)
+        );
         return index;
       }
     };
