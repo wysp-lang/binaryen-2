@@ -89,7 +89,8 @@ class ConvergenceMonitor {
   Index types;
 
 public:
-  ConvergenceMonitor(Module& wasm, PassOptions& options) : wasm(wasm), options(options) {
+  ConvergenceMonitor(Module& wasm, PassOptions& options)
+    : wasm(wasm), options(options) {
     measure();
   }
 
@@ -129,9 +130,7 @@ private:
     return buffer.size();
   }
 
-  Index measureFuncs() {
-    return wasm.functions.size();
-  }
+  Index measureFuncs() { return wasm.functions.size(); }
 
   Index measureTypes() {
     std::vector<HeapType> types;
