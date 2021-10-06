@@ -345,3 +345,27 @@
   (func $helper5)
 )
 
+(module
+  ;; CHECK:      (type $modify (struct (field i32)))
+  (type $modify (struct (field funcref)))
+
+  ;; Test that we update globals
+  ;; CHECK:      (type $none_=>_none (func))
+
+  ;; CHECK:      (global $global (ref $modify) (struct.new $modify
+  ;; CHECK-NEXT:  (i32.const 0)
+  ;; CHECK-NEXT: ))
+  (global $global (ref $modify) (struct.new $modify
+    (ref.func $foo)
+  ))
+
+  ;; CHECK:      (table $v-table 1 1 funcref)
+
+  ;; CHECK:      (elem (i32.const 0) $foo)
+
+  ;; CHECK:      (func $foo
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $foo)
+)
+
