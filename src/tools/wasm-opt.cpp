@@ -68,6 +68,79 @@ static bool willRemoveDebugInfo(const std::vector<std::string>& passes) {
   return false;
 }
 
+// A monitor for --converge mode, in which we keep running passes while we see
+// benefits. This class measures the possible benefits and reports on them.
+class ConvergenceMonitor {
+  Module& wasm;
+  PassOptions& options;
+
+  // While the size decreases it is definitely worth converging.
+  Index size;
+
+  // While the number of functions decreases it is probably worth converging,
+  // even if code size increases, as the removed functions were likely inlined.
+  // This should not lead to infinite recursion since the optimize does not
+  // create new functions as it goes.
+  Index funcs;
+
+  // While the number of functions decreases it is probably worth converging,
+  // even if code size increases, as removing types suggests we have reduced
+  // the overall complexity of the module (perhaps through devirtualization).
+  Index types;
+
+public:
+  ConvergenceMonitor(Module& wasm, PassOptions& options) : wasm(wasm), options(options) {
+    measure();
+  }
+
+  void measure() {
+    size = measureSize();
+    std::cout << "[converge] \t" << size << " bytes";
+    if (options.shrinkLevel == 0) {
+      funcs = measureFuncs();
+      std::cout << " \t" << funcs << " funcs";
+      types = measureTypes();
+      std::cout << " \t" << types << " types";
+    }
+    std::cout << '\n';
+  }
+
+  bool keepWorking() {
+    auto lastSize = size;
+    auto lastFuncs = funcs;
+    auto lastTypes = types;
+    measure();
+    if (size < lastSize) {
+      return true;
+    }
+    if (options.shrinkLevel == 0) {
+      if (funcs < lastFuncs || types < lastTypes) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+private:
+  Index measureSize() {
+    BufferWithRandomAccess buffer;
+    WasmBinaryWriter writer(&wasm, buffer);
+    writer.write();
+    return buffer.size();
+  }
+
+  Index measureFuncs() {
+    return wasm.functions.size();
+  }
+
+  Index measureTypes() {
+    std::vector<HeapType> types;
+    std::unordered_map<HeapType, Index> typeIndices;
+    ModuleUtils::collectHeapTypes(wasm, types, typeIndices);
+    return types.size();
+  }
+};
+
 //
 // main
 //
@@ -108,7 +181,7 @@ int main(int argc, const char* argv[]) {
          [&](Options* o, const std::string& argument) { emitBinary = false; })
     .add("--converge",
          "-c",
-         "Run passes to convergence, continuing while binary size decreases",
+         "Run passes to convergence, continuing to run while we see benefits",
          Options::Arguments::Zero,
          [&](Options* o, const std::string& arguments) { converge = true; })
     .add(
@@ -341,25 +414,12 @@ int main(int argc, const char* argv[]) {
       }
     };
     runPasses();
+
     if (converge) {
-      // Keep on running passes to convergence, defined as binary
-      // size no longer decreasing.
-      auto getSize = [&]() {
-        BufferWithRandomAccess buffer;
-        WasmBinaryWriter writer(&wasm, buffer);
-        writer.write();
-        return buffer.size();
-      };
-      auto lastSize = getSize();
-      while (1) {
-        BYN_TRACE("running iteration for convergence (" << lastSize << ")..\n");
+      ConvergenceMonitor monitor(wasm, options.passOptions);
+      do {
         runPasses();
-        auto currSize = getSize();
-        if (currSize >= lastSize) {
-          break;
-        }
-        lastSize = currSize;
-      }
+      } while (monitor.keepWorking());
     }
   }
 

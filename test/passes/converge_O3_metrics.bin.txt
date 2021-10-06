@@ -228,6 +228,7 @@ total
   (i32.const 0)
  )
 )
+[converge] 	1074 bytes 	7 funcs 	5 types
 total
  [exports]      : 2       
  [funcs]        : 6       
@@ -451,6 +452,7 @@ total
   (i32.const 0)
  )
 )
+[converge] 	1060 bytes 	7 funcs 	5 types
 total
  [exports]      : 2       
  [funcs]        : 6       
@@ -674,3 +676,4 @@ total
   (i32.const 0)
  )
 )
+[converge] 	1060 bytes 	7 funcs 	5 types
