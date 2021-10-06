@@ -241,10 +241,15 @@ struct VTableToIndexes : public Pass {
       TypeRewriter(Module& wasm) : GlobalTypeRewriter(wasm) {}
 
       virtual void modifyStruct(HeapType oldStructType, Struct& struct_) {
-        for (auto& field : struct_.fields) {
-          if (field.type.isFunction()) {
+        auto& oldFields = oldStructType.getStruct().fields;
+        auto& newFields = struct_.fields;
+
+        for (Index i = 0; i < oldFields.size(); i++) {
+          // Check for function-hood on the old fields, as the new ones contain
+          // temp types that we should not be accessing.
+          if (oldFields[i].type.isFunction()) {
             // This is exactly what we are looking to change!
-            field.type = Type::i32;
+            newFields[i].type = Type::i32;
           }
         }
       }

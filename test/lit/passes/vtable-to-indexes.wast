@@ -7,6 +7,8 @@
   ;; These types have nothing we need to change.
   (type $ignore-1 (struct (field i32) (field f32)))
   (type $ignore-2 (struct (field anyref)))
+  (type $ignore-3 (struct (field (ref $array))))
+  (type $array (array (mut i32)))
 
   ;; This type should have its field changed to an i32.
   ;; CHECK:      (type $none_=>_none (func))
