@@ -35,8 +35,6 @@
 //    specialized type (it would have the subtype).
 //
 
-#include <mutex>
-
 #include <ir/module-utils.h>
 #include <ir/names.h>
 #include <ir/type-updating.h>
@@ -80,15 +78,11 @@ struct VTableToIndexes : public Pass {
 
       // Information for all the tables.
       std::unordered_map<Name, TableInfo> tableInfos;
-
-      // When modifying this data structure in parallel, or doing global
-      // operations on the module, this mutex must be taken.
-      // TODO: optimize
-      std::mutex mutex;
     } mappingInfo;
 
     struct Mapper : public WalkerPass<PostWalker<Mapper>> {
-      bool isFunctionParallel() override { return true; }
+      // Intentionally *not* function parallel, to make it deterministic, and
+      // to not need to lock the mapping info.
 
       MappingInfo& mapping;
 
@@ -107,12 +101,8 @@ struct VTableToIndexes : public Pass {
           auto heapType = curr->type.getHeapType();
           Index funcIndex;
 
-          // Lock while we are working on the shared mapping data.
-          {
-            std::lock_guard<std::mutex> lock(mapping.mutex);
-            auto table = getFieldTable(heapType, i);
-            funcIndex = getFuncIndex(table, refFunc->func);
-          }
+          auto table = getFieldTable(heapType, i);
+          funcIndex = getFuncIndex(table, refFunc->func);
 
           // Replace the function reference with the proper index.
           curr->operands[i] =
@@ -134,12 +124,8 @@ struct VTableToIndexes : public Pass {
         Name table;
         Type type;
 
-        // Lock while we are working on the shared mapping data.
-        {
-          std::lock_guard<std::mutex> lock(mapping.mutex);
-          table = getFieldTable(curr->ref->type.getHeapType(), curr->index);
-          type = getModule()->getTable(table)->type;
-        }
+        table = getFieldTable(curr->ref->type.getHeapType(), curr->index);
+        type = getModule()->getTable(table)->type;
 
         // We now have type i32, as the field will contain an index.
         curr->type = Type::i32;
@@ -147,7 +133,6 @@ struct VTableToIndexes : public Pass {
         replaceCurrent(Builder(*getModule()).makeTableGet(table, curr, type));
       }
 
-      // This must be called with the mutex held.
       Name getFieldTable(HeapType type, Index i) {
         auto& fieldTable = mapping.fieldTables[{type, i}];
         if (!fieldTable.is()) {
@@ -204,7 +189,6 @@ struct VTableToIndexes : public Pass {
 
       // Returns the index of a function in a table. If not already present
       // there, this allocates a new entry in the table.
-      // This must be called with the mutex held.
       Index getFuncIndex(Name tableName, Name func) {
         auto& tableInfo = mapping.tableInfos[tableName];
         auto& funcIndexes = tableInfo.funcIndexes;
