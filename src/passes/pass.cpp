@@ -158,6 +158,8 @@ void PassRegistry::registerPasses() {
                "rewrite global GC types to be more optimal",
                createGlobalTypeOptimizationPass);
   registerPass(
+    "gto", "globally optimize GC types", createGlobalTypeOptimizationPass);
+  registerPass(
     "heap2local", "replace GC allocations with locals", createHeap2LocalPass);
   registerPass(
     "inline-main", "inline __original_main into main", createInlineMainPass);
