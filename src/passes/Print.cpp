@@ -435,7 +435,26 @@ struct PrintExpressionContents
 
     o << '(';
     printMinor(o, "type ");
-    TypeNamePrinter(o, wasm).print(HeapType(curr->sig));
+
+    auto heapType = HeapType(curr->sig);
+    if (wasm) {
+      // FIXME We should probably store a heap type on CallIndirect, see
+      //       https://github.com/WebAssembly/binaryen/issues/4220
+      //       For now, copy the heap type from the table if it matches - then a
+      //       nominal check will succeed too. If it does not match, then just
+      //       emit something for it like we always used to, using
+      //       HeapType(sig).
+      auto tableType = wasm->getTable(curr->table)->type;
+      if (tableType.isFunction() && tableType != Type::funcref) {
+        auto tableHeapType = tableType.getHeapType();
+        auto tableSig = tableHeapType.getSignature();
+        if (curr->sig == tableSig) {
+          heapType = tableHeapType;
+        }
+      }
+    }
+    TypeNamePrinter(o, wasm).print(heapType);
+
     o << ')';
   }
   void visitLocalGet(LocalGet* curr) {
