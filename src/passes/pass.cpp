@@ -154,9 +154,6 @@ void PassRegistry::registerPasses() {
     createGenerateI64DynCallsPass);
   registerPass(
     "generate-stack-ir", "generate Stack IR", createGenerateStackIRPass);
-  registerPass("gto",
-               "rewrite global GC types to be more optimal",
-               createGlobalTypeOptimizationPass);
   registerPass(
     "gto", "globally optimize GC types", createGlobalTypeOptimizationPass);
   registerPass(
