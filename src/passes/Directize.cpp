@@ -22,6 +22,7 @@
 
 #include <unordered_map>
 
+#include "ir/properties.h"
 #include "ir/table-utils.h"
 #include "ir/type-updating.h"
 #include "ir/utils.h"
@@ -50,6 +51,11 @@ struct FunctionDirectizer : public WalkerPass<PostWalker<FunctionDirectizer>> {
     }
 
     auto& flatTable = it->second;
+
+    if (curr->target->is<StructGet>()) {
+      optimizeITable(curr);
+      return;
+    }
 
     // If the target is constant, we can emit a direct call.
     if (curr->target->is<Const>()) {
@@ -168,6 +174,102 @@ private:
     }
     return builder.makeSequence(builder.makeBlock(newOperands),
                                 builder.makeUnreachable());
+  }
+
+  void optimizeITable(CallIndirect* curr) {
+    if (curr->type == Type::unreachable) {
+      return;
+    }
+    // In TrapsNeverHappen mode, we can optimize this pattern:
+    //
+    //  (call_indirect $table (type $type)
+    //   ..params..
+    //   (struct.get $vtable $vtable.field
+    //    (ref.cast $vtable
+    //     (array.get $itable
+    //      ..object..
+    //      (i32.const K)))))
+    //
+    // An itable is basically a bundle of sub-vtables. We load one of those sub-
+    // vtables by index K, then cast it to a particular vtable type $vtable,
+    // then read a field $vtable.field from that vtable struct and then call it
+    // on $table.
+    //    
+    // Even if we assume nothing about the input object, we know this:
+    //  - We read from some itable at index K
+    //  - What we find there is cast successfully to $vtable
+    //  - We read $vtable.field from that
+    //
+    // And we can verify that
+    //  - $vtable and $itable have immutable fields (for $vtable we can see that on the
+    //    type, for $itable which is an array the wasm type system doesn't yet
+    //    allow that (but it should, given array.init), so we need to verify it)
+    //
+    // If we are lucky, that narrows things down enough to infer a constant
+    // index being passed to the call_indirect. Specifically, we can do this:
+    //  - Find all $itable creations
+    //  - Filter to ones where index K exists and holds an item of type $vtable (or sub).
+    //  - For all those $vtable instances, see if at field $vtable.field we have
+    //    the same constant value all the time.
+    //
+    // (Even without TNH we could do something here that just leaves a trap
+    // around if the cast fails, then does a direct call.)
+    auto* outerGet = curr->target->dynCast<StructGet>();
+    if (!outerGet) {
+      return;
+    }
+    auto* cast = outerGet->ref->dynCast<RefCast>();
+    if (!cast) {
+      return;
+    }
+    auto* innerGet = cast->ref->dynCast<ArrayGet>();
+    if (!innerGet) {
+      return;
+    }
+    if (!innerGet->index->is<Const>()) {
+      return;
+    }
+
+std::cout << "waka1\n";
+    // Looks like our pattern. Let's see what we can infer.
+    auto vtableType = cast->getIntendedType();
+//std::cout << "waka2\n";
+    Index itableIndex = innerGet->index->cast<Const>()->value.geti32();
+//std::cout << "waka3\n";
+    auto vtableIndex = outerGet->index;
+    auto itableType = innerGet->ref->type.getHeapType();
+    auto& wasm = *getModule();
+    std::unordered_set<Literal> possibleValues; // Small?
+    for (auto& global : wasm.globals) {
+//std::cout << "  shaka1\n";
+      // Check it is an itable with the right type.
+      if (global->imported() || !global->init->type.isRef() || !HeapType::isSubType(global->init->type.getHeapType(), itableType)) {
+        continue;
+      }
+//std::cout << "  shaka2\n";
+      // Check it is an array.init with enough items for our constant index.
+      auto* init = global->init->dynCast<ArrayInit>();
+      if (!init || init->values.size() <= itableIndex) {
+        continue;
+      }
+//std::cout << "  shaka3\n";
+      // Check the vtable is of the right type.
+      auto* vtableNew = init->values[itableIndex]->dynCast<StructNew>();
+      if (!vtableNew || !HeapType::isSubType(vtableNew->type.getHeapType(), vtableType)) {
+        continue;
+      }
+      if (vtableNew->isWithDefault()) continue;
+      auto* vtableItem = vtableNew->operands[vtableIndex];
+      if (!Properties::isSingleConstantExpression(vtableItem)) {
+        continue;
+      }
+      auto value = Properties::getLiteral(vtableItem);
+      possibleValues.insert(value);
+      if (possibleValues.size() > 1) {
+        break;
+      }
+    }
+std::cout << "  shaka4 " << (possibleValues.size() <= 1) << "\n"; // this finds nothing :(
   }
 };
 
