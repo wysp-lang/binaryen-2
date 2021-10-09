@@ -51,11 +51,26 @@ struct FunctionDirectizer : public WalkerPass<PostWalker<FunctionDirectizer>> {
 
     auto& flatTable = it->second;
 
+    // Size 0? trapp!
+
+    // Given an expression, get an index from it if it is a constant, and if not
+    // then use a given default.
+    auto getIndex = [](Expression* expr, Index default_) -> Index {
+      if (expr) {
+        if (auto* c = expr->dynCast<Const>()) {
+          return c->value.geti32();
+        }
+      }
+      return default_;
+    };
+
     // If the target is constant, we can emit a direct call.
-    if (curr->target->is<Const>()) {
+    // FIXME: 1 and 2 depend on TNH
+    if (curr->target->is<Const>() || flatTable.names.size() == 1) {
       std::vector<Expression*> operands(curr->operands.begin(),
                                         curr->operands.end());
-      replaceCurrent(makeDirectCall(operands, curr->target, flatTable, curr));
+      replaceCurrent(
+        makeDirectCall(operands, getIndex(curr->target, 0), flatTable, curr));
       return;
     }
 
@@ -63,53 +78,61 @@ struct FunctionDirectizer : public WalkerPass<PostWalker<FunctionDirectizer>> {
     // direct calls.
     // TODO: handle 3+
     // TODO: handle the case where just one arm is a constant?
-    if (auto* select = curr->target->dynCast<Select>()) {
-      if (select->ifTrue->is<Const>() && select->ifFalse->is<Const>()) {
-        Builder builder(*getModule());
-        auto* func = getFunction();
-        std::vector<Expression*> blockContents;
+    auto* select = curr->target->dynCast<Select>();
+    if ((select && select->ifTrue->is<Const>() &&
+         select->ifFalse->is<Const>()) ||
+        flatTable.names.size() == 2) {
+      Builder builder(*getModule());
+      auto* func = getFunction();
+      std::vector<Expression*> blockContents;
 
-        // We must use the operands twice, and also must move the condition to
-        // execute first; use locals for them all. While doing so, if we see
-        // any are unreachable, stop trying to optimize and leave this for DCE.
-        std::vector<Index> operandLocals;
-        for (auto* operand : curr->operands) {
-          if (operand->type == Type::unreachable ||
-              !TypeUpdating::canHandleAsLocal(operand->type)) {
-            return;
-          }
-          auto currLocal = builder.addVar(func, operand->type);
-          operandLocals.push_back(currLocal);
-          blockContents.push_back(builder.makeLocalSet(currLocal, operand));
-        }
-
-        if (select->condition->type == Type::unreachable) {
+      // We must use the operands twice, and also must move the condition to
+      // execute first; use locals for them all. While doing so, if we see
+      // any are unreachable, stop trying to optimize and leave this for DCE.
+      std::vector<Index> operandLocals;
+      for (auto* operand : curr->operands) {
+        if (operand->type == Type::unreachable ||
+            !TypeUpdating::canHandleAsLocal(operand->type)) {
           return;
         }
-
-        // Build the calls.
-        auto numOperands = curr->operands.size();
-        auto getOperands = [&]() {
-          std::vector<Expression*> newOperands(numOperands);
-          for (Index i = 0; i < numOperands; i++) {
-            newOperands[i] =
-              builder.makeLocalGet(operandLocals[i], curr->operands[i]->type);
-          }
-          return newOperands;
-        };
-        auto* ifTrueCall =
-          makeDirectCall(getOperands(), select->ifTrue, flatTable, curr);
-        auto* ifFalseCall =
-          makeDirectCall(getOperands(), select->ifFalse, flatTable, curr);
-
-        // Create the if to pick the calls, and emit the final block.
-        auto* iff = builder.makeIf(select->condition, ifTrueCall, ifFalseCall);
-        blockContents.push_back(iff);
-        replaceCurrent(builder.makeBlock(blockContents));
-
-        // By adding locals we must make type adjustments at the end.
-        changedTypes = true;
+        auto currLocal = builder.addVar(func, operand->type);
+        operandLocals.push_back(currLocal);
+        blockContents.push_back(builder.makeLocalSet(currLocal, operand));
       }
+
+      if (select && select->condition->type == Type::unreachable) {
+        return;
+      }
+
+      // Build the calls.
+      auto numOperands = curr->operands.size();
+      auto getOperands = [&]() {
+        std::vector<Expression*> newOperands(numOperands);
+        for (Index i = 0; i < numOperands; i++) {
+          newOperands[i] =
+            builder.makeLocalGet(operandLocals[i], curr->operands[i]->type);
+        }
+        return newOperands;
+      };
+      auto* ifTrueCall = makeDirectCall(
+        getOperands(), getIndex(select ? select->ifTrue : nullptr, 1), flatTable, curr);
+      auto* ifFalseCall = makeDirectCall(
+        getOperands(), getIndex(select ? select->ifFalse : nullptr, 0), flatTable, curr);
+
+      Expression* condition;
+      if (select) {
+        condition = select->condition;
+      } else {
+        condition = curr;
+      }
+
+      // Create the if to pick the calls, and emit the final block.
+      auto* iff = builder.makeIf(condition, ifTrueCall, ifFalseCall);
+      blockContents.push_back(iff);
+      replaceCurrent(builder.makeBlock(blockContents));
+
+      // By adding locals we must make type adjustments at the end.
+      changedTypes = true;
     }
   }
 
@@ -131,10 +154,9 @@ private:
   // table. If we can see that the call will trap, instead return an
   // unreachable.
   Expression* makeDirectCall(const std::vector<Expression*>& operands,
-                             Expression* c,
+                             Index index,
                              const TableUtils::FlatTable& flatTable,
                              CallIndirect* original) {
-    Index index = c->cast<Const>()->value.geti32();
 
     // If the index is invalid, or the type is wrong, we can
     // emit an unreachable here, since in Binaryen it is ok to
