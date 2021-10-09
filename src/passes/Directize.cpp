@@ -53,6 +53,8 @@ struct FunctionDirectizer : public WalkerPass<PostWalker<FunctionDirectizer>> {
 
     // Size 0? trapp!
 
+    // Replace all call_indirects to flat immutable tables with a call to a function with a switch?
+
     // Given an expression, get an index from it if it is a constant, and if not
     // then use a given default.
     auto getIndex = [](Expression* expr, Index default_) -> Index {
