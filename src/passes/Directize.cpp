@@ -69,6 +69,9 @@ struct FunctionDirectizer : public WalkerPass<PostWalker<FunctionDirectizer>> {
     if (curr->target->is<Const>() || flatTable.names.size() == 1) {
       std::vector<Expression*> operands(curr->operands.begin(),
                                         curr->operands.end());
+      // FIXME 0 and 0 and 1 below are wrong! Must be indexes of the things in the table.
+      // FIXME also really this isn't the size of the tale per say but the
+      // existence of only 1 or 2 non-null items in itt.
       replaceCurrent(
         makeDirectCall(operands, getIndex(curr->target, 0), flatTable, curr));
       return;
@@ -103,6 +106,9 @@ struct FunctionDirectizer : public WalkerPass<PostWalker<FunctionDirectizer>> {
       if (select && select->condition->type == Type::unreachable) {
         return;
       }
+      if (!select && curr->type == Type::unreachable) {
+        return;
+      }
 
       // Build the calls.
       auto numOperands = curr->operands.size();
@@ -119,11 +125,12 @@ struct FunctionDirectizer : public WalkerPass<PostWalker<FunctionDirectizer>> {
       auto* ifFalseCall = makeDirectCall(
         getOperands(), getIndex(select ? select->ifFalse : nullptr, 0), flatTable, curr);
 
+      // TODO: move up and use for unreachability
       Expression* condition;
       if (select) {
         condition = select->condition;
       } else {
-        condition = curr;
+        condition = curr->target;
       }
 
       // Create the if to pick the calls, and emit the final block.

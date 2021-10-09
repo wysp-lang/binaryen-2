@@ -324,10 +324,31 @@
   (unreachable)
  )
  ;; CHECK:      (func $bar (param $x i32) (param $y i32) (param $z i32)
- ;; CHECK-NEXT:  (call_indirect $0 (type $ii)
+ ;; CHECK-NEXT:  (local $3 i32)
+ ;; CHECK-NEXT:  (local $4 i32)
+ ;; CHECK-NEXT:  (local.set $3
  ;; CHECK-NEXT:   (local.get $x)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (local.set $4
  ;; CHECK-NEXT:   (local.get $y)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (if
  ;; CHECK-NEXT:   (local.get $z)
+ ;; CHECK-NEXT:   (call $foo
+ ;; CHECK-NEXT:    (local.get $3)
+ ;; CHECK-NEXT:    (local.get $4)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (block
+ ;; CHECK-NEXT:    (block
+ ;; CHECK-NEXT:     (drop
+ ;; CHECK-NEXT:      (local.get $3)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (drop
+ ;; CHECK-NEXT:      (local.get $4)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT: )
  (func $bar (param $x i32) (param $y i32) (param $z i32)
@@ -854,6 +875,74 @@
   )
   (call_indirect $no-set (type $v)
    (i32.const 1)
+  )
+ )
+)
+
+;; waka 1
+(module
+ ;; CHECK:      (type $v (func))
+ (type $v (func))
+
+ ;; CHECK:      (type $i32_=>_none (func (param i32)))
+
+ ;; CHECK:      (table $one 1 1 funcref)
+ (table $one 1 1 funcref)
+
+ ;; CHECK:      (elem $0 (i32.const 0) $foo)
+ (elem $0 (table $one) (i32.const 0) $foo)
+
+ ;; CHECK:      (func $foo
+ ;; CHECK-NEXT:  (nop)
+ ;; CHECK-NEXT: )
+ (func $foo
+ )
+
+ ;; CHECK:      (func $bar (param $x i32)
+ ;; CHECK-NEXT:  (call $foo)
+ ;; CHECK-NEXT: )
+ (func $bar (param $x i32)
+  (call_indirect $one (type $v)
+   (local.get $x)
+  )
+ )
+)
+
+;; waka 2
+(module
+ ;; CHECK:      (type $v (func))
+ (type $v (func))
+
+ ;; CHECK:      (type $i32_=>_none (func (param i32)))
+
+ ;; CHECK:      (table $two 2 2 funcref)
+ (table $two 2 2 funcref)
+
+ ;; CHECK:      (elem $0 (i32.const 0) $foo1 $foo2)
+ (elem $0 (table $two) (i32.const 0) $foo1 $foo2)
+
+ ;; CHECK:      (func $foo1
+ ;; CHECK-NEXT:  (nop)
+ ;; CHECK-NEXT: )
+ (func $foo1
+ )
+
+ ;; CHECK:      (func $foo2
+ ;; CHECK-NEXT:  (nop)
+ ;; CHECK-NEXT: )
+ (func $foo2
+ )
+
+ ;; CHECK:      (func $bar (param $x i32)
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (local.get $x)
+ ;; CHECK-NEXT:   (call $foo2)
+ ;; CHECK-NEXT:   (call $foo1)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $bar (param $x i32)
+  (call_indirect $two (type $v)
+   (local.get $x)
   )
  )
 )
