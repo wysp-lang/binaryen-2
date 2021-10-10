@@ -238,8 +238,53 @@ struct Planner : public WalkerPass<PostWalker<Planner>> {
     }
   }
 
+  static void scan(Planner* self, Expression** currp) {
+    // Avoid scanning into code that looks unlikely to execute: inlining there
+    // will likely only increase code size for no benefit.
+    if (auto* iff = (*currp)->dynCast<If>()) {
+      if (self->isUnlikelyToReachIfTrue(iff)) {
+        // Only push the condition, but not the body that is unlikely to be
+        // executed.
+        self->pushTask(PostWalker<Planner>::scan, &iff->condition);
+        // See TODO below
+        assert(!iff->ifFalse);
+        return;
+      }
+    }
+
+    PostWalker<Planner>::scan(self, currp);
+  }
+
 private:
   InliningState* state;
+
+  // Check if an if is unlikely to reach its if-true branch.
+  bool isUnlikelyToReachIfTrue(If* iff) {
+    // TODO: support if-false and more patterns
+    if (iff->ifFalse) {
+      return false;
+    }
+
+    // The "once" pattern is unlikely to happen multiple times:
+    //
+    //   if (!global) { global = ..work.. }
+    //
+    // TODO see if this concept can be expanded beyond references. or, maybe
+    //      just wait for branch-hints to arrive and use that
+    if (auto* is = iff->condition->dynCast<RefIs>()) {
+      if (is->op == RefIsNull) {
+        if (auto* get = is->value->dynCast<GlobalGet>()) {
+          if (auto* set = iff->ifTrue->dynCast<GlobalSet>()) {
+            if (get->name == set->name) {
+              return true;
+            }
+          }
+        }
+      }
+    }
+
+    return false;
+  }
 };
 
 struct Updater : public PostWalker<Updater> {

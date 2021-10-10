@@ -2,6 +2,15 @@
 ;; RUN: wasm-opt %s --inlining --enable-gc-nn-locals -all -S -o - | filecheck %s
 
 (module
+ ;; CHECK:      (type $struct (struct (field i32)))
+ (type $struct (struct (field i32)))
+
+ ;; CHECK:      (global $global (mut (ref null $struct)) (ref.null $struct))
+ (global $global (mut (ref null $struct)) (ref.null $struct))
+
+ ;; CHECK:      (global $other (mut (ref null $struct)) (ref.null $struct))
+ (global $other (mut (ref null $struct)) (ref.null $struct))
+
  ;; CHECK:      (func $caller-nullable
  ;; CHECK-NEXT:  (local $0 funcref)
  ;; CHECK-NEXT:  (block $__inlined_func$target-nullable
@@ -41,5 +50,133 @@
 
  (func $target-non-nullable
   (local $1 (ref func))
+ )
+
+ ;; CHECK:      (func $unlikely-call
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (ref.is_null
+ ;; CHECK-NEXT:    (global.get $global)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (global.set $global
+ ;; CHECK-NEXT:    (struct.new $struct
+ ;; CHECK-NEXT:     (call $helper)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $unlikely-call
+  ;; This "once" pattern is unlikely to have its condition be true more than
+  ;; once, so we should not inline into its body.
+  (if
+   (ref.is_null
+    (global.get $global)
+   )
+   (global.set $global
+    (struct.new $struct
+     (call $helper)
+    )
+   )
+  )
+ )
+
+ ;; CHECK:      (func $unlikely-call-bad-condition
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (ref.is_data
+ ;; CHECK-NEXT:    (global.get $global)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (global.set $global
+ ;; CHECK-NEXT:    (struct.new $struct
+ ;; CHECK-NEXT:     (block (result i32)
+ ;; CHECK-NEXT:      (block $__inlined_func$helper (result i32)
+ ;; CHECK-NEXT:       (i32.const 42)
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $unlikely-call-bad-condition
+  ;; The condition should be "is null". Here it isn't, so we will inline.
+  (if
+   (ref.is_data
+    (global.get $global)
+   )
+   (global.set $global
+    (struct.new $struct
+     (call $helper)
+    )
+   )
+  )
+ )
+
+ ;; CHECK:      (func $unlikely-call-bad-global
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (ref.is_null
+ ;; CHECK-NEXT:    (global.get $global)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (global.set $other
+ ;; CHECK-NEXT:    (struct.new $struct
+ ;; CHECK-NEXT:     (block (result i32)
+ ;; CHECK-NEXT:      (block $__inlined_func$helper (result i32)
+ ;; CHECK-NEXT:       (i32.const 42)
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $unlikely-call-bad-global
+  ;; A different global is written than is checked, so so it does not fit the
+  ;; "once" pattern and we will inline.
+  (if
+   (ref.is_null
+    (global.get $global)
+   )
+   (global.set $other
+    (struct.new $struct
+     (call $helper)
+    )
+   )
+  )
+ )
+
+ ;; CHECK:      (func $unlikely-call-else
+ ;; CHECK-NEXT:  (if
+ ;; CHECK-NEXT:   (ref.is_null
+ ;; CHECK-NEXT:    (global.get $global)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (global.set $global
+ ;; CHECK-NEXT:    (struct.new $struct
+ ;; CHECK-NEXT:     (block (result i32)
+ ;; CHECK-NEXT:      (block $__inlined_func$helper (result i32)
+ ;; CHECK-NEXT:       (i32.const 42)
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (nop)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $unlikely-call-else
+  ;; This if has an else, so it does not fit the "once" pattern and we will
+  ;; inline.
+  (if
+   (ref.is_null
+    (global.get $global)
+   )
+   (global.set $global
+    (struct.new $struct
+     (call $helper)
+    )
+   )
+   (nop)
+  )
+ )
+
+ ;; CHECK:      (func $helper (result i32)
+ ;; CHECK-NEXT:  (i32.const 42)
+ ;; CHECK-NEXT: )
+ (func $helper (result i32)
+  (i32.const 42)
  )
 )
