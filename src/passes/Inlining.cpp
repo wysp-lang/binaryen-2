@@ -259,6 +259,9 @@ private:
   InliningState* state;
 
   // Check if an if is unlikely to reach its if-true branch.
+  //
+  // TODO: Still inline trivial things, like a getter, that do not increase
+  //       code size?
   bool isUnlikelyToReachIfTrue(If* iff) {
     // TODO: support if-false and more patterns
     if (iff->ifFalse) {
