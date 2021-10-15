@@ -425,4 +425,5 @@
     (local.get $x)
   )
   ;; TODO: test unreachable param, we stop there.
+  ;; TODO: test nonnullable
 )

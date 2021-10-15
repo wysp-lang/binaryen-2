@@ -346,15 +346,12 @@ auto processImmutability = [&](HeapType type, Index index, const Field& field) {
           }
           auto* module = getModule();
           auto* block = Builder(*module).makeBlock();
-std::cout << *curr << '\n';
           auto sets = ChildLocalizer(curr, func, module).sets;
-std::cout << *curr << '\n';
-for (auto* set : sets) { std::cout << set << "\n"; std::cout << *set << "\n"; }
           block->list.set(sets);
           block->list.push_back(curr);
           block->finalize(curr->type);
-std::cout << *block << '\n';
           replaceCurrent(block);
+          addedLocals = true;
         }
 
         // Remove the unneeded operands.
@@ -398,6 +395,15 @@ std::cout << *block << '\n';
         assert(newIndex != RemovedField);
         curr->index = newIndex;
       }
+
+      void visitFunction(Function* curr) {
+        if (addedLocals) {
+          TypeUpdating::handleNonDefaultableLocals(curr, *getModule());
+        }
+      }
+
+    private:
+      bool addedLocals = false;
 
       Index getNewIndex(HeapType type, Index index) {
         auto iter = parent.indexesAfterRemovals.find(type);
