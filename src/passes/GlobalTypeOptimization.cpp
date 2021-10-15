@@ -26,6 +26,7 @@
 //
 
 #include "ir/effects.h"
+#include "ir/localize.h"
 #include "ir/struct-utils.h"
 #include "ir/subtypes.h"
 #include "ir/type-updating.h"
@@ -326,6 +327,36 @@ auto processImmutability = [&](HeapType type, Index index, const Field& field) {
         auto& operands = curr->operands;
         assert(indexesAfterRemoval.size() == operands.size());
 
+        // Check for side effects in removed fields. If there are any, we must
+        // use locals to save all the values (while keeping them in order).
+        bool useLocals = false;
+        for (Index i = 0; i < operands.size(); i++) {
+          auto newIndex = indexesAfterRemoval[i];
+          if (newIndex == RemovedField &&
+              EffectAnalyzer(getPassOptions(), *getModule(), operands[i])
+                .hasUnremovableSideEffects()) {
+            useLocals = true;
+            break;
+          }
+        }
+        if (useLocals) {
+          auto* func = getFunction();
+          if (!func) {
+            Fatal() << "TODO: side effects in removed fields in globals\n";
+          }
+          auto* module = getModule();
+          auto* block = Builder(*module).makeBlock();
+std::cout << *curr << '\n';
+          auto sets = ChildLocalizer(curr, func, module).sets;
+std::cout << *curr << '\n';
+for (auto* set : sets) { std::cout << set << "\n"; std::cout << *set << "\n"; }
+          block->list.set(sets);
+          block->list.push_back(curr);
+          block->finalize(curr->type);
+std::cout << *block << '\n';
+          replaceCurrent(block);
+        }
+
         // Remove the unneeded operands.
         Index removed = 0;
         for (Index i = 0; i < operands.size(); i++) {
@@ -334,11 +365,6 @@ auto processImmutability = [&](HeapType type, Index index, const Field& field) {
             assert(newIndex < operands.size());
             operands[newIndex] = operands[i];
           } else {
-            if (EffectAnalyzer(getPassOptions(), *getModule(), operands[i])
-                  .hasUnremovableSideEffects()) {
-              Fatal() << "TODO: handle side effects in field removal "
-                         "(impossible in global locations?)";
-            }
             removed++;
           }
         }
