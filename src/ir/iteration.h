@@ -18,6 +18,7 @@
 #define wasm_ir_iteration_h
 
 #include "ir/properties.h"
+#include "wasm-builder.h"
 #include "wasm.h"
 
 namespace wasm {
@@ -161,6 +162,23 @@ template<typename T> bool containsChild(Expression* parent, int depth = -1) {
   }
   return false;
 }
+
+namespace IterationUtils {
+
+// Returns a block that contains drops of all an expression's children, which
+// can be used as a replacement for it if the instruction itself is not needed.
+inline Expression* replaceWithDrops(Module& wasm, Expression* curr) {
+  Builder builder(wasm);
+  auto* block = builder.makeBlock();
+  auto& list = block->list;
+  for (auto* child : ChildIterator(curr)) {
+    list.push_back(builder.makeDrop(child));
+  }
+  block->finalize();
+  return block;
+}
+
+} // namespace IterationUtils
 
 } // namespace wasm
 
