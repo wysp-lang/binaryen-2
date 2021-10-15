@@ -188,17 +188,19 @@ struct Scanner : public WalkerPass<PostWalker<Scanner<T, SubType>>> {
       functionSetGetInfos[this->getFunction()][heapType][index]);
   }
 
-  void visitArrayGet(ArrayGet* curr) {
+  // TODO: ArrayGet?
+  void visitArraySet(ArraySet* curr) {
     auto type = curr->ref->type;
     if (type == Type::unreachable) {
       return;
     }
 
-    auto heapType = type.getHeapType();
-    static_cast<SubType*>(this)->noteRead(
-      heapType,
-      0,
-      functionSetGetInfos[this->getFunction()][heapType][0]);
+    // Note a write to the field of the array.
+    noteExpressionOrCopy(curr->value,
+                         type.getHeapType(),
+                         0,
+                         functionSetGetInfos[this->getFunction()]
+                                            [type.getHeapType()][0]);
   }
 
   void

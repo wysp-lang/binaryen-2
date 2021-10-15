@@ -149,8 +149,34 @@ struct GlobalTypeOptimization : public Pass {
     TypeHierarchyPropagator<FieldInfo> propagator(*module);
     propagator.propagateToSuperAndSubTypes(combinedSetGetInfos);
 
+
+
+auto processImmutability = [&](HeapType type, Index index, const Field& field) {
+  if (field.mutable_ == Immutable) {
+    // Already immutable; nothing to do.
+    return;
+  }
+
+  if (combinedSetGetInfos[type][index].hasWrite) {
+    // A set exists.
+    return;
+  }
+
+  // No write exists. Mark it as something we can make immutable.
+  auto& vec = canBecomeImmutable[type];
+  vec.resize(index + 1);
+  vec[index] = true;
+};
+
+
+
     // Process the propagated info.
     for (auto type : propagator.subTypes.types) {
+      if (type.isArray()) {
+        processImmutability(type, 0, type.getArray().element);
+        continue;
+      }
+
       if (!type.isStruct()) {
         continue;
       }
@@ -158,20 +184,7 @@ struct GlobalTypeOptimization : public Pass {
 
       // Process immutability.
       for (Index i = 0; i < fields.size(); i++) {
-        if (fields[i].mutable_ == Immutable) {
-          // Already immutable; nothing to do.
-          continue;
-        }
-
-        if (combinedSetGetInfos[type][i].hasWrite) {
-          // A set exists.
-          continue;
-        }
-
-        // No set exists. Mark it as something we can make immutable.
-        auto& vec = canBecomeImmutable[type];
-        vec.resize(i + 1);
-        vec[i] = true;
+        processImmutability(type, i, fields[i]);
       }
 
       // Process removability. First, see if we can remove anything before we
