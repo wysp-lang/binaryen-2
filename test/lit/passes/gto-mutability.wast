@@ -535,3 +535,34 @@
     (drop (struct.get $sub 0 (ref.null $sub)))
   )
 )
+
+(module
+  ;; Arrays. One immutable already, one mutable with a write, and one mutable
+  ;; without a write, that we can make immutable.
+
+  ;; CHECK:      (type $ref|$array-mut|_ref|$array-imm|_ref|$array-mut-nowrite|_=>_none (func_subtype (param (ref $array-mut) (ref $array-imm) (ref $array-mut-nowrite)) func))
+
+  ;; CHECK:      (type $array-mut (array_subtype (mut i32) data))
+
+  ;; CHECK:      (type $array-imm (array_subtype i32 data))
+  (type $array-imm (array i32))
+  (type $array-mut (array (mut i32)))
+  ;; CHECK:      (type $array-mut-nowrite (array_subtype (mut i32) data))
+  (type $array-mut-nowrite (array (mut i32)))
+
+  ;; CHECK:      (func $func (param $x (ref $array-mut)) (param $y (ref $array-imm)) (param $z (ref $array-mut-nowrite))
+  ;; CHECK-NEXT:  (array.set $array-mut
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:   (i32.const 10)
+  ;; CHECK-NEXT:   (i32.const 42)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $func (param $x (ref $array-mut)) (param $y (ref $array-imm)) (param $z (ref $array-mut-nowrite))
+    (array.set $array-mut
+      (local.get $x)
+      (i32.const 10)
+      (i32.const 42)
+    )
+  )
+)
+
