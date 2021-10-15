@@ -51,7 +51,11 @@ struct StructValuesMap : public std::unordered_map<HeapType, StructValues<T>> {
     auto inserted = this->insert({type, {}});
     auto& values = inserted.first->second;
     if (inserted.second) {
-      values.resize(type.getStruct().fields.size());
+      if (type.isStruct()) {
+        values.resize(type.getStruct().fields.size());
+      } else {
+        values.resize(1);
+      }
     }
     return values;
   }
@@ -184,6 +188,19 @@ struct Scanner : public WalkerPass<PostWalker<Scanner<T, SubType>>> {
       functionSetGetInfos[this->getFunction()][heapType][index]);
   }
 
+  void visitArrayGet(ArrayGet* curr) {
+    auto type = curr->ref->type;
+    if (type == Type::unreachable) {
+      return;
+    }
+
+    auto heapType = type.getHeapType();
+    static_cast<SubType*>(this)->noteRead(
+      heapType,
+      0,
+      functionSetGetInfos[this->getFunction()][heapType][0]);
+  }
+
   void
   noteExpressionOrCopy(Expression* expr, HeapType type, Index index, T& info) {
     // Look at the value falling through, if it has the exact same type
@@ -244,8 +261,8 @@ private:
       HeapType superType;
       if (type.getSuperType(superType)) {
         auto& superInfos = combinedInfos[superType];
-        auto& superFields = superType.getStruct().fields;
-        for (Index i = 0; i < superFields.size(); i++) {
+        auto numFields = superType.isStruct() ? superType.getStruct().fields.size() : 1;
+        for (Index i = 0; i < numFields; i++) {
           if (superInfos[i].combine(infos[i])) {
             work.push(superType);
           }
@@ -254,7 +271,7 @@ private:
 
       if (toSubTypes) {
         // Propagate shared fields to the subtypes.
-        auto numFields = type.getStruct().fields.size();
+        auto numFields = type.isStruct() ? type.getStruct().fields.size() : 1;
         for (auto subType : subTypes.getSubTypes(type)) {
           auto& subInfos = combinedInfos[subType];
           for (Index i = 0; i < numFields; i++) {
