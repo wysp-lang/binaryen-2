@@ -547,7 +547,7 @@
   ;; CHECK:      (type $array-imm (array_subtype i32 data))
   (type $array-imm (array i32))
   (type $array-mut (array (mut i32)))
-  ;; CHECK:      (type $array-mut-nowrite (array_subtype (mut i32) data))
+  ;; CHECK:      (type $array-mut-nowrite (array_subtype i32 data))
   (type $array-mut-nowrite (array (mut i32)))
 
   ;; CHECK:      (func $func (param $x (ref $array-mut)) (param $y (ref $array-imm)) (param $z (ref $array-mut-nowrite))

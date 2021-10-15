@@ -282,6 +282,15 @@ auto processImmutability = [&](HeapType type, Index index, const Field& field) {
           }
         }
       }
+
+      virtual void modifyArray(HeapType oldArrayType, Array& array) {
+        if (parent.canBecomeImmutable.count(oldArrayType)) {
+          // We don't even need to read the value - just that we resized it to
+          // include an element indicates that it can be immutable, since there
+          // is just one "field".
+          array.element.mutable_ = Immutable;
+        }
+      }
     };
 
     TypeRewriter(wasm, *this).update();
