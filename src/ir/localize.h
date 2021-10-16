@@ -49,7 +49,7 @@ struct Localizer {
 struct ChildLocalizer {
   std::vector<LocalSet*> sets;
 
-  ChildLocalizer(Expression* input, Function* func, Module* wasm) {
+  ChildLocalizer(Expression* input, Function* func, Module* wasm, const PassOptions& options) {
     Builder builder(*wasm);
     ChildIterator iterator(input);
     auto& children = iterator.children;
@@ -63,9 +63,13 @@ struct ChildLocalizer {
       if (child->type == Type::unreachable) {
         break;
       }
-      auto local = builder.addVar(func, child->type);
-      sets[i] = builder.makeLocalSet(local, child);
-      *childp = builder.makeLocalGet(local, child->type);
+      // If there are effects, use a local for this.
+      // TODO: Compare interactions between their side effects.
+      if (EffectAnalyzer(options, *wasm, child).hasAnything()) {
+        auto local = builder.addVar(func, child->type);
+        sets[i] = builder.makeLocalSet(local, child);
+        *childp = builder.makeLocalGet(local, child->type);
+      }
     }
   }
 };

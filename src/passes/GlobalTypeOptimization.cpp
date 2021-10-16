@@ -328,7 +328,7 @@ auto processImmutability = [&](HeapType type, Index index, const Field& field) {
         assert(indexesAfterRemoval.size() == operands.size());
 
         // Check for side effects in removed fields. If there are any, we must
-        // use locals to save all the values (while keeping them in order).
+        // use locals to save the values (while keeping them in order).
         bool useLocals = false;
         for (Index i = 0; i < operands.size(); i++) {
           auto newIndex = indexesAfterRemoval[i];
@@ -336,6 +336,7 @@ auto processImmutability = [&](HeapType type, Index index, const Field& field) {
               EffectAnalyzer(getPassOptions(), *getModule(), operands[i])
                 .hasUnremovableSideEffects()) {
             useLocals = true;
+            // avoid local when no problems. helps avoid rtt issue.
             break;
           }
         }
@@ -346,7 +347,7 @@ auto processImmutability = [&](HeapType type, Index index, const Field& field) {
           }
           auto* module = getModule();
           auto* block = Builder(*module).makeBlock();
-          auto sets = ChildLocalizer(curr, func, module).sets;
+          auto sets = ChildLocalizer(curr, func, module, getPassOptions()).sets;
           block->list.set(sets);
           block->list.push_back(curr);
           block->finalize(curr->type);
