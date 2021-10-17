@@ -36,7 +36,7 @@
     )
   )
 
-  ;; CHECK:      (func $ref-to-copy-and-original-is-subtype
+  ;; CHECK:      (func $ref-to-copy-subtype
   ;; CHECK-NEXT:  (local $copy anyref)
   ;; CHECK-NEXT:  (local $original funcref)
   ;; CHECK-NEXT:  (local.set $copy
@@ -49,8 +49,7 @@
   ;; CHECK-NEXT:   (local.get $original)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  (func $ref-to-copy-and-original-is-subtype
-    ;; (the types here changed)
+  (func $ref-to-copy-subtype
     (local $copy anyref)
     (local $original funcref)
     (local.set $copy
@@ -94,6 +93,47 @@
     )
     ;; Another possible set exists to $original, which prevents using $copy for
     ;; both of the gets. However, we can use $original for them both.
+    (drop
+      (local.get $copy)
+    )
+    (if
+      (local.get $param)
+      (local.set $original
+        (ref.null func)
+      )
+    )
+    (drop
+      (local.get $original)
+    )
+  )
+
+  ;; CHECK:      (func $ref-to-original-subtype (param $param i32)
+  ;; CHECK-NEXT:  (local $copy anyref)
+  ;; CHECK-NEXT:  (local $original anyref)
+  ;; CHECK-NEXT:  (local.set $copy
+  ;; CHECK-NEXT:   (local.get $original)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $original)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (local.get $param)
+  ;; CHECK-NEXT:   (local.set $original
+  ;; CHECK-NEXT:    (ref.null func)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $original)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $ref-to-original-subtype (param $param i32)
+    (local $copy anyref)
+    (local $original anyref)
+    (local.set $copy
+      (local.get $original)
+    )
+    ;; As above, but now $original is a subtype of $copy. This does not change
+    ;; how we optimize, since we switch to the more specific type.
     (drop
       (local.get $copy)
     )
