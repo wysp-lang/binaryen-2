@@ -36,6 +36,19 @@
     )
   )
 
+  ;; CHECK:      (func $ref-to-copy-and-original-is-subtype
+  ;; CHECK-NEXT:  (local $copy anyref)
+  ;; CHECK-NEXT:  (local $original funcref)
+  ;; CHECK-NEXT:  (local.set $copy
+  ;; CHECK-NEXT:   (local.get $original)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $original)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $original)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
   (func $ref-to-copy-and-original-is-subtype
     (local $copy anyref)
     (local $original funcref)
@@ -53,6 +66,19 @@
     )
   )
 
+  ;; CHECK:      (func $ref-to-copy-and-copy-is-subtype
+  ;; CHECK-NEXT:  (local $copy anyref)
+  ;; CHECK-NEXT:  (local $original funcref)
+  ;; CHECK-NEXT:  (local.set $copy
+  ;; CHECK-NEXT:   (local.get $original)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $original)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $original)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
   (func $ref-to-copy-and-copy-is-subtype
     (local $copy anyref)
     (local $original funcref)

@@ -144,6 +144,7 @@ struct MergeLocals
         // worth it for this copy, do it
         for (auto* influencedGet : trivialInfluences) {
           influencedGet->index = copy->index;
+          influencedGet->type = func->getLocalType(copy->index);
         }
         optimizedToCopy[copy] = trivial;
       } else {
@@ -167,9 +168,11 @@ struct MergeLocals
               if (preGraph.getSetses[influencedGet].size() == 1) {
                 // this is ok
                 assert(*preGraph.getSetses[influencedGet].begin() == copy);
-                // If local types are different (when one is a subtype of the
-                // other), don't optimize
-                if (func->getLocalType(trivial->index) != influencedGet->type) {
+                // As above, avoid changes to a less specific type.
+                auto originalType = influencedGet->type;
+                auto trivialType = func->getLocalType(trivial->index);
+                if (trivialType != originalType &&
+                    Type::isSubType(originalType, trivialType)) {
                   canOptimizeToTrivial = false;
                 }
               } else {
@@ -181,6 +184,7 @@ struct MergeLocals
               // worth it for this copy, do it
               for (auto* influencedGet : copyInfluences) {
                 influencedGet->index = trivial->index;
+                influencedGet->type = func->getLocalType(trivial->index);
               }
               optimizedToTrivial[copy] = trivial;
               // note that we don't
