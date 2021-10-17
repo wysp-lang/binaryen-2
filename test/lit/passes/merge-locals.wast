@@ -50,6 +50,7 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   (func $ref-to-copy-and-original-is-subtype
+    ;; (the types here changed)
     (local $copy anyref)
     (local $original funcref)
     (local.set $copy
@@ -58,35 +59,6 @@
     ;; As above, but the original is a subtype. We prefer to use a more specific
     ;; type, and so we will *not* turn them both into $copy as we did above,
     ;; but rather turn them both into $original.
-    (drop
-      (local.get $original)
-    )
-    (drop
-      (local.get $copy)
-    )
-  )
-
-  ;; CHECK:      (func $ref-to-copy-and-copy-is-subtype
-  ;; CHECK-NEXT:  (local $copy anyref)
-  ;; CHECK-NEXT:  (local $original funcref)
-  ;; CHECK-NEXT:  (local.set $copy
-  ;; CHECK-NEXT:   (local.get $original)
-  ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (local.get $original)
-  ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (local.get $original)
-  ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT: )
-  (func $ref-to-copy-and-copy-is-subtype
-    (local $copy anyref)
-    (local $original funcref)
-    (local.set $copy
-      (local.get $original)
-    )
-    ;; As above, but the copy is a subtype. Again, prefer the specific type, so
-    ;; we turn them both into $copy.
     (drop
       (local.get $original)
     )
