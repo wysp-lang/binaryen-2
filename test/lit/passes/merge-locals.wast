@@ -4,74 +4,74 @@
 
 (module
   ;; CHECK:      (func $subtype-to-copy
-  ;; CHECK-NEXT:  (local $0 anyref)
-  ;; CHECK-NEXT:  (local $1 anyref)
-  ;; CHECK-NEXT:  (local.set $0
-  ;; CHECK-NEXT:   (local.get $1)
+  ;; CHECK-NEXT:  (local $copy anyref)
+  ;; CHECK-NEXT:  (local $original anyref)
+  ;; CHECK-NEXT:  (local.set $copy
+  ;; CHECK-NEXT:   (local.get $original)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:   (local.get $copy)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (local.get $0)
+  ;; CHECK-NEXT:   (local.get $copy)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   (func $subtype-to-copy
-    (local $0 anyref)
-    (local $1 anyref) ;; should be func
-    (local.set $0
-      (local.get $1)
+    (local $copy anyref)
+    (local $original anyref)
+    (local.set $copy
+      (local.get $original)
     )
     ;; Test that merge-locals support subtyping. Merge-locals wants to use the
     ;; same local in as many places, which simplies the pattern of local usage
     ;; and allows more opts later.
-    ;; In this case, both gets can use $0.
+    ;; In this case, both gets can use $copy.
     (drop
-      (local.get $1)
+      (local.get $original)
     )
     (drop
-      (local.get $0)
+      (local.get $copy)
     )
   )
 
-  ;; CHECK:      (func $subtype-test (param $param i32)
-  ;; CHECK-NEXT:  (local $0 anyref)
-  ;; CHECK-NEXT:  (local $1 anyref)
-  ;; CHECK-NEXT:  (local.set $0
-  ;; CHECK-NEXT:   (local.get $1)
+  ;; CHECK:      (func $subtype-to-original (param $param i32)
+  ;; CHECK-NEXT:  (local $copy anyref)
+  ;; CHECK-NEXT:  (local $original anyref)
+  ;; CHECK-NEXT:  (local.set $copy
+  ;; CHECK-NEXT:   (local.get $original)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (local.get $1)
+  ;; CHECK-NEXT:   (local.get $original)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (if
   ;; CHECK-NEXT:   (local.get $param)
-  ;; CHECK-NEXT:   (local.set $1
+  ;; CHECK-NEXT:   (local.set $original
   ;; CHECK-NEXT:    (ref.null func)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (local.get $1)
+  ;; CHECK-NEXT:   (local.get $original)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  (func $subtype-test (param $param i32)
-    (local $0 anyref)
-    (local $1 anyref) ;; should be func
-    (local.set $0
-      (local.get $1)
+  (func $subtype-to-original (param $param i32)
+    (local $copy anyref)
+    (local $original anyref)
+    (local.set $copy
+      (local.get $original)
     )
-    ;; Another possible set exists to $1, which prevents using $0 for both of
-    ;; the gets. However, we can use $1 for them both.
+    ;; Another possible set exists to $original, which prevents using $copy for
+    ;; both of the gets. However, we can use $original for them both.
     (drop
-      (local.get $0)
+      (local.get $copy)
     )
     (if
       (local.get $param)
-      (local.set $1
+      (local.set $original
         (ref.null func)
       )
     )
     (drop
-      (local.get $1)
+      (local.get $original)
     )
   )
 )
