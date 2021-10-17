@@ -3,7 +3,7 @@
 ;; RUN:   | filecheck %s
 
 (module
-  (func $subtype-test (result i32)
+  (func $subtype-to-copy
     (local $0 anyref)
     (local $1 funcref)
     (local $2 funcref)
@@ -12,6 +12,34 @@
     )
     ;; Test that merge-locals support subtyping. This get should be switched
     ;; to use $0.
-    (local.get $1)
+    (drop
+      (local.get $0)
+    )
+    (drop
+      (local.get $1)
+    )
+  )
+
+  (func $subtype-test (param $param i32)
+    (local $0 anyref)
+    (local $1 funcref)
+    (local $2 funcref)
+    (local.set $0
+      (local.get $1)
+    )
+    ;; Another possible set exists, which 
+    (if
+      (local.get $param)
+      (local.set $1
+        (ref.null func)
+      )
+    )
+    (drop
+      (local.get $0)
+    )
+    (drop
+      (local.get $1)
+    )
   )
 )
+
