@@ -241,6 +241,9 @@ struct MergeLocals
     for (auto* copy : copies) {
       copy->value = copy->value->cast<LocalSet>()->value;
     }
+    // TODO: ReFinalize if needed. Add test (for e.g. struct.get type getting
+    //       more specific).
+    // TODO: Casts
   }
 };
 
