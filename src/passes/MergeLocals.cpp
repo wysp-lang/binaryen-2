@@ -125,8 +125,13 @@ struct MergeLocals
             // this is ok
             assert(*preGraph.getSetses[influencedGet].begin() == trivial);
             // If local types are different (when one is a subtype of the
-            // other), don't optimize
-            if (func->getLocalType(copy->index) != influencedGet->type) {
+            // other), it not make sense to optimize. Specifically, we always
+            // want to use the most specific type possible, so we do not switch
+            // to using a supertype.
+            auto originalType = influencedGet->type;
+            auto copyType = func->getLocalType(copy->index);
+            if (copyType != originalType &&
+                Type::isSubType(originalType, copyType)) {
               canOptimizeToCopy = false;
             }
           } else {
