@@ -259,6 +259,7 @@ struct Walker : public VisitorType {
 
   // Walks module-level code, that is, code that is not in functions.
   void walkModuleCode(Module* module) {
+    setModule(module);
     // Dispatch statically through the SubType.
     SubType* self = static_cast<SubType*>(this);
     for (auto& curr : module->globals) {

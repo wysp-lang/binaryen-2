@@ -30,6 +30,7 @@ set(passes_SOURCES
   Flatten.cpp
   FuncCastEmulation.cpp
   GenerateDynCalls.cpp
+  GlobalTypeOptimization.cpp
   Heap2Local.cpp
   I64ToI32Lowering.cpp
   Inlining.cpp
@@ -87,7 +88,7 @@ set(passes_SOURCES
   SSAify.cpp
   Untee.cpp
   Vacuum.cpp
-  GlobalTypeOptimization.cpp
+  UnifyITable.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/WasmIntrinsics.cpp
   ${passes_HEADERS}
 )
