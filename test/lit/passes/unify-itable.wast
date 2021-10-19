@@ -889,6 +889,8 @@
     )
   )
 
+  ;; as above, but with the array.get as well, alone.
+
   ;; CHECK:      (func $a (param $0 (ref null $object)) (param $1 (ref null $sub-object))
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )

@@ -290,33 +290,77 @@ struct UnifyITable : public Pass {
       // The simple case is handled by our replacing the global's value with a
       // ref to contain the i32. For that, we just need to update the type of
       // relevant global.gets.
+      //
+      // Aside from that, we need to handle the case where the itable value
+      // is passed through locals (which it might if it was read multiple times
+      // and ended up CSEed into a local). Furthermore, we need to handle reads
+      // from the struct field, that now return an i32, and those reads will end
+      // up used in an itable call pattern like this:
+      //
+      //  (call_ref
+      //   (struct.get $vtable $vtable.field
+      //    (ref.cast $vtable
+      //     (array.get $itable
+      //      (struct.get $object $itable  ;; This is where the itable arrives
+      //       (..ref..)
+      //      )
+      //      (i32.const itable-offset)
+      //
+      // As with the global value being passed through a local, any of the
+      // steps here might, as well, depending on CSE and other opts. To handle
+      // all of that, we do this:
+      //
+      //  * We detect when an itable value arrives. It comes from either a
+      //    global.get or struct.get as described earlier.
+      //  * We mark such arrivals as |inPattern|, and we use that information
+      //    in anything that accesses them, which includes their parents as well
+      //    as flowing through locals. Those uses are then marked as also being
+      //    in |inPattern|, and are altered accordingly (see details below).
+
+      std::unordered_set<Expression*> inPattern;
+
       void visitGlobalGet(GlobalGet* curr) {
         if (mapping.itableBases.count(curr->name)) {
-          // This global now contains an i32 base.
+          inPattern.insert(curr);
           curr->type = Type::i32;
         }
+      }
 
-        // Wrap us in a table.get to get the itable
+      void visitStructGet(StructGet* curr) {
+        if (isItableField(curr->ref->type.getHeapType(), curr->index, *getModule())) {
+          inPattern.insert(curr);
+          curr->type = Type::i32;
+          return;
+        }
+
+        // This may also be a struct.get from the vtable in the itable pattern,
+        //   struct.get $vtable $vtable.field
+        // in the comment from earlier. We detect that if the reference is
+        // known to be in the pattern. If it is, then so are we.
+        if (inPattern.count(curr->ref)) {
+          inPattern.insert(curr);
+
+          // The vtable read is at an offset which we need to add to the value
+          // so far.
+          replaceCurrent(builder.makeBinary(
+            AddInt32,
+            curr->ref,
+            builder.makeConst(int32_t(curr->index))
+          ));
+        }
       }
 
       // The case where the value flows through a local requires us to do a
       // local analysis.
       std::unique_ptr<LocalGraph> localGraph;
 
-      // Local indices that contain itables. We need to update their sets and
-      // gets.
-      std::unordered_set<Index> itableLocals;
-
       void visitLocalSet(LocalSet* curr) {
         auto* func = getFunction();
 
-        auto updateToI32 = [&]{
-          // This set must be updated to use an i32 since it holds an itable
-          // value, which used to be a reference but is now an i32. Update it
-          // and all gets that read from it.
-          itableLocals.insert(curr->index);
+        if (inPattern.count(curr->value)) {
+          inPattern.insert(curr);
 
-          // TODO: handle itables in params..?
+          // TODO: handle itables stored in params..?
           assert(func->isVar(curr->index));
 
           // Update the var's type.
@@ -327,119 +371,76 @@ struct UnifyITable : public Pass {
             curr->makeTee(Type::i32);
           }
 
-          // Update all gets
+
+          // Update all gets.
           if (!localGraph) {
             localGraph = std::make_unique<LocalGraph>(func);
             localGraph->computeSetInfluences();
           }
           for (auto* get : localGraph->setInfluences[curr]) {
             get->type = Type::i32;
+
+            // Mark them as well, so that their parents know to update
+            // themselves.
+            inPattern.insert(get);
           }
-        };
-
-        // If this is the second or later time we see this local, the local type
-        // has already been updated, but we do still need to update the gets
-        // for us.
-        if (itableLocals.count(curr->index)) {
-          updateToI32();
-          return;
         }
+      }
 
-        // We need to update in the case where our local holds an itable value,
-        // which used to be a reference, and which is now and i32.
-        if (func->getLocalType(curr->index).isRef() && curr->value->type == Type::i32) {
-          updateToI32();
+      void visitArrayGet(ArrayGet* curr) {
+        if (inPattern.count(curr->ref)) {
+          inPattern.insert(curr);
+
+          // Our reference is an itable base. We need to add the category
+          // offset to it.
+          Builder builder(*getModule());
+          Index categoryIndex = curr->index->cast<Const>()->value.geti32();
+          assert(categoryIndex < mapping.categoryBases.size());
+          auto categoryBase = mapping.categoryBases[categoryIndex];
+          replaceCurrent(builder.makeBinary(
+            AddInt32,
+            curr->ref,
+            builder.makeConst(int32_t(categoryBase))
+          ));
+        }
+      }
+
+      void visitRefCast(RefCast* curr) {
+        if (inPattern.count(curr->ref)) {
+          // The cast is no longer needed; skip it.
+          replaceCurrent(curr->ref);
         }
       }
 
       void visitRefAs(RefAs* curr) {
-        if (curr->value->type == Type::i32) {
-          // This is a ref.as_non_null of an itable in a local. Skip it now that
-          // the value is an i32.
+        if (inPattern.count(curr->ref)) {
+          // This is a ref.as_non_null of an itable in a local (which is now
+          // an i32). Skip the ref_as.
           assert(curr->op == RefAsNonNull);
-          replaceCurrent(curr->value);
+          replaceCurrent(curr->ref);
         }
       }
 
       void visitCallRef(CallRef* curr) {
-        if (curr->type == Type::unreachable) {
-          return;
-        }
+        if (inPattern.count(curr->target)) {
+          // We have reached the end of the pattern: our call target contains
+          // not a function reference but an index in the unified table,
+          // including all necessary offseting. All that we have left to do is
+          // to replace the call_ref with an appropriate call_indirect.
+          std::vector<Type> params;
+          for (auto* operand : curr->operands) {
+            params.push_back(operand->type);
+          }
+          auto sig = Signature(Type(params), curr->type);
 
-        // We are looking for the particular pattern of
-        //
-        //  (call_ref
-        //   (struct.get $vtable $vtable.field
-        //    (ref.cast $vtable
-        //     (array.get $itable
-        //      (struct.get $object $itable
-        //       (..ref..)
-        //      )
-        //      (i32.const itable-offset)
-        //
-        auto* vtableGet = curr->target->dynCast<StructGet>();
-        if (!vtableGet) {
-          return;
-        }
-        auto* refCast = vtableGet->ref->dynCast<RefCast>();
-        if (!refCast) {
-          return;
-        }
-        auto* arrayGet = refCast->ref->dynCast<ArrayGet>();
-        if (!arrayGet) {
-          return;
-        }
-        auto* objectGet = arrayGet->ref->dynCast<StructGet>();
-        if (!objectGet) {
-          return;
-        }
-        // TODO: we'll need global.get of an itable here, once CFP does that.
+          auto* call = builder.makeCallIndirect(mapping.unifiedTable,
+                                                target,
+                                                curr->operands,
+                                                sig);
+          replaceCurrent(call);
 
-        // The shape fits, check that it all begins with a read of an itable.
-        auto objectType = objectGet->ref->type.getHeapType();
-        if (!isItableField(objectType, objectGet->index, *getModule())) {
-          return;
-        }
-
-        // Perfect, this is the pattern we seek.
-        Builder builder(*getModule());
-
-        // Reuse the objectGet, which now loads the i32 base from the same field
-        // that used to hold a reference to an itable.
-        objectGet->type = Type::i32;
-
-        // Compute the index in the unified table: add the base from the object
-        // to the category base and the index in the category.
-        Index categoryIndex = arrayGet->index->cast<Const>()->value.geti32();
-        assert(categoryIndex < mapping.categoryBases.size());
-        auto categoryBase = mapping.categoryBases[categoryIndex];
-        auto indexInCategory = vtableGet->index;
-        auto* target = builder.makeBinary(
-          AddInt32,
-          objectGet,
-          builder.makeConst(int32_t(categoryBase + indexInCategory))
-        );
-
-        std::vector<Type> params;
-        for (auto* operand : curr->operands) {
-          params.push_back(operand->type);
-        }
-        auto sig = Signature(Type(params), curr->type);
-
-        auto* call = builder.makeCallIndirect(mapping.unifiedTable,
-                                              target,
-                                              curr->operands,
-                                              sig);
-
-        // TODO: handle rtts with side effects?
-        assert(!refCast->rtt || refCast->rtt->is<RttCanon>());
-
-        replaceCurrent(call);
-      }
-
-      void visitStructGet(StructGet* curr) {
-        if (isItableField(curr->ref->type.getHeapType(), curr->index, *getModule())) {
-          curr->type = Type::i32;
+          // TODO: handle rtts with side effects?
+          assert(!curr->rtt || curr->rtt->is<RttCanon>());
         }
       }
     };
