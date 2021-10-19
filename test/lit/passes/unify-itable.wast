@@ -75,9 +75,11 @@
 
   ;; CHECK:      (export "call-2-1" (func $call-2-1))
 
-  ;; CHECK:      (export "call-3-0" (func $call-3-0))
+  ;; CHECK:      (export "call-4-0" (func $call-4-0))
 
-  ;; CHECK:      (export "call-3-2" (func $call-3-2))
+  ;; CHECK:      (export "call-4-2" (func $call-4-2))
+
+  ;; CHECK:      (export "call-5-0" (func $call-5-0))
 
   ;; CHECK:      (func $new-1 (result (ref $object))
   ;; CHECK-NEXT:  (struct.new $object
@@ -174,7 +176,7 @@
     )
   )
 
-  ;; CHECK:      (func $call-3-0 (param $ref (ref $object))
+  ;; CHECK:      (func $call-4-0 (param $ref (ref $object))
   ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (struct.get $object $itable
@@ -184,7 +186,7 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  (func $call-3-0 (export "call-3-0") (param $ref (ref $object))
+  (func $call-4-0 (export "call-4-0") (param $ref (ref $object))
     ;; Call category #4, which has base 3, with offset 0.
     (call_ref
       (struct.get $vtable-3 0
@@ -200,7 +202,7 @@
     )
   )
 
-  ;; CHECK:      (func $call-3-2 (param $ref (ref $object))
+  ;; CHECK:      (func $call-4-2 (param $ref (ref $object))
   ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (struct.get $object $itable
@@ -210,7 +212,7 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  (func $call-3-2 (export "call-3-2") (param $ref (ref $object))
+  (func $call-4-2 (export "call-4-2") (param $ref (ref $object))
     ;; Add an offset of 2, for a total of 5.
     (call_ref
       (struct.get $vtable-3 2
@@ -220,6 +222,32 @@
               (local.get $ref)
             )
             (i32.const 4)
+          )
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $call-5-0 (param $ref (ref $object))
+  ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
+  ;; CHECK-NEXT:   (i32.add
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 6)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $call-5-0 (export "call-5-0") (param $ref (ref $object))
+    ;; Call category #5, which has base 6, with offset 0.
+    (call_ref
+      (struct.get $vtable-1 0
+        (ref.cast_static $vtable-1
+          (array.get $itable
+            (struct.get $object $itable
+              (local.get $ref)
+            )
+            (i32.const 5)
           )
         )
       )
