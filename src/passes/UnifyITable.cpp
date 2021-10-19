@@ -134,7 +134,7 @@ struct UnifyITable : public Pass {
       std::unordered_map<Name, Index> itableToBase;
 
 
-    } mappingInfo;
+    } mapping;
 
     // Find the itable globals.
     ModuleUtils::iterDefinedGlobals(
@@ -153,17 +153,17 @@ struct UnifyITable : public Pass {
         }
 
         // This is an itable.
-        mappingInfo.itables.push_back(global->name);
+        mapping.itables.push_back(global->name);
       });
-    auto numItables = mappingInfo.itables.size();
+    auto numItables = mapping.itables.size();
 
     // Compute the size of the categories.
     auto ensureCategorySize = [&](Index index, Index size) {
-      mappingInfo.categorySizes.resize(index + 1);
-      mappingInfo.categorySizes[index] = std::max(mappingInfo.categorySizes[index], size);
+      mapping.categorySizes.resize(index + 1);
+      mapping.categorySizes[index] = std::max(mapping.categorySizes[index], size);
     };
 
-    for (auto itable : mappingInfo.itables) {
+    for (auto itable : mapping.itables) {
       auto itableGlobal = wasm.getGlobal(itable);
       auto itableOperands = itableGlobal->init->cast<ArrayInit>()->operands;
       Index index = 0;
@@ -184,7 +184,7 @@ struct UnifyITable : public Pass {
     // The size of an itable in the new layout is the sum of all the category
     // sizes;
     Index itableSize = 0;
-    for (auto size : mappingInfo.categorySizes) {
+    for (auto size : mapping.categorySizes) {
       itableSize += size;
     }
 
@@ -195,16 +195,16 @@ struct UnifyITable : public Pass {
     // of the unified table and fill it out.
     Builder builder(wasm);
     Index tableIndex = 0;
-    for (auto itable : mappingInfo.itables) {
+    for (auto itable : mapping.itables) {
       auto itableGlobal = wasm.getGlobal(itable);
       auto itableOperands = itableGlobal->init->cast<ArrayInit>()->operands;
 
       // Pick the base for this itable.
-      mappingInfo.itableToBase[itable] = tableIndex;
+      mapping.itableToBase[itable] = tableIndex;
 
       auto categoryIndex = 0;
       for (auto* operand : itableOperands) {
-        auto categorySize = mappingInfo.categorySizes[categoryIndex];
+        auto categorySize = mapping.categorySizes[categoryIndex];
         if (operand->is<RefNull>()) {
           // Fill the entire category with nulls.
           for (Index i = 0; i < categorySize; i++) {
@@ -228,66 +228,75 @@ struct UnifyITable : public Pass {
       }
     }
     
-
-
-
-
-
-
-
-
-
-    struct Mapper : public WalkerPass<PostWalker<Mapper>> {
-      // Intentionally *not* function parallel, to make it deterministic, and
-      // to not need to lock the mapping info.
+    assert(tableIndex == segmentData.size());
+    assert(tableIndex == itableSize * numItables);
+    
+    // Update the code in the entire module.
+    struct CodeUpdater : public WalkerPass<PostWalker<CodeUpdater>> {
+      bool isFunctionParallel() override { return true; }
 
       MappingInfo& mapping;
 
-      Mapper(MappingInfo& mapping) : mapping(mapping) {}
+      CodeUpdater(MappingInfo& mapping) : mapping(mapping) {}
 
-      Mapper* create() override { return new Mapper(mapping); }
+      CodeUpdater* create() override { return new CodeUpdater(mapping); }
 
       void visitStructNew(StructNew* curr) {
-        for (Index i = 0; i < curr->operands.size(); i++) {
-          auto* operand = curr->operands[i];
-          if (!operand->type.isFunction()) {
-            continue;
+        // Where we used to write a global.get of an itable, instead write out
+        // the base of that itable's data in the unified table.
+        for (auto*& operand : curr->operands) {
+          if (auto* get = operand->dynCast<GlobalGet>()) {
+            auto iter = mapping.itableToBase.find(get->name);
+            if (iter != mapping.itableToBase.end()) {
+              replaceCurrent(Builder(*getModule()).makeConst(iter->second);
+            }
           }
-
-          auto* refFunc = operand->cast<RefFunc>();
-          auto heapType = curr->type.getHeapType();
-          Index funcIndex;
-
-          auto table = getFieldTable(heapType, i);
-          funcIndex = getFuncIndex(table, refFunc->func);
-
-          // Replace the function reference with the proper index.
-          curr->operands[i] =
-            Builder(*getModule()).makeConst(int32_t(funcIndex));
         }
       }
 
-      void visitStructSet(StructSet* curr) {
-        if (curr->value->type.isFunction()) {
-          Fatal() << "UnifyITable assumes no sets of funcs";
-        }
-      }
-
-      void visitStructGet(StructGet* curr) {
-        if (!curr->type.isFunction()) {
+      void visitCallRef(CallRef* curr) {
+        if (curr->type == Type::unreachable) {
           return;
         }
 
-        Name table;
-        Type type;
+        // We are looking for the particular pattern of
+        //
+        //  (call_ref
+        //   (struct.get $vtable $vtable.field
+        //    (ref.cast $vtable
+        //     (array.get $itable
+        //      (struct.get $object $itable
+        //       (..ref..)
+        //      )
+        //      (i32.const itable-offset)
+        //
+        auto* vtableGet = curr->target->dynCast<StructGet>();
+        if (!vtableGet) {
+          return;
+        }
+        auto* refCast = vtableGet->ref->dynCast<RefCast>();
+        if (!refCast) {
+          return;
+        }
+        auto* arrayGet = refCast->ref->dynCast<ArrayGet>();
+        if (!arrayGet) {
+          return;
+        }
+        auto* objectGet = arrayGet->target->dynCast<StructGet>();
+        if (!objectGet) {
+          return;
+        }
+        // TODO: we'll need global.get of an itable here, once CFP does that.
 
-        table = getFieldTable(curr->ref->type.getHeapType(), curr->index);
-        type = getModule()->getTable(table)->type;
-
-        // We now have type i32, as the field will contain an index.
-        curr->type = Type::i32;
-
-        replaceCurrent(Builder(*getModule()).makeTableGet(table, curr, type));
+        // The shape fits, check that it all begins with a read of an itable.
+        auto objectType = objectGet->ref->type.getHeapType();
+        auto& typeNames = getModule()->typeNames;
+        if (!typeNames.count(objectType) ||
+            !typeNames[objectType].fields.count(objectGet->index) ||
+            typeNames[objectType].fields[objectGet->index] != ITABLE) {
+          // No name for this field, or the name is not "itable".
+          return;
+        }
       }
 
       Name getFieldTable(HeapType type, Index i) {
@@ -366,9 +375,9 @@ struct UnifyITable : public Pass {
       }
     };
 
-    Mapper mapper(mappingInfo);
-    mapper.run(runner, &wasm);
-    mapper.walkModuleCode(&wasm);
+    CodeUpdater updater(mappingInfo);
+    updater.run(runner, &wasm);
+    updater.walkModuleCode(&wasm);
   }
 
   void updateFieldTypes(Module& wasm) {
