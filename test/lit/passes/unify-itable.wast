@@ -28,27 +28,36 @@
   ;; CHECK:      (type $object (struct_subtype (field $itable i32) data))
   (type $object (struct (field $itable (ref $itable))))
 
-  ;; CHECK:      (type $none_=>_ref|$object| (func_subtype (result (ref $object)) func))
-
   ;; CHECK:      (type $ref|$object|_=>_none (func_subtype (param (ref $object)) func))
 
   ;; CHECK:      (type $none_=>_none (func_subtype func))
 
+  ;; CHECK:      (type $none_=>_ref|$object| (func_subtype (result (ref $object)) func))
+
   ;; CHECK:      (global $itable-1 i32 (i32.const 0))
   (global $itable-1 (ref $itable) (array.init_static $itable
+    ;; Category #0, of size 0.
     (ref.null data)
+    ;; Category #1, of size 1.
     (struct.new $vtable-1
       (ref.func $a)
     )
+    ;; Category #2, of size 2.
     (struct.new $vtable-2
       (ref.func $b)
       (ref.func $c)
     )
+    ;; Category #3, of size 0.
     (ref.null data)
+    ;; Category #4, of size 3.
     (struct.new $vtable-3
       (ref.func $d)
       (ref.func $e)
       (ref.func $f)
+    )
+    ;; Category #5, of size 1.
+    (struct.new $vtable-1
+      (ref.func $g)
     )
   ))
 
@@ -59,7 +68,9 @@
 
   ;; CHECK:      (export "new-1" (func $new-1))
 
-  ;; CHECK:      (export "call-1" (func $call-1))
+  ;; CHECK:      (export "call-1-0" (func $call-1-0))
+
+  ;; CHECK:      (export "call-2-0" (func $call-2-0))
 
   ;; CHECK:      (func $new-1 (result (ref $object))
   ;; CHECK-NEXT:  (struct.new $object
@@ -72,7 +83,7 @@
     )
   )
 
-  ;; CHECK:      (func $call-1 (param $ref (ref $object))
+  ;; CHECK:      (func $call-1-0 (param $ref (ref $object))
   ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (struct.get $object $itable
@@ -82,7 +93,7 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  (func $call-1 (export "call-1") (param $ref (ref $object))
+  (func $call-1-0 (export "call-1-0") (param $ref (ref $object))
     (call_ref
       ;; Add an offset of 0 in that category. Added to the category base, we get
       ;; 0 which is what will be added before the call_indirect.
@@ -95,6 +106,35 @@
             ;; Call the first category that has any content, #1. The category
             ;; base is 0.
             (i32.const 1)
+          )
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $call-2-0 (param $ref (ref $object))
+  ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
+  ;; CHECK-NEXT:   (i32.add
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $call-2-0 (export "call-2-0") (param $ref (ref $object))
+    (call_ref
+      ;; Add an offset of 0 in that category, for a total of 1 added to the
+      ;; call_indirect.
+      (struct.get $vtable-1 0
+        (ref.cast_static $vtable-1
+          (array.get $itable
+            (struct.get $object $itable
+              (local.get $ref)
+            )
+            ;; Call category #2. It has a base of 1, as there was one item
+            ;; in the only category before it.
+            (i32.const 2)
           )
         )
       )
@@ -125,4 +165,6 @@
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $f)
+
+  (func $g)
 )
