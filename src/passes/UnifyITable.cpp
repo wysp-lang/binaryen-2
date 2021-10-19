@@ -174,7 +174,9 @@ struct UnifyITable : public Pass {
 
     // Compute the size of the categories.
     auto ensureCategorySize = [&](Index index, Index size) {
-      mapping.categorySizes.resize(index + 1);
+      if (index >= mapping.categorySizes.size()) {
+        mapping.categorySizes.resize(index + 1);
+      }
       mapping.categorySizes[index] = std::max(mapping.categorySizes[index], size);
     };
 
@@ -218,29 +220,33 @@ struct UnifyITable : public Pass {
       // Pick the base for this itable.
       mapping.itableBases[itable] = tableIndex;
 
-      auto categoryIndex = 0;
-      for (auto* operand : itableOperands) {
+      for (Index categoryIndex = 0; categoryIndex < mapping.categorySizes.size(); categoryIndex++) {
         auto categorySize = mapping.categorySizes[categoryIndex];
-        if (operand->is<RefNull>()) {
+        // This category might not exist in this itable. If not, we just need
+        // nulls there.
+        auto* operand = categoryIndex < itableOperands.size() ? itableOperands[categoryIndex] : nullptr;
+        if (!operand || operand->is<RefNull>()) {
           // Fill the entire category with nulls.
           for (Index i = 0; i < categorySize; i++) {
+            assert(tableIndex < segmentData.size());          
             segmentData[tableIndex++] = builder.makeRefNull(HeapType::func);
           }
         } else if (auto* new_ = operand->dynCast<StructNew>()) {
           // Copy in the contents.
           for (auto* newOperand : new_->operands) {
             auto* refFunc = newOperand->cast<RefFunc>();
+            assert(tableIndex < segmentData.size());          
             segmentData[tableIndex++] = builder.makeRefFunc(refFunc->func, refFunc->type.getHeapType());
           }
 
           // Fill the remaining space with nulls.
           for (Index i = 0; i < categorySize - new_->operands.size(); i++) {
+            assert(tableIndex < segmentData.size());          
             segmentData[tableIndex++] = builder.makeRefNull(HeapType::func);
           }
         } else {
           WASM_UNREACHABLE("bad array.init operand");
         }
-        categoryIndex++;
       }
     }
     
