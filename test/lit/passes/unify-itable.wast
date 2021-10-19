@@ -77,6 +77,8 @@
 
   ;; CHECK:      (export "call-3-0" (func $call-3-0))
 
+  ;; CHECK:      (export "call-3-2" (func $call-3-2))
+
   ;; CHECK:      (func $new-1 (result (ref $object))
   ;; CHECK-NEXT:  (struct.new $object
   ;; CHECK-NEXT:   (global.get $itable-1)
@@ -186,6 +188,32 @@
     ;; Call category #4, which has base 3, with offset 0.
     (call_ref
       (struct.get $vtable-3 0
+        (ref.cast_static $vtable-3
+          (array.get $itable
+            (struct.get $object $itable
+              (local.get $ref)
+            )
+            (i32.const 4)
+          )
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $call-3-2 (param $ref (ref $object))
+  ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
+  ;; CHECK-NEXT:   (i32.add
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 5)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $call-3-2 (export "call-3-2") (param $ref (ref $object))
+    ;; Add an offset of 2, for a total of 5.
+    (call_ref
+      (struct.get $vtable-3 2
         (ref.cast_static $vtable-3
           (array.get $itable
             (struct.get $object $itable
