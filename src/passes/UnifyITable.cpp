@@ -99,11 +99,11 @@ namespace {
 
 static const Name ITABLE("itable");
 
-static bool isItableField(HeapType type, Index field, Module& wasm) {
+static bool isItableField(HeapType type, Index fieldIndex, Module& wasm) {
   auto& typeNames = wasm.typeNames;
-  return typeNames.count(objectType) &&
-         typeNames[objectType].fields.count(objectGet->index) &&
-         typeNames[objectType].fields[objectGet->index] == ITABLE;
+  return typeNames.count(type) &&
+         typeNames[type].fieldNames.count(fieldIndex) &&
+         typeNames[type].fieldNames[fieldIndex] == ITABLE;
 }
 
 struct UnifyITable : public Pass {
@@ -140,14 +140,14 @@ struct UnifyITable : public Pass {
 
     // Create the unified table.
     mapping.unifiedTable =
-      Names::getValidTableName(*getModule(), "unified-table");
+      Names::getValidTableName(wasm, "unified-table");
     wasm.addTable(Builder::makeTable(mapping.unifiedTable, Type::funcref));
     auto segmentName = Names::getValidElementSegmentName(
       wasm, mapping.unifiedTable.str + std::string("$segment"));
     auto* segment = wasm.addElementSegment(Builder::makeElementSegment(
       segmentName,
       mapping.unifiedTable,
-      Builder(*getModule()).makeConst(int32_t(0)),
+      Builder(wasm).makeConst(int32_t(0)),
       Type::funcref));
     auto& segmentData = segment->data;
 
@@ -180,7 +180,7 @@ struct UnifyITable : public Pass {
 
     for (auto itable : mapping.itables) {
       auto itableGlobal = wasm.getGlobal(itable);
-      auto itableOperands = itableGlobal->init->cast<ArrayInit>()->operands;
+      auto& itableOperands = itableGlobal->init->cast<ArrayInit>()->values;
       Index index = 0;
       for (auto* operand : itableOperands) {
         // Elements in an itable are either a null or a struct.new.
@@ -213,7 +213,7 @@ struct UnifyITable : public Pass {
     Index tableIndex = 0;
     for (auto itable : mapping.itables) {
       auto itableGlobal = wasm.getGlobal(itable);
-      auto itableOperands = itableGlobal->init->cast<ArrayInit>()->operands;
+      auto& itableOperands = itableGlobal->init->cast<ArrayInit>()->values;
 
       // Pick the base for this itable.
       mapping.itableToBase[itable] = tableIndex;
@@ -230,7 +230,7 @@ struct UnifyITable : public Pass {
           // Copy in the contents.
           for (auto* newOperand : new_->operands) {
             auto* refFunc = newOperand->cast<RefFunc>();
-            segmentData[tableIndex++] = builder.makeRefFunc(refFunc->name, refFunc->type);
+            segmentData[tableIndex++] = builder.makeRefFunc(refFunc->func, refFunc->type.getHeapType());
           }
 
           // Fill the remaining space with nulls.
@@ -264,7 +264,7 @@ struct UnifyITable : public Pass {
           if (auto* get = operand->dynCast<GlobalGet>()) {
             auto iter = mapping.itableToBase.find(get->name);
             if (iter != mapping.itableToBase.end()) {
-              replaceCurrent(Builder(*getModule()).makeConst(iter->second);
+              operand = Builder(*getModule()).makeConst(iter->second);
             }
           }
         }
@@ -298,7 +298,7 @@ struct UnifyITable : public Pass {
         if (!arrayGet) {
           return;
         }
-        auto* objectGet = arrayGet->target->dynCast<StructGet>();
+        auto* objectGet = arrayGet->ref->dynCast<StructGet>();
         if (!objectGet) {
           return;
         }
@@ -321,18 +321,18 @@ struct UnifyITable : public Pass {
         // to the category base and the index in the category.
         Index categoryIndex = arrayGet->index->cast<Const>()->value.geti32();
         assert(categoryIndex < mapping.categoryBases.size());
-        auto categoryBase = mapping.categoryBases[categoryIndexes];
+        auto categoryBase = mapping.categoryBases[categoryIndex];
         auto indexInCategory = vtableGet->index;
         auto* target = builder.makeBinary(
           AddInt32,
           objectGet,
-          Builder.makeConst(int32_t(categoryBase + indexInCategory))
+          builder.makeConst(int32_t(categoryBase + indexInCategory))
         );
 
         auto* call = builder.makeCallIndirect(mapping.unifiedTable,
                                               target,
-                                              callRef->operands,
-                                              callRef->target->type.getHeapType().getSignature());
+                                              curr->operands,
+                                              curr->target->type.getHeapType().getSignature());
 
         // TODO: handle rtts with side effects?
         assert(!refCast->rtt || refCast->rtt->is<RttCanon>());
@@ -341,7 +341,7 @@ struct UnifyITable : public Pass {
       }
     };
 
-    CodeUpdater updater(mappingInfo);
+    CodeUpdater updater(mapping);
     updater.run(runner, &wasm);
     updater.walkModuleCode(&wasm);
   }
@@ -352,7 +352,8 @@ struct UnifyITable : public Pass {
       TypeRewriter(Module& wasm) : GlobalTypeRewriter(wasm) {}
 
       virtual void modifyStruct(HeapType oldStructType, Struct& struct_) {
-        for (Index i = 0; i < oldFields.size(); i++) {
+        auto& newFields = struct_.fields;
+        for (Index i = 0; i < newFields.size(); i++) {
           if (isItableField(oldStructType, i, wasm)) {
             newFields[i].type = Type::i32;
           }
