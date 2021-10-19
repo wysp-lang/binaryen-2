@@ -921,9 +921,10 @@ struct Inlining : public Pass {
       infos[module->start].usedGlobally = true;
     }
 
-    // When optimizing heavily for size, we may potentially split functions in
-    // order to inline parts of them.
-    if (runner->options.optimizeLevel >= 3 && !runner->options.shrinkLevel) {
+    // If partial inlining is enabled, then when optimizing heavily for size we
+    // may potentially split functions in order to inline parts of them.
+    if (runner->options.partialInliningIfs > 0 &&
+        runner->options.optimizeLevel >= 3 && !runner->options.shrinkLevel) {
       functionSplitter =
         std::make_unique<FunctionSplitter>(module, runner->options);
     }
