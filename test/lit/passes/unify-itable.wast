@@ -290,7 +290,9 @@
 (module
   ;; A module with two itables.
   ;; The final category sizes will be 3 1 3 1 1, and null will appear in the
-  ;; table to pad things out wherever needed.
+  ;; table to pad things out wherever needed. Category offsets will be
+  ;; 0 3 4 7 8. The second itable global will contain 9 which is the total
+  ;; size of each itable, and where that itable starts in the unified table.
 
   ;; CHECK:      (type $object (struct_subtype (field $itable i32) data))
 
@@ -433,7 +435,7 @@
   ;; CHECK-NEXT: )
   (func $call-1-2-0 (export "call-1-2-0") (param $ref (ref $object))
     (call_ref
-      ;; Call itable 1's category #0 with offset 0.
+      ;; Call itable 1's category #2 with offset 0.
       (struct.get $vtable-3 0
         (ref.cast_static $vtable-3
           (array.get $itable
@@ -485,7 +487,7 @@
   ;; CHECK-NEXT: )
   (func $call-1-3-0 (export "call-1-3-0") (param $ref (ref $object))
     (call_ref
-      ;; Call itable 1's category #0 with offset 0.
+      ;; Call itable 1's category #3 with offset 0.
       (struct.get $vtable-1 0
         (ref.cast_static $vtable-1
           (array.get $itable
@@ -548,7 +550,7 @@
   ;; CHECK-NEXT: )
   (func $call-2-1-1 (export "call-2-1-1") (param $ref (ref $object))
     (call_ref
-      ;; Call itable 1's category #0 with offset 0.
+      ;; Call itable 1's category #1 with offset 0.
       (struct.get $vtable-1 0
         (ref.cast_static $vtable-1
           (array.get $itable
@@ -574,7 +576,7 @@
   ;; CHECK-NEXT: )
   (func $call-2-1-2 (export "call-2-1-2") (param $ref (ref $object))
     (call_ref
-      ;; Call itable 1's category #0 with offset 0.
+      ;; Call itable 1's category #2 with offset 0.
       (struct.get $vtable-1 0
         (ref.cast_static $vtable-1
           (array.get $itable
@@ -600,7 +602,7 @@
   ;; CHECK-NEXT: )
   (func $call-2-1-4 (export "call-2-1-4") (param $ref (ref $object))
     (call_ref
-      ;; Call itable 1's category #0 with offset 0.
+      ;; Call itable 1's category #4 with offset 0.
       (struct.get $vtable-1 0
         (ref.cast_static $vtable-1
           (array.get $itable
