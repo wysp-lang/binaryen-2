@@ -310,8 +310,6 @@ struct UnifyITable : public Pass {
       void visitLocalSet(LocalSet* curr) {
         auto* func = getFunction();
 
-std::cout << "tee/set " << *curr << '\n';
-
         auto updateToI32 = [&]{
           // This set must be updated to use an i32 since it holds an itable
           // value, which used to be a reference but is now an i32. Update it
@@ -347,30 +345,10 @@ std::cout << "tee/set " << *curr << '\n';
           return;
         }
 
-        // We only need to update a reference to the itable to an i32.
-        if (!func->getLocalType(curr->index).isRef()) {
-          return;
-        }
-std::cout << "b\n";
-
-        if (auto* get = curr->value->dynCast<GlobalGet>()) {
-std::cout << "global\n";
-          if (mapping.itableBases.count(get->name)) {
-            updateToI32();
-          }
-        } else if (auto* tee = curr->value->dynCast<LocalSet>()) {
-std::cout << "teel\n";
-          if (tee->type == Type::i32) {
-            // We receive an i32 value, but our local is a reference. That means
-            // that we used to receive a reference, but it was an itable, which
-            // is now passed around as an i32.
-            updateToI32();
-          }
-        } else if (auto* get = curr->value->dynCast<LocalGet>()) {
-std::cout << "locall\n";
-          if (get->type == Type::i32) {
-            updateToI32();
-          }
+        // We need to update in the case where our local holds an itable value,
+        // which used to be a reference, and which is now and i32.
+        if (func->getLocalType(curr->index).isRef() && curr->value->type == Type::i32) {
+          updateToI32();
         }
       }
 
@@ -457,6 +435,12 @@ std::cout << "locall\n";
         assert(!refCast->rtt || refCast->rtt->is<RttCanon>());
 
         replaceCurrent(call);
+      }
+
+      void visitStructGet(StructGet* curr) {
+        if (isItableField(curr->ref->type.getHeapType(), curr->index, *getModule())) {
+          curr->type = Type::i32;
+        }
       }
     };
 

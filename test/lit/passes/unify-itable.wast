@@ -681,6 +681,8 @@
 
   ;; CHECK:      (type $none_=>_none (func_subtype func))
 
+  ;; CHECK:      (type $ref|$object|_=>_none (func_subtype (param (ref $object)) func))
+
   ;; CHECK:      (type $ftype (func_subtype (param (ref null $object) (ref null $sub-object)) func))
   (type $ftype (func_subtype (param (ref null $object)) (param (ref null $sub-object)) func))
 
@@ -707,6 +709,8 @@
   ;; CHECK:      (export "call" (func $call))
 
   ;; CHECK:      (export "itable-in-local" (func $itable-in-local))
+
+  ;; CHECK:      (export "lone-struct-get" (func $lone-struct-get))
 
   ;; CHECK:      (func $new (result (ref $object))
   ;; CHECK-NEXT:  (struct.new $object
@@ -861,6 +865,26 @@
         (ref.as_non_null
           (local.get $itable)
         )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $lone-struct-get (param $ref (ref $object))
+  ;; CHECK-NEXT:  (local $itable i32)
+  ;; CHECK-NEXT:  (local.set $itable
+  ;; CHECK-NEXT:   (struct.get $object $itable
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $lone-struct-get (export "lone-struct-get") (param $ref (ref $object))
+    (local $itable (ref null $itable))
+    ;; A lone get of an itable field, not in a call pattern. We still need to
+    ;; update this to return an i32, so it can be passed around properly without
+    ;; breaking validation.
+    (local.set $itable
+      (struct.get $object $itable
+        (local.get $ref)
       )
     )
   )
