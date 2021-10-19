@@ -342,10 +342,16 @@ struct UnifyITable : public Pass {
           builder.makeConst(int32_t(categoryBase + indexInCategory))
         );
 
+        std::vector<Type> params;
+        for (auto* operand : curr->operands) {
+          params.push_back(operand->type);
+        }
+        auto sig = Signature(Type(params), curr->type);
+
         auto* call = builder.makeCallIndirect(mapping.unifiedTable,
                                               target,
                                               curr->operands,
-                                              curr->target->type.getHeapType().getSignature());
+                                              sig);
 
         // TODO: handle rtts with side effects?
         assert(!refCast->rtt || refCast->rtt->is<RttCanon>());

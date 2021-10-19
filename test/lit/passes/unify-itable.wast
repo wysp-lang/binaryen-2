@@ -667,3 +667,82 @@
   ;; CHECK-NEXT: )
   (func $f-2)
 )
+
+(module
+  ;; A module where the call has subtyping of parameters.
+
+  ;; CHECK:      (type $object (struct_subtype (field $itable i32) data))
+
+  ;; CHECK:      (type $sub=>none (func_subtype (param (ref $sub-object)) func))
+  (type $sub=>none (func_subtype (param (ref $sub-object)) func))
+
+  (type $itable (array (mut (ref null data))))
+
+  (type $vtable (struct (field (ref $sub=>none))))
+
+  (type $object (struct (field $itable (ref $itable))))
+  ;; CHECK:      (type $sub-object (struct_subtype (field $itable i32) (field i32) data))
+  (type $sub-object (struct (field $itable (ref $itable)) (field i32)))
+
+  ;; CHECK:      (type $none_=>_ref|$object| (func_subtype (result (ref $object)) func))
+
+  ;; CHECK:      (type $ref|$object|_ref|$sub-object|_=>_none (func_subtype (param (ref $object) (ref $sub-object)) func))
+
+  ;; CHECK:      (global $itable i32 (i32.const 0))
+  (global $itable (ref $itable) (array.init_static $itable
+    (struct.new $vtable
+      (ref.func $a)
+    )
+  ))
+
+  ;; CHECK:      (table $unified-table 1 1 funcref)
+
+  ;; CHECK:      (elem (i32.const 0) $a)
+
+  ;; CHECK:      (export "new" (func $new))
+
+  ;; CHECK:      (export "call" (func $call))
+
+  ;; CHECK:      (func $new (result (ref $object))
+  ;; CHECK-NEXT:  (struct.new $object
+  ;; CHECK-NEXT:   (global.get $itable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $new (export "new") (result (ref $object))
+    (struct.new $object
+      (global.get $itable)
+    )
+  )
+
+  ;; CHECK:      (func $call (param $ref (ref $object)) (param $sub-ref (ref $sub-object))
+  ;; CHECK-NEXT:  (call_indirect $unified-table (type $sub=>none)
+  ;; CHECK-NEXT:   (local.get $sub-ref)
+  ;; CHECK-NEXT:   (i32.add
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $call (export "call") (param $ref (ref $object)) (param $sub-ref (ref $sub-object))
+    (call_ref
+      (local.get $sub-ref)
+      (struct.get $vtable 0
+        (ref.cast_static $vtable
+          (array.get $itable
+            (struct.get $object $itable
+              (local.get $ref)
+            )
+            (i32.const 0)
+          )
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $a (param $0 (ref $sub-object))
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $a (param (ref $sub-object)))
+)
