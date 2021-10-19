@@ -72,6 +72,8 @@
 
   ;; CHECK:      (export "call-2-0" (func $call-2-0))
 
+  ;; CHECK:      (export "call-2-1" (func $call-2-1))
+
   ;; CHECK:      (func $new-1 (result (ref $object))
   ;; CHECK-NEXT:  (struct.new $object
   ;; CHECK-NEXT:   (global.get $itable-1)
@@ -126,14 +128,40 @@
     (call_ref
       ;; Add an offset of 0 in that category, for a total of 1 added to the
       ;; call_indirect.
-      (struct.get $vtable-1 0
-        (ref.cast_static $vtable-1
+      (struct.get $vtable-2 0
+        (ref.cast_static $vtable-2
           (array.get $itable
             (struct.get $object $itable
               (local.get $ref)
             )
             ;; Call category #2. It has a base of 1, as there was one item
             ;; in the only category before it.
+            (i32.const 2)
+          )
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $call-2-1 (param $ref (ref $object))
+  ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
+  ;; CHECK-NEXT:   (i32.add
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $call-2-1 (export "call-2-1") (param $ref (ref $object))
+    (call_ref
+      ;; Add an offset of 1 compared to before, for a total of 2.
+      (struct.get $vtable-2 1
+        (ref.cast_static $vtable-2
+          (array.get $itable
+            (struct.get $object $itable
+              (local.get $ref)
+            )
             (i32.const 2)
           )
         )
