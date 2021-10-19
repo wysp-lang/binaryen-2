@@ -750,6 +750,7 @@
 
   ;; CHECK:      (func $itable-in-local
   ;; CHECK-NEXT:  (local $itable i32)
+  ;; CHECK-NEXT:  (local $itable-2 i32)
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (struct.new $object
   ;; CHECK-NEXT:    (local.tee $itable
@@ -767,9 +768,37 @@
   ;; CHECK-NEXT:    (local.get $itable)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $object
+  ;; CHECK-NEXT:    (local.tee $itable-2
+  ;; CHECK-NEXT:     (local.tee $itable
+  ;; CHECK-NEXT:      (local.get $itable)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $object
+  ;; CHECK-NEXT:    (local.get $itable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $object
+  ;; CHECK-NEXT:    (local.get $itable-2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $itable
+  ;; CHECK-NEXT:   (global.get $itable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $object
+  ;; CHECK-NEXT:    (local.get $itable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   (func $itable-in-local (export "itable-in-local")
     (local $itable (ref null $itable))
+    (local $itable-2 (ref null $itable))
     ;; Create more than one struct using the same itable. We need to propagate
     ;; the constant base for it to all gets of the local, and to do so through
     ;; the ref.as_non_nulls (that are necessary since the struct field is non-
@@ -789,6 +818,43 @@
           (local.get $itable)
         )
       )
+    )
+    (drop
+      (struct.new $object
+        (ref.as_non_null
+          (local.get $itable)
+        )
+      )
+    )
+    (drop
+      (struct.new $object
+        (ref.as_non_null
+          ;; Tee to the local once more, and add another.
+          (local.tee $itable-2
+            (local.tee $itable
+              (local.get $itable)
+            )
+          )
+        )
+      )
+    )
+    (drop
+      (struct.new $object
+        (ref.as_non_null
+          (local.get $itable)
+        )
+      )
+    )
+    (drop
+      (struct.new $object
+        (ref.as_non_null
+          (local.get $itable-2)
+        )
+      )
+    )
+    ;; Withut a tee.
+    (local.set $itable
+      (global.get $itable)
     )
     (drop
       (struct.new $object

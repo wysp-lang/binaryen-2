@@ -303,32 +303,73 @@ struct UnifyITable : public Pass {
       // local analysis.
       std::unique_ptr<LocalGraph> localGraph;
 
+      // Local indices that contain itables. We need to update their sets and
+      // gets.
+      std::unordered_set<Index> itableLocals;
+
       void visitLocalSet(LocalSet* curr) {
+        auto* func = getFunction();
+
+std::cout << "tee/set " << *curr << '\n';
+
+        auto updateToI32 = [&]{
+          // This set must be updated to use an i32 since it holds an itable
+          // value, which used to be a reference but is now an i32. Update it
+          // and all gets that read from it.
+          itableLocals.insert(curr->index);
+
+          // TODO: handle itables in params..?
+          assert(func->isVar(curr->index));
+
+          // Update the var's type.
+          func->vars[curr->index - func->getVarIndexBase()] = Type::i32;
+
+          // If this is a tee, its type changes as well.
+          if (curr->isTee()) {
+            curr->makeTee(Type::i32);
+          }
+
+          // Update all gets
+          if (!localGraph) {
+            localGraph = std::make_unique<LocalGraph>(func);
+            localGraph->computeSetInfluences();
+          }
+          for (auto* get : localGraph->setInfluences[curr]) {
+            get->type = Type::i32;
+          }
+        };
+
+        // If this is the second or later time we see this local, the local type
+        // has already been updated, but we do still need to update the gets
+        // for us.
+        if (itableLocals.count(curr->index)) {
+          updateToI32();
+          return;
+        }
+
+        // We only need to update a reference to the itable to an i32.
+        if (!func->getLocalType(curr->index).isRef()) {
+          return;
+        }
+std::cout << "b\n";
+
         if (auto* get = curr->value->dynCast<GlobalGet>()) {
+std::cout << "global\n";
           if (mapping.itableBases.count(get->name)) {
-            // This itable is written to a local, which means we'll need to
-            // update this local to use an i32, and all its gets.
-            auto* func = getFunction();
-
-            // TODO: handle itables in params..?
-            assert(func->isVar(curr->index));
-
-            // Update the var's type.
-            func->vars[curr->index - func->getVarIndexBase()] = Type::i32;
-
-            // If this is a tee, its type changes as well.
-            if (curr->isTee()) {
-              curr->makeTee(Type::i32);
-            }
-
-            // Update all gets
-            if (!localGraph) {
-              localGraph = std::make_unique<LocalGraph>(func);
-              localGraph->computeSetInfluences();
-            }
-            for (auto* get : localGraph->setInfluences[curr]) {
-              get->type = Type::i32;
-            }
+            updateToI32();
+          }
+        } else if (auto* tee = curr->value->dynCast<LocalSet>()) {
+std::cout << "teel\n";
+          if (tee->type == Type::i32) {
+            // We receive an i32 value, but our local is a reference. That means
+            // that we used to receive a reference, but it was an itable, which
+            // is now passed around as an i32.
+            updateToI32();
+          }
+        } else if (auto* get = curr->value->dynCast<LocalGet>()) {
+std::cout << "locall\n";
+          if (get->type == Type::i32) {
+            updateToI32();
           }
         }
       }
