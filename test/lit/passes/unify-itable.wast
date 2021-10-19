@@ -679,6 +679,8 @@
 
   ;; CHECK:      (type $none_=>_ref|$object| (func_subtype (result (ref $object)) func))
 
+  ;; CHECK:      (type $none_=>_none (func_subtype func))
+
   ;; CHECK:      (type $ftype (func_subtype (param (ref null $object) (ref null $sub-object)) func))
   (type $ftype (func_subtype (param (ref null $object)) (param (ref null $sub-object)) func))
 
@@ -703,6 +705,8 @@
   ;; CHECK:      (export "new" (func $new))
 
   ;; CHECK:      (export "call" (func $call))
+
+  ;; CHECK:      (export "itable-in-local" (func $itable-in-local))
 
   ;; CHECK:      (func $new (result (ref $object))
   ;; CHECK-NEXT:  (struct.new $object
@@ -739,6 +743,57 @@
             )
             (i32.const 0)
           )
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $itable-in-local
+  ;; CHECK-NEXT:  (local $itable i32)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $object
+  ;; CHECK-NEXT:    (local.tee $itable
+  ;; CHECK-NEXT:     (global.get $itable)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $object
+  ;; CHECK-NEXT:    (local.get $itable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $object
+  ;; CHECK-NEXT:    (local.get $itable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $itable-in-local (export "itable-in-local")
+    (local $itable (ref null $itable))
+    ;; Create more than one struct using the same itable. We need to propagate
+    ;; the constant base for it to all gets of the local, and to do so through
+    ;; the ref.as_non_nulls (that are necessary since the struct field is non-
+    ;; nullable).
+    (drop
+      (struct.new $object
+        (ref.as_non_null
+          (local.tee $itable
+            (global.get $itable)
+          )
+        )
+      )
+    )
+    (drop
+      (struct.new $object
+        (ref.as_non_null
+          (local.get $itable)
+        )
+      )
+    )
+    (drop
+      (struct.new $object
+        (ref.as_non_null
+          (local.get $itable)
         )
       )
     )

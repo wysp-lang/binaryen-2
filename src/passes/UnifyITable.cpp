@@ -82,6 +82,7 @@
 // reason this pass makes sense as a final transformation.
 //
 
+#include <ir/local-graph.h>
 #include <ir/module-utils.h>
 #include <ir/names.h>
 #include <ir/type-updating.h>
@@ -276,10 +277,68 @@ struct UnifyITable : public Pass {
 
       CodeUpdater* create() override { return new CodeUpdater(mapping); }
 
+      // Adapt to the change of struct $itable fields now contain an i32 instead
+      // of a reference. That is, we have things like this:
+      //
+      //  (struct.new ..
+      //    (global.get $some-itable)
+      //
+      // and we need to write the proper i32 there instead. Note that the itable
+      // may not be read and immediately written out as it is here: if it is
+      // used multiple times in a function it may be cached in a local.
+      //
+      // The simple case is handled by our replacing the global's value with a
+      // ref to contain the i32. For that, we just need to update the type of
+      // relevant global.gets.
       void visitGlobalGet(GlobalGet* curr) {
         if (mapping.itableBases.count(curr->name)) {
           // This global now contains an i32 base.
           curr->type = Type::i32;
+        }
+
+        // Wrap us in a table.get to get the itable
+      }
+
+      // The case where the value flows through a local requires us to do a
+      // local analysis.
+      std::unique_ptr<LocalGraph> localGraph;
+
+      void visitLocalSet(LocalSet* curr) {
+        if (auto* get = curr->value->dynCast<GlobalGet>()) {
+          if (mapping.itableBases.count(get->name)) {
+            // This itable is written to a local, which means we'll need to
+            // update this local to use an i32, and all its gets.
+            auto* func = getFunction();
+
+            // TODO: handle itables in params..?
+            assert(func->isVar(curr->index));
+
+            // Update the var's type.
+            func->vars[curr->index - func->getVarIndexBase()] = Type::i32;
+
+            // If this is a tee, its type changes as well.
+            if (curr->isTee()) {
+              curr->makeTee(Type::i32);
+            }
+
+            // Update all gets
+            if (!localGraph) {
+              localGraph = std::make_unique<LocalGraph>(func);
+              localGraph->computeSetInfluences();
+            }
+            for (auto* get : localGraph->setInfluences[curr]) {
+              get->type = Type::i32;
+            }
+          }
+        }
+      }
+
+      void visitRefAs(RefAs* curr) {
+        if (curr->value->type == Type::i32) {
+          // This is a ref.as_non_null of an itable in a local. Skip it now that
+          // the value is an i32.
+          assert(curr->op == RefAsNonNull);
+          replaceCurrent(curr->value);
         }
       }
 
