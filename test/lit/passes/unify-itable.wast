@@ -16,6 +16,8 @@
   ;;  * call_ref is replaced by a call_indirect with a proper offset, that
   ;;    takes into account the category as well as the offset in that category.
 
+  ;; CHECK:      (type $object (struct_subtype (field $itable i32) data))
+
   ;; CHECK:      (type $none_=>_none (func_subtype func))
   (type $none_=>_none (func_subtype func))
 
@@ -25,7 +27,6 @@
   (type $vtable-2 (struct (field (ref $none_=>_none)) (field (ref $none_=>_none))))
   (type $vtable-3 (struct (field (ref $none_=>_none)) (field (ref $none_=>_none)) (field (ref $none_=>_none))))
 
-  ;; CHECK:      (type $object (struct_subtype (field $itable i32) data))
   (type $object (struct (field $itable (ref $itable))))
 
   ;; CHECK:      (type $ref|$object|_=>_none (func_subtype (param (ref $object)) func))
@@ -38,24 +39,24 @@
   (global $itable-1 (ref $itable) (array.init_static $itable
     ;; Category #0, of size 0.
     (ref.null data)
-    ;; Category #1, of size 1.
+    ;; Category #1, of size 1. This will have base 0.
     (struct.new $vtable-1
       (ref.func $a)
     )
-    ;; Category #2, of size 2.
+    ;; Category #2, of size 2. This will have base 1.
     (struct.new $vtable-2
       (ref.func $b)
       (ref.func $c)
     )
     ;; Category #3, of size 0.
     (ref.null data)
-    ;; Category #4, of size 3.
+    ;; Category #4, of size 3. This will have base 3.
     (struct.new $vtable-3
       (ref.func $d)
       (ref.func $e)
       (ref.func $f)
     )
-    ;; Category #5, of size 1.
+    ;; Category #5, of size 1. This will have base 6.
     (struct.new $vtable-1
       (ref.func $g)
     )
@@ -73,6 +74,8 @@
   ;; CHECK:      (export "call-2-0" (func $call-2-0))
 
   ;; CHECK:      (export "call-2-1" (func $call-2-1))
+
+  ;; CHECK:      (export "call-3-0" (func $call-3-0))
 
   ;; CHECK:      (func $new-1 (result (ref $object))
   ;; CHECK-NEXT:  (struct.new $object
@@ -163,6 +166,32 @@
               (local.get $ref)
             )
             (i32.const 2)
+          )
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $call-3-0 (param $ref (ref $object))
+  ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
+  ;; CHECK-NEXT:   (i32.add
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 3)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $call-3-0 (export "call-3-0") (param $ref (ref $object))
+    ;; Call category #4, which has base 3, with offset 0.
+    (call_ref
+      (struct.get $vtable-3 0
+        (ref.cast_static $vtable-3
+          (array.get $itable
+            (struct.get $object $itable
+              (local.get $ref)
+            )
+            (i32.const 4)
           )
         )
       )
