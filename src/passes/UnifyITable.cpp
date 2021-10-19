@@ -37,10 +37,13 @@
 // Then we create a single table to rule them all ("the one table"):
 //
 //  (table $unified-table
+//    ;; first itable
 //    (null) (null) ..            ;; as many nulls as that first category needs
 //    (ref.func $a) (ref.func $b) ;; the funcs from the second category (plus
 //                                ;; nulls, to fill the category, see below)
+//    ;; second itable, etc.
 //  )
+// TODO: better graph
 //
 // Fields that were (ref $itable) become i32s, where that value is the offset
 // into the one table, which indicates where that class's info begins. To that
@@ -96,6 +99,13 @@ namespace {
 
 static const Name ITABLE("itable");
 
+static bool isItableField(HeapType type, Index field, Module& wasm) {
+  auto& typeNames = wasm.typeNames;
+  return typeNames.count(objectType) &&
+         typeNames[objectType].fields.count(objectGet->index) &&
+         typeNames[objectType].fields[objectGet->index] == ITABLE;
+}
+
 struct UnifyITable : public Pass {
   void run(PassRunner* runner, Module* module) override {
     // Process itable data in globals and compute the layout of the unified
@@ -108,23 +118,10 @@ struct UnifyITable : public Pass {
   }
 
   void mapFunctionsToTable(PassRunner* runner, Module& wasm) {
-    // Create the unified table.
-    auto unifiedTable =
-      Names::getValidTableName(*getModule(), "unified-table");
-    wasm.addTable(Builder::makeTable(unifiedTable, Type::funcref));
-    auto segmentName = Names::getValidElementSegmentName(
-      wasm, unifiedTable.str + std::string("$segment"));
-    auto* segment = wasm.addElementSegment(Builder::makeElementSegment(
-      segmentName,
-      unifiedTable,
-      Builder(*getModule()).makeConst(int32_t(0)),
-      Type::funcref));
-    auto& segmentData = segment->data;
-
     // Fill in mapping info that describes how we lay out the unified table.
     struct MappingInfo {
-      // The size of each category.
-      std::vector<Index> categorySizes;
+      // The name of the unified table that we will create and use everywhere.
+      Name unifiedTable;
 
       // The list of itable globals, in the order they appear in the wasm.
       std::vector<Name> itables;
@@ -133,8 +130,26 @@ struct UnifyITable : public Pass {
       // the unified table in the new model.
       std::unordered_map<Name, Index> itableToBase;
 
+      // The size of each category.
+      std::vector<Index> categorySizes;
 
+      // The base index of each category, that is, at what offset that category
+      // begins (in each itable region in the unified table).
+      std::vector<Index> categoryBases;
     } mapping;
+
+    // Create the unified table.
+    mapping.unifiedTable =
+      Names::getValidTableName(*getModule(), "unified-table");
+    wasm.addTable(Builder::makeTable(mapping.unifiedTable, Type::funcref));
+    auto segmentName = Names::getValidElementSegmentName(
+      wasm, mapping.unifiedTable.str + std::string("$segment"));
+    auto* segment = wasm.addElementSegment(Builder::makeElementSegment(
+      segmentName,
+      mapping.unifiedTable,
+      Builder(*getModule()).makeConst(int32_t(0)),
+      Type::funcref));
+    auto& segmentData = segment->data;
 
     // Find the itable globals.
     ModuleUtils::iterDefinedGlobals(
@@ -182,9 +197,10 @@ struct UnifyITable : public Pass {
     }
 
     // The size of an itable in the new layout is the sum of all the category
-    // sizes;
+    // sizes. Calculate that and the base for each category.
     Index itableSize = 0;
     for (auto size : mapping.categorySizes) {
+      mapping.categoryBases.push_back(itableSize);
       itableSize += size;
     }
 
@@ -290,88 +306,38 @@ struct UnifyITable : public Pass {
 
         // The shape fits, check that it all begins with a read of an itable.
         auto objectType = objectGet->ref->type.getHeapType();
-        auto& typeNames = getModule()->typeNames;
-        if (!typeNames.count(objectType) ||
-            !typeNames[objectType].fields.count(objectGet->index) ||
-            typeNames[objectType].fields[objectGet->index] != ITABLE) {
-          // No name for this field, or the name is not "itable".
+        if (!isItableField(objectType, objectGet->index, *getModule())) {
           return;
         }
-      }
 
-      Name getFieldTable(HeapType type, Index i) {
-        auto& fieldTable = mapping.fieldTables[{type, i}];
-        if (!fieldTable.is()) {
-          // Compute the table in which we will store functions for this field.
-          // First, find the supertype in which this field was first defined;
-          // all subclasses use the same table for their functions.
-          // TODO: more memoization here
-          HeapType parent = type;
-          while (1) {
-            HeapType grandParent;
-            if (!parent.getSuperType(grandParent)) {
-              // No more supers, so parent is the topmost one.
-              break;
-            }
-            if (i >= grandParent.getStruct().fields.size()) {
-              // The grand-parent does not have this field, so parent is where
-              // it is first defined.
-              break;
-            }
-            // Otherwise, continue up.
-            parent = grandParent;
-          }
+        // Perfect, this is the pattern we seek.
+        Builder builder(*getModule());
 
-          // We know the proper supertype, and our table is the one it has.
-          auto& parentFieldTable = mapping.fieldTables[{parent, i}];
-          if (!parentFieldTable.is()) {
-            // This is the first time we need a table for this parent; do so
-            // now.
-            parentFieldTable =
-              Names::getValidTableName(*getModule(), "v-table");
-            auto fieldType = type.getStruct().fields[i].type;
-            if (fieldType.isNonNullable()) {
-              // Non-nullable types are not allowed in tables yet.
-              fieldType = Type(fieldType.getHeapType(), Nullable);
-            }
-            getModule()->addTable(
-              Builder::makeTable(parentFieldTable, fieldType));
-            Name segmentName = Names::getValidElementSegmentName(
-              *getModule(), parentFieldTable.str + std::string("$segment"));
-            getModule()->addElementSegment(Builder::makeElementSegment(
-              segmentName,
-              parentFieldTable,
-              Builder(*getModule()).makeConst(int32_t(0)),
-              fieldType));
-            mapping.tableInfos[parentFieldTable].segmentName = segmentName;
-          }
+        // Reuse the objectGet, which now loads the i32 base from the same field
+        // that used to hold a reference to an itable.
+        objectGet->type = Type::i32;
 
-          // Copy from the parent;
-          fieldTable = parentFieldTable;
-        }
+        // Compute the index in the unified table: add the base from the object
+        // to the category base and the index in the category.
+        Index categoryIndex = arrayGet->index->cast<Const>()->value.geti32();
+        assert(categoryIndex < mapping.categoryBases.size());
+        auto categoryBase = mapping.categoryBases[categoryIndexes];
+        auto indexInCategory = vtableGet->index;
+        auto* target = builder.makeBinary(
+          AddInt32,
+          objectGet,
+          Builder.makeConst(int32_t(categoryBase + indexInCategory))
+        );
 
-        return fieldTable;
-      }
+        auto* call = builder.makeCallIndirect(mapping.unifiedTable,
+                                              target,
+                                              callRef->operands,
+                                              callRef->target->type.getHeapType().getSignature());
 
-      // Returns the index of a function in a table. If not already present
-      // there, this allocates a new entry in the table.
-      Index getFuncIndex(Name tableName, Name func) {
-        auto& tableInfo = mapping.tableInfos[tableName];
-        auto& funcIndexes = tableInfo.funcIndexes;
-        if (funcIndexes.count(func)) {
-          return funcIndexes[func];
-        }
+        // TODO: handle rtts with side effects?
+        assert(!refCast->rtt || refCast->rtt->is<RttCanon>());
 
-        // Enlarge the table, add to the segment, and update the info.
-        auto index = funcIndexes.size();
-        funcIndexes[func] = index;
-        auto* table = getModule()->getTable(tableName);
-        table->initial = table->max = index + 1;
-        auto* segment = getModule()->getElementSegment(tableInfo.segmentName);
-        segment->data.push_back(
-          Builder(*getModule())
-            .makeRefFunc(func, getModule()->getFunction(func)->type));
-        return index;
+        replaceCurrent(call);
       }
     };
 
