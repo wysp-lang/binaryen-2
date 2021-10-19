@@ -128,7 +128,7 @@ struct UnifyITable : public Pass {
 
       // Maps the names of itable globals in the old model to base offsets in
       // the unified table in the new model.
-      std::unordered_map<Name, Index> itableToBase;
+      std::unordered_map<Name, Index> itableBases;
 
       // The size of each category.
       std::vector<Index> categorySizes;
@@ -179,8 +179,8 @@ struct UnifyITable : public Pass {
     };
 
     for (auto itable : mapping.itables) {
-      auto itableGlobal = wasm.getGlobal(itable);
-      auto& itableOperands = itableGlobal->init->cast<ArrayInit>()->values;
+      auto* global = wasm.getGlobal(itable);
+      auto& itableOperands = global->init->cast<ArrayInit>()->values;
       Index index = 0;
       for (auto* operand : itableOperands) {
         // Elements in an itable are either a null or a struct.new.
@@ -212,11 +212,11 @@ struct UnifyITable : public Pass {
     Builder builder(wasm);
     Index tableIndex = 0;
     for (auto itable : mapping.itables) {
-      auto itableGlobal = wasm.getGlobal(itable);
-      auto& itableOperands = itableGlobal->init->cast<ArrayInit>()->values;
+      auto* global = wasm.getGlobal(itable);
+      auto& itableOperands = global->init->cast<ArrayInit>()->values;
 
       // Pick the base for this itable.
-      mapping.itableToBase[itable] = tableIndex;
+      mapping.itableBases[itable] = tableIndex;
 
       auto categoryIndex = 0;
       for (auto* operand : itableOperands) {
@@ -251,6 +251,15 @@ struct UnifyITable : public Pass {
     table->initial = tableIndex;
     table->max = tableIndex;
 
+    // Update the globals to contain offsets instead. That way when the globals
+    // are read in order to initialize the object's $itable fields, we will get
+    // the proper values.
+    for (auto itable : mapping.itables) {
+      auto* global = wasm.getGlobal(itable);
+      global->init = Builder(wasm).makeConst(mapping.itableBases[itable]);
+      global->type = Type::i32;
+    }
+
     // Update the code in the entire module.
     struct CodeUpdater : public WalkerPass<PostWalker<CodeUpdater>> {
       bool isFunctionParallel() override { return true; }
@@ -261,16 +270,10 @@ struct UnifyITable : public Pass {
 
       CodeUpdater* create() override { return new CodeUpdater(mapping); }
 
-      void visitStructNew(StructNew* curr) {
-        // Where we used to write a global.get of an itable, instead write out
-        // the base of that itable's data in the unified table.
-        for (auto*& operand : curr->operands) {
-          if (auto* get = operand->dynCast<GlobalGet>()) {
-            auto iter = mapping.itableToBase.find(get->name);
-            if (iter != mapping.itableToBase.end()) {
-              operand = Builder(*getModule()).makeConst(iter->second);
-            }
-          }
+      void visitGlobalGet(GlobalGet* curr) {
+        if (mapping.itableBases.count(curr->name)) {
+          // This global now contains an i32 base.
+          curr->type = Type::i32;
         }
       }
 
