@@ -246,7 +246,11 @@ struct UnifyITable : public Pass {
     
     assert(tableIndex == segmentData.size());
     assert(tableIndex == itableSize * numItables);
-    
+
+    auto* table = wasm.getTable(mapping.unifiedTable);
+    table->initial = tableIndex;
+    table->max = tableIndex;
+
     // Update the code in the entire module.
     struct CodeUpdater : public WalkerPass<PostWalker<CodeUpdater>> {
       bool isFunctionParallel() override { return true; }

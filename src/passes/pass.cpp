@@ -401,7 +401,7 @@ void PassRegistry::registerPasses() {
                createUnteePass);
   registerPass("vacuum", "removes obviously unneeded code", createVacuumPass);
   registerPass("unify-itable",
-               "converts vtable structs to use indexes",
+               "converts all itables to a single unified table",
                createUnifyITablePass);
   // registerPass(
   //   "lower-i64", "lowers i64 into pairs of i32s", createLowerInt64Pass);
