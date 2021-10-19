@@ -673,20 +673,21 @@
 
   ;; CHECK:      (type $object (struct_subtype (field $itable i32) data))
 
-  ;; CHECK:      (type $sub=>none (func_subtype (param (ref $sub-object)) func))
-  (type $sub=>none (func_subtype (param (ref $sub-object)) func))
+  ;; CHECK:      (type $ref|$object|_ref|$sub-object|_=>_none (func_subtype (param (ref $object) (ref $sub-object)) func))
 
-  (type $itable (array (mut (ref null data))))
-
-  (type $vtable (struct (field (ref $sub=>none))))
-
-  (type $object (struct (field $itable (ref $itable))))
   ;; CHECK:      (type $sub-object (struct_subtype (field $itable i32) (field i32) data))
-  (type $sub-object (struct (field $itable (ref $itable)) (field i32)))
 
   ;; CHECK:      (type $none_=>_ref|$object| (func_subtype (result (ref $object)) func))
 
-  ;; CHECK:      (type $ref|$object|_ref|$sub-object|_=>_none (func_subtype (param (ref $object) (ref $sub-object)) func))
+  ;; CHECK:      (type $ftype (func_subtype (param (ref null $object) (ref null $sub-object)) func))
+  (type $ftype (func_subtype (param (ref null $object)) (param (ref null $sub-object)) func))
+
+  (type $itable (array (mut (ref null data))))
+
+  (type $vtable (struct (field (ref $ftype))))
+
+  (type $object (struct (field $itable (ref $itable))))
+  (type $sub-object (struct (field $itable (ref $itable)) (field i32)))
 
   ;; CHECK:      (global $itable i32 (i32.const 0))
   (global $itable (ref $itable) (array.init_static $itable
@@ -715,7 +716,8 @@
   )
 
   ;; CHECK:      (func $call (param $ref (ref $object)) (param $sub-ref (ref $sub-object))
-  ;; CHECK-NEXT:  (call_indirect $unified-table (type $sub=>none)
+  ;; CHECK-NEXT:  (call_indirect $unified-table (type $ref|$object|_ref|$sub-object|_=>_none)
+  ;; CHECK-NEXT:   (local.get $ref)
   ;; CHECK-NEXT:   (local.get $sub-ref)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (struct.get $object $itable
@@ -727,6 +729,7 @@
   ;; CHECK-NEXT: )
   (func $call (export "call") (param $ref (ref $object)) (param $sub-ref (ref $sub-object))
     (call_ref
+      (local.get $ref)
       (local.get $sub-ref)
       (struct.get $vtable 0
         (ref.cast_static $vtable
@@ -741,8 +744,8 @@
     )
   )
 
-  ;; CHECK:      (func $a (param $0 (ref $sub-object))
+  ;; CHECK:      (func $a (param $0 (ref null $object)) (param $1 (ref null $sub-object))
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
-  (func $a (param (ref $sub-object)))
+  (func $a (param (ref null $object) (ref null $sub-object)))
 )
