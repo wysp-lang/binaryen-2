@@ -62,9 +62,9 @@
   ))
 
 
-  ;; CHECK:      (table $unified-table 6 6 funcref)
+  ;; CHECK:      (table $unified-table 7 7 funcref)
 
-  ;; CHECK:      (elem (i32.const 0) $a $b $c $d $e $f)
+  ;; CHECK:      (elem (i32.const 0) $a $b $c $d $e $f $g)
 
   ;; CHECK:      (export "new-1" (func $new-1))
 
@@ -166,5 +166,8 @@
   ;; CHECK-NEXT: )
   (func $f)
 
+  ;; CHECK:      (func $g
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
   (func $g)
 )
