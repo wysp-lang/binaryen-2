@@ -327,27 +327,29 @@ struct UnifyITable : public Pass {
       }
 
       void visitStructGet(StructGet* curr) {
-        if (isItableField(curr->ref->type.getHeapType(), curr->index, *getModule())) {
-          inPattern.insert(curr);
-          curr->type = Type::i32;
-          return;
-        }
-
-        // This may also be a struct.get from the vtable in the itable pattern,
+        // This may be a struct.get from the vtable in the itable pattern,
         //   struct.get $vtable $vtable.field
         // in the comment from earlier. We detect that if the reference is
         // known to be in the pattern. If it is, then so are we.
         if (inPattern.count(curr->ref)) {
-          inPattern.insert(curr);
-
           // The vtable read is at an offset which we need to add to the value
           // so far.
           Builder builder(*getModule());
-          replaceCurrent(builder.makeBinary(
+          auto* add = builder.makeBinary(
             AddInt32,
             curr->ref,
             builder.makeConst(int32_t(curr->index))
-          ));
+          );
+          replaceCurrent(add);
+          inPattern.insert(add);
+          return;
+        }
+
+        // Or, this may be where an itable value arrives, if it is read from
+        // an itable field.
+        if (isItableField(curr->ref->type.getHeapType(), curr->index, *getModule())) {
+          inPattern.insert(curr);
+          curr->type = Type::i32;
         }
       }
 
@@ -394,15 +396,17 @@ struct UnifyITable : public Pass {
 
           // Our reference is an itable base. We need to add the category
           // offset to it.
-          Builder builder(*getModule());
           Index categoryIndex = curr->index->cast<Const>()->value.geti32();
           assert(categoryIndex < mapping.categoryBases.size());
           auto categoryBase = mapping.categoryBases[categoryIndex];
-          replaceCurrent(builder.makeBinary(
+          Builder builder(*getModule());
+          auto* add = builder.makeBinary(
             AddInt32,
             curr->ref,
             builder.makeConst(int32_t(categoryBase))
-          ));
+          );
+          replaceCurrent(add);
+          inPattern.insert(add);
         }
       }
 
