@@ -342,6 +342,7 @@ struct UnifyITable : public Pass {
 
           // The vtable read is at an offset which we need to add to the value
           // so far.
+          Builder builder(*getModule());
           replaceCurrent(builder.makeBinary(
             AddInt32,
             curr->ref,
@@ -409,15 +410,18 @@ struct UnifyITable : public Pass {
         if (inPattern.count(curr->ref)) {
           // The cast is no longer needed; skip it.
           replaceCurrent(curr->ref);
+
+          // TODO: handle rtts with side effects?
+          assert(!curr->rtt || curr->rtt->is<RttCanon>());
         }
       }
 
       void visitRefAs(RefAs* curr) {
-        if (inPattern.count(curr->ref)) {
+        if (inPattern.count(curr->value)) {
           // This is a ref.as_non_null of an itable in a local (which is now
           // an i32). Skip the ref_as.
           assert(curr->op == RefAsNonNull);
-          replaceCurrent(curr->ref);
+          replaceCurrent(curr->value);
         }
       }
 
@@ -433,14 +437,11 @@ struct UnifyITable : public Pass {
           }
           auto sig = Signature(Type(params), curr->type);
 
-          auto* call = builder.makeCallIndirect(mapping.unifiedTable,
-                                                target,
+          auto* call = Builder(*getModule()).makeCallIndirect(mapping.unifiedTable,
+                                                curr->target,
                                                 curr->operands,
                                                 sig);
           replaceCurrent(call);
-
-          // TODO: handle rtts with side effects?
-          assert(!curr->rtt || curr->rtt->is<RttCanon>());
         }
       }
     };
