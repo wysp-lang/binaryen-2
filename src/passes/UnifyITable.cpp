@@ -144,6 +144,10 @@ struct UnifyITable : public Pass {
       // The base index of each category, that is, at what offset that category
       // begins (in each itable region in the dispatch table).
       std::vector<Index> categoryBases;
+
+      // The list of expressions in the array.init that contains the data for
+      // the test table.
+      ExpressionList* testTableData;
     } mapping;
 
     // Create the dispatch table.
@@ -152,17 +156,30 @@ struct UnifyITable : public Pass {
     wasm.addTable(Builder::makeTable(mapping.dispatchTable, Type::funcref));
     auto segmentName = Names::getValidElementSegmentName(
       wasm, mapping.dispatchTable.str + std::string("$segment"));
+    Builder builder(wasm);
     auto* segment = wasm.addElementSegment(Builder::makeElementSegment(
       segmentName,
       mapping.dispatchTable,
-      Builder(wasm).makeConst(int32_t(0)),
+      builder.makeConst(int32_t(0)),
       Type::funcref));
     auto& segmentData = segment->data;
 
-    // Create the test table.
+    // Create the test table, which is an array of datas. Create it with size
+    // 0 for now; we will fill in the data later.
+    auto testTableType = Type(
+      Array(
+        Field(
+          Type(HeapType::data, Nullable),
+          Immutable
+        )
+      ),
+      NonNullable
+    );
+    auto* testTableContents = builder.makeArrayInit(builder.makeRttCanon(testTableType.getHeapType()), {});
+    mapping.testTableData = &testTableContents->values;
     mapping.testTable =
-      Names::getValidTableName(wasm, "test-table");
-    wasm.addTable(Builder::makeTable(mapping.testTable, Type::dataref));
+      Names::getValidGlobalName(wasm, "test-table");
+    wasm.addGlobal(Builder::makeGlobal(mapping.testTable, testTableType, testTableContents, Builder::Immutable));
 
     // Find the itable globals.
     ModuleUtils::iterDefinedGlobals(
@@ -224,7 +241,6 @@ struct UnifyITable : public Pass {
 
     // Now that we know the sizes of the categories, we can generate the layout
     // of the dispatch table and fill it out.
-    Builder builder(wasm);
     Index tableIndex = 0;
     for (auto itable : mapping.itables) {
       auto* global = wasm.getGlobal(itable);
@@ -265,14 +281,17 @@ struct UnifyITable : public Pass {
     
     assert(tableIndex == segmentData.size());
     assert(tableIndex == itableSize * numItables);
+    auto totalTableSize = tableIndex;
 
     // Update the table sizes.
     auto* table = wasm.getTable(mapping.dispatchTable);
-    table->initial = tableIndex;
-    table->max = tableIndex;
-    table = wasm.getTable(mapping.testTable);
-    table->initial = tableIndex;
-    table->max = tableIndex;
+    table->initial = totalTableSize;
+    table->max = totalTableSize;
+
+    // Fill in nulls for the test table.
+    for (Index i = 0; i < totalTableSize; i++) {
+      mapping.testTableData->push_back(builder.makeRefNull(HeapType::data));
+    }
 
     // Update the itable globals to contain offsets instead. That way when the
     // globals are read in order to initialize the object's $itable fields, we
@@ -285,16 +304,8 @@ struct UnifyITable : public Pass {
       global->type = Type::i32;
 
       // The old init is placed in the test table, where it can be used by
-      // ref.test instructions. Create a new segment for each, as most of the
-      // test table will contain nulls.
-      auto segmentName = Names::getValidElementSegmentName(
-        wasm, mapping.dispatchTable.str + std::string("$segment$") + itable.str);
-      auto* segment = wasm.addElementSegment(Builder::makeElementSegment(
-        segmentName,
-        mapping.testTable,
-        Builder(wasm).makeConst(int32_t(itableBase)),
-        Type::dataref));
-      segment->data.push_back(oldInit);
+      // ref.test instructions.
+      (*mapping.testTableData)[itableBase] = oldInit;
     }
 
     // Update the code in the entire module.
@@ -447,6 +458,16 @@ struct UnifyITable : public Pass {
 
           // TODO: handle rtts with side effects?
           assert(!curr->rtt || curr->rtt->is<RttCanon>());
+        }
+      }
+
+      void visitRefTest(RefTest* curr) {
+        if (inPattern.count(curr->ref)) {
+          // Do a test on the test table's contents at the relevant location.
+          Builder builder(*getModule());
+          auto* globalGet = builder.makeGlobalGet(mapping.testTable, getModule()->getGlobal(mapping.testTable)->type);
+          curr->ref = builder.makeArrayGet(globalGet,
+                                           curr->ref);
         }
       }
 

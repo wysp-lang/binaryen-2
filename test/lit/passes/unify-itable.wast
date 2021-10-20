@@ -715,19 +715,16 @@
 
   ;; CHECK:      (type $object (struct_subtype (field $itable i32) data))
 
+  ;; CHECK:      (type $vtable (struct_subtype (field (ref $ftype)) data))
+
   ;; CHECK:      (type $ref|$object|_ref|$sub-object|_=>_none (func_subtype (param (ref $object) (ref $sub-object)) func))
-
-  ;; CHECK:      (type $sub-object (struct_subtype (field $itable i32) (field i32) data))
-
-  ;; CHECK:      (type $none_=>_ref|$object| (func_subtype (result (ref $object)) func))
-
-  ;; CHECK:      (type $none_=>_none (func_subtype func))
-
-  ;; CHECK:      (type $ref|$object|_=>_none (func_subtype (param (ref $object)) func))
 
   ;; CHECK:      (type $ftype (func_subtype (param (ref null $object) (ref null $sub-object)) func))
   (type $ftype (func_subtype (param (ref null $object)) (param (ref null $sub-object)) func))
 
+  ;; CHECK:      (type $sub-object (struct_subtype (field $itable i32) (field i32) data))
+
+  ;; CHECK:      (type $itable (array_subtype (mut (ref null data)) data))
   (type $itable (array (mut (ref null data))))
 
   (type $vtable (struct (field (ref $ftype))))
@@ -735,12 +732,29 @@
   (type $object (struct (field $itable (ref $itable))))
   (type $sub-object (struct (field $itable (ref $itable)) (field i32)))
 
+  ;; CHECK:      (type $(null Name) (array_subtype (ref null data) data))
+
+  ;; CHECK:      (type $none_=>_ref|$object| (func_subtype (result (ref $object)) func))
+
+  ;; CHECK:      (type $none_=>_none (func_subtype func))
+
+  ;; CHECK:      (type $ref|$object|_=>_i32 (func_subtype (param (ref $object)) (result i32) func))
+
   ;; CHECK:      (global $itable i32 (i32.const 0))
   (global $itable (ref $itable) (array.init_static $itable
     (struct.new $vtable
       (ref.func $a)
     )
   ))
+
+  ;; CHECK:      (global $test-table (ref $(null Name)) (array.init $(null Name)
+  ;; CHECK-NEXT:  (array.init_static $itable
+  ;; CHECK-NEXT:   (struct.new $vtable
+  ;; CHECK-NEXT:    (ref.func $a)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (rtt.canon $(null Name))
+  ;; CHECK-NEXT: ))
 
   ;; CHECK:      (table $dispatch-table 1 1 funcref)
 
@@ -752,7 +766,7 @@
 
   ;; CHECK:      (export "itable-in-local" (func $itable-in-local))
 
-  ;; CHECK:      (export "lone-struct-get" (func $lone-struct-get))
+  ;; CHECK:      (export "test" (func $test))
 
   ;; CHECK:      (func $new (result (ref $object))
   ;; CHECK-NEXT:  (struct.new $object
@@ -910,26 +924,6 @@
         (ref.as_non_null
           (local.get $itable)
         )
-      )
-    )
-  )
-
-  ;; CHECK:      (func $lone-struct-get (param $ref (ref $object))
-  ;; CHECK-NEXT:  (local $itable i32)
-  ;; CHECK-NEXT:  (local.set $itable
-  ;; CHECK-NEXT:   (struct.get $object $itable
-  ;; CHECK-NEXT:    (local.get $ref)
-  ;; CHECK-NEXT:   )
-  ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT: )
-  (func $lone-struct-get (export "lone-struct-get") (param $ref (ref $object))
-    (local $itable (ref null $itable))
-    ;; A lone get of an itable field, not in a call pattern. We still need to
-    ;; update this to return an i32, so it can be passed around properly without
-    ;; breaking validation.
-    (local.set $itable
-      (struct.get $object $itable
-        (local.get $ref)
       )
     )
   )
