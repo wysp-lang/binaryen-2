@@ -11,18 +11,32 @@
   ;;
   ;;  * The global will switch to contain a base (of 0, which is where the
   ;;    single itable begins.
-  ;;  * A table is added, containing the various functions in the itable in
+  ;;  * A dispatch table is added, containing the various functions in the itable in
   ;;    order. No padding happens here, as with a single itable each category
   ;;    is of the size it appears in that itable.
   ;;  * call_ref is replaced by a call_indirect with a proper offset, that
   ;;    takes into account the category as well as the offset in that category.
+  ;;  * A test-table is created that mirrors the shape of the dispatch table,
+  ;;    and contains vtables (or nulls). It is used by ref.test (which are used
+  ;;    to implement checks for whether an object supports an interface).
   ;;
-
-  ;; CHECK:      (type $object (struct_subtype (field $itable i32) data))
 
   ;; CHECK:      (type $none_=>_none (func_subtype func))
   (type $none_=>_none (func_subtype func))
 
+  ;; CHECK:      (type $object (struct_subtype (field $itable i32) data))
+
+  ;; CHECK:      (type $ref|$object|_=>_none (func_subtype (param (ref $object)) func))
+
+  ;; CHECK:      (type $none_=>_none (func_subtype func))
+
+  ;; CHECK:      (type $vtable-1 (struct_subtype (field (ref $none_=>_none)) data))
+
+  ;; CHECK:      (type $vtable-2 (struct_subtype (field (ref $none_=>_none)) (field (ref $none_=>_none)) data))
+
+  ;; CHECK:      (type $vtable-3 (struct_subtype (field (ref $none_=>_none)) (field (ref $none_=>_none)) (field (ref $none_=>_none)) data))
+
+  ;; CHECK:      (type $itable (array_subtype (mut (ref null data)) data))
   (type $itable (array (mut (ref null data))))
 
   (type $vtable-1 (struct (field (ref $none_=>_none))))
@@ -31,9 +45,7 @@
 
   (type $object (struct (field $itable (ref $itable))))
 
-  ;; CHECK:      (type $ref|$object|_=>_none (func_subtype (param (ref $object)) func))
-
-  ;; CHECK:      (type $none_=>_none (func_subtype func))
+  ;; CHECK:      (type $(null Name) (array_subtype (ref null data) data))
 
   ;; CHECK:      (type $none_=>_ref|$object| (func_subtype (result (ref $object)) func))
 
@@ -65,6 +77,35 @@
   ))
 
 
+  ;; CHECK:      (global $test-table (ref $(null Name)) (array.init $(null Name)
+  ;; CHECK-NEXT:  (array.init_static $itable
+  ;; CHECK-NEXT:   (ref.null data)
+  ;; CHECK-NEXT:   (struct.new $vtable-1
+  ;; CHECK-NEXT:    (ref.func $a)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (struct.new $vtable-2
+  ;; CHECK-NEXT:    (ref.func $b)
+  ;; CHECK-NEXT:    (ref.func $c)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (ref.null data)
+  ;; CHECK-NEXT:   (struct.new $vtable-3
+  ;; CHECK-NEXT:    (ref.func $d)
+  ;; CHECK-NEXT:    (ref.func $e)
+  ;; CHECK-NEXT:    (ref.func $f)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (struct.new $vtable-1
+  ;; CHECK-NEXT:    (ref.func $g)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (ref.null data)
+  ;; CHECK-NEXT:  (ref.null data)
+  ;; CHECK-NEXT:  (ref.null data)
+  ;; CHECK-NEXT:  (ref.null data)
+  ;; CHECK-NEXT:  (ref.null data)
+  ;; CHECK-NEXT:  (ref.null data)
+  ;; CHECK-NEXT:  (rtt.canon $(null Name))
+  ;; CHECK-NEXT: ))
+
   ;; CHECK:      (table $dispatch-table 7 7 funcref)
 
   ;; CHECK:      (elem (i32.const 0) $a $b $c $d $e $f $g)
@@ -82,6 +123,8 @@
   ;; CHECK:      (export "call-4-2" (func $call-4-2))
 
   ;; CHECK:      (export "call-5-0" (func $call-5-0))
+
+  ;; CHECK:      (export "test" (func $test))
 
   ;; CHECK:      (func $new-1 (result (ref $object))
   ;; CHECK-NEXT:  (struct.new $object
@@ -269,6 +312,61 @@
             )
             (i32.const 5)
           )
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $test (param $ref (ref $object))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.test_static $vtable-1
+  ;; CHECK-NEXT:    (array.get $(null Name)
+  ;; CHECK-NEXT:     (global.get $test-table)
+  ;; CHECK-NEXT:     (i32.add
+  ;; CHECK-NEXT:      (struct.get $object $itable
+  ;; CHECK-NEXT:       (local.get $ref)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (i32.const 0)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.test_static $vtable-2
+  ;; CHECK-NEXT:    (array.get $(null Name)
+  ;; CHECK-NEXT:     (global.get $test-table)
+  ;; CHECK-NEXT:     (i32.add
+  ;; CHECK-NEXT:      (struct.get $object $itable
+  ;; CHECK-NEXT:       (local.get $ref)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (i32.const 3)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $test (export "test") (param $ref (ref $object))
+    ;; Use a ref.test on a vtable from an itable. We support this by doing a
+    ;; test on the "test table" that we create. The index in the test table is
+    ;; the base for the category we are checking on, which will appear in the
+    ;; output.
+    (drop
+      (ref.test_static $vtable-1
+        (array.get $itable
+          (struct.get $object $itable
+            (local.get $ref)
+          )
+          (i32.const 0) ;; category 0 has base 0
+        )
+      )
+    )
+    (drop
+      (ref.test_static $vtable-2
+        (array.get $itable
+          (struct.get $object $itable
+            (local.get $ref)
+          )
+          (i32.const 4) ;; category 4 has base 3.
         )
       )
     )
@@ -715,16 +813,17 @@
 
   ;; CHECK:      (type $object (struct_subtype (field $itable i32) data))
 
-  ;; CHECK:      (type $vtable (struct_subtype (field (ref $ftype)) data))
-
   ;; CHECK:      (type $ref|$object|_ref|$sub-object|_=>_none (func_subtype (param (ref $object) (ref $sub-object)) func))
+
+  ;; CHECK:      (type $sub-object (struct_subtype (field $itable i32) (field i32) data))
+
+  ;; CHECK:      (type $none_=>_ref|$object| (func_subtype (result (ref $object)) func))
+
+  ;; CHECK:      (type $none_=>_none (func_subtype func))
 
   ;; CHECK:      (type $ftype (func_subtype (param (ref null $object) (ref null $sub-object)) func))
   (type $ftype (func_subtype (param (ref null $object)) (param (ref null $sub-object)) func))
 
-  ;; CHECK:      (type $sub-object (struct_subtype (field $itable i32) (field i32) data))
-
-  ;; CHECK:      (type $itable (array_subtype (mut (ref null data)) data))
   (type $itable (array (mut (ref null data))))
 
   (type $vtable (struct (field (ref $ftype))))
@@ -732,29 +831,12 @@
   (type $object (struct (field $itable (ref $itable))))
   (type $sub-object (struct (field $itable (ref $itable)) (field i32)))
 
-  ;; CHECK:      (type $(null Name) (array_subtype (ref null data) data))
-
-  ;; CHECK:      (type $none_=>_ref|$object| (func_subtype (result (ref $object)) func))
-
-  ;; CHECK:      (type $none_=>_none (func_subtype func))
-
-  ;; CHECK:      (type $ref|$object|_=>_i32 (func_subtype (param (ref $object)) (result i32) func))
-
   ;; CHECK:      (global $itable i32 (i32.const 0))
   (global $itable (ref $itable) (array.init_static $itable
     (struct.new $vtable
       (ref.func $a)
     )
   ))
-
-  ;; CHECK:      (global $test-table (ref $(null Name)) (array.init $(null Name)
-  ;; CHECK-NEXT:  (array.init_static $itable
-  ;; CHECK-NEXT:   (struct.new $vtable
-  ;; CHECK-NEXT:    (ref.func $a)
-  ;; CHECK-NEXT:   )
-  ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT:  (rtt.canon $(null Name))
-  ;; CHECK-NEXT: ))
 
   ;; CHECK:      (table $dispatch-table 1 1 funcref)
 
@@ -765,8 +847,6 @@
   ;; CHECK:      (export "call" (func $call))
 
   ;; CHECK:      (export "itable-in-local" (func $itable-in-local))
-
-  ;; CHECK:      (export "test" (func $test))
 
   ;; CHECK:      (func $new (result (ref $object))
   ;; CHECK-NEXT:  (struct.new $object
