@@ -141,6 +141,9 @@ struct UnifyITable : public Pass {
       // The size of each category.
       std::vector<Index> categorySizes;
 
+      // The total size of each itable, which is the sum of the category sizes.
+      Index itableSize;
+
       // The base index of each category, that is, at what offset that category
       // begins (in each itable region in the dispatch table).
       std::vector<Index> categoryBases;
@@ -228,6 +231,7 @@ struct UnifyITable : public Pass {
       mapping.categoryBases.push_back(itableSize);
       itableSize += size;
     }
+    mapping.itableSize = itableSize;
 
     // The dispatch table's segment's size is now known.
     segmentData.resize(itableSize * numItables);
@@ -489,6 +493,21 @@ struct UnifyITable : public Pass {
               .makeCallIndirect(
                 mapping.dispatchTable, curr->target, curr->operands, sig);
           replaceCurrent(call);
+        }
+      }
+
+      void visitArrayLen(ArrayLen* curr) {
+        if (inPattern.count(curr->ref)) {
+          // This code checks for the size of an itable, which is done before
+          // doing a ref.test on it. XXX give the maximum length possible among
+          // all itables, which is not precisely accurate but as this is just
+          // used to avoid a trap, good enough: if the itable is shorter then
+          // we'll load a null and the ref.test will fail anyhow.
+          Builder builder(*getModule());
+          replaceCurrent(builder.makeSequence(
+            builder.makeDrop(curr->ref),
+            builder.makeConst(int32_t(mapping.itableSize))
+          ));
         }
       }
     };

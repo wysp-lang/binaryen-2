@@ -126,6 +126,8 @@
 
   ;; CHECK:      (export "test" (func $test))
 
+  ;; CHECK:      (export "len" (func $len))
+
   ;; CHECK:      (func $new-1 (result (ref $object))
   ;; CHECK-NEXT:  (struct.new $object
   ;; CHECK-NEXT:   (global.get $itable-1)
@@ -367,6 +369,31 @@
             (local.get $ref)
           )
           (i32.const 4) ;; category 4 has base 3.
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $len (param $ref (ref $object))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (struct.get $object $itable
+  ;; CHECK-NEXT:      (local.get $ref)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 7)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $len (export "len") (param $ref (ref $object))
+    ;; ArrayLen on an itable is converted to return the maximum size of an
+    ;; itable in our mapping (that is, the size equal to the sum of all the
+    ;; category sizes). This is an overestimate XXX
+    (drop
+      (array.len $itable
+        (struct.get $object $itable
+          (local.get $ref)
         )
       )
     )
