@@ -151,55 +151,47 @@ struct UnifyITable : public Pass {
     } mapping;
 
     // Create the dispatch table.
-    mapping.dispatchTable =
-      Names::getValidTableName(wasm, "dispatch-table");
+    mapping.dispatchTable = Names::getValidTableName(wasm, "dispatch-table");
     wasm.addTable(Builder::makeTable(mapping.dispatchTable, Type::funcref));
     auto segmentName = Names::getValidElementSegmentName(
       wasm, mapping.dispatchTable.str + std::string("$segment"));
     Builder builder(wasm);
-    auto* segment = wasm.addElementSegment(Builder::makeElementSegment(
-      segmentName,
-      mapping.dispatchTable,
-      builder.makeConst(int32_t(0)),
-      Type::funcref));
+    auto* segment = wasm.addElementSegment(
+      Builder::makeElementSegment(segmentName,
+                                  mapping.dispatchTable,
+                                  builder.makeConst(int32_t(0)),
+                                  Type::funcref));
     auto& segmentData = segment->data;
 
     // Create the test table, which is an array of datas. Create it with size
     // 0 for now; we will fill in the data later.
     auto testTableType = Type(
-      Array(
-        Field(
-          Type(HeapType::data, Nullable),
-          Immutable
-        )
-      ),
-      NonNullable
-    );
-    auto* testTableContents = builder.makeArrayInit(builder.makeRttCanon(testTableType.getHeapType()), {});
+      Array(Field(Type(HeapType::data, Nullable), Immutable)), NonNullable);
+    auto* testTableContents = builder.makeArrayInit(
+      builder.makeRttCanon(testTableType.getHeapType()), {});
     mapping.testTableData = &testTableContents->values;
-    mapping.testTable =
-      Names::getValidGlobalName(wasm, "test-table");
-    wasm.addGlobal(Builder::makeGlobal(mapping.testTable, testTableType, testTableContents, Builder::Immutable));
+    mapping.testTable = Names::getValidGlobalName(wasm, "test-table");
+    wasm.addGlobal(Builder::makeGlobal(
+      mapping.testTable, testTableType, testTableContents, Builder::Immutable));
 
     // Find the itable globals.
-    ModuleUtils::iterDefinedGlobals(
-      wasm, [&](Global* global) {
-        // Itables are created with array.init and nothing else.
-        if (!global->init->is<ArrayInit>()) {
-          return;
-        }
+    ModuleUtils::iterDefinedGlobals(wasm, [&](Global* global) {
+      // Itables are created with array.init and nothing else.
+      if (!global->init->is<ArrayInit>()) {
+        return;
+      }
 
-        auto type = global->init->type;
-        if (!type.isArray()) {
-          return;
-        }
-        if (wasm.typeNames[type.getHeapType()].name != ITABLE) {
-          return;
-        }
+      auto type = global->init->type;
+      if (!type.isArray()) {
+        return;
+      }
+      if (wasm.typeNames[type.getHeapType()].name != ITABLE) {
+        return;
+      }
 
-        // This is an itable.
-        mapping.itables.push_back(global->name);
-      });
+      // This is an itable.
+      mapping.itables.push_back(global->name);
+    });
     auto numItables = mapping.itables.size();
 
     // Compute the size of the categories.
@@ -207,7 +199,8 @@ struct UnifyITable : public Pass {
       if (index >= mapping.categorySizes.size()) {
         mapping.categorySizes.resize(index + 1);
       }
-      mapping.categorySizes[index] = std::max(mapping.categorySizes[index], size);
+      mapping.categorySizes[index] =
+        std::max(mapping.categorySizes[index], size);
     };
 
     for (auto itable : mapping.itables) {
@@ -249,28 +242,33 @@ struct UnifyITable : public Pass {
       // Pick the base for this itable.
       mapping.itableBases[itable] = tableIndex;
 
-      for (Index categoryIndex = 0; categoryIndex < mapping.categorySizes.size(); categoryIndex++) {
+      for (Index categoryIndex = 0;
+           categoryIndex < mapping.categorySizes.size();
+           categoryIndex++) {
         auto categorySize = mapping.categorySizes[categoryIndex];
         // This category might not exist in this itable. If not, we just need
         // nulls there.
-        auto* operand = categoryIndex < itableOperands.size() ? itableOperands[categoryIndex] : nullptr;
+        auto* operand = categoryIndex < itableOperands.size()
+                          ? itableOperands[categoryIndex]
+                          : nullptr;
         if (!operand || operand->is<RefNull>()) {
           // Fill the entire category with nulls.
           for (Index i = 0; i < categorySize; i++) {
-            assert(tableIndex < segmentData.size());          
+            assert(tableIndex < segmentData.size());
             segmentData[tableIndex++] = builder.makeRefNull(HeapType::func);
           }
         } else if (auto* new_ = operand->dynCast<StructNew>()) {
           // Copy in the contents.
           for (auto* newOperand : new_->operands) {
             auto* refFunc = newOperand->cast<RefFunc>();
-            assert(tableIndex < segmentData.size());          
-            segmentData[tableIndex++] = builder.makeRefFunc(refFunc->func, refFunc->type.getHeapType());
+            assert(tableIndex < segmentData.size());
+            segmentData[tableIndex++] =
+              builder.makeRefFunc(refFunc->func, refFunc->type.getHeapType());
           }
 
           // Fill the remaining space with nulls.
           for (Index i = 0; i < categorySize - new_->operands.size(); i++) {
-            assert(tableIndex < segmentData.size());          
+            assert(tableIndex < segmentData.size());
             segmentData[tableIndex++] = builder.makeRefNull(HeapType::func);
           }
         } else {
@@ -278,7 +276,7 @@ struct UnifyITable : public Pass {
         }
       }
     }
-    
+
     assert(tableIndex == segmentData.size());
     assert(tableIndex == itableSize * numItables);
     auto totalTableSize = tableIndex;
@@ -377,10 +375,7 @@ struct UnifyITable : public Pass {
           // so far.
           Builder builder(*getModule());
           auto* add = builder.makeBinary(
-            AddInt32,
-            curr->ref,
-            builder.makeConst(int32_t(curr->index))
-          );
+            AddInt32, curr->ref, builder.makeConst(int32_t(curr->index)));
           replaceCurrent(add);
           inPattern.insert(add);
           return;
@@ -388,7 +383,8 @@ struct UnifyITable : public Pass {
 
         // Or, this may be where an itable value arrives, if it is read from
         // an itable field.
-        if (isItableField(curr->ref->type.getHeapType(), curr->index, *getModule())) {
+        if (isItableField(
+              curr->ref->type.getHeapType(), curr->index, *getModule())) {
           inPattern.insert(curr);
           curr->type = Type::i32;
         }
@@ -414,7 +410,6 @@ struct UnifyITable : public Pass {
           if (curr->isTee()) {
             curr->makeTee(Type::i32);
           }
-
 
           // Update all gets.
           if (!localGraph) {
@@ -442,10 +437,7 @@ struct UnifyITable : public Pass {
           auto categoryBase = mapping.categoryBases[categoryIndex];
           Builder builder(*getModule());
           auto* add = builder.makeBinary(
-            AddInt32,
-            curr->ref,
-            builder.makeConst(int32_t(categoryBase))
-          );
+            AddInt32, curr->ref, builder.makeConst(int32_t(categoryBase)));
           replaceCurrent(add);
           inPattern.insert(add);
         }
@@ -465,9 +457,9 @@ struct UnifyITable : public Pass {
         if (inPattern.count(curr->ref)) {
           // Do a test on the test table's contents at the relevant location.
           Builder builder(*getModule());
-          auto* globalGet = builder.makeGlobalGet(mapping.testTable, getModule()->getGlobal(mapping.testTable)->type);
-          curr->ref = builder.makeArrayGet(globalGet,
-                                           curr->ref);
+          auto* globalGet = builder.makeGlobalGet(
+            mapping.testTable, getModule()->getGlobal(mapping.testTable)->type);
+          curr->ref = builder.makeArrayGet(globalGet, curr->ref);
         }
       }
 
@@ -492,10 +484,10 @@ struct UnifyITable : public Pass {
           }
           auto sig = Signature(Type(params), curr->type);
 
-          auto* call = Builder(*getModule()).makeCallIndirect(mapping.dispatchTable,
-                                                curr->target,
-                                                curr->operands,
-                                                sig);
+          auto* call =
+            Builder(*getModule())
+              .makeCallIndirect(
+                mapping.dispatchTable, curr->target, curr->operands, sig);
           replaceCurrent(call);
         }
       }

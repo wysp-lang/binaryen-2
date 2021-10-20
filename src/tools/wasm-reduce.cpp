@@ -411,7 +411,8 @@ struct Reducer
 
   // tests a reduction on the current traversal node, and undos if it failed
   bool tryToReplaceCurrent(Expression* with) {
-    if (!getFunction()) return false;
+    if (!getFunction())
+      return false;
     if (!isOkReplacement(with)) {
       return false;
     }
@@ -896,7 +897,8 @@ struct Reducer
       // Try to remove functions and/or empty them. Note that
       // tryToRemoveFunctions() will reload the module if it fails, which means
       // function names may change - for that reason, run it second.
-      justReduced = tryToEmptyFunctions(names);// || tryToRemoveFunctions(names);
+      justReduced =
+        tryToEmptyFunctions(names); // || tryToRemoveFunctions(names);
       if (justReduced) {
         noteReduction(names.size());
         i += skip;

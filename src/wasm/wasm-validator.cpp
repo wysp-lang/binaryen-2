@@ -460,9 +460,16 @@ private:
         getStream() << "(on argument " << i << ")\n";
         if (param.isRef()) {
           auto& typeNames = getModule()->typeNames;
-          getStream() << typeNames[param.getHeapType()].name << " is the param, operand is " << typeNames[curr->operands[i]->type.getHeapType()].name << ")\n";
-          getStream() << param.isNullable() << " is the param's nullability; operand's: " << curr->operands[i]->type.isNullable() << ")\n";
-          getStream() << (param.getHeapType() == curr->operands[i]->type.getHeapType()) << '\n';
+          getStream() << typeNames[param.getHeapType()].name
+                      << " is the param, operand is "
+                      << typeNames[curr->operands[i]->type.getHeapType()].name
+                      << ")\n";
+          getStream() << param.isNullable()
+                      << " is the param's nullability; operand's: "
+                      << curr->operands[i]->type.isNullable() << ")\n";
+          getStream() << (param.getHeapType() ==
+                          curr->operands[i]->type.getHeapType())
+                      << '\n';
         }
       }
       ++i;
@@ -2434,16 +2441,16 @@ void FunctionValidator::visitStructNew(StructNew* curr) {
       // All the fields must have the proper type.
       for (Index i = 0; i < fields.size(); i++) {
         if (!shouldBeSubType(curr->operands[i]->type,
-                        fields[i].type,
-                        curr,
-                        "struct.new operand must have proper type")) {
+                             fields[i].type,
+                             curr,
+                             "struct.new operand must have proper type")) {
           getStream() << "(on operand " << i << ")\n";
 
-std::cout << "SADDDDD\n";
-std::cout << *curr << " : " << i << "\n";
+          std::cout << "SADDDDD\n";
+          std::cout << *curr << " : " << i << "\n";
 
-std::cout << *getFunction()->body << '\n';
-abort();
+          std::cout << *getFunction()->body << '\n';
+          abort();
         }
       }
     }
