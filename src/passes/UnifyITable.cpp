@@ -119,38 +119,50 @@ struct UnifyITable : public Pass {
   }
 
   void mapFunctionsToTable(PassRunner* runner, Module& wasm) {
-    // Fill in mapping info that describes how we lay out the unified table.
+    // Fill in mapping info that describes how we lay out the dispatch table.
     struct MappingInfo {
-      // The name of the unified table that we will create and use everywhere.
-      Name unifiedTable;
+      // The name of the unified dispatch table that we will create and use
+      // everywhere. This table contains function references.
+      Name dispatchTable;
+
+      // The name of the unified test table that we will create and use
+      // everywhere. This table contains vtables, and is used by ref.test to
+      // basically check if an object supports an interface.
+      // TODO: remove this if j2cl can stop using vtables this way
+      Name testTable;
 
       // The list of itable globals, in the order they appear in the wasm.
       std::vector<Name> itables;
 
       // Maps the names of itable globals in the old model to base offsets in
-      // the unified table in the new model.
+      // the dispatch table in the new model.
       std::unordered_map<Name, Index> itableBases;
 
       // The size of each category.
       std::vector<Index> categorySizes;
 
       // The base index of each category, that is, at what offset that category
-      // begins (in each itable region in the unified table).
+      // begins (in each itable region in the dispatch table).
       std::vector<Index> categoryBases;
     } mapping;
 
-    // Create the unified table.
-    mapping.unifiedTable =
-      Names::getValidTableName(wasm, "unified-table");
-    wasm.addTable(Builder::makeTable(mapping.unifiedTable, Type::funcref));
+    // Create the dispatch table.
+    mapping.dispatchTable =
+      Names::getValidTableName(wasm, "dispatch-table");
+    wasm.addTable(Builder::makeTable(mapping.dispatchTable, Type::funcref));
     auto segmentName = Names::getValidElementSegmentName(
-      wasm, mapping.unifiedTable.str + std::string("$segment"));
+      wasm, mapping.dispatchTable.str + std::string("$segment"));
     auto* segment = wasm.addElementSegment(Builder::makeElementSegment(
       segmentName,
-      mapping.unifiedTable,
+      mapping.dispatchTable,
       Builder(wasm).makeConst(int32_t(0)),
       Type::funcref));
     auto& segmentData = segment->data;
+
+    // Create the test table.
+    mapping.testTable =
+      Names::getValidTableName(wasm, "test-table");
+    wasm.addTable(Builder::makeTable(mapping.testTable, Type::dataref));
 
     // Find the itable globals.
     ModuleUtils::iterDefinedGlobals(
@@ -207,11 +219,11 @@ struct UnifyITable : public Pass {
       itableSize += size;
     }
 
-    // The unified table's segment's size is now known.
+    // The dispatch table's segment's size is now known.
     segmentData.resize(itableSize * numItables);
 
     // Now that we know the sizes of the categories, we can generate the layout
-    // of the unified table and fill it out.
+    // of the dispatch table and fill it out.
     Builder builder(wasm);
     Index tableIndex = 0;
     for (auto itable : mapping.itables) {
@@ -254,17 +266,35 @@ struct UnifyITable : public Pass {
     assert(tableIndex == segmentData.size());
     assert(tableIndex == itableSize * numItables);
 
-    auto* table = wasm.getTable(mapping.unifiedTable);
+    // Update the table sizes.
+    auto* table = wasm.getTable(mapping.dispatchTable);
+    table->initial = tableIndex;
+    table->max = tableIndex;
+    table = wasm.getTable(mapping.testTable);
     table->initial = tableIndex;
     table->max = tableIndex;
 
-    // Update the globals to contain offsets instead. That way when the globals
-    // are read in order to initialize the object's $itable fields, we will get
-    // the proper values.
+    // Update the itable globals to contain offsets instead. That way when the
+    // globals are read in order to initialize the object's $itable fields, we
+    // will get the proper values.
     for (auto itable : mapping.itables) {
       auto* global = wasm.getGlobal(itable);
-      global->init = Builder(wasm).makeConst(mapping.itableBases[itable]);
+      auto* oldInit = global->init;
+      auto itableBase = mapping.itableBases[itable];
+      global->init = Builder(wasm).makeConst(itableBase);
       global->type = Type::i32;
+
+      // The old init is placed in the test table, where it can be used by
+      // ref.test instructions. Create a new segment for each, as most of the
+      // test table will contain nulls.
+      auto segmentName = Names::getValidElementSegmentName(
+        wasm, mapping.dispatchTable.str + std::string("$segment$") + itable.str);
+      auto* segment = wasm.addElementSegment(Builder::makeElementSegment(
+        segmentName,
+        mapping.testTable,
+        Builder(wasm).makeConst(int32_t(itableBase)),
+        Type::dataref));
+      segment->data.push_back(oldInit);
     }
 
     // Update the code in the entire module.
@@ -432,7 +462,7 @@ struct UnifyITable : public Pass {
       void visitCallRef(CallRef* curr) {
         if (inPattern.count(curr->target)) {
           // We have reached the end of the pattern: our call target contains
-          // not a function reference but an index in the unified table,
+          // not a function reference but an index in the dispatch table,
           // including all necessary offseting. All that we have left to do is
           // to replace the call_ref with an appropriate call_indirect.
           std::vector<Type> params;
@@ -441,7 +471,7 @@ struct UnifyITable : public Pass {
           }
           auto sig = Signature(Type(params), curr->type);
 
-          auto* call = Builder(*getModule()).makeCallIndirect(mapping.unifiedTable,
+          auto* call = Builder(*getModule()).makeCallIndirect(mapping.dispatchTable,
                                                 curr->target,
                                                 curr->operands,
                                                 sig);

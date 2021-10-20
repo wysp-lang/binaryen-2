@@ -65,7 +65,7 @@
   ))
 
 
-  ;; CHECK:      (table $unified-table 7 7 funcref)
+  ;; CHECK:      (table $dispatch-table 7 7 funcref)
 
   ;; CHECK:      (elem (i32.const 0) $a $b $c $d $e $f $g)
 
@@ -95,7 +95,7 @@
   )
 
   ;; CHECK:      (func $call-1-0 (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
   ;; CHECK-NEXT:     (struct.get $object $itable
@@ -127,7 +127,7 @@
   )
 
   ;; CHECK:      (func $call-2-0 (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
   ;; CHECK-NEXT:     (struct.get $object $itable
@@ -159,7 +159,7 @@
   )
 
   ;; CHECK:      (func $call-2-1 (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
   ;; CHECK-NEXT:     (struct.get $object $itable
@@ -188,7 +188,7 @@
   )
 
   ;; CHECK:      (func $call-4-0 (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
   ;; CHECK-NEXT:     (struct.get $object $itable
@@ -217,7 +217,7 @@
   )
 
   ;; CHECK:      (func $call-4-2 (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
   ;; CHECK-NEXT:     (struct.get $object $itable
@@ -246,7 +246,7 @@
   )
 
   ;; CHECK:      (func $call-5-0 (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
   ;; CHECK-NEXT:     (struct.get $object $itable
@@ -380,9 +380,9 @@
     )
   ))
 
-  ;; CHECK:      (table $unified-table 18 18 funcref)
+  ;; CHECK:      (table $dispatch-table 18 18 funcref)
 
-  ;; CHECK:      (elem (table $unified-table) (i32.const 0) funcref (ref.func $a) (ref.func $b) (ref.null func) (ref.null func) (ref.func $d) (ref.func $e) (ref.func $f) (ref.func $g) (ref.null func) (ref.func $a-2) (ref.func $b-2) (ref.func $c-2) (ref.func $d-2) (ref.func $e-2) (ref.null func) (ref.null func) (ref.null func) (ref.func $f-2))
+  ;; CHECK:      (elem (table $dispatch-table) (i32.const 0) funcref (ref.func $a) (ref.func $b) (ref.null func) (ref.null func) (ref.func $d) (ref.func $e) (ref.func $f) (ref.func $g) (ref.null func) (ref.func $a-2) (ref.func $b-2) (ref.func $c-2) (ref.func $d-2) (ref.func $e-2) (ref.null func) (ref.null func) (ref.null func) (ref.func $f-2))
 
   ;; CHECK:      (export "new-1" (func $new-1))
 
@@ -416,7 +416,7 @@
   )
 
   ;; CHECK:      (func $call-1-1-0 (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
   ;; CHECK-NEXT:     (struct.get $object $itable
@@ -445,7 +445,7 @@
   )
 
   ;; CHECK:      (func $call-1-2-0 (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
   ;; CHECK-NEXT:     (struct.get $object $itable
@@ -474,7 +474,7 @@
   )
 
   ;; CHECK:      (func $call-1-2-1 (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
   ;; CHECK-NEXT:     (struct.get $object $itable
@@ -503,7 +503,7 @@
   )
 
   ;; CHECK:      (func $call-1-3-0 (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
   ;; CHECK-NEXT:     (struct.get $object $itable
@@ -543,7 +543,7 @@
   )
 
   ;; CHECK:      (func $call-2-1-0 (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
   ;; CHECK-NEXT:     (struct.get $object $itable
@@ -572,7 +572,7 @@
   )
 
   ;; CHECK:      (func $call-2-1-1 (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
   ;; CHECK-NEXT:     (struct.get $object $itable
@@ -601,7 +601,7 @@
   )
 
   ;; CHECK:      (func $call-2-1-2 (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
   ;; CHECK-NEXT:     (struct.get $object $itable
@@ -630,7 +630,7 @@
   )
 
   ;; CHECK:      (func $call-2-1-4 (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $unified-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
   ;; CHECK-NEXT:     (struct.get $object $itable
@@ -742,7 +742,7 @@
     )
   ))
 
-  ;; CHECK:      (table $unified-table 1 1 funcref)
+  ;; CHECK:      (table $dispatch-table 1 1 funcref)
 
   ;; CHECK:      (elem (i32.const 0) $a)
 
@@ -766,7 +766,7 @@
   )
 
   ;; CHECK:      (func $call (param $ref (ref $object)) (param $sub-ref (ref $sub-object))
-  ;; CHECK-NEXT:  (call_indirect $unified-table (type $ref|$object|_ref|$sub-object|_=>_none)
+  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $ref|$object|_ref|$sub-object|_=>_none)
   ;; CHECK-NEXT:   (local.get $ref)
   ;; CHECK-NEXT:   (local.get $sub-ref)
   ;; CHECK-NEXT:   (i32.add
