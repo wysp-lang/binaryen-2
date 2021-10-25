@@ -369,6 +369,15 @@ struct UnifyITable : public Pass {
         }
       }
 
+      // Map struct.gets in our pattern to the types they used to return. These
+      // struct.gets read a function reference from the specific vtable in the
+      // itable, so they contain knowledge of the function type we should be
+      // calling. Note that as we rewrite the struct.get we lose that
+      // information, as it will now return an i32 (and also be replaced with
+      // an entirely new instruction), which is why we must stash it on the side
+      // here so that the parent can find the type.
+      std::unordered_map<Expression*, Type> oldStructGetTypes;
+
       void visitStructGet(StructGet* curr) {
         // This may be a struct.get from the vtable in the itable pattern,
         //   struct.get $vtable $vtable.field
@@ -382,6 +391,7 @@ struct UnifyITable : public Pass {
             AddInt32, curr->ref, builder.makeConst(int32_t(curr->index)));
           replaceCurrent(add);
           inPattern.insert(add);
+          oldStructGetTypes[add] = curr->type;
           return;
         }
 
@@ -481,13 +491,14 @@ struct UnifyITable : public Pass {
           // We have reached the end of the pattern: our call target contains
           // not a function reference but an index in the dispatch table,
           // including all necessary offseting. All that we have left to do is
-          // to replace the call_ref with an appropriate call_indirect.
-          std::vector<Type> params;
-          for (auto* operand : curr->operands) {
-            params.push_back(operand->type);
-          }
-          auto sig = Signature(Type(params), curr->type);
-
+          // to replace the call_ref with an appropriate call_indirect. To do
+          // so, we need to know the proper signature. It is *not* valid to
+          // infer that signature from the parameters passed to this CallRef,
+          // since they may be subtypes of the actual function being called.
+          // Instead, we use our knowledge of what function type the struct.get
+          // that used to be our child had.
+          auto funcType = oldStructGetTypes[curr->target];
+          auto sig = funcType.getHeapType().getSignature();
           auto* call =
             Builder(*getModule())
               .makeCallIndirect(
