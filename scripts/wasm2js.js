@@ -128,6 +128,30 @@ var asmLibraryArg = {
     console.log('get_externref ' + [loc, index, value]);
     return value;
   },
+  get_funcref: function(loc, index, value) {
+    console.log('get_funcnref ' + [loc, index, value]);
+    return value;
+  },
+  get_anyref: function(loc, index, value) {
+    console.log('get_anyref ' + [loc, index, value]);
+    return value;
+  },
+  get_eqref: function(loc, index, value) {
+    console.log('get_eqref ' + [loc, index, value]);
+    return value;
+  },
+  get_i31ref: function(loc, index, value) {
+    console.log('get_i31ref ' + [loc, index, value]);
+    return value;
+  },
+  get_dataref: function(loc, index, value) {
+    console.log('get_dataref ' + [loc, index, value]);
+    return value;
+  },
+  get_v128: function(loc, index, value) {
+    console.log('get_v128 ' + [loc, index, value]);
+    return value;
+  },
   set_i32: function(loc, index, value) {
     console.log('set_i32 ' + [loc, index, value]);
     return value;
@@ -147,6 +171,30 @@ var asmLibraryArg = {
   },
   set_externref: function(loc, index, value) {
     console.log('set_externref ' + [loc, index, value]);
+    return value;
+  },
+  set_funcref: function(loc, index, value) {
+    console.log('set_funcref ' + [loc, index, value]);
+    return value;
+  },
+  set_anyref: function(loc, index, value) {
+    console.log('set_anyref ' + [loc, index, value]);
+    return value;
+  },
+  set_eqref: function(loc, index, value) {
+    console.log('set_eqref ' + [loc, index, value]);
+    return value;
+  },
+  set_i31ref: function(loc, index, value) {
+    console.log('set_i31ref ' + [loc, index, value]);
+    return value;
+  },
+  set_dataref: function(loc, index, value) {
+    console.log('set_dataref ' + [loc, index, value]);
+    return value;
+  },
+  set_v128: function(loc, index, value) {
+    console.log('set_v128 ' + [loc, index, value]);
     return value;
   },
   load_ptr: function(loc, bytes, offset, ptr) {

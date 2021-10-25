@@ -39,7 +39,17 @@ namespace wasm {
 Name LOGGER("log_execution");
 
 struct LogExecution : public WalkerPass<PostWalker<LogExecution>> {
+  void visitIf(If* curr) {
+    curr->ifTrue = makeLogCall(curr->ifTrue);
+    if (curr->ifFalse) {
+      curr->ifFalse = makeLogCall(curr->ifFalse);
+    }
+    replaceCurrent(makeLogCall(curr));
+  }
+
   void visitLoop(Loop* curr) { curr->body = makeLogCall(curr->body); }
+
+  void visitBreak(Break* curr) { replaceCurrent(makeLogCall(curr)); }
 
   void visitReturn(Return* curr) { replaceCurrent(makeLogCall(curr)); }
 
