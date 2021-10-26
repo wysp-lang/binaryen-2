@@ -280,7 +280,7 @@ struct UnifyITable : public Pass {
     // values to it. (Note that we can't use array.init as it is far too large
     // due to VM limitations!)
     auto testTableType = Type(
-      Array(Field(Type(HeapType::data, Nullable), Immutable)), NonNullable);
+      Array(Field(Type(HeapType::data, Nullable), Mutable)), NonNullable);
     auto* testTableContents = builder.makeArrayNew(
       testTableType.getHeapType(),
       builder.makeConst(uint32_t(totalTableSize))
@@ -298,6 +298,7 @@ struct UnifyITable : public Pass {
                                           Signature(Type::none, Type::none),
                                           {},
                                           startBlock));
+    wasm.start = startName;
 
     // Update the itable globals to contain offsets instead. That way when the
     // globals are read in order to initialize the object's $itable fields, we
