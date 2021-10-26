@@ -280,14 +280,10 @@ struct UnifyITable : public Pass {
     // values to it. (Note that we can't use array.init as it is far too large
     // due to VM limitations!)
     auto testTableType = Type(
-      Array(Field(Type(HeapType::data, Nullable), Mutable)), NonNullable);
-    auto* testTableContents = builder.makeArrayNew(
-      testTableType.getHeapType(),
-      builder.makeConst(uint32_t(totalTableSize))
-    );
+      Array(Field(Type(HeapType::data, Nullable), Mutable)), Nullable);
     mapping.testTable = Names::getValidGlobalName(wasm, "test-table");
     wasm.addGlobal(Builder::makeGlobal(
-      mapping.testTable, testTableType, testTableContents, Builder::Immutable));
+      mapping.testTable, testTableType, builder.makeRefNull(testTableType), Builder::Mutable));
 
     // Create a start function for the test table assignments.
     // TODO: handle an existing start function by prepending.
@@ -299,6 +295,17 @@ struct UnifyITable : public Pass {
                                           {},
                                           startBlock));
     wasm.start = startName;
+
+    // Create the test table. (V8 atm does not allow array.new in globals.)
+    startBlock->list.push_back(
+      builder.makeGlobalSet(
+        mapping.testTable,
+        builder.makeArrayNew(
+          testTableType.getHeapType(),
+          builder.makeConst(uint32_t(totalTableSize))
+        )
+      )
+    );
 
     // Update the itable globals to contain offsets instead. That way when the
     // globals are read in order to initialize the object's $itable fields, we
