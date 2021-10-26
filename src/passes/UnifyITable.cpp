@@ -147,10 +147,6 @@ struct UnifyITable : public Pass {
       // The base index of each category, that is, at what offset that category
       // begins (in each itable region in the dispatch table).
       std::vector<Index> categoryBases;
-
-      // The list of expressions in the array.init that contains the data for
-      // the test table.
-      ExpressionList* testTableData;
     } mapping;
 
     // Create the dispatch table.
@@ -165,17 +161,6 @@ struct UnifyITable : public Pass {
                                   builder.makeConst(int32_t(0)),
                                   Type::funcref));
     auto& segmentData = segment->data;
-
-    // Create the test table, which is an array of datas. Create it with size
-    // 0 for now; we will fill in the data later.
-    auto testTableType = Type(
-      Array(Field(Type(HeapType::data, Nullable), Immutable)), NonNullable);
-    auto* testTableContents = builder.makeArrayInit(
-      builder.makeRttCanon(testTableType.getHeapType()), {});
-    mapping.testTableData = &testTableContents->values;
-    mapping.testTable = Names::getValidGlobalName(wasm, "test-table");
-    wasm.addGlobal(Builder::makeGlobal(
-      mapping.testTable, testTableType, testTableContents, Builder::Immutable));
 
     // Find the itable globals.
     ModuleUtils::iterDefinedGlobals(wasm, [&](Global* global) {
@@ -290,10 +275,29 @@ struct UnifyITable : public Pass {
     table->initial = totalTableSize;
     table->max = totalTableSize;
 
-    // Fill in nulls for the test table.
-    for (Index i = 0; i < totalTableSize; i++) {
-      mapping.testTableData->push_back(builder.makeRefNull(HeapType::data));
-    }
+    // Create the test table, which is an array of datas, now that we know its
+    // size. It begins initialized with nulls, and a start function will assign
+    // values to it. (Note that we can't use array.init as it is far too large
+    // due to VM limitations!)
+    auto testTableType = Type(
+      Array(Field(Type(HeapType::data, Nullable), Immutable)), NonNullable);
+    auto* testTableContents = builder.makeArrayNew(
+      testTableType.getHeapType(),
+      builder.makeConst(uint32_t(totalTableSize))
+    );
+    mapping.testTable = Names::getValidGlobalName(wasm, "test-table");
+    wasm.addGlobal(Builder::makeGlobal(
+      mapping.testTable, testTableType, testTableContents, Builder::Immutable));
+
+    // Create a start function for the test table assignments.
+    // TODO: handle an existing start function by prepending.
+    assert(!wasm.start.is());
+    auto startName = Names::getValidFunctionName(wasm, "start");
+    auto* startBlock = builder.makeBlock();
+    wasm.addFunction(builder.makeFunction(startName,
+                                          Signature(Type::none, Type::none),
+                                          {},
+                                          startBlock));
 
     // Update the itable globals to contain offsets instead. That way when the
     // globals are read in order to initialize the object's $itable fields, we
@@ -307,7 +311,16 @@ struct UnifyITable : public Pass {
 
       // The old init is placed in the test table, where it can be used by
       // ref.test instructions.
-      (*mapping.testTableData)[itableBase] = oldInit;
+      startBlock->list.push_back(
+        builder.makeArraySet(
+          builder.makeGlobalGet(
+            mapping.testTable,
+            testTableType
+          ),
+          builder.makeConst(uint32_t(itableBase)),
+          oldInit
+        )
+      );
     }
 
     // Update the code in the entire module.
