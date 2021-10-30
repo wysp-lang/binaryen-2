@@ -209,7 +209,7 @@
 
   ;; NOMNL:      (import "env" "array_set_index" (func $array_set_index (param i32 i32) (result i32)))
 
-  ;; NOMNL:      (func $structs (param $x (ref $struct))
+  ;; NOMNL:      (func $structs (type $ref|$struct|_=>_none) (param $x (ref $struct))
   ;; NOMNL-NEXT:  (drop
   ;; NOMNL-NEXT:   (call $struct_get_val_i32
   ;; NOMNL-NEXT:    (i32.const 0)
@@ -280,7 +280,7 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  ;; NOMNL:      (func $arrays (param $x (ref $array))
+  ;; NOMNL:      (func $arrays (type $ref|$array|_=>_none) (param $x (ref $array))
   ;; NOMNL-NEXT:  (drop
   ;; NOMNL-NEXT:   (call $array_get_val_f64
   ;; NOMNL-NEXT:    (i32.const 5)
@@ -340,7 +340,7 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  ;; NOMNL:      (func $struct-ref-copy (param $x (ref $struct))
+  ;; NOMNL:      (func $struct-ref-copy (type $ref|$struct|_=>_none) (param $x (ref $struct))
   ;; NOMNL-NEXT:  (local $1 (ref null $struct))
   ;; NOMNL-NEXT:  (local $2 (ref null $struct))
   ;; NOMNL-NEXT:  (struct.set $struct $ref

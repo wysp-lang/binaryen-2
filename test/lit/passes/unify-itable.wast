@@ -103,7 +103,7 @@
 
   ;; CHECK:      (start $start)
 
-  ;; CHECK:      (func $new-1 (result (ref $object))
+  ;; CHECK:      (func $new-1 (type $none_=>_ref|$object|) (result (ref $object))
   ;; CHECK-NEXT:  (struct.new $object
   ;; CHECK-NEXT:   (global.get $itable-1)
   ;; CHECK-NEXT:  )
@@ -114,7 +114,7 @@
     )
   )
 
-  ;; CHECK:      (func $call-1-0 (param $ref (ref $object))
+  ;; CHECK:      (func $call-1-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
@@ -146,7 +146,7 @@
     )
   )
 
-  ;; CHECK:      (func $call-2-0 (param $ref (ref $object))
+  ;; CHECK:      (func $call-2-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
@@ -178,7 +178,7 @@
     )
   )
 
-  ;; CHECK:      (func $call-2-1 (param $ref (ref $object))
+  ;; CHECK:      (func $call-2-1 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
@@ -207,7 +207,7 @@
     )
   )
 
-  ;; CHECK:      (func $call-4-0 (param $ref (ref $object))
+  ;; CHECK:      (func $call-4-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
@@ -236,7 +236,7 @@
     )
   )
 
-  ;; CHECK:      (func $call-4-2 (param $ref (ref $object))
+  ;; CHECK:      (func $call-4-2 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
@@ -265,7 +265,7 @@
     )
   )
 
-  ;; CHECK:      (func $call-5-0 (param $ref (ref $object))
+  ;; CHECK:      (func $call-5-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
@@ -294,7 +294,7 @@
     )
   )
 
-  ;; CHECK:      (func $test (param $ref (ref $object))
+  ;; CHECK:      (func $test (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (ref.test_static $vtable-1
   ;; CHECK-NEXT:    (array.get $[mut:ref?|data|]
@@ -349,7 +349,7 @@
     )
   )
 
-  ;; CHECK:      (func $len (param $ref (ref $object))
+  ;; CHECK:      (func $len (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (block (result i32)
   ;; CHECK-NEXT:    (drop
@@ -374,38 +374,38 @@
     )
   )
 
-  ;; CHECK:      (func $a
+  ;; CHECK:      (func $a (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $a)
-  ;; CHECK:      (func $b
+  ;; CHECK:      (func $b (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $b)
-  ;; CHECK:      (func $c
+  ;; CHECK:      (func $c (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $c)
-  ;; CHECK:      (func $d
+  ;; CHECK:      (func $d (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $d)
-  ;; CHECK:      (func $e
+  ;; CHECK:      (func $e (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $e)
-  ;; CHECK:      (func $f
+  ;; CHECK:      (func $f (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $f)
 
-  ;; CHECK:      (func $g
+  ;; CHECK:      (func $g (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $g)
 )
 
-;; CHECK:      (func $start
+;; CHECK:      (func $start (type $none_=>_none)
 ;; CHECK-NEXT:  (global.set $test-table
 ;; CHECK-NEXT:   (array.new_default $[mut:ref?|data|]
 ;; CHECK-NEXT:    (i32.const 7)
@@ -546,7 +546,7 @@
 
   ;; CHECK:      (start $start)
 
-  ;; CHECK:      (func $new-1 (result (ref $object))
+  ;; CHECK:      (func $new-1 (type $none_=>_ref|$object|) (result (ref $object))
   ;; CHECK-NEXT:  (struct.new $object
   ;; CHECK-NEXT:   (global.get $itable-1)
   ;; CHECK-NEXT:  )
@@ -557,7 +557,7 @@
     )
   )
 
-  ;; CHECK:      (func $call-1-1-0 (param $ref (ref $object))
+  ;; CHECK:      (func $call-1-1-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
@@ -586,7 +586,7 @@
     )
   )
 
-  ;; CHECK:      (func $call-1-2-0 (param $ref (ref $object))
+  ;; CHECK:      (func $call-1-2-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
@@ -615,7 +615,7 @@
     )
   )
 
-  ;; CHECK:      (func $call-1-2-1 (param $ref (ref $object))
+  ;; CHECK:      (func $call-1-2-1 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
@@ -644,7 +644,7 @@
     )
   )
 
-  ;; CHECK:      (func $call-1-3-0 (param $ref (ref $object))
+  ;; CHECK:      (func $call-1-3-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
@@ -673,7 +673,7 @@
     )
   )
 
-  ;; CHECK:      (func $new-2 (result (ref $object))
+  ;; CHECK:      (func $new-2 (type $none_=>_ref|$object|) (result (ref $object))
   ;; CHECK-NEXT:  (struct.new $object
   ;; CHECK-NEXT:   (global.get $itable-2)
   ;; CHECK-NEXT:  )
@@ -684,7 +684,7 @@
     )
   )
 
-  ;; CHECK:      (func $call-2-1-0 (param $ref (ref $object))
+  ;; CHECK:      (func $call-2-1-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
@@ -713,7 +713,7 @@
     )
   )
 
-  ;; CHECK:      (func $call-2-1-1 (param $ref (ref $object))
+  ;; CHECK:      (func $call-2-1-1 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
@@ -742,7 +742,7 @@
     )
   )
 
-  ;; CHECK:      (func $call-2-1-2 (param $ref (ref $object))
+  ;; CHECK:      (func $call-2-1-2 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
@@ -771,7 +771,7 @@
     )
   )
 
-  ;; CHECK:      (func $call-2-1-4 (param $ref (ref $object))
+  ;; CHECK:      (func $call-2-1-4 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
   ;; CHECK-NEXT:   (i32.add
   ;; CHECK-NEXT:    (i32.add
@@ -800,59 +800,59 @@
     )
   )
 
-  ;; CHECK:      (func $a
+  ;; CHECK:      (func $a (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $a)
-  ;; CHECK:      (func $b
+  ;; CHECK:      (func $b (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $b)
   (func $c)
-  ;; CHECK:      (func $d
+  ;; CHECK:      (func $d (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $d)
-  ;; CHECK:      (func $e
+  ;; CHECK:      (func $e (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $e)
-  ;; CHECK:      (func $f
+  ;; CHECK:      (func $f (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $f)
-  ;; CHECK:      (func $g
+  ;; CHECK:      (func $g (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $g)
 
-  ;; CHECK:      (func $a-2
+  ;; CHECK:      (func $a-2 (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $a-2)
-  ;; CHECK:      (func $b-2
+  ;; CHECK:      (func $b-2 (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $b-2)
-  ;; CHECK:      (func $c-2
+  ;; CHECK:      (func $c-2 (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $c-2)
-  ;; CHECK:      (func $d-2
+  ;; CHECK:      (func $d-2 (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $d-2)
-  ;; CHECK:      (func $e-2
+  ;; CHECK:      (func $e-2 (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $e-2)
-  ;; CHECK:      (func $f-2
+  ;; CHECK:      (func $f-2 (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $f-2)
 )
 
-;; CHECK:      (func $start
+;; CHECK:      (func $start (type $none_=>_none)
 ;; CHECK-NEXT:  (global.set $test-table
 ;; CHECK-NEXT:   (array.new_default $[mut:ref?|data|]
 ;; CHECK-NEXT:    (i32.const 18)
@@ -948,7 +948,7 @@
 
   ;; CHECK:      (start $start)
 
-  ;; CHECK:      (func $new (result (ref $object))
+  ;; CHECK:      (func $new (type $none_=>_ref|$object|) (result (ref $object))
   ;; CHECK-NEXT:  (struct.new $object
   ;; CHECK-NEXT:   (global.get $itable)
   ;; CHECK-NEXT:  )
@@ -959,7 +959,7 @@
     )
   )
 
-  ;; CHECK:      (func $call (param $ref (ref $object)) (param $sub-ref (ref $sub-object))
+  ;; CHECK:      (func $call (type $ref|$object|_ref|$sub-object|_=>_none) (param $ref (ref $object)) (param $sub-ref (ref $sub-object))
   ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $ftype)
   ;; CHECK-NEXT:   (local.get $ref)
   ;; CHECK-NEXT:   (local.get $sub-ref)
@@ -991,7 +991,7 @@
     )
   )
 
-  ;; CHECK:      (func $itable-in-local
+  ;; CHECK:      (func $itable-in-local (type $none_=>_none)
   ;; CHECK-NEXT:  (local $itable i32)
   ;; CHECK-NEXT:  (local $itable-2 i32)
   ;; CHECK-NEXT:  (drop
@@ -1110,12 +1110,12 @@
 
   ;; as above, but with the array.get as well, alone.
 
-  ;; CHECK:      (func $a (param $0 (ref null $object)) (param $1 (ref null $sub-object))
+  ;; CHECK:      (func $a (type $ftype) (param $0 (ref null $object)) (param $1 (ref null $sub-object))
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $a (param (ref null $object) (ref null $sub-object)))
 )
-;; CHECK:      (func $start
+;; CHECK:      (func $start (type $none_=>_none)
 ;; CHECK-NEXT:  (global.set $test-table
 ;; CHECK-NEXT:   (array.new_default $[mut:ref?|data|]
 ;; CHECK-NEXT:    (i32.const 1)
