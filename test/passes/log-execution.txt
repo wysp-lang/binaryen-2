@@ -18,16 +18,26 @@
  )
  (func $workk
   (call $log_execution
-   (i32.const 3)
+   (i32.const 5)
   )
   (block
-   (if
-    (i32.const 0)
-    (nop)
+   (block
+    (call $log_execution
+     (i32.const 3)
+    )
+    (if
+     (i32.const 0)
+     (block
+      (call $log_execution
+       (i32.const 2)
+      )
+      (nop)
+     )
+    )
    )
    (block
     (call $log_execution
-     (i32.const 2)
+     (i32.const 4)
     )
     (drop
      (i32.const 1)
@@ -37,34 +47,49 @@
  )
  (func $loops
   (call $log_execution
-   (i32.const 8)
+   (i32.const 13)
   )
   (block
    (loop $x
     (call $log_execution
-     (i32.const 4)
+     (i32.const 7)
     )
     (block
      (call $loops)
-     (br $x)
-    )
-   )
-   (if
-    (call $intt)
-    (loop $y
-     (call $log_execution
-      (i32.const 5)
+     (block
+      (call $log_execution
+       (i32.const 6)
+      )
+      (br $x)
      )
-     (call $loops)
     )
    )
    (block
     (call $log_execution
-     (i32.const 7)
+     (i32.const 10)
+    )
+    (if
+     (call $intt)
+     (block
+      (call $log_execution
+       (i32.const 9)
+      )
+      (loop $y
+       (call $log_execution
+        (i32.const 8)
+       )
+       (call $loops)
+      )
+     )
+    )
+   )
+   (block
+    (call $log_execution
+     (i32.const 12)
     )
     (loop $loop-in
      (call $log_execution
-      (i32.const 6)
+      (i32.const 11)
      )
      (block
       (drop
@@ -83,15 +108,20 @@
  )
  (func $loops-similar
   (call $log_execution
-   (i32.const 10)
+   (i32.const 16)
   )
   (loop $x
    (call $log_execution
-    (i32.const 9)
+    (i32.const 15)
    )
    (block
     (call $loops)
-    (br $x)
+    (block
+     (call $log_execution
+      (i32.const 14)
+     )
+     (br $x)
+    )
    )
   )
  )

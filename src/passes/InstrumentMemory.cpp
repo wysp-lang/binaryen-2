@@ -79,18 +79,22 @@ static Name struct_get_val_i32("struct_get_val_i32");
 static Name struct_get_val_i64("struct_get_val_i64");
 static Name struct_get_val_f32("struct_get_val_f32");
 static Name struct_get_val_f64("struct_get_val_f64");
+static Name struct_get_val_ref("struct_get_val_ref");
 static Name struct_set_val_i32("struct_set_val_i32");
 static Name struct_set_val_i64("struct_set_val_i64");
 static Name struct_set_val_f32("struct_set_val_f32");
 static Name struct_set_val_f64("struct_set_val_f64");
+static Name struct_set_val_ref("struct_set_val_ref");
 static Name array_get_val_i32("array_get_val_i32");
 static Name array_get_val_i64("array_get_val_i64");
 static Name array_get_val_f32("array_get_val_f32");
 static Name array_get_val_f64("array_get_val_f64");
+static Name array_get_val_ref("array_get_val_ref");
 static Name array_set_val_i32("array_set_val_i32");
 static Name array_set_val_i64("array_set_val_i64");
 static Name array_set_val_f32("array_set_val_f32");
 static Name array_set_val_f64("array_set_val_f64");
+static Name array_set_val_ref("array_set_val_ref");
 static Name array_get_index("array_get_index");
 static Name array_set_index("array_set_index");
 
@@ -172,6 +176,8 @@ struct InstrumentMemory : public WalkerPass<PostWalker<InstrumentMemory>> {
       target = struct_get_val_f32;
     } else if (curr->type == Type::f64) {
       target = struct_get_val_f64;
+    } else if (curr->type.isRef()) {
+      target = struct_get_val_ref;
     } else {
       return; // TODO: other types, unreachable, etc.
     }
@@ -190,6 +196,8 @@ struct InstrumentMemory : public WalkerPass<PostWalker<InstrumentMemory>> {
       target = struct_set_val_f32;
     } else if (curr->value->type == Type::f64) {
       target = struct_set_val_f64;
+    } else if (curr->value->type.isRef()) {
+      target = struct_set_val_ref;
     } else {
       return; // TODO: other types, unreachable, etc.
     }
