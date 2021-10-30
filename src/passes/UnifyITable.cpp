@@ -312,23 +312,27 @@ struct UnifyITable : public Pass {
     // will get the proper values.
     for (auto itable : mapping.itables) {
       auto* global = wasm.getGlobal(itable);
-      auto* oldInit = global->init;
+      auto* oldInit = global->init->cast<ArrayInit>();
       auto itableBase = mapping.itableBases[itable];
       global->init = Builder(wasm).makeConst(itableBase);
       global->type = Type::i32;
 
-      // The old init is placed in the test table, where it can be used by
-      // ref.test instructions.
-      startBlock->list.push_back(
-        builder.makeArraySet(
-          builder.makeGlobalGet(
-            mapping.testTable,
-            testTableType
-          ),
-          builder.makeConst(uint32_t(itableBase)),
-          oldInit
-        )
-      );
+      // The old init's data is placed in the test table, where it can be used
+      // by ref.test instructions. We unpack the array.init instruction's args
+      // and write each to its index in the itable.
+      auto offset = itableBase;
+      for (auto* value : oldInit->values) {
+        startBlock->list.push_back(
+          builder.makeArraySet(
+            builder.makeGlobalGet(
+              mapping.testTable,
+              testTableType
+            ),
+            builder.makeConst(uint32_t(offset++)),
+            value
+          )
+        );
+      }
     }
 
     // Update the code in the entire module.

@@ -24,6 +24,8 @@
   ;; CHECK:      (type $none_=>_none (func_subtype func))
   (type $none_=>_none (func_subtype func))
 
+  (type $itable (array (mut (ref null data))))
+
   ;; CHECK:      (type $object (struct_subtype (field $itable i32) data))
 
   ;; CHECK:      (type $ref|$object|_=>_none (func_subtype (param (ref $object)) func))
@@ -31,20 +33,14 @@
   ;; CHECK:      (type $none_=>_none (func_subtype func))
 
   ;; CHECK:      (type $vtable-1 (struct_subtype (field (ref $none_=>_none)) data))
-
+  (type $vtable-1 (struct (field (ref $none_=>_none))))
   ;; CHECK:      (type $[mut:ref?|data|] (array_subtype (mut (ref null data)) data))
 
   ;; CHECK:      (type $vtable-2 (struct_subtype (field (ref $none_=>_none)) (field (ref $none_=>_none)) data))
-
+  (type $vtable-2 (struct (field (ref $none_=>_none)) (field (ref $none_=>_none))))
   ;; CHECK:      (type $none_=>_ref|$object| (func_subtype (result (ref $object)) func))
 
   ;; CHECK:      (type $vtable-3 (struct_subtype (field (ref $none_=>_none)) (field (ref $none_=>_none)) (field (ref $none_=>_none)) data))
-
-  ;; CHECK:      (type $itable (array_subtype (mut (ref null data)) data))
-  (type $itable (array (mut (ref null data))))
-
-  (type $vtable-1 (struct (field (ref $none_=>_none))))
-  (type $vtable-2 (struct (field (ref $none_=>_none)) (field (ref $none_=>_none))))
   (type $vtable-3 (struct (field (ref $none_=>_none)) (field (ref $none_=>_none)) (field (ref $none_=>_none))))
 
   (type $object (struct (field $itable (ref $itable))))
@@ -414,24 +410,42 @@
 ;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
 ;; CHECK-NEXT:   (global.get $test-table)
 ;; CHECK-NEXT:   (i32.const 0)
-;; CHECK-NEXT:   (array.init_static $itable
-;; CHECK-NEXT:    (ref.null data)
-;; CHECK-NEXT:    (struct.new $vtable-1
-;; CHECK-NEXT:     (ref.func $a)
-;; CHECK-NEXT:    )
-;; CHECK-NEXT:    (struct.new $vtable-2
-;; CHECK-NEXT:     (ref.func $b)
-;; CHECK-NEXT:     (ref.func $c)
-;; CHECK-NEXT:    )
-;; CHECK-NEXT:    (ref.null data)
-;; CHECK-NEXT:    (struct.new $vtable-3
-;; CHECK-NEXT:     (ref.func $d)
-;; CHECK-NEXT:     (ref.func $e)
-;; CHECK-NEXT:     (ref.func $f)
-;; CHECK-NEXT:    )
-;; CHECK-NEXT:    (struct.new $vtable-1
-;; CHECK-NEXT:     (ref.func $g)
-;; CHECK-NEXT:    )
+;; CHECK-NEXT:   (ref.null data)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
+;; CHECK-NEXT:   (global.get $test-table)
+;; CHECK-NEXT:   (i32.const 1)
+;; CHECK-NEXT:   (struct.new $vtable-1
+;; CHECK-NEXT:    (ref.func $a)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
+;; CHECK-NEXT:   (global.get $test-table)
+;; CHECK-NEXT:   (i32.const 2)
+;; CHECK-NEXT:   (struct.new $vtable-2
+;; CHECK-NEXT:    (ref.func $b)
+;; CHECK-NEXT:    (ref.func $c)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
+;; CHECK-NEXT:   (global.get $test-table)
+;; CHECK-NEXT:   (i32.const 3)
+;; CHECK-NEXT:   (ref.null data)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
+;; CHECK-NEXT:   (global.get $test-table)
+;; CHECK-NEXT:   (i32.const 4)
+;; CHECK-NEXT:   (struct.new $vtable-3
+;; CHECK-NEXT:    (ref.func $d)
+;; CHECK-NEXT:    (ref.func $e)
+;; CHECK-NEXT:    (ref.func $f)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
+;; CHECK-NEXT:   (global.get $test-table)
+;; CHECK-NEXT:   (i32.const 5)
+;; CHECK-NEXT:   (struct.new $vtable-1
+;; CHECK-NEXT:    (ref.func $g)
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT: )
@@ -445,6 +459,8 @@
   ;; CHECK:      (type $none_=>_none (func_subtype func))
   (type $none_=>_none (func_subtype func))
 
+  (type $itable (array (mut (ref null data))))
+
   ;; CHECK:      (type $object (struct_subtype (field $itable i32) data))
 
   ;; CHECK:      (type $ref|$object|_=>_none (func_subtype (param (ref $object)) func))
@@ -452,17 +468,13 @@
   ;; CHECK:      (type $none_=>_none (func_subtype func))
 
   ;; CHECK:      (type $vtable-1 (struct_subtype (field (ref $none_=>_none)) data))
-
+  (type $vtable-1 (struct (field (ref $none_=>_none))))
   ;; CHECK:      (type $[mut:ref?|data|] (array_subtype (mut (ref null data)) data))
 
   ;; CHECK:      (type $none_=>_ref|$object| (func_subtype (result (ref $object)) func))
 
   ;; CHECK:      (type $vtable-3 (struct_subtype (field (ref $none_=>_none)) (field (ref $none_=>_none)) (field (ref $none_=>_none)) data))
 
-  ;; CHECK:      (type $itable (array_subtype (mut (ref null data)) data))
-  (type $itable (array (mut (ref null data))))
-
-  (type $vtable-1 (struct (field (ref $none_=>_none))))
   ;; CHECK:      (type $vtable-2 (struct_subtype (field (ref $none_=>_none)) (field (ref $none_=>_none)) data))
   (type $vtable-2 (struct (field (ref $none_=>_none)) (field (ref $none_=>_none))))
   (type $vtable-3 (struct (field (ref $none_=>_none)) (field (ref $none_=>_none)) (field (ref $none_=>_none))))
@@ -861,41 +873,65 @@
 ;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
 ;; CHECK-NEXT:   (global.get $test-table)
 ;; CHECK-NEXT:   (i32.const 0)
-;; CHECK-NEXT:   (array.init_static $itable
-;; CHECK-NEXT:    (struct.new $vtable-2
-;; CHECK-NEXT:     (ref.func $a)
-;; CHECK-NEXT:     (ref.func $b)
-;; CHECK-NEXT:    )
-;; CHECK-NEXT:    (ref.null data)
-;; CHECK-NEXT:    (struct.new $vtable-3
-;; CHECK-NEXT:     (ref.func $d)
-;; CHECK-NEXT:     (ref.func $e)
-;; CHECK-NEXT:     (ref.func $f)
-;; CHECK-NEXT:    )
-;; CHECK-NEXT:    (struct.new $vtable-1
-;; CHECK-NEXT:     (ref.func $g)
-;; CHECK-NEXT:    )
+;; CHECK-NEXT:   (struct.new $vtable-2
+;; CHECK-NEXT:    (ref.func $a)
+;; CHECK-NEXT:    (ref.func $b)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
+;; CHECK-NEXT:   (global.get $test-table)
+;; CHECK-NEXT:   (i32.const 1)
+;; CHECK-NEXT:   (ref.null data)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
+;; CHECK-NEXT:   (global.get $test-table)
+;; CHECK-NEXT:   (i32.const 2)
+;; CHECK-NEXT:   (struct.new $vtable-3
+;; CHECK-NEXT:    (ref.func $d)
+;; CHECK-NEXT:    (ref.func $e)
+;; CHECK-NEXT:    (ref.func $f)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
+;; CHECK-NEXT:   (global.get $test-table)
+;; CHECK-NEXT:   (i32.const 3)
+;; CHECK-NEXT:   (struct.new $vtable-1
+;; CHECK-NEXT:    (ref.func $g)
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
 ;; CHECK-NEXT:   (global.get $test-table)
 ;; CHECK-NEXT:   (i32.const 9)
-;; CHECK-NEXT:   (array.init_static $itable
-;; CHECK-NEXT:    (struct.new $vtable-3
-;; CHECK-NEXT:     (ref.func $a-2)
-;; CHECK-NEXT:     (ref.func $b-2)
-;; CHECK-NEXT:     (ref.func $c-2)
-;; CHECK-NEXT:    )
-;; CHECK-NEXT:    (struct.new $vtable-1
-;; CHECK-NEXT:     (ref.func $d-2)
-;; CHECK-NEXT:    )
-;; CHECK-NEXT:    (struct.new $vtable-1
-;; CHECK-NEXT:     (ref.func $e-2)
-;; CHECK-NEXT:    )
-;; CHECK-NEXT:    (ref.null data)
-;; CHECK-NEXT:    (struct.new $vtable-1
-;; CHECK-NEXT:     (ref.func $f-2)
-;; CHECK-NEXT:    )
+;; CHECK-NEXT:   (struct.new $vtable-3
+;; CHECK-NEXT:    (ref.func $a-2)
+;; CHECK-NEXT:    (ref.func $b-2)
+;; CHECK-NEXT:    (ref.func $c-2)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
+;; CHECK-NEXT:   (global.get $test-table)
+;; CHECK-NEXT:   (i32.const 10)
+;; CHECK-NEXT:   (struct.new $vtable-1
+;; CHECK-NEXT:    (ref.func $d-2)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
+;; CHECK-NEXT:   (global.get $test-table)
+;; CHECK-NEXT:   (i32.const 11)
+;; CHECK-NEXT:   (struct.new $vtable-1
+;; CHECK-NEXT:    (ref.func $e-2)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
+;; CHECK-NEXT:   (global.get $test-table)
+;; CHECK-NEXT:   (i32.const 12)
+;; CHECK-NEXT:   (ref.null data)
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
+;; CHECK-NEXT:   (global.get $test-table)
+;; CHECK-NEXT:   (i32.const 13)
+;; CHECK-NEXT:   (struct.new $vtable-1
+;; CHECK-NEXT:    (ref.func $f-2)
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT: )
@@ -906,6 +942,8 @@
 
   ;; CHECK:      (type $ftype (func_subtype (param (ref null $object) (ref null $sub-object)) func))
   (type $ftype (func_subtype (param (ref null $object)) (param (ref null $sub-object)) func))
+
+  (type $itable (array (mut (ref null data))))
 
   ;; CHECK:      (type $[mut:ref?|data|] (array_subtype (mut (ref null data)) data))
 
@@ -918,10 +956,6 @@
   ;; CHECK:      (type $ref|$object|_ref|$sub-object|_=>_none (func_subtype (param (ref $object) (ref $sub-object)) func))
 
   ;; CHECK:      (type $vtable (struct_subtype (field (ref $ftype)) data))
-
-  ;; CHECK:      (type $itable (array_subtype (mut (ref null data)) data))
-  (type $itable (array (mut (ref null data))))
-
   (type $vtable (struct (field (ref $ftype))))
 
   (type $object (struct (field $itable (ref $itable))))
@@ -1124,10 +1158,8 @@
 ;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
 ;; CHECK-NEXT:   (global.get $test-table)
 ;; CHECK-NEXT:   (i32.const 0)
-;; CHECK-NEXT:   (array.init_static $itable
-;; CHECK-NEXT:    (struct.new $vtable
-;; CHECK-NEXT:     (ref.func $a)
-;; CHECK-NEXT:    )
+;; CHECK-NEXT:   (struct.new $vtable
+;; CHECK-NEXT:    (ref.func $a)
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT: )
