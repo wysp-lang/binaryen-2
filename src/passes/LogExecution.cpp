@@ -47,6 +47,15 @@ struct LogExecution : public WalkerPass<PostWalker<LogExecution>> {
     replaceCurrent(makeLogCall(curr));
   }
 
+  void visitSelect(Select* curr) {
+    Builder builder(*getModule());
+    curr->condition = builder.makeIf(
+      curr->condition,
+      makeLogCall(builder.makeConst(int32_t(1))),
+      makeLogCall(builder.makeConst(int32_t(0)))
+    );
+  }
+
   void visitLoop(Loop* curr) { curr->body = makeLogCall(curr->body); }
 
   void visitBreak(Break* curr) { replaceCurrent(makeLogCall(curr)); }
