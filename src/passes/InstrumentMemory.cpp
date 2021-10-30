@@ -39,7 +39,7 @@
 //   (i32.store8 align=1 offset=2 (i32.const 3) (i32.const 4))
 //
 //  After:
-//   (i32.store16 align=1 offset=2
+//   (i32.store8 align=1 offset=2
 //    (call $store_ptr
 //     (i32.const n) // ID
 //     (i32.const 1) // bytes
@@ -52,16 +52,19 @@
 //    )
 //   )
 //
-// GC struct and array operations are similarly instrumented, but without their
-// pointers (which are references), and we only log MVP wasm types (i.e., not
-// references or rtts).
+// GC struct and array operations are similarly instrumented, with the exception
+// that references are not passed through JS, since we would need to either have
+// a large number of imports, one for each reference type (including user-
+// defined ones), or to do a cast when the value returns from JS. Instead, we
+// use locals there to save the value in wasm, and those JS imports return None.
 //
 
 #include "asmjs/shared-constants.h"
+#include "ir/type-updating.h"
 #include "shared-constants.h"
-#include <pass.h>
-#include <wasm-builder.h>
-#include <wasm.h>
+#include "pass.h"
+#include "wasm-builder.h"
+#include "wasm.h"
 
 namespace wasm {
 
@@ -177,7 +180,8 @@ struct InstrumentMemory : public WalkerPass<PostWalker<InstrumentMemory>> {
     } else if (curr->type == Type::f64) {
       target = struct_get_val_f64;
     } else if (curr->type.isRef()) {
-      target = struct_get_val_ref;
+      replaceCurrent(handleRef(curr, struct_get_val_ref));
+      return;
     } else {
       return; // TODO: other types, unreachable, etc.
     }
@@ -197,7 +201,8 @@ struct InstrumentMemory : public WalkerPass<PostWalker<InstrumentMemory>> {
     } else if (curr->value->type == Type::f64) {
       target = struct_set_val_f64;
     } else if (curr->value->type.isRef()) {
-      target = struct_set_val_ref;
+      curr->value = handleRef(curr->value, struct_set_val_ref);
+      return;
     } else {
       return; // TODO: other types, unreachable, etc.
     }
@@ -222,6 +227,9 @@ struct InstrumentMemory : public WalkerPass<PostWalker<InstrumentMemory>> {
       target = array_get_val_f32;
     } else if (curr->type == Type::f64) {
       target = array_get_val_f64;
+    } else if (curr->type.isRef()) {
+      replaceCurrent(handleRef(curr, array_get_val_ref));
+      return;
     } else {
       return; // TODO: other types, unreachable, etc.
     }
@@ -244,6 +252,9 @@ struct InstrumentMemory : public WalkerPass<PostWalker<InstrumentMemory>> {
       target = array_set_val_f32;
     } else if (curr->value->type == Type::f64) {
       target = array_set_val_f64;
+    } else if (curr->value->type.isRef()) {
+      curr->value = handleRef(curr->value, array_set_val_ref);
+      return;
     } else {
       return; // TODO: other types, unreachable, etc.
     }
@@ -251,6 +262,10 @@ struct InstrumentMemory : public WalkerPass<PostWalker<InstrumentMemory>> {
       builder.makeCall(target,
                        {builder.makeConst(int32_t(id++)), curr->value},
                        curr->value->type);
+  }
+
+  void visitFunction(Function* curr) {
+    TypeUpdating::handleNonDefaultableLocals(curr, *getModule());
   }
 
   void visitModule(Module* curr) {
@@ -278,20 +293,24 @@ struct InstrumentMemory : public WalkerPass<PostWalker<InstrumentMemory>> {
       addImport(curr, struct_get_val_i64, {Type::i32, Type::i64}, Type::i64);
       addImport(curr, struct_get_val_f32, {Type::i32, Type::f32}, Type::f32);
       addImport(curr, struct_get_val_f64, {Type::i32, Type::f64}, Type::f64);
+      addImport(curr, struct_get_val_ref, {Type::i32, Type::anyref}, Type::none);
       addImport(curr, struct_set_val_i32, {Type::i32, Type::i32}, Type::i32);
       addImport(curr, struct_set_val_i64, {Type::i32, Type::i64}, Type::i64);
       addImport(curr, struct_set_val_f32, {Type::i32, Type::f32}, Type::f32);
       addImport(curr, struct_set_val_f64, {Type::i32, Type::f64}, Type::f64);
+      addImport(curr, struct_set_val_ref, {Type::i32, Type::anyref}, Type::none);
 
       // Array get/set.
       addImport(curr, array_get_val_i32, {Type::i32, Type::i32}, Type::i32);
       addImport(curr, array_get_val_i64, {Type::i32, Type::i64}, Type::i64);
       addImport(curr, array_get_val_f32, {Type::i32, Type::f32}, Type::f32);
       addImport(curr, array_get_val_f64, {Type::i32, Type::f64}, Type::f64);
+      addImport(curr, array_get_val_ref, {Type::i32, Type::anyref}, Type::none);
       addImport(curr, array_set_val_i32, {Type::i32, Type::i32}, Type::i32);
       addImport(curr, array_set_val_i64, {Type::i32, Type::i64}, Type::i64);
       addImport(curr, array_set_val_f32, {Type::i32, Type::f32}, Type::f32);
       addImport(curr, array_set_val_f64, {Type::i32, Type::f64}, Type::f64);
+      addImport(curr, array_set_val_ref, {Type::i32, Type::anyref}, Type::none);
       addImport(curr, array_get_index, {Type::i32, Type::i32}, Type::i32);
       addImport(curr, array_set_index, {Type::i32, Type::i32}, Type::i32);
     }
@@ -305,6 +324,25 @@ private:
     import->module = ENV;
     import->base = name;
     curr->addFunction(std::move(import));
+  }
+
+  // Given an expression that returns a reference, use a local to stash the
+  // value in wasm. Send that value to a specified JS import for logging, and
+  // return an expression that gets the value, so it returns the value as it
+  // used to.
+  Expression* handleRef(Expression* curr, Name import) {
+    Builder builder(*getModule());
+    auto type = curr->type;
+    auto local = builder.addVar(getFunction(), type);
+    return builder.makeBlock({
+      builder.makeLocalSet(local, curr),
+      builder.makeCall(import,
+        {builder.makeConst(int32_t(id++)),
+         builder.makeLocalGet(local, type)
+        },
+        Type::none),
+      builder.makeLocalGet(local, type)
+    });
   }
 };
 

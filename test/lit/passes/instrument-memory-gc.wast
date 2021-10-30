@@ -4,6 +4,14 @@
 ;; RUN: foreach %s %t wasm-opt --instrument-memory --nominal -all -S -o - | filecheck %s --check-prefix=NOMNL
 
 (module
+  ;; CHECK:      (type $struct (struct (field (mut i32)) (field f32) (field $named f64) (field $ref (mut (ref null $struct)))))
+  ;; NOMNL:      (type $struct (struct_subtype (field (mut i32)) (field f32) (field $named f64) (field $ref (mut (ref null $struct))) data))
+  (type $struct (struct
+    (field (mut i32))
+    (field f32)
+    (field $named f64)
+    (field $ref (mut (ref null $struct)))
+  ))
   ;; CHECK:      (type $i32_i32_=>_i32 (func (param i32 i32) (result i32)))
 
   ;; CHECK:      (type $i32_i64_=>_i64 (func (param i32 i64) (result i64)))
@@ -12,7 +20,15 @@
 
   ;; CHECK:      (type $i32_f64_=>_f64 (func (param i32 f64) (result f64)))
 
-  ;; CHECK:      (type $struct (struct (field (mut i32)) (field f32) (field $named f64)))
+  ;; CHECK:      (type $i32_anyref_=>_none (func (param i32 anyref)))
+
+  ;; CHECK:      (type $ref|$struct|_=>_none (func (param (ref $struct))))
+
+  ;; CHECK:      (type $i32_i32_i32_i32_=>_i32 (func (param i32 i32 i32 i32) (result i32)))
+
+  ;; CHECK:      (type $ref|$array|_=>_none (func (param (ref $array))))
+
+  ;; CHECK:      (type $array (array (mut f64)))
   ;; NOMNL:      (type $i32_i32_=>_i32 (func_subtype (param i32 i32) (result i32) func))
 
   ;; NOMNL:      (type $i32_i64_=>_i64 (func_subtype (param i32 i64) (result i64) func))
@@ -21,22 +37,11 @@
 
   ;; NOMNL:      (type $i32_f64_=>_f64 (func_subtype (param i32 f64) (result f64) func))
 
-  ;; NOMNL:      (type $struct (struct_subtype (field (mut i32)) (field f32) (field $named f64) data))
-  (type $struct (struct
-    (field (mut i32))
-    (field f32)
-    (field $named f64)
-  ))
-  ;; CHECK:      (type $i32_i32_i32_i32_=>_i32 (func (param i32 i32 i32 i32) (result i32)))
-
-  ;; CHECK:      (type $ref|$struct|_=>_none (func (param (ref $struct))))
-
-  ;; CHECK:      (type $ref|$array|_=>_none (func (param (ref $array))))
-
-  ;; CHECK:      (type $array (array (mut f64)))
-  ;; NOMNL:      (type $i32_i32_i32_i32_=>_i32 (func_subtype (param i32 i32 i32 i32) (result i32) func))
+  ;; NOMNL:      (type $i32_anyref_=>_none (func_subtype (param i32 anyref) func))
 
   ;; NOMNL:      (type $ref|$struct|_=>_none (func_subtype (param (ref $struct)) func))
+
+  ;; NOMNL:      (type $i32_i32_i32_i32_=>_i32 (func_subtype (param i32 i32 i32 i32) (result i32) func))
 
   ;; NOMNL:      (type $ref|$array|_=>_none (func_subtype (param (ref $array)) func))
 
@@ -71,6 +76,8 @@
 
   ;; CHECK:      (import "env" "struct_get_val_f64" (func $struct_get_val_f64 (param i32 f64) (result f64)))
 
+  ;; CHECK:      (import "env" "struct_get_val_ref" (func $struct_get_val_ref (param i32 anyref)))
+
   ;; CHECK:      (import "env" "struct_set_val_i32" (func $struct_set_val_i32 (param i32 i32) (result i32)))
 
   ;; CHECK:      (import "env" "struct_set_val_i64" (func $struct_set_val_i64 (param i32 i64) (result i64)))
@@ -78,6 +85,8 @@
   ;; CHECK:      (import "env" "struct_set_val_f32" (func $struct_set_val_f32 (param i32 f32) (result f32)))
 
   ;; CHECK:      (import "env" "struct_set_val_f64" (func $struct_set_val_f64 (param i32 f64) (result f64)))
+
+  ;; CHECK:      (import "env" "struct_set_val_ref" (func $struct_set_val_ref (param i32 anyref)))
 
   ;; CHECK:      (import "env" "array_get_val_i32" (func $array_get_val_i32 (param i32 i32) (result i32)))
 
@@ -87,6 +96,8 @@
 
   ;; CHECK:      (import "env" "array_get_val_f64" (func $array_get_val_f64 (param i32 f64) (result f64)))
 
+  ;; CHECK:      (import "env" "array_get_val_ref" (func $array_get_val_ref (param i32 anyref)))
+
   ;; CHECK:      (import "env" "array_set_val_i32" (func $array_set_val_i32 (param i32 i32) (result i32)))
 
   ;; CHECK:      (import "env" "array_set_val_i64" (func $array_set_val_i64 (param i32 i64) (result i64)))
@@ -94,6 +105,8 @@
   ;; CHECK:      (import "env" "array_set_val_f32" (func $array_set_val_f32 (param i32 f32) (result f32)))
 
   ;; CHECK:      (import "env" "array_set_val_f64" (func $array_set_val_f64 (param i32 f64) (result f64)))
+
+  ;; CHECK:      (import "env" "array_set_val_ref" (func $array_set_val_ref (param i32 anyref)))
 
   ;; CHECK:      (import "env" "array_get_index" (func $array_get_index (param i32 i32) (result i32)))
 
@@ -160,6 +173,8 @@
 
   ;; NOMNL:      (import "env" "struct_get_val_f64" (func $struct_get_val_f64 (param i32 f64) (result f64)))
 
+  ;; NOMNL:      (import "env" "struct_get_val_ref" (func $struct_get_val_ref (param i32 anyref)))
+
   ;; NOMNL:      (import "env" "struct_set_val_i32" (func $struct_set_val_i32 (param i32 i32) (result i32)))
 
   ;; NOMNL:      (import "env" "struct_set_val_i64" (func $struct_set_val_i64 (param i32 i64) (result i64)))
@@ -167,6 +182,8 @@
   ;; NOMNL:      (import "env" "struct_set_val_f32" (func $struct_set_val_f32 (param i32 f32) (result f32)))
 
   ;; NOMNL:      (import "env" "struct_set_val_f64" (func $struct_set_val_f64 (param i32 f64) (result f64)))
+
+  ;; NOMNL:      (import "env" "struct_set_val_ref" (func $struct_set_val_ref (param i32 anyref)))
 
   ;; NOMNL:      (import "env" "array_get_val_i32" (func $array_get_val_i32 (param i32 i32) (result i32)))
 
@@ -176,6 +193,8 @@
 
   ;; NOMNL:      (import "env" "array_get_val_f64" (func $array_get_val_f64 (param i32 f64) (result f64)))
 
+  ;; NOMNL:      (import "env" "array_get_val_ref" (func $array_get_val_ref (param i32 anyref)))
+
   ;; NOMNL:      (import "env" "array_set_val_i32" (func $array_set_val_i32 (param i32 i32) (result i32)))
 
   ;; NOMNL:      (import "env" "array_set_val_i64" (func $array_set_val_i64 (param i32 i64) (result i64)))
@@ -183,6 +202,8 @@
   ;; NOMNL:      (import "env" "array_set_val_f32" (func $array_set_val_f32 (param i32 f32) (result f32)))
 
   ;; NOMNL:      (import "env" "array_set_val_f64" (func $array_set_val_f64 (param i32 f64) (result f64)))
+
+  ;; NOMNL:      (import "env" "array_set_val_ref" (func $array_set_val_ref (param i32 anyref)))
 
   ;; NOMNL:      (import "env" "array_get_index" (func $array_get_index (param i32 i32) (result i32)))
 
@@ -289,5 +310,70 @@
       (array.get $array (local.get $x) (i32.const 10))
     )
     (array.set $array (local.get $x) (i32.const 42) (f64.const 3.14159))
+  )
+
+  ;; CHECK:      (func $struct-ref-copy (param $x (ref $struct))
+  ;; CHECK-NEXT:  (local $1 (ref null $struct))
+  ;; CHECK-NEXT:  (local $2 (ref null $struct))
+  ;; CHECK-NEXT:  (struct.set $struct $ref
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:   (block (result (ref null $struct))
+  ;; CHECK-NEXT:    (local.set $2
+  ;; CHECK-NEXT:     (block (result (ref null $struct))
+  ;; CHECK-NEXT:      (local.set $1
+  ;; CHECK-NEXT:       (struct.get $struct $ref
+  ;; CHECK-NEXT:        (local.get $x)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (call $struct_get_val_ref
+  ;; CHECK-NEXT:       (i32.const 8)
+  ;; CHECK-NEXT:       (local.get $1)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (local.get $1)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (call $struct_set_val_ref
+  ;; CHECK-NEXT:     (i32.const 9)
+  ;; CHECK-NEXT:     (local.get $2)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.get $2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; NOMNL:      (func $struct-ref-copy (param $x (ref $struct))
+  ;; NOMNL-NEXT:  (local $1 (ref null $struct))
+  ;; NOMNL-NEXT:  (local $2 (ref null $struct))
+  ;; NOMNL-NEXT:  (struct.set $struct $ref
+  ;; NOMNL-NEXT:   (local.get $x)
+  ;; NOMNL-NEXT:   (block (result (ref null $struct))
+  ;; NOMNL-NEXT:    (local.set $2
+  ;; NOMNL-NEXT:     (block (result (ref null $struct))
+  ;; NOMNL-NEXT:      (local.set $1
+  ;; NOMNL-NEXT:       (struct.get $struct $ref
+  ;; NOMNL-NEXT:        (local.get $x)
+  ;; NOMNL-NEXT:       )
+  ;; NOMNL-NEXT:      )
+  ;; NOMNL-NEXT:      (call $struct_get_val_ref
+  ;; NOMNL-NEXT:       (i32.const 8)
+  ;; NOMNL-NEXT:       (local.get $1)
+  ;; NOMNL-NEXT:      )
+  ;; NOMNL-NEXT:      (local.get $1)
+  ;; NOMNL-NEXT:     )
+  ;; NOMNL-NEXT:    )
+  ;; NOMNL-NEXT:    (call $struct_set_val_ref
+  ;; NOMNL-NEXT:     (i32.const 9)
+  ;; NOMNL-NEXT:     (local.get $2)
+  ;; NOMNL-NEXT:    )
+  ;; NOMNL-NEXT:    (local.get $2)
+  ;; NOMNL-NEXT:   )
+  ;; NOMNL-NEXT:  )
+  ;; NOMNL-NEXT: )
+  (func $struct-ref-copy (param $x (ref $struct))
+    (struct.set $struct 3
+      (local.get $x)
+      (struct.get $struct 3
+        (local.get $x)
+      )
+    )
   )
 )
