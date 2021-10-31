@@ -334,7 +334,7 @@ struct UnifyITable : public Pass {
                   mapping.testTable,
                   testTableType
                 ),
-                builder.makeConst(uint32_t(offset)),
+                builder.makeConst(uint32_t(itableBase + offset)),
                 value
               )
             );
