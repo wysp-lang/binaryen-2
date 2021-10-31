@@ -61,8 +61,8 @@
 
 #include "asmjs/shared-constants.h"
 #include "ir/type-updating.h"
-#include "shared-constants.h"
 #include "pass.h"
+#include "shared-constants.h"
 #include "wasm-builder.h"
 #include "wasm.h"
 
@@ -293,12 +293,14 @@ struct InstrumentMemory : public WalkerPass<PostWalker<InstrumentMemory>> {
       addImport(curr, struct_get_val_i64, {Type::i32, Type::i64}, Type::i64);
       addImport(curr, struct_get_val_f32, {Type::i32, Type::f32}, Type::f32);
       addImport(curr, struct_get_val_f64, {Type::i32, Type::f64}, Type::f64);
-      addImport(curr, struct_get_val_ref, {Type::i32, Type::anyref}, Type::none);
+      addImport(
+        curr, struct_get_val_ref, {Type::i32, Type::anyref}, Type::none);
       addImport(curr, struct_set_val_i32, {Type::i32, Type::i32}, Type::i32);
       addImport(curr, struct_set_val_i64, {Type::i32, Type::i64}, Type::i64);
       addImport(curr, struct_set_val_f32, {Type::i32, Type::f32}, Type::f32);
       addImport(curr, struct_set_val_f64, {Type::i32, Type::f64}, Type::f64);
-      addImport(curr, struct_set_val_ref, {Type::i32, Type::anyref}, Type::none);
+      addImport(
+        curr, struct_set_val_ref, {Type::i32, Type::anyref}, Type::none);
 
       // Array get/set.
       addImport(curr, array_get_val_i32, {Type::i32, Type::i32}, Type::i32);
@@ -334,15 +336,13 @@ private:
     Builder builder(*getModule());
     auto type = curr->type;
     auto local = builder.addVar(getFunction(), type);
-    return builder.makeBlock({
-      builder.makeLocalSet(local, curr),
-      builder.makeCall(import,
-        {builder.makeConst(int32_t(id++)),
-         builder.makeLocalGet(local, type)
-        },
-        Type::none),
-      builder.makeLocalGet(local, type)
-    });
+    return builder.makeBlock(
+      {builder.makeLocalSet(local, curr),
+       builder.makeCall(
+         import,
+         {builder.makeConst(int32_t(id++)), builder.makeLocalGet(local, type)},
+         Type::none),
+       builder.makeLocalGet(local, type)});
   }
 };
 

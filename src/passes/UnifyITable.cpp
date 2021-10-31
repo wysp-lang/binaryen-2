@@ -279,33 +279,28 @@ struct UnifyITable : public Pass {
     // size. It begins initialized with nulls, and a start function will assign
     // values to it. (Note that we can't use array.init as it is far too large
     // due to VM limitations!)
-    auto testTableType = Type(
-      Array(Field(Type(HeapType::data, Nullable), Mutable)), Nullable);
+    auto testTableType =
+      Type(Array(Field(Type(HeapType::data, Nullable), Mutable)), Nullable);
     mapping.testTable = Names::getValidGlobalName(wasm, "test-table");
-    wasm.addGlobal(Builder::makeGlobal(
-      mapping.testTable, testTableType, builder.makeRefNull(testTableType), Builder::Mutable));
+    wasm.addGlobal(Builder::makeGlobal(mapping.testTable,
+                                       testTableType,
+                                       builder.makeRefNull(testTableType),
+                                       Builder::Mutable));
 
     // Create a start function for the test table assignments.
     // TODO: handle an existing start function by prepending.
     assert(!wasm.start.is());
     auto startName = Names::getValidFunctionName(wasm, "start");
     auto* startBlock = builder.makeBlock();
-    wasm.addFunction(builder.makeFunction(startName,
-                                          Signature(Type::none, Type::none),
-                                          {},
-                                          startBlock));
+    wasm.addFunction(builder.makeFunction(
+      startName, Signature(Type::none, Type::none), {}, startBlock));
     wasm.start = startName;
 
     // Create the test table. (V8 atm does not allow array.new in globals.)
-    startBlock->list.push_back(
-      builder.makeGlobalSet(
-        mapping.testTable,
-        builder.makeArrayNew(
-          testTableType.getHeapType(),
-          builder.makeConst(uint32_t(totalTableSize))
-        )
-      )
-    );
+    startBlock->list.push_back(builder.makeGlobalSet(
+      mapping.testTable,
+      builder.makeArrayNew(testTableType.getHeapType(),
+                           builder.makeConst(uint32_t(totalTableSize)))));
 
     // Update the itable globals to contain offsets instead. That way when the
     // globals are read in order to initialize the object's $itable fields, we
@@ -328,16 +323,10 @@ struct UnifyITable : public Pass {
           auto* value = oldInit->values[i];
           // We only need to write non-null values.
           if (!value->is<RefNull>()) {
-            startBlock->list.push_back(
-              builder.makeArraySet(
-                builder.makeGlobalGet(
-                  mapping.testTable,
-                  testTableType
-                ),
-                builder.makeConst(uint32_t(itableBase + offset)),
-                value
-              )
-            );
+            startBlock->list.push_back(builder.makeArraySet(
+              builder.makeGlobalGet(mapping.testTable, testTableType),
+              builder.makeConst(uint32_t(itableBase + offset)),
+              value));
           }
         }
         offset += mapping.categorySizes[i];
@@ -551,8 +540,7 @@ struct UnifyITable : public Pass {
           Builder builder(*getModule());
           replaceCurrent(builder.makeSequence(
             builder.makeDrop(curr->ref),
-            builder.makeConst(int32_t(mapping.itableSize))
-          ));
+            builder.makeConst(int32_t(mapping.itableSize))));
         }
       }
     };

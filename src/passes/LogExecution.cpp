@@ -49,11 +49,10 @@ struct LogExecution : public WalkerPass<PostWalker<LogExecution>> {
 
   void visitSelect(Select* curr) {
     Builder builder(*getModule());
-    curr->condition = builder.makeIf(
-      curr->condition,
-      makeLogCall(builder.makeConst(int32_t(1))),
-      makeLogCall(builder.makeConst(int32_t(0)))
-    );
+    curr->condition =
+      builder.makeIf(curr->condition,
+                     makeLogCall(builder.makeConst(int32_t(1))),
+                     makeLogCall(builder.makeConst(int32_t(0))));
   }
 
   void visitLoop(Loop* curr) { curr->body = makeLogCall(curr->body); }

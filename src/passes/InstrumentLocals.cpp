@@ -79,7 +79,8 @@ struct InstrumentLocals : public WalkerPass<PostWalker<InstrumentLocals>> {
   void visitLocalGet(LocalGet* curr) {
     Builder builder(*getModule());
     Name import;
-if (!curr->type.isBasic()) return;
+    if (!curr->type.isBasic())
+      return;
     TODO_SINGLE_COMPOUND(curr->type);
     switch (curr->type.getBasic()) {
       case Type::i32:
@@ -140,7 +141,8 @@ if (!curr->type.isBasic()) return;
       // FIXME: support typed function references
       return;
     }
-if (!type.isBasic()) return;
+    if (!type.isBasic())
+      return;
     TODO_SINGLE_COMPOUND(curr->value->type);
     switch (type.getBasic()) {
       case Type::i32:
