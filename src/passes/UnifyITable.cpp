@@ -319,19 +319,28 @@ struct UnifyITable : public Pass {
 
       // The old init's data is placed in the test table, where it can be used
       // by ref.test instructions. We unpack the array.init instruction's args
-      // and write each to its index in the itable.
-      auto offset = itableBase;
-      for (auto* value : oldInit->values) {
-        startBlock->list.push_back(
-          builder.makeArraySet(
-            builder.makeGlobalGet(
-              mapping.testTable,
-              testTableType
-            ),
-            builder.makeConst(uint32_t(offset++)),
-            value
-          )
-        );
+      // and write each to its index in the itable: each vtable goes to the
+      // proper offset for the category it represents.
+      Index offset = 0;
+      for (Index i = 0; i < mapping.categorySizes.size(); i++) {
+        // The itable may not have this category.
+        if (i < oldInit->values.size()) {
+          auto* value = oldInit->values[i];
+          // We only need to write non-null values.
+          if (!value->is<RefNull>()) {
+            startBlock->list.push_back(
+              builder.makeArraySet(
+                builder.makeGlobalGet(
+                  mapping.testTable,
+                  testTableType
+                ),
+                builder.makeConst(uint32_t(offset)),
+                value
+              )
+            );
+          }
+        }
+        offset += mapping.categorySizes[i];
       }
     }
 

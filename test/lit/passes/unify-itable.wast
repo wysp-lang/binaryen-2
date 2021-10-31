@@ -410,18 +410,13 @@
 ;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
 ;; CHECK-NEXT:   (global.get $test-table)
 ;; CHECK-NEXT:   (i32.const 0)
-;; CHECK-NEXT:   (ref.null data)
-;; CHECK-NEXT:  )
-;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
-;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 1)
 ;; CHECK-NEXT:   (struct.new $vtable-1
 ;; CHECK-NEXT:    (ref.func $a)
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
 ;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 2)
+;; CHECK-NEXT:   (i32.const 1)
 ;; CHECK-NEXT:   (struct.new $vtable-2
 ;; CHECK-NEXT:    (ref.func $b)
 ;; CHECK-NEXT:    (ref.func $c)
@@ -430,11 +425,6 @@
 ;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
 ;; CHECK-NEXT:   (global.get $test-table)
 ;; CHECK-NEXT:   (i32.const 3)
-;; CHECK-NEXT:   (ref.null data)
-;; CHECK-NEXT:  )
-;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
-;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 4)
 ;; CHECK-NEXT:   (struct.new $vtable-3
 ;; CHECK-NEXT:    (ref.func $d)
 ;; CHECK-NEXT:    (ref.func $e)
@@ -443,7 +433,7 @@
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
 ;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 5)
+;; CHECK-NEXT:   (i32.const 6)
 ;; CHECK-NEXT:   (struct.new $vtable-1
 ;; CHECK-NEXT:    (ref.func $g)
 ;; CHECK-NEXT:   )
@@ -880,12 +870,7 @@
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
 ;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 1)
-;; CHECK-NEXT:   (ref.null data)
-;; CHECK-NEXT:  )
-;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
-;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 2)
+;; CHECK-NEXT:   (i32.const 4)
 ;; CHECK-NEXT:   (struct.new $vtable-3
 ;; CHECK-NEXT:    (ref.func $d)
 ;; CHECK-NEXT:    (ref.func $e)
@@ -894,14 +879,14 @@
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
 ;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 3)
+;; CHECK-NEXT:   (i32.const 7)
 ;; CHECK-NEXT:   (struct.new $vtable-1
 ;; CHECK-NEXT:    (ref.func $g)
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
 ;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 9)
+;; CHECK-NEXT:   (i32.const 0)
 ;; CHECK-NEXT:   (struct.new $vtable-3
 ;; CHECK-NEXT:    (ref.func $a-2)
 ;; CHECK-NEXT:    (ref.func $b-2)
@@ -910,26 +895,21 @@
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
 ;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 10)
+;; CHECK-NEXT:   (i32.const 3)
 ;; CHECK-NEXT:   (struct.new $vtable-1
 ;; CHECK-NEXT:    (ref.func $d-2)
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
 ;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 11)
+;; CHECK-NEXT:   (i32.const 4)
 ;; CHECK-NEXT:   (struct.new $vtable-1
 ;; CHECK-NEXT:    (ref.func $e-2)
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
 ;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 12)
-;; CHECK-NEXT:   (ref.null data)
-;; CHECK-NEXT:  )
-;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
-;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 13)
+;; CHECK-NEXT:   (i32.const 8)
 ;; CHECK-NEXT:   (struct.new $vtable-1
 ;; CHECK-NEXT:    (ref.func $f-2)
 ;; CHECK-NEXT:   )
