@@ -2174,3 +2174,74 @@
   )
 )
 
+;; Different nulls are written. But, all nulls compare equal, and so when we
+;; look for the same literal in all places, we do find that is the case. Which
+;; of the nulls is chosen is determined by the deterministic process of merging
+;; the function contents: in practice, the first null in the last function.
+(module
+  ;; CHECK:      (type $struct (struct_subtype (field (mut anyref)) data))
+  (type $struct (struct (mut anyref)))
+  ;; CHECK:      (type $none_=>_none (func_subtype func))
+
+  ;; CHECK:      (func $sets
+  ;; CHECK-NEXT:  (struct.set $struct 0
+  ;; CHECK-NEXT:   (ref.null $struct)
+  ;; CHECK-NEXT:   (ref.null any)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (struct.set $struct 0
+  ;; CHECK-NEXT:   (ref.null $struct)
+  ;; CHECK-NEXT:   (ref.null func)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $sets
+    (struct.set $struct 0
+      (ref.null $struct)
+      (ref.null any)
+    )
+    (struct.set $struct 0
+      (ref.null $struct)
+      (ref.null func)
+    )
+  )
+  ;; CHECK:      (func $sets-2
+  ;; CHECK-NEXT:  (struct.set $struct 0
+  ;; CHECK-NEXT:   (ref.null $struct)
+  ;; CHECK-NEXT:   (ref.null func)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (struct.set $struct 0
+  ;; CHECK-NEXT:   (ref.null $struct)
+  ;; CHECK-NEXT:   (ref.null data)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $sets-2
+    ;; This null will "win" as it is the first null in the last function.
+    (struct.set $struct 0
+      (ref.null $struct)
+      (ref.null func)
+    )
+    (struct.set $struct 0
+      (ref.null $struct)
+      (ref.null data)
+    )
+  )
+  ;; CHECK:      (func $get
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result funcref)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (ref.as_non_null
+  ;; CHECK-NEXT:      (ref.null $struct)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (ref.null func)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $get
+    (drop
+      (struct.get $struct 0
+        (ref.null $struct)
+      )
+    )
+  )
+)
+
