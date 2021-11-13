@@ -26,7 +26,7 @@ using namespace std;
 
 namespace wasm {
 
-typedef map<const char*, int> Counts;
+typedef map<const char*, size_t> Counts;
 
 static Counts lastCounts;
 
@@ -86,13 +86,16 @@ struct Metrics
       counts["[table-data]"] = size;
     }
 
+    // compute binary info, so we know function sizes and compressibility
+    BufferWithRandomAccess buffer;
+    WasmBinaryWriter writer(module, buffer);
+    writer.write();
+
+    counts["compressed-ratio"] = Entropy::estimateCompressedRatio(buffer);
+
     if (byFunction) {
       // print global
       printCounts("global");
-      // compute binary info, so we know function sizes
-      BufferWithRandomAccess buffer;
-      WasmBinaryWriter writer(module, buffer);
-      writer.write();
       // print for each function
       Index binaryIndex = 0;
       ModuleUtils::iterDefinedFunctions(*module, [&](Function* func) {
