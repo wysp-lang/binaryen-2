@@ -19,6 +19,7 @@
 #include <ir/module-utils.h>
 #include <pass.h>
 #include <support/colors.h>
+#include <support/entropy.h>
 #include <wasm-binary.h>
 #include <wasm.h>
 
@@ -86,11 +87,11 @@ struct Metrics
       counts["[table-data]"] = size;
     }
 
-    // compute binary info, so we know function sizes and compressibility
+    // compute binary info, for purposes of estimating compressibility. it may
+    // also be used lower down in the optional per-function metrics.
     BufferWithRandomAccess buffer;
     WasmBinaryWriter writer(module, buffer);
     writer.write();
-
     counts["compressed-ratio"] = Entropy::estimateCompressedRatio(buffer);
 
     if (byFunction) {

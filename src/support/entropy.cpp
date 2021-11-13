@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include <math>
+#include <cmath>
+#include <cstdint>
 #include <numeric>
-#include <vector>
 
 #include "entropy.h"
 
@@ -38,8 +38,12 @@ static double computeEntropy(const std::vector<size_t>& freqs) {
 }
 
 double estimateCompressedRatio(const std::vector<uint8_t>& data) {
-  // Brotli, gzip, etc. do not do well on small sizes anyhow.
-  if (data.size() < 128) {
+  // As we will look at pairs, we need at least two items.
+  //
+  // Note that real compression will have a header and other overhead, so there
+  // is a minimum size (128 bytes in brotli, for example) that we should
+  // probably ignore anything under, but leave that for the caller.
+  if (data.size() < 2) {
     return 1.0;
   }
 

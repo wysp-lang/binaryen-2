@@ -17,6 +17,9 @@
 #ifndef wasm_support_entropy_h
 #define wasm_support_entropy_h
 
+#include <cstdint>
+#include <vector>
+
 namespace wasm {
 
 namespace Entropy {
