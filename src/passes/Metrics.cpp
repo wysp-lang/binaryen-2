@@ -92,7 +92,8 @@ struct Metrics
     BufferWithRandomAccess buffer;
     WasmBinaryWriter writer(module, buffer);
     writer.write();
-    counts["compressed-ratio"] = Entropy::estimateCompressedRatio(buffer);
+    counts["[bin bytes]"] = buffer.size();
+    counts["[comp bytes]"] = buffer.size() * Entropy::estimateCompressedRatio(buffer);
 
     if (byFunction) {
       // print global
