@@ -53,60 +53,134 @@ static double computeEntropy(const std::vector<size_t>& freqs) {
 }
 
 static double estimateCompressedRatioInternal(const std::vector<uint8_t>& data) {
-//use more than pairs?
-
-std::cout << "data size " << data.size() << '\n';
-  // As we will look at pairs, we need at least two items.
-  //
-  // Note that real compression will have a header and other overhead, so there
-  // is a minimum size (128 bytes in brotli, for example) that we should
-  // probably ignore anything under, but leave that for the caller.
-  if (data.size() < 2) {
+  if (data.size() <= 1) {
     return 1.0;
   }
 
-  // First, compute the entropy of single byres.
-  std::vector<size_t> singleCounts(1 << 8, 0);
-  for (auto single : data) {
-    singleCounts[single]++;
-  }
-  auto singleEntropy = computeEntropy(singleCounts);
-std::cout << "  single entropy: " << singleEntropy << '\n';
+  double totalBits = 0;
 
-  // Second, compute the entropy of pairs of bytes.
-  std::vector<size_t> pairCounts(1 << 24, 0);
-  for (size_t i = 0; i < data.size() - 2; i++) {
-    auto pair = uint16_t(data[i]) | (uint16_t(data[i + 1]) << 8) | (uint16_t(data[i + 2]) << 16);
-    pairCounts[pair]++;
-  }
-  auto pairEntropy = computeEntropy(pairCounts);
-std::cout << "  pair entropy: " << pairEntropy << '\n';
+  // brotli will actally pick the optimal window out of 1K-16MB. gzip uses 32K.
+  // Use 64k which represents gzip++;
+  size_t WindowSize = 64 * 1024;
 
-  // We estimate the compressed ratio using the product of the normalized single
-  // and pair entropies. The rationale is that a compression scheme can use either
-  // patterns of size 1 or above, and it chooses the better as it sees, so we
-  // do not want a simple mean: if one of the normalized entropies is very near 0, then our
-  // final estimate of the relevant entropy should also be zero. Likewise, if
-  // one of the normalized entropies is very near 1, then it should not affect
-  // the result at all: there is no information there, but hopefully there is in
-  // the other measurement.
-  //
-  // To keep the product itself normalized in terms of the input values, we
-  // use the geometric mean.
-  //
-  // This does not take into account larger structure than pairs. TODO
-  //
-  // This does not take into account that when using pairs we replace type
-  // bytes each time, that is, it is twice as efficient as single codes. TODO
-  auto totalBits = double(data.size()) * 8;
-  auto normalizedSingleEntropy = singleEntropy / totalBits;
-  auto normalizedPairEntropy = pairEntropy / totalBits;
-  auto combined = normalizedSingleEntropy;// pow(normalizedSingleEntropy, 0.333) * pow(normalizedPairEntropy, 0.666);
-std::cout << "  final: " << normalizedSingleEntropy << " & " << normalizedPairEntropy << " => " << combined << '\n';
-  return combined;
+  // Deflate/gzip have this as the maximum pattern size. Brotli can have up to
+  // 16MB.
+  size_t MaxPatternSize = 258;
+
+  // Tracks the frequency of each byte we emitted, of the bytes we emit when we
+  // fail to find a pattern.
+  std::vector<size_t> byteFreqs(1 << 8, 0);
+
+  // We track the patterns seen so far using a trie.
+  struct Node {
+    // How many times the pattern ending in this node has been seen.
+    size_t num; // FIXME do we need this?
+
+    // The index in |data| of the last time we saw this pattern. This marks the
+    // first byte in that appearance.
+    size_t lastStart;
+
+    // A map of bytes to another node that continues the pattern with that
+    // particular byte;
+    std::unordered_map<uint8_t, std::unique_ptr<Node>> children;
+
+    Node(size_t lastStart) : lastStart(lastStart) {}
+  };
+
+  // The |lastStart| of the root is meaningless.
+  const size_t MeaninglessIndex = -1;
+  Node root(MeaninglessIndex);
+
+  size_t numNewBytes = 0;
+
+  size_t i = 0;
+  while (i < data.size()) {
+    // Starting at the i-th byte, see how many bytes forward we can look while
+    // still finding something in the trie.
+    Node* node = &root;
+    size_t j = i;
+
+    // We will note the last time we saw the pattern that we found to be
+    // repeating.
+    size_t previousLastStart;
+    bool emitByte = true;
+
+    while (1) {
+      if (j == data.size()) {
+        // Nothing to do, and not even a new byte to emit.
+        emitByte = false;
+        break;
+      }
+
+      if (j - i == MaxPatternSize) {
+        // This pattern is unreasonably-large; stop and emit a new byte without
+        // adding a pattern this size.
+        break;
+      }
+
+      // Note the last start of the parent before we look at the child. If we
+      // end up stopping at the child, then the repeating pattern is in the
+      // parent, and its |lastStart| is when last we saw the pattern.
+      previousLastStart = node->lastStart;
+
+      // Add j to the pattern and see if we have seen that as well.
+      auto iter = node->children.find(data[j]);
+      if (iter != node->children.end()) {
+        node = iter->second.get();
+
+        // Mark that we have seen this pattern starting at i. We need to do that
+        // regardless of our actions later: this is either one we've seen too
+        // long ago, and so it counts as new, or it is actually new. Either way,
+        // |i| is the lastStart for it.
+        node->lastStart = i;
+
+        if (i - node->lastStart >= WindowSize) {
+          // This is a too-old pattern. We must emit a byte for it as if it is
+          // a new pattern here.
+          break;
+        }
+
+        // Otherwise, we saw the pattern recently enough, and can proceed.
+        j++;
+        continue;
+      }
+
+      // Otherwise, we failed to find the pattern in the trie: this extra
+      // character at data[j] is new. Add a node, emit a byte, and stop.
+      node->children[data[j]] = std::make_unique<Node>(i);
+      break;
+    }
+
+    if (previousLastStart != MeaninglessIndex) {
+      // We proceeded past the root, that is, we actually found at least one
+      // repeating byte of some pattern before we stopped to emit a new byte.
+      // To represent the size of that pattern in the compressed output,
+      // estimate it as if emitting the optimal number of bits for the distance.
+      totalBits += log2(i - previousLastStart);
+
+      // Also we estimate the bits for the size in a similar way.
+      totalBits += log2(j - i + 1);
+    }
+
+    if (emitByte) {
+      // Update the frequency of the byte we are emitting.
+      byteFreqs[data[j]]++;
+      numNewBytes++;
+
+      // To estimate how many bits we need to emit the new byte, use the factor
+      // that the byte would have when computing the entropy.
+      totalBits += -log2(double(byteFreqs(data[j])) / double(numNewBytes));
+    }
+
+    // Continue after this pattern. TODO: fill in lastStarts of subpatterns?
+    i = j + 1;
+  }
+
+  return totalBits;
 }
 
 double estimateCompressedRatio(const std::vector<uint8_t>& data) {
+#if 0
   // brotli will actally pick the optimal window out of 1K-16MB. gzip uses 32K.
   // Use 64k which represents gzip + overlaps.
   size_t ChunkSize = 64 * 1024;
@@ -125,6 +199,9 @@ double estimateCompressedRatio(const std::vector<uint8_t>& data) {
   }
 std::cout << "final final: " << (ratios / double(chunks)) << '\n';
   return ratios / double(chunks);
+#else
+  return estimateCompressedRatioInternal(data);
+#endif
 }
 
 } // namespace Entropy
