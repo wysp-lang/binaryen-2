@@ -14,10 +14,13 @@
  * limitations under the License.
  */
 
+#include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <memory>
 #include <numeric>
+#include <unordered_map>
 
 #include "entropy.h"
 
@@ -28,6 +31,7 @@ namespace Entropy {
 // Given a vector of frequencies of items, compute their entropy. That is, if
 // given [50, 50] then each index has equal probability, so this is like a fair
 // coin, and the entropy is 1. The result is measured in bits.
+#if 0
 static double computeEntropy(const std::vector<size_t>& freqs) {
   double totalFreq = 0;
   for (auto freq : freqs) {
@@ -51,6 +55,7 @@ static double computeEntropy(const std::vector<size_t>& freqs) {
   // the total number of bits, multiply by the total frequency.
   return mean * totalFreq;
 }
+#endif
 
 static double estimateCompressedRatioInternal(const std::vector<uint8_t>& data) {
   if (data.size() <= 1) {
@@ -70,6 +75,8 @@ static double estimateCompressedRatioInternal(const std::vector<uint8_t>& data) 
   // Tracks the frequency of each byte we emitted, of the bytes we emit when we
   // fail to find a pattern.
   std::vector<size_t> byteFreqs(1 << 8, 0);
+
+  // TODO: start at 1111 - uniform. reset to 111 each window? or decease old byts, or randomly?
 
   // We track the patterns seen so far using a trie.
   struct Node {
@@ -95,6 +102,7 @@ static double estimateCompressedRatioInternal(const std::vector<uint8_t>& data) 
 
   size_t i = 0;
   while (i < data.size()) {
+std::cout << "seek pattern from " << i << '\n';
     // Starting at the i-th byte, see how many bytes forward we can look while
     // still finding something in the trie.
     Node* node = &root;
@@ -102,7 +110,7 @@ static double estimateCompressedRatioInternal(const std::vector<uint8_t>& data) 
 
     // We will note the last time we saw the pattern that we found to be
     // repeating.
-    size_t previousLastStart;
+    size_t previousLastStart = MeaninglessIndex;
     bool emitByte = true;
 
     while (1) {
@@ -118,22 +126,23 @@ static double estimateCompressedRatioInternal(const std::vector<uint8_t>& data) 
         break;
       }
 
-      // Note the last start of the parent before we look at the child. If we
-      // end up stopping at the child, then the repeating pattern is in the
-      // parent, and its |lastStart| is when last we saw the pattern.
-      previousLastStart = node->lastStart;
-
       // Add j to the pattern and see if we have seen that as well.
       auto iter = node->children.find(data[j]);
       if (iter != node->children.end()) {
         node = iter->second.get();
+
+      // Note the last start of the parent before we look at the child. If we
+      // end up stopping at the child, then the repeating pattern is in the
+      // parent, and its |lastStart| is when last we saw the pattern.
+      previousLastStart = node->lastStart;
+//std::cout << "prev last: " << previousLastStart << '\n';
 
         // Mark that we have seen this pattern starting at i. We need to do that
         // regardless of our actions later: this is either one we've seen too
         // long ago, and so it counts as new, or it is actually new. Either way,
         // |i| is the lastStart for it.
         node->lastStart = i;
-
+//std::cout << "set node's last to " << i << '\n';
         if (i - node->lastStart >= WindowSize) {
           // This is a too-old pattern. We must emit a byte for it as if it is
           // a new pattern here.
@@ -148,6 +157,7 @@ static double estimateCompressedRatioInternal(const std::vector<uint8_t>& data) 
       // Otherwise, we failed to find the pattern in the trie: this extra
       // character at data[j] is new. Add a node, emit a byte, and stop.
       node->children[data[j]] = std::make_unique<Node>(i);
+//std::cout << "created new node with last of " << i << '\n';
       break;
     }
 
@@ -156,20 +166,28 @@ static double estimateCompressedRatioInternal(const std::vector<uint8_t>& data) 
       // repeating byte of some pattern before we stopped to emit a new byte.
       // To represent the size of that pattern in the compressed output,
       // estimate it as if emitting the optimal number of bits for the distance.
+assert(i != previousLastStart);
+std::cout << "emit ref to known pattern: " << (i - previousLastStart) << " , of size " << (j - i) << '\n';
       totalBits += log2(i - previousLastStart);
+std::cout << "atotal " << totalBits << '\n';
 
       // Also we estimate the bits for the size in a similar way.
-      totalBits += log2(j - i + 1);
+assert(j != i);
+      totalBits += log2(j - i);
+std::cout << "btotal " << totalBits << '\n';
     }
 
     if (emitByte) {
+      auto byte = data[j];
+std::cout << "emit byte " << int(byte) << '\n';
       // Update the frequency of the byte we are emitting.
-      byteFreqs[data[j]]++;
+      byteFreqs[byte]++;
       numNewBytes++;
 
       // To estimate how many bits we need to emit the new byte, use the factor
       // that the byte would have when computing the entropy.
-      totalBits += -log2(double(byteFreqs(data[j])) / double(numNewBytes));
+      totalBits += -log2(double(byteFreqs[byte]) / double(numNewBytes));
+std::cout << "ctotal " << totalBits << '\n';
     }
 
     // Continue after this pattern. TODO: fill in lastStarts of subpatterns?
