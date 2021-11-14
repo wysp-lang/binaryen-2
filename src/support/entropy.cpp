@@ -204,25 +204,24 @@ assert(j != i);
 }
 
 double estimateCompressedBytes(const std::vector<uint8_t>& data) {
-#if 0
+#if 1
   // brotli will actally pick the optimal window out of 1K-16MB. gzip uses 32K.
   // Use 64k which represents gzip + overlaps.
   size_t ChunkSize = 64 * 1024;
   size_t start = 0;
   std::vector<uint8_t> temp;
   size_t chunks = 0;
-  double ratios = 0;
+  double total = 0;
   while (start < data.size()) {
     auto end = std::min(start + ChunkSize, data.size());
     temp.resize(end - start);
     std::copy(data.begin() + start, data.begin() + end, temp.begin());
-    auto ratio = estimateCompressedRatioInternal(temp);
-    ratios += ratio;
+    total += estimateCompressedBytesInternal(temp);
     chunks++;
-    start += ChunkSize / 2; // overlap like the window slides
+    start += ChunkSize;// / 2; // overlap like the window slides
   }
 //std::cout << "final final: " << (ratios / double(chunks)) << '\n';
-  return ratios / double(chunks);
+  return total;
 #else
   return estimateCompressedBytesInternal(data);
 #endif
