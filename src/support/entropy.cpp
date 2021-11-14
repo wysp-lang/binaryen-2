@@ -18,11 +18,11 @@
 #include <cmath>
 #include <cstdint>
 #include <iostream>
-#include <memory>
 #include <numeric>
 #include <unordered_map>
 
 #include "entropy.h"
+#include "mixed_arena.h"
 
 namespace wasm {
 
@@ -62,6 +62,9 @@ static double estimateCompressedBytesInternal(const std::vector<uint8_t>& data) 
     return 1.0;
   }
 
+  // Allocate everything in an arena for speed.
+  MixedArena arena;
+
   double totalBits = 0;
 
   // brotli will actally pick the optimal window out of 1K-16MB. gzip uses 32K.
@@ -90,14 +93,18 @@ static double estimateCompressedBytesInternal(const std::vector<uint8_t>& data) 
 
     // A map of bytes to another node that continues the pattern with that
     // particular byte;
-    std::unordered_map<uint8_t, std::unique_ptr<Node>> children;
+    std::vector<Node*> children;
 
-    Node(size_t lastStart) : lastStart(lastStart) {}
+    Node() {
+      children.resize(256, 0);
+    }
+    Node(MixedArena& allocator) : Node() {}
   };
 
   // The |lastStart| of the root is meaningless.
   const size_t MeaninglessIndex = -1;
-  Node root(MeaninglessIndex);
+  Node root;
+  root.lastStart = MeaninglessIndex;
 
   size_t i = 0;
   while (i < data.size()) {
@@ -126,14 +133,13 @@ static double estimateCompressedBytesInternal(const std::vector<uint8_t>& data) 
       }
 
       // Add j to the pattern and see if we have seen that as well.
-      auto iter = node->children.find(data[j]);
-      if (iter != node->children.end()) {
-        node = iter->second.get();
+      if (auto* child = node->children[data[j]]) {
+        node = child;
 
-      // Note the last start of the parent before we look at the child. If we
-      // end up stopping at the child, then the repeating pattern is in the
-      // parent, and its |lastStart| is when last we saw the pattern.
-      previousLastStart = node->lastStart;
+        // Note the last start of the parent before we look at the child. If we
+        // end up stopping at the child, then the repeating pattern is in the
+        // parent, and its |lastStart| is when last we saw the pattern.
+        previousLastStart = node->lastStart;
 ////std::cout << "prev last: " << previousLastStart << '\n';
 
         // Mark that we have seen this pattern starting at i. We need to do that
@@ -155,7 +161,8 @@ static double estimateCompressedBytesInternal(const std::vector<uint8_t>& data) 
 
       // Otherwise, we failed to find the pattern in the trie: this extra
       // character at data[j] is new. Add a node, emit a byte, and stop.
-      node->children[data[j]] = std::make_unique<Node>(i);
+      auto* newNode = node->children[data[j]] = arena.alloc<Node>();
+      newNode->lastStart = i;
 ////std::cout << "created new node with last of " << i << '\n';
       break;
     }
