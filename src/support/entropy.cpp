@@ -57,7 +57,7 @@ static double computeEntropy(const std::vector<size_t>& freqs) {
 }
 #endif
 
-static double estimateCompressedRatioInternal(const std::vector<uint8_t>& data) {
+static double estimateCompressedBytesInternal(const std::vector<uint8_t>& data) {
   if (data.size() <= 1) {
     return 1.0;
   }
@@ -101,7 +101,7 @@ static double estimateCompressedRatioInternal(const std::vector<uint8_t>& data) 
 
   size_t i = 0;
   while (i < data.size()) {
-std::cout << "seek pattern from " << i << '\n';
+//std::cout << "seek pattern from " << i << '\n';
     // Starting at the i-th byte, see how many bytes forward we can look while
     // still finding something in the trie.
     Node* node = &root;
@@ -134,14 +134,14 @@ std::cout << "seek pattern from " << i << '\n';
       // end up stopping at the child, then the repeating pattern is in the
       // parent, and its |lastStart| is when last we saw the pattern.
       previousLastStart = node->lastStart;
-//std::cout << "prev last: " << previousLastStart << '\n';
+////std::cout << "prev last: " << previousLastStart << '\n';
 
         // Mark that we have seen this pattern starting at i. We need to do that
         // regardless of our actions later: this is either one we've seen too
         // long ago, and so it counts as new, or it is actually new. Either way,
         // |i| is the lastStart for it.
         node->lastStart = i;
-//std::cout << "set node's last to " << i << '\n';
+////std::cout << "set node's last to " << i << '\n';
         if (i - node->lastStart >= WindowSize) {
           // This is a too-old pattern. We must emit a byte for it as if it is
           // a new pattern here.
@@ -156,7 +156,7 @@ std::cout << "seek pattern from " << i << '\n';
       // Otherwise, we failed to find the pattern in the trie: this extra
       // character at data[j] is new. Add a node, emit a byte, and stop.
       node->children[data[j]] = std::make_unique<Node>(i);
-//std::cout << "created new node with last of " << i << '\n';
+////std::cout << "created new node with last of " << i << '\n';
       break;
     }
 
@@ -166,23 +166,23 @@ std::cout << "seek pattern from " << i << '\n';
       // To represent the size of that pattern in the compressed output,
       // estimate it as if emitting the optimal number of bits for the distance.
 assert(i != previousLastStart);
-std::cout << "emit ref to known pattern: " << (i - previousLastStart) << " , of size " << (j - i) << '\n';
+//std::cout << "emit ref to known pattern: " << (i - previousLastStart) << " , of size " << (j - i) << '\n';
       totalBits += log2(i - previousLastStart);
-std::cout << "atotal " << totalBits << '\n';
+//std::cout << "atotal " << totalBits << '\n';
 
       // Also we estimate the bits for the size in a similar way.
 assert(j != i);
       totalBits += log2(j - i);
-std::cout << "btotal " << totalBits << '\n';
+//std::cout << "btotal " << totalBits << '\n';
     }
 
     if (emitByte) {
       auto byte = data[j];
-std::cout << "emit byte " << int(byte) << '\n';
+//std::cout << "emit byte " << int(byte) << '\n';
       // To estimate how many bits we need to emit the new byte, use the factor
       // that the byte would have when computing the entropy.
       totalBits += -log2(double(byteFreqs[byte]) / double(totalByteFreqs));
-std::cout << "ctotal " << totalBits << '\n';
+//std::cout << "ctotal " << totalBits << '\n';
 
       // Update the frequency of the byte we are emitting.
       byteFreqs[byte]++;
@@ -193,10 +193,10 @@ std::cout << "ctotal " << totalBits << '\n';
     i = j + 1;
   }
 
-  return totalBits;
+  return totalBits / 8;
 }
 
-double estimateCompressedRatio(const std::vector<uint8_t>& data) {
+double estimateCompressedBytes(const std::vector<uint8_t>& data) {
 #if 0
   // brotli will actally pick the optimal window out of 1K-16MB. gzip uses 32K.
   // Use 64k which represents gzip + overlaps.
@@ -214,10 +214,10 @@ double estimateCompressedRatio(const std::vector<uint8_t>& data) {
     chunks++;
     start += ChunkSize / 2; // overlap like the window slides
   }
-std::cout << "final final: " << (ratios / double(chunks)) << '\n';
+//std::cout << "final final: " << (ratios / double(chunks)) << '\n';
   return ratios / double(chunks);
 #else
-  return estimateCompressedRatioInternal(data);
+  return estimateCompressedBytesInternal(data);
 #endif
 }
 

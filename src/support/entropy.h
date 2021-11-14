@@ -27,10 +27,9 @@ namespace Entropy {
 // Estimate how compressible some data is. This is a rough estimate for how
 // much smaller the data could get when compressed by something like gzip or
 // brotli, but it is a rough estimate that does not necessarily correspond
-// perfectly to any existing compression algorithm. The result is a ratio
-// compared to the original size, that is, 1.0 indicates we cannot compress and
-// we expect to remain at the same size as originally.
-double estimateCompressedRatio(const std::vector<uint8_t>& data);
+// perfectly to any existing compression algorithm. The result is the number of
+// bytes we expect the compressed data to be.
+double estimateCompressedBytes(const std::vector<uint8_t>& data);
 
 } // namespace Entropy
 

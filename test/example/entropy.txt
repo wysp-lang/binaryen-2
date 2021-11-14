@@ -1,0 +1,10 @@
+estimating compressibility of various sequences of 14 bytes:
+1, 1, 1, ...:
+	4.57733
+1, 2, 1, 2,... (should be higher):
+	6.81237
+1, 2, ..7, 1, 2, .. 7 (should be higher):
+	11.06
+1, 2, .,, 14 with no repetition (should be close to the full size of 14):
+	14.063
+done.
