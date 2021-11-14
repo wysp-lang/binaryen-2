@@ -73,10 +73,11 @@ static double estimateCompressedRatioInternal(const std::vector<uint8_t>& data) 
   size_t MaxPatternSize = 258;
 
   // Tracks the frequency of each byte we emitted, of the bytes we emit when we
-  // fail to find a pattern.
-  std::vector<size_t> byteFreqs(1 << 8, 0);
-
-  // TODO: start at 1111 - uniform. reset to 111 each window? or decease old byts, or randomly?
+  // fail to find a pattern. Start with equal probability of all bytes.
+  // TODO: we need to clear out old bytes (older than the window) somehow -
+  //       track them, or randomly?
+  std::vector<size_t> byteFreqs(1 << 8, 1);
+  size_t totalByteFreqs = 256;
 
   // We track the patterns seen so far using a trie.
   struct Node {
@@ -97,8 +98,6 @@ static double estimateCompressedRatioInternal(const std::vector<uint8_t>& data) 
   // The |lastStart| of the root is meaningless.
   const size_t MeaninglessIndex = -1;
   Node root(MeaninglessIndex);
-
-  size_t numNewBytes = 0;
 
   size_t i = 0;
   while (i < data.size()) {
@@ -180,14 +179,14 @@ std::cout << "btotal " << totalBits << '\n';
     if (emitByte) {
       auto byte = data[j];
 std::cout << "emit byte " << int(byte) << '\n';
-      // Update the frequency of the byte we are emitting.
-      byteFreqs[byte]++;
-      numNewBytes++;
-
       // To estimate how many bits we need to emit the new byte, use the factor
       // that the byte would have when computing the entropy.
-      totalBits += -log2(double(byteFreqs[byte]) / double(numNewBytes));
+      totalBits += -log2(double(byteFreqs[byte]) / double(totalByteFreqs));
 std::cout << "ctotal " << totalBits << '\n';
+
+      // Update the frequency of the byte we are emitting.
+      byteFreqs[byte]++;
+      totalByteFreqs++;
     }
 
     // Continue after this pattern. TODO: fill in lastStarts of subpatterns?
