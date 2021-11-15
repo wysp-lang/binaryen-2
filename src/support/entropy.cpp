@@ -178,9 +178,11 @@ static double estimateCompressedBytesInternal(const std::vector<uint8_t>& data) 
       // repeating byte of some pattern before we stopped to emit a new byte.
       // To represent the size of that pattern in the compressed output,
       // estimate it as if emitting the optimal number of bits for the distance.
-assert(i != previousLastStart);
+//assert(i != previousLastStart);
 //std::cout << "emit ref to known pattern: " << (i - previousLastStart) << " , of size " << (j - i) << '\n';
-      totalBits += log2(i - previousLastStart);
+      if (i != previousLastStart) {
+        totalBits += log2(i - previousLastStart);
+      }
 //std::cout << "atotal " << totalBits << '\n';
 
       // Also we estimate the bits for the size in a similar way.
