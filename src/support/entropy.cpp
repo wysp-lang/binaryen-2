@@ -19,7 +19,6 @@
 #include <cstdint>
 #include <iostream>
 #include <numeric>
-#include <unordered_map>
 
 #include "entropy.h"
 #include "mixed_arena.h"
@@ -69,11 +68,43 @@ static double estimateCompressedBytesInternal(const std::vector<uint8_t>& data) 
 
   // brotli will actally pick the optimal window out of 1K-16MB. gzip uses 32K.
   // Use 64k which represents gzip++;
-  size_t WindowSize = 64 * 1024;
+  const size_t WindowSize = 64 * 1024;
 
   // Deflate/gzip have this as the maximum pattern size. Brotli can have up to
   // 16MB.
-  size_t MaxPatternSize = 258;
+  const size_t MaxPatternSize = 258;
+
+  const size_t PatternCacheSize = 1 << 24;
+
+  const size_t MeaninglessIndex = -1;
+
+  struct PatternInfo {
+    // The index in |data| of the last time we saw this pattern. This marks the
+    // first byte in that appearance.
+    size_t lastStart = MeaninglessIndex;
+
+    bool is() {
+      return lastStart != MeaninglessIndex;
+    }
+    // We could also store stuff like the pattern length, last char, etc., to
+    // reduce hash collisions?
+  };
+
+  // A map of hash values to pattern info for that hash.
+  std::vector<PatternInfo> patternCache(PatternCacheSize);
+
+  struct PatternHash {
+    // Use a simple and fast hash, see http://www.cse.yorku.ca/~oz/hash.html
+    uint32_t hash = 5381;
+
+    void note(uint8_t byte) {
+      hash = ((hash << 5) + hash) ^ byte;
+    }
+
+    size_t get() {
+      return hash & (PatternCacheSize - 1);
+    }
+  };
 
   // Tracks the frequency of each byte we emitted, of the bytes we emit when we
   // fail to find a pattern. Start with equal probability of all bytes.
@@ -82,36 +113,12 @@ static double estimateCompressedBytesInternal(const std::vector<uint8_t>& data) 
   std::vector<size_t> byteFreqs(1 << 8, 1);
   size_t totalByteFreqs = 256;
 
-  // We track the patterns seen so far using a trie.
-  struct Node {
-    // How many times the pattern ending in this node has been seen.
-    size_t num; // FIXME do we need this?
-
-    // The index in |data| of the last time we saw this pattern. This marks the
-    // first byte in that appearance.
-    size_t lastStart;
-
-    // A map of bytes to another node that continues the pattern with that
-    // particular byte;
-    std::vector<Node*> children;
-
-    Node() {
-      children.resize(256, 0);
-    }
-    Node(MixedArena& allocator) : Node() {}
-  };
-
-  // The |lastStart| of the root is meaningless.
-  const size_t MeaninglessIndex = -1;
-  Node root;
-  root.lastStart = MeaninglessIndex;
-
   size_t i = 0;
   while (i < data.size()) {
 //std::cout << "seek pattern from " << i << '\n';
     // Starting at the i-th byte, see how many bytes forward we can look while
     // still finding something in the trie.
-    Node* node = &root;
+    PatternHash pattern;
     size_t j = i;
 
     // We will note the last time we saw the pattern that we found to be
@@ -133,22 +140,22 @@ static double estimateCompressedBytesInternal(const std::vector<uint8_t>& data) 
       }
 
       // Add j to the pattern and see if we have seen that as well.
-      if (auto* child = node->children[data[j]]) {
-        node = child;
-
+      pattern.note(data[j]);
+      auto& info = patternCache[pattern.get()];
+      if (info.is()) {
         // Note the last start of the parent before we look at the child. If we
         // end up stopping at the child, then the repeating pattern is in the
         // parent, and its |lastStart| is when last we saw the pattern.
-        previousLastStart = node->lastStart;
+        previousLastStart = info.lastStart;
 ////std::cout << "prev last: " << previousLastStart << '\n';
 
         // Mark that we have seen this pattern starting at i. We need to do that
         // regardless of our actions later: this is either one we've seen too
         // long ago, and so it counts as new, or it is actually new. Either way,
         // |i| is the lastStart for it.
-        node->lastStart = i;
+        info.lastStart = i;
 ////std::cout << "set node's last to " << i << '\n';
-        if (i - node->lastStart >= WindowSize) {
+        if (i - info.lastStart >= WindowSize) {
           // This is a too-old pattern. We must emit a byte for it as if it is
           // a new pattern here.
           break;
@@ -159,10 +166,9 @@ static double estimateCompressedBytesInternal(const std::vector<uint8_t>& data) 
         continue;
       }
 
-      // Otherwise, we failed to find the pattern in the trie: this extra
-      // character at data[j] is new. Add a node, emit a byte, and stop.
-      auto* newNode = node->children[data[j]] = arena.alloc<Node>();
-      newNode->lastStart = i;
+      // Otherwise, we failed to find the pattern, so this extra
+      // character at data[j] is new. Emit a byte, and stop.
+      info.lastStart = i;
 ////std::cout << "created new node with last of " << i << '\n';
       break;
     }
