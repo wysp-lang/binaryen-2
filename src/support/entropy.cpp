@@ -56,11 +56,22 @@ static double computeEntropy(const std::vector<size_t>& freqs) {
 }
 #endif
 
-static double estimateCompressedBytesInternal(const std::vector<uint8_t>& data) {
-  if (data.size() <= 1) {
-    return 1.0;
+struct PatternHash {
+  static const size_t PatternCacheSize = 1 << 24;
+
+  // Use a simple and fast hash, see http://www.cse.yorku.ca/~oz/hash.html
+  uint32_t hash = 5381;
+
+  void note(uint8_t byte) {
+    hash = ((hash << 5) + hash) ^ byte;
   }
 
+  size_t get() {
+    return hash & (PatternCacheSize - 1);
+  }
+};
+
+static double estimateCompressedBytesInternal(const std::vector<uint8_t>& data) {
   // Allocate everything in an arena for speed.
   MixedArena arena;
 
@@ -74,8 +85,6 @@ static double estimateCompressedBytesInternal(const std::vector<uint8_t>& data) 
   // 16MB.
   const size_t MaxPatternSize = 258;
 
-  const size_t PatternCacheSize = 1 << 24;
-
   const size_t MeaninglessIndex = -1;
 
   struct PatternInfo {
@@ -87,24 +96,11 @@ static double estimateCompressedBytesInternal(const std::vector<uint8_t>& data) 
       return lastStart != MeaninglessIndex;
     }
     // We could also store stuff like the pattern length, last char, etc., to
-    // reduce hash collisions?
+    // reduce hash collisions? Trusting the hash blindly is not good enough on ue4.
   };
 
   // A map of hash values to pattern info for that hash.
-  std::vector<PatternInfo> patternCache(PatternCacheSize);
-
-  struct PatternHash {
-    // Use a simple and fast hash, see http://www.cse.yorku.ca/~oz/hash.html
-    uint32_t hash = 5381;
-
-    void note(uint8_t byte) {
-      hash = ((hash << 5) + hash) ^ byte;
-    }
-
-    size_t get() {
-      return hash & (PatternCacheSize - 1);
-    }
-  };
+  std::vector<PatternInfo> patternCache(PatternHash::PatternCacheSize);
 
   // Tracks the frequency of each byte we emitted, of the bytes we emit when we
   // fail to find a pattern. Start with equal probability of all bytes.
