@@ -178,7 +178,8 @@ struct Metrics
         vars += func->getNumVars();
       });
       counts["[vars]"] = vars;
-      counts["[type-depth]"] = double(refExpressionDepths) / double(refExpressions);
+      counts["[type-depth]"] =
+        double(refExpressionDepths) / double(refExpressions);
       // print
       printCounts("total");
       // compare to next time
