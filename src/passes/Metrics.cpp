@@ -218,30 +218,36 @@ struct Metrics
     o << title << "\n";
     for (auto* key : keys) {
       if (auto size = std::get_if<size_t>(&counts[key])) {
-        auto value = *size;
-        if (value == 0 && key[0] != '[') {
-          continue;
-        }
-        o << " " << left << setw(15) << key << ": " << setw(8) << value;
-        if (lastCounts.count(key)) {
-          size_t before = std::get<size_t>(lastCounts[key]);
-          size_t after = value;
-          if (after - before) {
-            if (after > before) {
-              Colors::red(o);
-            } else {
-              Colors::green(o);
-            }
-            o << right << setw(8);
-            o << showpos << after - before << noshowpos;
-            Colors::normal(o);
-          }
-        }
+        printCount<size_t, int64_t>(key, *size);
+      } else if (auto size = std::get_if<double>(&counts[key])) {
+        printCount<double, double>(key, *size);
       } else {
-        auto value = std::get<double>(counts[key]);
-        o << " " << left << setw(15) << key << ": " << setw(8) << value;
+        WASM_UNREACHABLE("bad variant");
       }
       o << "\n";
+    }
+  }
+
+  template<typename InputType, typename SignedType>
+  void printCount(const char* key, InputType value) {
+    ostream& o = cout;
+    if (value == 0 && key[0] != '[') {
+      return;
+    }
+    o << " " << left << setw(17) << key << ": " << setw(13) << value;
+    if (lastCounts.count(key)) {
+      SignedType before = std::get<InputType>(lastCounts[key]);
+      SignedType after = value;
+      if (after - before) {
+        if (after > before) {
+          Colors::red(o);
+        } else {
+          Colors::green(o);
+        }
+        o << right << setw(8);
+        o << showpos << after - before << noshowpos;
+        Colors::normal(o);
+      }
     }
   }
 };
