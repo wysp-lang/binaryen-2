@@ -26,9 +26,18 @@ using namespace std;
 
 namespace wasm {
 
-typedef map<const char*, int> Counts;
+// Each value we count is either a size_t size, or some other kind of metric
+// that is stored in a double.
+typedef map<const char*, std::variant<size_t, double>> Counts;
 
 static Counts lastCounts;
+
+static size_t getDepth(HeapType type) {
+  if (auto super = type.getSuperType()) {
+    return getDepth(*super) + 1;
+  }
+  return 0;
+}
 
 // Prints metrics between optimization passes.
 struct Metrics
@@ -39,11 +48,18 @@ struct Metrics
 
   Counts counts;
 
+  size_t refExpressionDepths = 0;
+  size_t refExpressions = 0;
+
   Metrics(bool byFunction) : byFunction(byFunction) {}
 
   void visitExpression(Expression* curr) {
     auto name = getExpressionName(curr);
-    counts[name]++;
+    std::get<size_t>(counts[name])++;
+    if (curr->type.isRef()) {
+      refExpressionDepths += getDepth(curr->type.getHeapType());
+      refExpressions++;
+    }
   }
 
   void doWalkModule(Module* module) {
@@ -71,6 +87,14 @@ struct Metrics
         size += segment.data.size();
       }
       counts["[memory-data]"] = size;
+    }
+
+    if (module->features.hasGC()) {
+      // Find the types and add some stats for them.
+      std::vector<HeapType> types;
+      std::unordered_map<HeapType, Index> typeIndices;
+      ModuleUtils::collectHeapTypes(*module, types, typeIndices);
+      counts["[types]"] = types.size();
     }
 
     Index size = 0;
@@ -154,6 +178,7 @@ struct Metrics
         vars += func->getNumVars();
       });
       counts["[vars]"] = vars;
+      counts["[type-depth]"] = double(refExpressionDepths) / double(refExpressions);
       // print
       printCounts("total");
       // compare to next time
@@ -165,12 +190,15 @@ struct Metrics
     ostream& o = cout;
     vector<const char*> keys;
     // add total
-    int total = 0;
+    size_t total = 0;
     for (auto i : counts) {
       keys.push_back(i.first);
-      // total is of all the normal stuff, not the special [things]
+      // total is of all the normal sizes, not the special [things] or other
+      // stuff.
       if (i.first[0] != '[') {
-        total += i.second;
+        if (auto size = std::get_if<size_t>(&i.second)) {
+          total += *size;
+        }
       }
     }
     keys.push_back("[total]");
@@ -188,24 +216,29 @@ struct Metrics
     });
     o << title << "\n";
     for (auto* key : keys) {
-      auto value = counts[key];
-      if (value == 0 && key[0] != '[') {
-        continue;
-      }
-      o << " " << left << setw(15) << key << ": " << setw(8) << value;
-      if (lastCounts.count(key)) {
-        int before = lastCounts[key];
-        int after = value;
-        if (after - before) {
-          if (after > before) {
-            Colors::red(o);
-          } else {
-            Colors::green(o);
-          }
-          o << right << setw(8);
-          o << showpos << after - before << noshowpos;
-          Colors::normal(o);
+      if (auto size = std::get_if<size_t>(&counts[key])) {
+        auto value = *size;
+        if (value == 0 && key[0] != '[') {
+          continue;
         }
+        o << " " << left << setw(15) << key << ": " << setw(8) << value;
+        if (lastCounts.count(key)) {
+          size_t before = std::get<size_t>(lastCounts[key]);
+          size_t after = value;
+          if (after - before) {
+            if (after > before) {
+              Colors::red(o);
+            } else {
+              Colors::green(o);
+            }
+            o << right << setw(8);
+            o << showpos << after - before << noshowpos;
+            Colors::normal(o);
+          }
+        }
+      } else {
+        auto value = std::get<double>(counts[key]);
+        o << " " << left << setw(15) << key << ": " << setw(8) << value;
       }
       o << "\n";
     }

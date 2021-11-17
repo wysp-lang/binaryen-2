@@ -8,6 +8,7 @@ total
  [tables]       : 1       
  [tags]         : 2       
  [total]        : 30      
+ [types]        : 2       
  [vars]         : 1       
  Binary         : 1       
  Block          : 1       
@@ -73,6 +74,7 @@ total
  [tables]       : 0       
  [tags]         : 0       
  [total]        : 0       
+ [types]        : 0       
  [vars]         : 0       
 (module
 )

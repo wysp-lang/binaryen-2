@@ -227,13 +227,13 @@ total
 total
  [exports]      : 2       
  [funcs]        : 6       
- [globals]      : 0             -1
+ [globals]      : 0       18446744073709551615
  [imports]      : 3       
  [memory-data]  : 28      
  [table-data]   : 429     
  [tables]       : 0       
  [tags]         : 0       
- [total]        : 547           -4
+ [total]        : 547     18446744073709551612
  [vars]         : 2       
  Binary         : 12      
  Block          : 6       
@@ -244,8 +244,8 @@ total
  Drop           : 3       
  If             : 2       
  Load           : 16      
- LocalGet       : 14            -2
- LocalSet       : 5             -1
+ LocalGet       : 14      18446744073709551614
+ LocalSet       : 5       18446744073709551615
  Loop           : 1       
  RefFunc        : 429     
  Store          : 5       

@@ -8,6 +8,7 @@ total
  [tables]       : 1       
  [tags]         : 1       
  [total]        : 465     
+ [types]        : 13      
  [vars]         : 10      
  ArrayInit      : 1       
  AtomicCmpxchg  : 1       
