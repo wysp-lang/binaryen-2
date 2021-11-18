@@ -56,7 +56,7 @@ struct Metrics
   void visitExpression(Expression* curr) {
     auto name = getExpressionName(curr);
     std::get<size_t>(counts[name])++;
-    if (curr->type.isRef()) {
+    if (curr->type.isStruct() || curr->type.isArray()) {
       refExpressionDepths += getDepth(curr->type.getHeapType());
       refExpressions++;
     }
