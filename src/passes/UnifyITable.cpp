@@ -118,7 +118,7 @@ struct UnifyITable : public Pass {
       HeapType type;
 
       // A list of the names of the functions in the vtable.
-      std::vector<Name>;
+      std::vector<Name> funcs;
     };
 
     struct ITable {
@@ -158,9 +158,9 @@ struct UnifyITable : public Pass {
       }
 
       // This is an itable.
-      mapping.itable.emplace_back({global->name, {}});
+      mapping.itables.emplace_back(global->name, {});
     });
-    auto numItables = mapping.itables.size();
+//    auto numItables = mapping.itables.size();
 
     // Find the itable data.
     for (auto& itable : mapping.itables) {
@@ -177,8 +177,8 @@ struct UnifyITable : public Pass {
           auto& vtable = itable.vtables[category];
           auto type = operand->type.getHeapType();
           vtable.type = type;
-          for (auto* operand : new_->operands.size()) {
-            vtable.push_back(operand->cast<RefFunc>()->func);
+          for (auto* operand : new_->operands) {
+            vtable.funcs.push_back(operand->cast<RefFunc>()->func);
           }
 
           // Index the type if we haven't already seen it.
@@ -511,8 +511,8 @@ private:
                             {},
                             body)
     );
-#endif
   }
+#endif
 };
 
 } // anonymous namespace
