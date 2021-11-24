@@ -531,17 +531,26 @@ private:
 
     // Create blocks for each index. (Rely on the relooper to merge and optimize
     // them etc.)
+std::cout << "reloop\n";
+
     for (auto& [index, code] : indexToCode) {
       auto* block = relooper.AddBlock(code);
+std::cout << "block " << index << " => " << *code << '\n';
       entry->AddSwitchBranchTo(block, {index});
     }
+
+std::cout << "default => " << *default_ << '\n';
+    auto* defaultBlock = relooper.AddBlock(default_);
+    entry->AddBranchTo(defaultBlock, nullptr);
 
     // Do not provide an index for a "label helper" local. We should never need
     // one. If we use one somehow, we'll error on it being an invalid local
     // index.
     CFG::RelooperBuilder relooperBuilder(*module, Index(-1));
     relooper.Calculate(entry);
-    return relooper.Render(relooperBuilder);
+    auto* result = relooper.Render(relooperBuilder);
+    ReFinalize().walk(result);
+    return result;
   }
 };
 
