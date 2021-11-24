@@ -177,122 +177,15 @@ struct UnifyITable : public Pass {
       generateSupportsFunc(category);
     }
 
-
-
-
-
-      // Figure out what code each itable index should run.
-      for (auto Index : supportingITables) {
-      }
-
-
-      auto* global = wasm.getGlobal(name);
-      auto& 
-      auto& itableOperands = global->init->cast<ArrayInit>()->values;
-
-      // Pick the base for this itable.
-      mapping.itableBases[itable] = tableIndex;
-
-      for (Index categoryIndex = 0;
-           categoryIndex < mapping.categorySizes.size();
-           categoryIndex++) {
-        auto categorySize = mapping.categorySizes[categoryIndex];
-        // This category might not exist in this itable. If not, we just need
-        // nulls there.
-        auto* operand = categoryIndex < itableOperands.size()
-                          ? itableOperands[categoryIndex]
-                          : nullptr;
-        if (!operand || operand->is<RefNull>()) {
-          // Fill the entire category with nulls.
-          for (Index i = 0; i < categorySize; i++) {
-            assert(tableIndex < segmentData.size());
-            segmentData[tableIndex++] = builder.makeRefNull(HeapType::func);
-          }
-        } else if (auto* new_ = operand->dynCast<StructNew>()) {
-          // Copy in the contents.
-          for (auto* newOperand : new_->operands) {
-            auto* refFunc = newOperand->cast<RefFunc>();
-            assert(tableIndex < segmentData.size());
-            segmentData[tableIndex++] =
-              builder.makeRefFunc(refFunc->func, refFunc->type.getHeapType());
-          }
-
-          // Fill the remaining space with nulls.
-          for (Index i = 0; i < categorySize - new_->operands.size(); i++) {
-            assert(tableIndex < segmentData.size());
-            segmentData[tableIndex++] = builder.makeRefNull(HeapType::func);
-          }
-        } else {
-          WASM_UNREACHABLE("bad array.init operand");
-        }
-      }
-    }
-
-    assert(tableIndex == segmentData.size());
-    assert(tableIndex == itableSize * numItables);
-    auto totalTableSize = tableIndex;
-
-    // Update the table sizes.
-    auto* table = wasm.getTable(mapping.dispatchTable);
-    table->initial = totalTableSize;
-    table->max = totalTableSize;
-
-    // Create the test table, which is an array of datas, now that we know its
-    // size. It begins initialized with nulls, and a start function will assign
-    // values to it. (Note that we can't use array.init as it is far too large
-    // due to VM limitations!)
-    auto testTableType =
-      Type(Array(Field(Type(HeapType::data, Nullable), Mutable)), Nullable);
-    mapping.testTable = Names::getValidGlobalName(wasm, "test-table");
-    wasm.addGlobal(Builder::makeGlobal(mapping.testTable,
-                                       testTableType,
-                                       builder.makeRefNull(testTableType),
-                                       Builder::Mutable));
-
-    // Create a start function for the test table assignments.
-    // TODO: handle an existing start function by prepending.
-    assert(!wasm.start.is());
-    auto startName = Names::getValidFunctionName(wasm, "start");
-    auto* startBlock = builder.makeBlock();
-    wasm.addFunction(builder.makeFunction(
-      startName, Signature(Type::none, Type::none), {}, startBlock));
-    wasm.start = startName;
-
-    // Create the test table. (V8 atm does not allow array.new in globals.)
-    startBlock->list.push_back(builder.makeGlobalSet(
-      mapping.testTable,
-      builder.makeArrayNew(testTableType.getHeapType(),
-                           builder.makeConst(uint32_t(totalTableSize)))));
-
     // Update the itable globals to contain offsets instead. That way when the
     // globals are read in order to initialize the object's $itable fields, we
     // will get the proper values.
-    for (auto itable : mapping.itables) {
-      auto* global = wasm.getGlobal(itable);
+    for (auto& itable : mapping.itables) {
+      auto* global = wasm.getGlobal(itable.name);
       auto* oldInit = global->init->cast<ArrayInit>();
       auto itableBase = mapping.itableBases[itable];
       global->init = Builder(wasm).makeConst(itableBase);
       global->type = Type::i32;
-
-      // The old init's data is placed in the test table, where it can be used
-      // by ref.test instructions. We unpack the array.init instruction's args
-      // and write each to its index in the itable: each vtable goes to the
-      // proper offset for the category it represents.
-      Index offset = 0;
-      for (Index i = 0; i < mapping.categorySizes.size(); i++) {
-        // The itable may not have this category.
-        if (i < oldInit->values.size()) {
-          auto* value = oldInit->values[i];
-          // We only need to write non-null values.
-          if (!value->is<RefNull>()) {
-            startBlock->list.push_back(builder.makeArraySet(
-              builder.makeGlobalGet(mapping.testTable, testTableType),
-              builder.makeConst(uint32_t(itableBase + offset)),
-              value));
-          }
-        }
-        offset += mapping.categorySizes[i];
-      }
     }
 
     // Update the code in the entire module.
@@ -559,6 +452,38 @@ private:
                             {},
                             body)
     );
+  }
+
+  void generateDispatchFunc(Index category) {
+    // TODO: check if they have different signatures...
+    std::map<Index, Expression*> indexToCode;
+    for (Index index = 0; index < mapping.itables.size(); index++) {
+      auto& itable = mapping.itables[index];
+      if (itable.vtables.count(category)) {
+        indexToCode.insert(
+          builder.makeReturn(
+            builder.makeConst(int32_t(1))
+          )
+        );
+      }
+    }
+#if 0
+    // Switch over the things that support the category, each of which has a
+    // return of 1 set up for it. Otherwise, return 0.
+    body = makeSwitch(
+      indexToCode,
+      builder.makeReturn(
+        builder.makeConst(int32_t(0))
+      )
+    );
+
+    module->addFunction(
+      builder->makeFunction("itable$supports$" + std::to_string(category),
+                            Signature({Type::i32}, {Type::i32}),
+                            {},
+                            body)
+    );
+#endif
   }
 };
 
