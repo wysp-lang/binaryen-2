@@ -66,15 +66,16 @@
 // reason this pass makes sense as a final transformation.
 //
 
-#include <ir/local-graph.h>
-#include <ir/module-utils.h>
-#include <ir/names.h>
-#include <ir/type-updating.h>
-#include <ir/utils.h>
-#include <pass.h>
-#include <wasm-builder.h>
-#include <wasm-type.h>
-#include <wasm.h>
+#include "cfg/Relooper.h"
+#include "ir/local-graph.h"
+#include "ir/module-utils.h"
+#include "ir/names.h"
+#include "ir/type-updating.h"
+#include "ir/utils.h"
+#include "pass.h"
+#include "wasm-builder.h"
+#include "wasm-type.h"
+#include "wasm.h"
 
 using namespace std;
 
@@ -128,6 +129,8 @@ struct UnifyITable : public Pass {
       // An itable maps the category indexes that it implements to the vtable
       // for them.
       std::unordered_map<Index, VTable> vtables;
+
+      ITable(Name name) : name(name) {}
     };
 
     // The itables in the wasm, in the order they appear. The index of an
@@ -158,7 +161,7 @@ struct UnifyITable : public Pass {
       }
 
       // This is an itable.
-      mapping.itables.emplace_back(global->name, {});
+      mapping.itables.emplace_back(global->name);
     });
 //    auto numItables = mapping.itables.size();
 
@@ -452,30 +455,31 @@ struct UnifyITable : public Pass {
 private:
   void generateSupportsFunc(Index category, HeapType type) {
     std::map<Index, Expression*> indexToCode;
-    for (Index index = 0; index < mapping.itables.size(); index++) {
-      auto& itable = mapping.itables[index];
+    for (Index itableIndex = 0; itableIndex < mapping.itables.size(); itableIndex++) {
+      auto& itable = mapping.itables[itableIndex];
       // This itable implements this category+type if it has the category, and
       // if the type on that category is correct.
-      if (itable.vtables.count(category) && index.vtables[category].type == type) {
-        indexToCode.insert(
-          builder.makeReturn(
-            builder.makeConst(int32_t(1))
+      if (itable.vtables.count(category) && itable.vtables[category].type == type) {
+        indexToCode[itableIndex] =
+          builder->makeReturn(
+            builder->makeConst(int32_t(1))
           )
-        );
+        ;
       }
     }
 
     // Switch over the things that support the category, each of which has a
     // return of 1 set up for it. Otherwise, return 0.
-    body = makeSwitch(
+    auto* body = makeSwitch(
       indexToCode,
-      builder.makeReturn(
-        builder.makeConst(int32_t(0))
-      )
+      builder->makeReturn(
+        builder->makeConst(int32_t(0))
+      ),
+      builder->makeLocalGet(0, Type::i32)
     );
 
     module->addFunction(
-      builder->makeFunction("itable$supports$" + std::to_string(category) + '$' + std::to_string(mapping.typeIndexes[type],
+      builder->makeFunction("itable$supports$" + std::to_string(category) + '$' + std::to_string(mapping.typeIndexes[type]),
                             Signature({Type::i32}, {Type::i32}),
                             {},
                             body)
@@ -490,8 +494,8 @@ private:
       auto& itable = mapping.itables[index];
       if (itable.vtables.count(category)) {
         indexToCode.insert(
-          builder.makeReturn(
-            builder.makeConst(int32_t(1))
+          builder->makeReturn(
+            builder->makeConst(int32_t(1))
           )
         );
       }
@@ -500,9 +504,10 @@ private:
     // return of 1 set up for it. Otherwise, return 0.
     body = makeSwitch(
       indexToCode,
-      builder.makeReturn(
-        builder.makeConst(int32_t(0))
-      )
+      builder->makeReturn(
+        builder->makeConst(int32_t(0))
+      ),
+      builder->makeLocalGet(0, Type::i32)
     );
 
     module->addFunction(
@@ -513,6 +518,31 @@ private:
     );
   }
 #endif
+
+  // This takes a map of indexes to the code we want to execute for that index,
+  // and the code we want to execute in the default case when none of the
+  // indexes is equal to the value at runtime. It also receives the value to
+  // perform the switch on.
+  Expression* makeSwitch(const std::map<Index, Expression*>& indexToCode, Expression* default_, Expression* condition) {
+    CFG::Relooper relooper(module);
+
+    // The entry block contains a switch on the condition, and nothing else.
+    auto* entry = relooper.AddBlock(builder->makeNop(), condition);
+
+    // Create blocks for each index. (Rely on the relooper to merge and optimize
+    // them etc.)
+    for (auto& [index, code] : indexToCode) {
+      auto* block = relooper.AddBlock(code);
+      entry->AddSwitchBranchTo(block, {index});
+    }
+
+    // Do not provide an index for a "label helper" local. We should never need
+    // one. If we use one somehow, we'll error on it being an invalid local
+    // index.
+    CFG::RelooperBuilder relooperBuilder(*module, Index(-1));
+    relooper.Calculate(entry);
+    return relooper.Render(relooperBuilder);
+  }
 };
 
 } // anonymous namespace
