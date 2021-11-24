@@ -205,14 +205,14 @@ struct UnifyITable : public Pass {
     }
 
     // Update the itable globals to contain indexes instead.
-    for (auto& itable : mapping.itables) {
+    for (Index index = 0; index < mapping.itables.size(); index++) {
+      auto& itable = mapping.itables[index];
       auto* global = wasm.getGlobal(itable.name);
-      auto* oldInit = global->init->cast<ArrayInit>();
-      auto itableBase = mapping.itableBases[itable];
-      global->init = Builder(wasm).makeConst(itableBase);
+      global->init = builder->makeConst(index);
       global->type = Type::i32;
     }
 
+#if 0
     // Update the code in the entire module.
     struct CodeUpdater : public WalkerPass<PostWalker<CodeUpdater>> {
       bool isFunctionParallel() override { return true; }
@@ -428,6 +428,7 @@ struct UnifyITable : public Pass {
     CodeUpdater updater(mapping);
     updater.run(runner, &wasm);
     updater.walkModuleCode(&wasm);
+#endif
   }
 
   void updateFieldTypes(Module& wasm) {
