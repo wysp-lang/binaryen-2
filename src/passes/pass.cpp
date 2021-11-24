@@ -416,6 +416,9 @@ void PassRegistry::registerPasses() {
   registerPass("trap-mode-js",
                "replace trapping operations with js semantics",
                createTrapModeJS);
+  registerPass("unify-itable",
+               "converts itable calls to use dispatch functions",
+               createUnifyITablePass);
   registerPass("untee",
                "removes local.tees, replacing them with sets and gets",
                createUnteePass);

@@ -133,6 +133,7 @@ Pass* createSSAifyNoMergePass();
 Pass* createTrapModeClamp();
 Pass* createTrapModeJS();
 Pass* createTypeRefiningPass();
+Pass* createUnifyITablePass();
 Pass* createUnteePass();
 Pass* createVacuumPass();
 

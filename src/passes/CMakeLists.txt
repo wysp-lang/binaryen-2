@@ -90,6 +90,7 @@ set(passes_SOURCES
   Souperify.cpp
   StackCheck.cpp
   SSAify.cpp
+  UnifyITable.cpp
   Untee.cpp
   Vacuum.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/WasmIntrinsics.cpp
