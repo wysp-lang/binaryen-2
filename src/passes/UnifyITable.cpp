@@ -203,7 +203,7 @@ struct UnifyITable : public Pass {
     for (auto& [category, types] : mapping.categoryTypes) {
       for (auto type : types) {
         generateSupportsFunc(category, type);
-        //generateDispatchFunc(category, type);
+        generateDispatchFunc(category, type);
       }
     }
 
@@ -486,38 +486,35 @@ private:
     );
   }
 
-#if 0
-  void generateDispatchFunc(Index category) {
-    // TODO: check if they have different signatures...
+  void generateDispatchFunc(Index category, HeapType type) {
+    auto sig = type.getSignature(); // XXX no, this is a vtable type. We must make one function for each slot in it, each of whom can have a different sig.
     std::map<Index, Expression*> indexToCode;
-    for (Index index = 0; index < mapping.itables.size(); index++) {
-      auto& itable = mapping.itables[index];
-      if (itable.vtables.count(category)) {
-        indexToCode.insert(
-          builder->makeReturn(
-            builder->makeConst(int32_t(1))
-          )
+    for (Index itableIndex = 0; itableIndex < mapping.itables.size(); itableIndex++) {
+      auto& itable = mapping.itables[itableIndex];
+      if (itable.vtables.count(category) && itable.vtables[category].type == type) {
+        Expression* call = builder->makeCall(
+          builder->makeConst(int32_t(1))
         );
+        indexToCode[itableIndex] = call;
       }
     }
-    // Switch over the things that support the category, each of which has a
-    // return of 1 set up for it. Otherwise, return 0.
-    body = makeSwitch(
+
+    // Switch over the things that support the category and run the correct
+    // code. If a logic error occurred, an unreachable will be executed as the
+    // default of the switch.
+    auto* body = makeSwitch(
       indexToCode,
-      builder->makeReturn(
-        builder->makeConst(int32_t(0))
-      ),
+      builder->makeUnreachable(),
       builder->makeLocalGet(0, Type::i32)
     );
 
     module->addFunction(
-      builder->makeFunction("itable$supports$" + std::to_string(category),
+      builder->makeFunction("itable$dispatch$" + std::to_string(category) + '$' + std::to_string(mapping.typeIndexes[type]),
                             Signature({Type::i32}, {Type::i32}),
                             {},
                             body)
     );
   }
-#endif
 
   // This takes a map of indexes to the code we want to execute for that index,
   // and the code we want to execute in the default case when none of the
