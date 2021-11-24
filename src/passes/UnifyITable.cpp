@@ -36,14 +36,22 @@
 //
 // Then we create dispatch functions that look like this:
 //
-//  function dispatch$N(itableIndex, args..) {
-//    if (itableIndex) {
+//  function itable$dispatch$N(itableIndex, args..) {
+//    if (itableIndex == 42) {
 //      foo(args..);
 //    } else ..
 //
 // Each dispatch function handles on category, and switches over the relevant
 // itables that implement that category. For each such itable it does a direct
 // call to its target.
+//
+// We also create functions that return whether an itable index supports a
+// category,
+//
+//  function itable$supports$N(itableIndex) {
+//    if (itableIndex == 42) {
+//      return 1; // this itable supports this category
+//    } else ..
 //
 // Assumption: The itable field is called $itable, and nothing else has that
 // name; and likewise the itable array is called $itable.
@@ -79,7 +87,15 @@ static bool isItableField(HeapType type, Index fieldIndex, Module& wasm) {
 }
 
 struct UnifyITable : public Pass {
-  void run(PassRunner* runner, Module* module) override {
+  Module* module;
+
+  std::unique_ptr<Builder> builder;
+
+  void run(PassRunner* runner, Module* module_) override {
+    module = module_;
+
+    builder = std::make_unique<Builder>(*module);
+
     // Process itable data in globals and compute the layout of the unified
     // table. This also applies those changes to code.
     mapFunctionsToTable(runner, *module);
@@ -89,50 +105,30 @@ struct UnifyITable : public Pass {
     updateFieldTypes(*module);
   }
 
+  // Fill in mapping info that describes how we lay out the dispatch table.
+  struct MappingInfo {
+    // A vtable in an itable is a list of the names of the functions that are
+    // targeted.
+    using VTable = std::vector<Name>;
+
+    struct ITable {
+      // The name of the global where this itable is defined.
+      Name name;
+
+      // An itable maps the category indexes that it implements to the vtable
+      // for them.
+      std::unordered_map<Index, VTable> vtables;
+    };
+
+    // The itables in the wasm, in the order they appear. The index of an
+    // itable in this vector is the index it is identified by.
+    std::vector<ITable> itables;
+
+    // The size of each category.
+    Index numCategories = 0;
+  } mapping;
+
   void mapFunctionsToTable(PassRunner* runner, Module& wasm) {
-    // Fill in mapping info that describes how we lay out the dispatch table.
-    struct MappingInfo {
-      // The name of the unified dispatch table that we will create and use
-      // everywhere. This table contains function references.
-      Name dispatchTable;
-
-      // The name of the unified test table that we will create and use
-      // everywhere. This table contains vtables, and is used by ref.test to
-      // basically check if an object supports an interface.
-      // TODO: remove this if j2cl can stop using vtables this way
-      Name testTable;
-
-      // The list of itable globals, in the order they appear in the wasm.
-      std::vector<Name> itables;
-
-      // Maps the names of itable globals in the old model to base offsets in
-      // the dispatch table in the new model.
-      std::unordered_map<Name, Index> itableBases;
-
-      // The size of each category.
-      std::vector<Index> categorySizes;
-
-      // The total size of each itable, which is the sum of the category sizes.
-      Index itableSize;
-
-      // The base index of each category, that is, at what offset that category
-      // begins (in each itable region in the dispatch table).
-      std::vector<Index> categoryBases;
-    } mapping;
-
-    // Create the dispatch table.
-    mapping.dispatchTable = Names::getValidTableName(wasm, "dispatch-table");
-    wasm.addTable(Builder::makeTable(mapping.dispatchTable, Type::funcref));
-    auto segmentName = Names::getValidElementSegmentName(
-      wasm, mapping.dispatchTable.str + std::string("$segment"));
-    Builder builder(wasm);
-    auto* segment = wasm.addElementSegment(
-      Builder::makeElementSegment(segmentName,
-                                  mapping.dispatchTable,
-                                  builder.makeConst(int32_t(0)),
-                                  Type::funcref));
-    auto& segmentData = segment->data;
-
     // Find the itable globals.
     ModuleUtils::iterDefinedGlobals(wasm, [&](Global* global) {
       // Itables are created with array.init and nothing else.
@@ -149,54 +145,49 @@ struct UnifyITable : public Pass {
       }
 
       // This is an itable.
-      mapping.itables.push_back(global->name);
+      mapping.itable.emplace_back({global->name, {}});
     });
     auto numItables = mapping.itables.size();
 
-    // Compute the size of the categories.
-    auto ensureCategorySize = [&](Index index, Index size) {
-      if (index >= mapping.categorySizes.size()) {
-        mapping.categorySizes.resize(index + 1);
-      }
-      mapping.categorySizes[index] =
-        std::max(mapping.categorySizes[index], size);
-    };
-
-    for (auto itable : mapping.itables) {
-      auto* global = wasm.getGlobal(itable);
+    // Find the itable data.
+    for (auto& itable : mapping.itables) {
+      auto* global = wasm.getGlobal(itable.name);
       auto& itableOperands = global->init->cast<ArrayInit>()->values;
-      Index index = 0;
+      Index category = 0;
       for (auto* operand : itableOperands) {
         // Elements in an itable are either a null or a struct.new.
         if (operand->is<RefNull>()) {
-          // Just ensure the category exists.
-          ensureCategorySize(index, 0);
+          // Nothing to do: this itable does not support this category.
         } else if (auto* new_ = operand->dynCast<StructNew>()) {
-          ensureCategorySize(index, new_->operands.size());
+          auto& vtable = itable.vtables[category];
+          for (auto* operand : new_->operands.size()) {
+            vtable.push_back(operand->cast<RefFunc>()->func);
+          }
+          mapping.numCategories = std::map(mapping.numCategories, category);
         } else {
           WASM_UNREACHABLE("bad array.init operand");
         }
-        index++;
+        category++;
       }
     }
 
-    // The size of an itable in the new layout is the sum of all the category
-    // sizes. Calculate that and the base for each category.
-    Index itableSize = 0;
-    for (auto size : mapping.categorySizes) {
-      mapping.categoryBases.push_back(itableSize);
-      itableSize += size;
+    // Generate the dispatch and supports functions.
+    for (Index category = 0; category < mapping.numCategories; category++) {
+      // Generate the supports function.
+      generateSupportsFunc(category);
     }
-    mapping.itableSize = itableSize;
 
-    // The dispatch table's segment's size is now known.
-    segmentData.resize(itableSize * numItables);
 
-    // Now that we know the sizes of the categories, we can generate the layout
-    // of the dispatch table and fill it out.
-    Index tableIndex = 0;
-    for (auto itable : mapping.itables) {
-      auto* global = wasm.getGlobal(itable);
+
+
+
+      // Figure out what code each itable index should run.
+      for (auto Index : supportingITables) {
+      }
+
+
+      auto* global = wasm.getGlobal(name);
+      auto& 
       auto& itableOperands = global->init->cast<ArrayInit>()->values;
 
       // Pick the base for this itable.
@@ -537,6 +528,37 @@ struct UnifyITable : public Pass {
     };
 
     TypeRewriter(wasm).update();
+  }
+
+private:
+  void generateSupportsFunc(Index category) {
+    std::map<Index, Expression*> indexToCode;
+    for (Index index = 0; index < mapping.itables.size(); index++) {
+      auto& itable = mapping.itables[index];
+      if (itable.vtables.count(category)) {
+        indexToCode.insert(
+          builder.makeReturn(
+            builder.makeConst(int32_t(1))
+          )
+        );
+      }
+    }
+
+    // Switch over the things that support the category, each of which has a
+    // return of 1 set up for it. Otherwise, return 0.
+    body = makeSwitch(
+      indexToCode,
+      builder.makeReturn(
+        builder.makeConst(int32_t(0))
+      )
+    );
+
+    module->addFunction(
+      builder->makeFunction("itable$supports$" + std::to_string(category),
+                            Signature({Type::i32}, {Type::i32}),
+                            {},
+                            body)
+    );
   }
 };
 
