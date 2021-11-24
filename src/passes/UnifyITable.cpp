@@ -20,7 +20,8 @@
 //
 //  (global $foo.itable (array.init $itable
 //    (null) ;; no entry for this category
-//    (struct.new $some.vtable ;; an entry of size 2 for this category
+//    (struct.new $some.vtable ;; an entry of size 2 for this category,
+//                             ;; with heap type $some.vtable
 //      (ref.func $a)
 //      (ref.func $b)
 //    )
@@ -28,27 +29,31 @@
 //  ))
 //
 // Each index refers to what we call a "category", globally. That is, the 0th
-// index in all itables refers to the first category, and so forth. (For
+// index in all itables refers to the first category, and so forth. For
 // example, the first category may be the interface "Serializable"; however,
 // there may also be more than one source interface per category, if the
-// producer emitted them that way.) At each index, an itable has either a null
-// or a vtable that contains function references.
+// producer emitted them that way, in which case different heap types of the
+// vtables indicate that.
+//
+// At each category index an itable has either a null or a vtable that contains
+// function references.
 //
 // Then we create dispatch functions that look like this:
 //
-//  function itable$dispatch$N(itableIndex, args..) {
+//  function itable$dispatch$N$T(itableIndex, args..) {
 //    if (itableIndex == 42) {
 //      foo(args..);
 //    } else ..
 //
-// Each dispatch function handles on category, and switches over the relevant
+// Each dispatch function handles one category N and one heap type T in that
+// category, and switches over the relevant
 // itables that implement that category. For each such itable it does a direct
 // call to its target.
 //
 // We also create functions that return whether an itable index supports a
 // category,
 //
-//  function itable$supports$N(itableIndex) {
+//  function itable$supports$N$T(itableIndex) {
 //    if (itableIndex == 42) {
 //      return 1; // this itable supports this category
 //    } else ..
@@ -107,9 +112,14 @@ struct UnifyITable : public Pass {
 
   // Fill in mapping info that describes how we lay out the dispatch table.
   struct MappingInfo {
-    // A vtable in an itable is a list of the names of the functions that are
-    // targeted.
-    using VTable = std::vector<Name>;
+    struct VTable {
+      // The type of the table. The old code casts to this before loading, and
+      // the new code needs this to tell if an itable supports an interface.
+      HeapType type;
+
+      // A list of the names of the functions in the vtable.
+      std::vector<Name>;
+    };
 
     struct ITable {
       // The name of the global where this itable is defined.
@@ -124,8 +134,11 @@ struct UnifyITable : public Pass {
     // itable in this vector is the index it is identified by.
     std::vector<ITable> itables;
 
-    // The size of each category.
-    Index numCategories = 0;
+    // A global mapping of heap types of vtables to indexes.
+    std::unordered_map<HeapType, Index> typeIndexes;
+
+    // A map of each category to its types.
+    InsertOrderedMap<Index, InsertOrderedSet<HeapType>> categoryTypes;
   } mapping;
 
   void mapFunctionsToTable(PassRunner* runner, Module& wasm) {
@@ -159,11 +172,23 @@ struct UnifyITable : public Pass {
         if (operand->is<RefNull>()) {
           // Nothing to do: this itable does not support this category.
         } else if (auto* new_ = operand->dynCast<StructNew>()) {
+          // This itable supports this category. Create the vtable data
+          // structure and set the type and function names.
           auto& vtable = itable.vtables[category];
+          auto type = operand->type.getHeapType();
+          vtable.type = type;
           for (auto* operand : new_->operands.size()) {
             vtable.push_back(operand->cast<RefFunc>()->func);
           }
-          mapping.numCategories = std::map(mapping.numCategories, category);
+
+          // Index the type if we haven't already seen it.
+          if (!mapping.typeIndexes.count(type)) {
+            auto index = mapping.typeIndexes.size();
+            mapping.typeIndexes[type] = index;
+          }
+
+          // Note the type is used in the category.
+          mapping.categoryTypes[category].insert(type);
         } else {
           WASM_UNREACHABLE("bad array.init operand");
         }
@@ -171,15 +196,15 @@ struct UnifyITable : public Pass {
       }
     }
 
-    // Generate the dispatch and supports functions.
-    for (Index category = 0; category < mapping.numCategories; category++) {
-      // Generate the supports function.
-      generateSupportsFunc(category);
+    // Generate the functions.
+    for (auto& [category, types] : mapping.categoryTypes) {
+      for (auto type : types) {
+        generateSupportsFunc(category, type);
+        //generateDispatchFunc(category, type);
+      }
     }
 
-    // Update the itable globals to contain offsets instead. That way when the
-    // globals are read in order to initialize the object's $itable fields, we
-    // will get the proper values.
+    // Update the itable globals to contain indexes instead.
     for (auto& itable : mapping.itables) {
       auto* global = wasm.getGlobal(itable.name);
       auto* oldInit = global->init->cast<ArrayInit>();
@@ -424,11 +449,13 @@ struct UnifyITable : public Pass {
   }
 
 private:
-  void generateSupportsFunc(Index category) {
+  void generateSupportsFunc(Index category, HeapType type) {
     std::map<Index, Expression*> indexToCode;
     for (Index index = 0; index < mapping.itables.size(); index++) {
       auto& itable = mapping.itables[index];
-      if (itable.vtables.count(category)) {
+      // This itable implements this category+type if it has the category, and
+      // if the type on that category is correct.
+      if (itable.vtables.count(category) && index.vtables[category].type == type) {
         indexToCode.insert(
           builder.makeReturn(
             builder.makeConst(int32_t(1))
@@ -447,13 +474,14 @@ private:
     );
 
     module->addFunction(
-      builder->makeFunction("itable$supports$" + std::to_string(category),
+      builder->makeFunction("itable$supports$" + std::to_string(category) + '$' + std::to_string(mapping.typeIndexes[type],
                             Signature({Type::i32}, {Type::i32}),
                             {},
                             body)
     );
   }
 
+#if 0
   void generateDispatchFunc(Index category) {
     // TODO: check if they have different signatures...
     std::map<Index, Expression*> indexToCode;
@@ -467,7 +495,6 @@ private:
         );
       }
     }
-#if 0
     // Switch over the things that support the category, each of which has a
     // return of 1 set up for it. Otherwise, return 0.
     body = makeSwitch(
