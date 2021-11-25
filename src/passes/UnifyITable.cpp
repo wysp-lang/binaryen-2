@@ -494,7 +494,7 @@ private:
   }
 
   void generateDispatchFunc(Index category, HeapType type, Index vtableFieldIndex, Type vtableFieldType) {
-    auto sig = fieldType.getSignature();
+    auto sig = vtableFieldType.getHeapType().getSignature();
     auto params = sig.params;
     auto results = sig.results;
     std::map<Index, Expression*> indexToCode;
@@ -505,11 +505,11 @@ private:
         if (vtable.type == type) {
           std::vector<Expression*> args;
           for (Index i = 0; i < params.size(); i++) {
-            args.push_back(builder->makeLocalGet(i, params[i]);
+            args.push_back(builder->makeLocalGet(i, params[i]));
           }
           Expression* call = builder->makeCall(vtable.funcs[vtableFieldIndex], args, results);
-          if (result != Type::none) {
-            call = builder.makeReturn(call);
+          if (results != Type::none) {
+            call = builder->makeReturn(call);
           }
           indexToCode[itableIndex] = call;
         }
@@ -517,7 +517,7 @@ private:
     }
 
     // The new parameters include the itable index at the end.
-    auto newParams = sig.params;
+    std::vector<Type> newParams(params.begin(), params.end());
     auto itableParamIndex = newParams.size();
     newParams.push_back(Type::i32);
 
@@ -531,8 +531,8 @@ private:
     );
 
     module->addFunction(
-      builder->makeFunction("itable$dispatch$" + std::to_string(category) + '$' + std::to_string(mapping.typeIndexes[type]) + '$' + vtableFieldIndex,
-                            Signature(newParams, results),
+      builder->makeFunction("itable$dispatch$" + std::to_string(category) + '$' + std::to_string(mapping.typeIndexes[type]) + '$' + std::to_string(vtableFieldIndex),
+                            Signature(Type(newParams), results),
                             {},
                             body)
     );
