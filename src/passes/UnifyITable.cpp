@@ -202,8 +202,15 @@ struct UnifyITable : public Pass {
     // Generate the functions.
     for (auto& [category, types] : mapping.categoryTypes) {
       for (auto type : types) {
+        // One supports func is generated per category and type.
         generateSupportsFunc(category, type);
-        generateDispatchFunc(category, type);
+
+        // Each category and type need one function for each field in the
+        // vtable.
+        auto& fields = type.getStruct().fields;
+        for (Index i = 0; i < fields.size(); i++) {
+          generateDispatchFunc(category, type, i, fields[i].type);
+        }
       }
     }
 
@@ -486,18 +493,33 @@ private:
     );
   }
 
-  void generateDispatchFunc(Index category, HeapType type) {
-    auto sig = type.getSignature(); // XXX no, this is a vtable type. We must make one function for each slot in it, each of whom can have a different sig.
+  void generateDispatchFunc(Index category, HeapType type, Index vtableFieldIndex, Type vtableFieldType) {
+    auto sig = fieldType.getSignature();
+    auto params = sig.params;
+    auto results = sig.results;
     std::map<Index, Expression*> indexToCode;
     for (Index itableIndex = 0; itableIndex < mapping.itables.size(); itableIndex++) {
       auto& itable = mapping.itables[itableIndex];
-      if (itable.vtables.count(category) && itable.vtables[category].type == type) {
-        Expression* call = builder->makeCall(
-          builder->makeConst(int32_t(1))
-        );
-        indexToCode[itableIndex] = call;
+      if (itable.vtables.count(category)) {
+        auto& vtable = itable.vtables[category];
+        if (vtable.type == type) {
+          std::vector<Expression*> args;
+          for (Index i = 0; i < params.size(); i++) {
+            args.push_back(builder->makeLocalGet(i, params[i]);
+          }
+          Expression* call = builder->makeCall(vtable.funcs[vtableFieldIndex], args, results);
+          if (result != Type::none) {
+            call = builder.makeReturn(call);
+          }
+          indexToCode[itableIndex] = call;
+        }
       }
     }
+
+    // The new parameters include the itable index at the end.
+    auto newParams = sig.params;
+    auto itableParamIndex = newParams.size();
+    newParams.push_back(Type::i32);
 
     // Switch over the things that support the category and run the correct
     // code. If a logic error occurred, an unreachable will be executed as the
@@ -505,12 +527,12 @@ private:
     auto* body = makeSwitch(
       indexToCode,
       builder->makeUnreachable(),
-      builder->makeLocalGet(0, Type::i32)
+      builder->makeLocalGet(itableParamIndex, Type::i32)
     );
 
     module->addFunction(
-      builder->makeFunction("itable$dispatch$" + std::to_string(category) + '$' + std::to_string(mapping.typeIndexes[type]),
-                            Signature({Type::i32}, {Type::i32}),
+      builder->makeFunction("itable$dispatch$" + std::to_string(category) + '$' + std::to_string(mapping.typeIndexes[type]) + '$' + vtableFieldIndex,
+                            Signature(newParams, results),
                             {},
                             body)
     );
