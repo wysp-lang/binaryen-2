@@ -485,8 +485,10 @@ private:
       builder->makeLocalGet(0, Type::i32)
     );
 
+    auto name = "itable$supports$" + std::to_string(category) + '$' + std::to_string(mapping.typeIndexes[type]);
+
     module->addFunction(
-      builder->makeFunction("itable$supports$" + std::to_string(category) + '$' + std::to_string(mapping.typeIndexes[type]),
+      builder->makeFunction(name,
                             Signature({Type::i32}, {Type::i32}),
                             {},
                             body)
@@ -550,15 +552,12 @@ private:
 
     // Create blocks for each index. (Rely on the relooper to merge and optimize
     // them etc.)
-std::cout << "reloop\n";
 
     for (auto& [index, code] : indexToCode) {
       auto* block = relooper.AddBlock(code);
-std::cout << "block " << index << " => " << *code << '\n';
       entry->AddSwitchBranchTo(block, {index});
     }
 
-std::cout << "default => " << *default_ << '\n';
     auto* defaultBlock = relooper.AddBlock(default_);
     entry->AddBranchTo(defaultBlock, nullptr);
 
