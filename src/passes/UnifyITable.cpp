@@ -137,6 +137,8 @@ struct UnifyITable : public Pass {
     // itable in this vector is the index it is identified by.
     std::vector<ITable> itables;
 
+    std::unordered_set<Name> itableGlobals;
+
     // A global mapping of heap types of vtables to indexes.
     std::unordered_map<HeapType, Index> typeIndexes;
 
@@ -162,6 +164,7 @@ struct UnifyITable : public Pass {
 
       // This is an itable.
       mapping.itables.emplace_back(global->name);
+      mapping.itableGlobals.insert(global->name);
     });
 //    auto numItables = mapping.itables.size();
 
@@ -222,7 +225,6 @@ struct UnifyITable : public Pass {
       global->type = Type::i32;
     }
 
-#if 0
     // Update the code in the entire module.
     struct CodeUpdater : public WalkerPass<PostWalker<CodeUpdater>> {
       bool isFunctionParallel() override { return true; }
@@ -273,11 +275,19 @@ struct UnifyITable : public Pass {
       //    as flowing through locals. Those uses are then marked as also being
       //    in |inPattern|, and are altered accordingly (see details below).
 
-      std::unordered_set<Expression*> inPattern;
+      struct PatternInfo {
+        Index category;
+        HeapType type;
+        Index vtableFieldIndex;
+        Type vtableFieldType; // TODO needed?
+      };
+
+      std::unordered_map<Expression*, PatternInfo> inPattern;
 
       void visitGlobalGet(GlobalGet* curr) {
-        if (mapping.itableBases.count(curr->name)) {
-          inPattern.insert(curr);
+        if (mapping.itableGlobals.count(curr->name)) {
+          // A pattern begins here by getting an itable from a global.
+          inPattern[curr];
           curr->type = Type::i32;
         }
       }
@@ -289,6 +299,7 @@ struct UnifyITable : public Pass {
       // information, as it will now return an i32 (and also be replaced with
       // an entirely new instruction), which is why we must stash it on the side
       // here so that the parent can find the type.
+      // TODO: move into pattern info?
       std::unordered_map<Expression*, Type> oldStructGetTypes;
 
       void visitStructGet(StructGet* curr) {
@@ -303,16 +314,18 @@ struct UnifyITable : public Pass {
           auto* add = builder.makeBinary(
             AddInt32, curr->ref, builder.makeConst(int32_t(curr->index)));
           replaceCurrent(add);
-          inPattern.insert(add);
+          auto& info = inPattern[add] = inPattern[curr->ref];
+          info.vtableFieldIndex = curr->index;
           oldStructGetTypes[add] = curr->type;
           return;
         }
 
         // Or, this may be where an itable value arrives, if it is read from
-        // an itable field.
+        // an itable field, and so a pattern begins here.
+        // TODO: reorder with the above.
         if (isItableField(
               curr->ref->type.getHeapType(), curr->index, *getModule())) {
-          inPattern.insert(curr);
+          inPattern[curr];
           curr->type = Type::i32;
         }
       }
@@ -325,7 +338,7 @@ struct UnifyITable : public Pass {
         auto* func = getFunction();
 
         if (inPattern.count(curr->value)) {
-          inPattern.insert(curr);
+          inPattern[curr] = inPattern[curr->value];
 
           // TODO: handle itables stored in params..?
           assert(func->isVar(curr->index));
@@ -348,31 +361,27 @@ struct UnifyITable : public Pass {
 
             // Mark them as well, so that their parents know to update
             // themselves.
-            inPattern.insert(get);
+            inPattern[get] = inPattern[curr];
           }
         }
       }
 
       void visitArrayGet(ArrayGet* curr) {
         if (inPattern.count(curr->ref)) {
-          inPattern.insert(curr);
-
-          // Our reference is an itable base. We need to add the category
-          // offset to it.
+          // Our reference is an itable base. The array.get offset is the
+          // category index, which we can now note.
           Index categoryIndex = curr->index->cast<Const>()->value.geti32();
           assert(categoryIndex < mapping.categoryBases.size());
-          auto categoryBase = mapping.categoryBases[categoryIndex];
-          Builder builder(*getModule());
-          auto* add = builder.makeBinary(
-            AddInt32, curr->ref, builder.makeConst(int32_t(categoryBase)));
-          replaceCurrent(add);
-          inPattern.insert(add);
+          auto& info = inPattern[curr] = inPattern.count[curr->ref];
+          info.category = categoryIndex;
         }
       }
 
       void visitRefCast(RefCast* curr) {
         if (inPattern.count(curr->ref)) {
-          // The cast is no longer needed; skip it.
+          // The cast is no longer needed; skip it. But note the type, which is
+          // the vtable type.
+          inPattern[curr->ref].type = curr->getIntendedType();
           replaceCurrent(curr->ref);
 
           // TODO: handle rtts with side effects?
@@ -382,11 +391,15 @@ struct UnifyITable : public Pass {
 
       void visitRefTest(RefTest* curr) {
         if (inPattern.count(curr->ref)) {
-          // Do a test on the test table's contents at the relevant location.
+          auto& info = inPattern[curr->ref];
+
+          // Call the proper supports method.
           Builder builder(*getModule());
-          auto* globalGet = builder.makeGlobalGet(
-            mapping.testTable, getModule()->getGlobal(mapping.testTable)->type);
-          curr->ref = builder.makeArrayGet(globalGet, curr->ref);
+          replaceCurrent(builder.makeCall(
+            parent.getSupportsName(info.category, info.type),
+            {curr->ref},
+            Type::i32
+          ));
         }
       }
 
@@ -401,6 +414,8 @@ struct UnifyITable : public Pass {
 
       void visitCallRef(CallRef* curr) {
         if (inPattern.count(curr->target)) {
+          auto& info = inPattern[curr->target];
+
           // We have reached the end of the pattern: our call target contains
           // not a function reference but an index in the dispatch table,
           // including all necessary offseting. All that we have left to do is
@@ -412,10 +427,14 @@ struct UnifyITable : public Pass {
           // that used to be our child had.
           auto funcType = oldStructGetTypes[curr->target];
           auto sig = funcType.getHeapType().getSignature();
-          auto* call =
-            Builder(*getModule())
-              .makeCallIndirect(
-                mapping.dispatchTable, curr->target, curr->operands, sig);
+          auto operands = curr->operands;
+          operands.push_back(curr->target);
+          Builder builder(*getModule());
+          replaceCurrent(builder.makeCall(
+            parent.getDispatchName(info.category, info.type, info.vtableFieldIndex),
+            operands,
+            sig.results
+          ));
           replaceCurrent(call);
         }
       }
@@ -438,7 +457,6 @@ struct UnifyITable : public Pass {
     CodeUpdater updater(mapping);
     updater.run(runner, &wasm);
     updater.walkModuleCode(&wasm);
-#endif
   }
 
   void updateFieldTypes(Module& wasm) {
@@ -457,6 +475,14 @@ struct UnifyITable : public Pass {
     };
 
     TypeRewriter(wasm).update();
+  }
+
+  std::string getSupportsName(Index category, HeapType type) {
+    return "itable$supports$" + std::to_string(category) + '$' + std::to_string(mapping.typeIndexes[type]);
+  }
+
+  std::string getDispatchName(Index category, HeapType type, Index vtableFieldIndex) {
+    return "itable$dispatch$" + std::to_string(category) + '$' + std::to_string(mapping.typeIndexes[type]) + '$' + std::to_string(vtableFieldIndex);
   }
 
 private:
@@ -485,7 +511,7 @@ private:
       builder->makeLocalGet(0, Type::i32)
     );
 
-    auto name = "itable$supports$" + std::to_string(category) + '$' + std::to_string(mapping.typeIndexes[type]);
+    auto name = getSupportsName(category, type);
 
     module->addFunction(
       builder->makeFunction(name,
@@ -533,7 +559,7 @@ private:
     );
 
     module->addFunction(
-      builder->makeFunction("itable$dispatch$" + std::to_string(category) + '$' + std::to_string(mapping.typeIndexes[type]) + '$' + std::to_string(vtableFieldIndex),
+      builder->makeFunction(getDispatchName(category, type, vtableFieldIndex),
                             Signature(Type(newParams), results),
                             {},
                             body)
