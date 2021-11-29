@@ -144,6 +144,8 @@ struct UnifyITable : public Pass {
 
     // A map of each category to its types.
     InsertOrderedMap<Index, InsertOrderedSet<HeapType>> categoryTypes;
+
+    Index numCategories = 0;
   } mapping;
 
   void mapFunctionsToTable(PassRunner* runner, Module& wasm) {
@@ -195,6 +197,7 @@ struct UnifyITable : public Pass {
 
           // Note the type is used in the category.
           mapping.categoryTypes[category].insert(type);
+          mapping.numCategories = std::max(mapping.numCategories, category);
         } else {
           WASM_UNREACHABLE("bad array.init operand");
         }
@@ -229,11 +232,12 @@ struct UnifyITable : public Pass {
     struct CodeUpdater : public WalkerPass<PostWalker<CodeUpdater>> {
       bool isFunctionParallel() override { return true; }
 
+      UnifyITable& parent;
       MappingInfo& mapping;
 
-      CodeUpdater(MappingInfo& mapping) : mapping(mapping) {}
+      CodeUpdater(UnifyITable& parent) : parent(parent), mapping(parent.mapping) {}
 
-      CodeUpdater* create() override { return new CodeUpdater(mapping); }
+      CodeUpdater* create() override { return new CodeUpdater(parent); }
 
       // Adapt to the change of struct $itable fields now contain an i32 instead
       // of a reference. That is, we have things like this:
@@ -371,8 +375,8 @@ struct UnifyITable : public Pass {
           // Our reference is an itable base. The array.get offset is the
           // category index, which we can now note.
           Index categoryIndex = curr->index->cast<Const>()->value.geti32();
-          assert(categoryIndex < mapping.categoryBases.size());
-          auto& info = inPattern[curr] = inPattern.count[curr->ref];
+          assert(categoryIndex < mapping.numCategories);
+          auto& info = inPattern[curr] = inPattern[curr->ref];
           info.category = categoryIndex;
         }
       }
@@ -427,7 +431,7 @@ struct UnifyITable : public Pass {
           // that used to be our child had.
           auto funcType = oldStructGetTypes[curr->target];
           auto sig = funcType.getHeapType().getSignature();
-          auto operands = curr->operands;
+          auto& operands = curr->operands;
           operands.push_back(curr->target);
           Builder builder(*getModule());
           replaceCurrent(builder.makeCall(
@@ -435,7 +439,6 @@ struct UnifyITable : public Pass {
             operands,
             sig.results
           ));
-          replaceCurrent(call);
         }
       }
 
@@ -449,12 +452,12 @@ struct UnifyITable : public Pass {
           Builder builder(*getModule());
           replaceCurrent(builder.makeSequence(
             builder.makeDrop(curr->ref),
-            builder.makeConst(int32_t(mapping.itableSize))));
+            builder.makeConst(int32_t(mapping.numCategories))));
         }
       }
     };
 
-    CodeUpdater updater(mapping);
+    CodeUpdater updater(*this);
     updater.run(runner, &wasm);
     updater.walkModuleCode(&wasm);
   }
