@@ -312,15 +312,10 @@ struct UnifyITable : public Pass {
         // in the comment from earlier. We detect that if the reference is
         // known to be in the pattern. If it is, then so are we.
         if (inPattern.count(curr->ref)) {
-          // The vtable read is at an offset which we need to add to the value
-          // so far.
-          Builder builder(*getModule());
-          auto* add = builder.makeBinary(
-            AddInt32, curr->ref, builder.makeConst(int32_t(curr->index)));
-          replaceCurrent(add);
-          auto& info = inPattern[add] = inPattern[curr->ref];
+          auto& info = inPattern[curr->ref];
           info.vtableFieldIndex = curr->index;
-          oldStructGetTypes[add] = curr->type;
+          oldStructGetTypes[curr->ref] = curr->type;
+          replaceCurrent(curr->ref);
           return;
         }
 
@@ -442,7 +437,31 @@ struct UnifyITable : public Pass {
 
       void visitCallRef(CallRef* curr) {
         if (inPattern.count(curr->target)) {
+          auto trap = [&]() {
+            Builder builder(*getModule());
+            auto* block = builder.makeBlock();
+            auto& list = block->list;
+            for (auto* operand : curr->operands) {
+              list.push_back(builder.makeDrop(operand));
+            }
+            list.push_back(builder.makeDrop(curr->target));
+            list.push_back(builder.makeUnreachable());
+            block->finalize(Type::unreachable);
+            replaceCurrent(block);
+          };
+
           auto& info = inPattern[curr->target];
+
+          if (mapping.typeIndexes.count(info.type) == 0) {
+            trap();
+            return;
+          }
+
+          auto name = parent.getDispatchName(info.category, info.type, info.vtableFieldIndex);
+          if (!getModule()->getFunctionOrNull(name)) {
+            trap();
+            return;
+          }
 
           // We have reached the end of the pattern: our call target contains
           // not a function reference but an index in the dispatch table,
@@ -459,7 +478,7 @@ struct UnifyITable : public Pass {
           operands.push_back(curr->target);
           Builder builder(*getModule());
           replaceCurrent(builder.makeCall(
-            parent.getDispatchName(info.category, info.type, info.vtableFieldIndex),
+            name,
             operands,
             sig.results
           ));

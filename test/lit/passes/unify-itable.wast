@@ -101,11 +101,8 @@
 
   ;; CHECK:      (func $call-1-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call $itable$dispatch$1$0$0
-  ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (struct.get $object $itable
-  ;; CHECK-NEXT:     (local.get $ref)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   (struct.get $object $itable
+  ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -130,11 +127,8 @@
 
   ;; CHECK:      (func $call-2-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call $itable$dispatch$2$1$0
-  ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (struct.get $object $itable
-  ;; CHECK-NEXT:     (local.get $ref)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   (struct.get $object $itable
+  ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -159,11 +153,8 @@
 
   ;; CHECK:      (func $call-2-1 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call $itable$dispatch$2$1$1
-  ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (struct.get $object $itable
-  ;; CHECK-NEXT:     (local.get $ref)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   (struct.get $object $itable
+  ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -185,11 +176,8 @@
 
   ;; CHECK:      (func $call-4-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call $itable$dispatch$4$2$0
-  ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (struct.get $object $itable
-  ;; CHECK-NEXT:     (local.get $ref)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   (struct.get $object $itable
+  ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -211,11 +199,8 @@
 
   ;; CHECK:      (func $call-4-2 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call $itable$dispatch$4$2$2
-  ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (struct.get $object $itable
-  ;; CHECK-NEXT:     (local.get $ref)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 2)
+  ;; CHECK-NEXT:   (struct.get $object $itable
+  ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -237,11 +222,8 @@
 
   ;; CHECK:      (func $call-5-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call $itable$dispatch$5$0$0
-  ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (struct.get $object $itable
-  ;; CHECK-NEXT:     (local.get $ref)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   (struct.get $object $itable
+  ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -672,11 +654,8 @@
 
   ;; CHECK:      (func $call-1-1-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call $itable$dispatch$0$0$0
-  ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (struct.get $object $itable
-  ;; CHECK-NEXT:     (local.get $ref)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   (struct.get $object $itable
+  ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -700,11 +679,8 @@
 
   ;; CHECK:      (func $call-1-2-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call $itable$dispatch$2$1$0
-  ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (struct.get $object $itable
-  ;; CHECK-NEXT:     (local.get $ref)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   (struct.get $object $itable
+  ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -727,11 +703,8 @@
 
   ;; CHECK:      (func $call-1-2-1 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call $itable$dispatch$2$1$1
-  ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (struct.get $object $itable
-  ;; CHECK-NEXT:     (local.get $ref)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   (struct.get $object $itable
+  ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -753,11 +726,8 @@
 
   ;; CHECK:      (func $call-1-3-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call $itable$dispatch$3$2$0
-  ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (struct.get $object $itable
-  ;; CHECK-NEXT:     (local.get $ref)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   (struct.get $object $itable
+  ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -790,11 +760,8 @@
 
   ;; CHECK:      (func $call-2-1-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call $itable$dispatch$0$1$0
-  ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (struct.get $object $itable
-  ;; CHECK-NEXT:     (local.get $ref)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   (struct.get $object $itable
+  ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -816,11 +783,8 @@
 
   ;; CHECK:      (func $call-2-1-1 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call $itable$dispatch$1$2$0
-  ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (struct.get $object $itable
-  ;; CHECK-NEXT:     (local.get $ref)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   (struct.get $object $itable
+  ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -842,11 +806,8 @@
 
   ;; CHECK:      (func $call-2-1-2 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call $itable$dispatch$2$2$0
-  ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (struct.get $object $itable
-  ;; CHECK-NEXT:     (local.get $ref)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   (struct.get $object $itable
+  ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -868,11 +829,8 @@
 
   ;; CHECK:      (func $call-2-1-4 (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call $itable$dispatch$4$2$0
-  ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (struct.get $object $itable
-  ;; CHECK-NEXT:     (local.get $ref)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   (struct.get $object $itable
+  ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -1196,11 +1154,8 @@
   ;; CHECK-NEXT:  (call $itable$dispatch$0$0$0
   ;; CHECK-NEXT:   (local.get $ref)
   ;; CHECK-NEXT:   (local.get $sub-ref)
-  ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (struct.get $object $itable
-  ;; CHECK-NEXT:     (local.get $ref)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   (struct.get $object $itable
+  ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -1427,4 +1382,54 @@
       )
     )
   )
+)
+
+(module
+  (type $itable (array (mut (ref null data))))
+
+  (type $none_=>_none (func_subtype func))
+
+  (type $vtable-1 (struct (field (ref $none_=>_none))))
+  (type $vtable-2 (struct (field (ref $none_=>_none))))
+
+  ;; CHECK:      (type $object (struct_subtype (field $itable i32) data))
+  (type $object (struct (field $itable (ref $itable))))
+
+  (global $itable-1 (ref $itable) (array.init_static $itable
+    ;; Similar to above, but now we do have something in category 0.
+    (struct.new $vtable-1
+      (ref.func $a)
+    )
+  ))
+
+  ;; CHECK:      (type $ref|$object|_=>_none (func_subtype (param (ref $object)) func))
+
+  ;; CHECK:      (export "call" (func $call-with-no-itable))
+
+  ;; CHECK:      (func $call-with-no-itable (type $ref|$object|_=>_none) (param $ref (ref $object))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $object $itable
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (unreachable)
+  ;; CHECK-NEXT: )
+  (func $call-with-no-itable (export "call") (param $ref (ref $object))
+    ;; We have vtable-1 in category 0, but here we cast to vtable-2, which means
+    ;; that no valid cast is possible and we will trap anyhow.
+    (call_ref
+      (struct.get $vtable-2 0
+        (ref.cast_static $vtable-2
+          (array.get $itable
+            (struct.get $object $itable
+              (local.get $ref)
+            )
+            (i32.const 0)
+          )
+        )
+      )
+    )
+  )
+
+  (func $a)
 )
