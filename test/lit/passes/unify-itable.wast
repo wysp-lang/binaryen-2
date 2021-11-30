@@ -21,29 +21,24 @@
   ;;    to implement checks for whether an object supports an interface).
   ;;
 
-  ;; CHECK:      (type $none_=>_none (func_subtype func))
-  (type $none_=>_none (func_subtype func))
-
-  (type $itable (array (mut (ref null data))))
-
   ;; CHECK:      (type $object (struct_subtype (field $itable i32) data))
 
   ;; CHECK:      (type $ref|$object|_=>_none (func_subtype (param (ref $object)) func))
 
   ;; CHECK:      (type $none_=>_none (func_subtype func))
+  (type $none_=>_none (func_subtype func))
 
-  ;; CHECK:      (type $vtable-1 (struct_subtype (field (ref $none_=>_none)) data))
+  (type $itable (array (mut (ref null data))))
+
   (type $vtable-1 (struct (field (ref $none_=>_none))))
-  ;; CHECK:      (type $[mut:ref?|data|] (array_subtype (mut (ref null data)) data))
-
-  ;; CHECK:      (type $vtable-2 (struct_subtype (field (ref $none_=>_none)) (field (ref $none_=>_none)) data))
   (type $vtable-2 (struct (field (ref $none_=>_none)) (field (ref $none_=>_none))))
-  ;; CHECK:      (type $none_=>_ref|$object| (func_subtype (result (ref $object)) func))
-
-  ;; CHECK:      (type $vtable-3 (struct_subtype (field (ref $none_=>_none)) (field (ref $none_=>_none)) (field (ref $none_=>_none)) data))
   (type $vtable-3 (struct (field (ref $none_=>_none)) (field (ref $none_=>_none)) (field (ref $none_=>_none))))
 
   (type $object (struct (field $itable (ref $itable))))
+
+  ;; CHECK:      (type $i32_=>_none (func_subtype (param i32) func))
+
+  ;; CHECK:      (type $none_=>_ref|$object| (func_subtype (result (ref $object)) func))
 
   ;; CHECK:      (global $itable-1 i32 (i32.const 0))
   (global $itable-1 (ref $itable) (array.init_static $itable
@@ -73,12 +68,6 @@
   ))
 
 
-  ;; CHECK:      (global $test-table (mut (ref null $[mut:ref?|data|])) (ref.null $[mut:ref?|data|]))
-
-  ;; CHECK:      (table $dispatch-table 7 7 funcref)
-
-  ;; CHECK:      (elem (i32.const 0) $a $b $c $d $e $f $g)
-
   ;; CHECK:      (export "new-1" (func $new-1))
 
   ;; CHECK:      (export "call-1-0" (func $call-1-0))
@@ -97,8 +86,6 @@
 
   ;; CHECK:      (export "len" (func $len))
 
-  ;; CHECK:      (start $start)
-
   ;; CHECK:      (func $new-1 (type $none_=>_ref|$object|) (result (ref $object))
   ;; CHECK-NEXT:  (struct.new $object
   ;; CHECK-NEXT:   (global.get $itable-1)
@@ -111,13 +98,10 @@
   )
 
   ;; CHECK:      (func $call-1-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call $itable$dispatch$1$0$0
   ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (i32.add
-  ;; CHECK-NEXT:     (struct.get $object $itable
-  ;; CHECK-NEXT:      (local.get $ref)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (i32.const 0)
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (i32.const 0)
   ;; CHECK-NEXT:   )
@@ -143,13 +127,10 @@
   )
 
   ;; CHECK:      (func $call-2-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call $itable$dispatch$2$1$0
   ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (i32.add
-  ;; CHECK-NEXT:     (struct.get $object $itable
-  ;; CHECK-NEXT:      (local.get $ref)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (i32.const 1)
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (i32.const 0)
   ;; CHECK-NEXT:   )
@@ -175,13 +156,10 @@
   )
 
   ;; CHECK:      (func $call-2-1 (type $ref|$object|_=>_none) (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call $itable$dispatch$2$1$1
   ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (i32.add
-  ;; CHECK-NEXT:     (struct.get $object $itable
-  ;; CHECK-NEXT:      (local.get $ref)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (i32.const 1)
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (i32.const 1)
   ;; CHECK-NEXT:   )
@@ -204,13 +182,10 @@
   )
 
   ;; CHECK:      (func $call-4-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call $itable$dispatch$4$2$0
   ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (i32.add
-  ;; CHECK-NEXT:     (struct.get $object $itable
-  ;; CHECK-NEXT:      (local.get $ref)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (i32.const 3)
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (i32.const 0)
   ;; CHECK-NEXT:   )
@@ -233,13 +208,10 @@
   )
 
   ;; CHECK:      (func $call-4-2 (type $ref|$object|_=>_none) (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call $itable$dispatch$4$2$2
   ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (i32.add
-  ;; CHECK-NEXT:     (struct.get $object $itable
-  ;; CHECK-NEXT:      (local.get $ref)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (i32.const 3)
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (i32.const 2)
   ;; CHECK-NEXT:   )
@@ -262,13 +234,10 @@
   )
 
   ;; CHECK:      (func $call-5-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call $itable$dispatch$5$0$0
   ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (i32.add
-  ;; CHECK-NEXT:     (struct.get $object $itable
-  ;; CHECK-NEXT:      (local.get $ref)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (i32.const 6)
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (i32.const 0)
   ;; CHECK-NEXT:   )
@@ -292,29 +261,23 @@
 
   ;; CHECK:      (func $test (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (ref.test_static $vtable-1
-  ;; CHECK-NEXT:    (array.get $[mut:ref?|data|]
-  ;; CHECK-NEXT:     (global.get $test-table)
-  ;; CHECK-NEXT:     (i32.add
-  ;; CHECK-NEXT:      (struct.get $object $itable
-  ;; CHECK-NEXT:       (local.get $ref)
-  ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (i32.const 0)
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (struct.get $object $itable
+  ;; CHECK-NEXT:      (local.get $ref)
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 0)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (ref.test_static $vtable-2
-  ;; CHECK-NEXT:    (array.get $[mut:ref?|data|]
-  ;; CHECK-NEXT:     (global.get $test-table)
-  ;; CHECK-NEXT:     (i32.add
-  ;; CHECK-NEXT:      (struct.get $object $itable
-  ;; CHECK-NEXT:       (local.get $ref)
-  ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (i32.const 3)
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (struct.get $object $itable
+  ;; CHECK-NEXT:      (local.get $ref)
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 0)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -353,7 +316,7 @@
   ;; CHECK-NEXT:      (local.get $ref)
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 7)
+  ;; CHECK-NEXT:    (i32.const 6)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -386,9 +349,6 @@
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $d)
-  ;; CHECK:      (func $e (type $none_=>_none)
-  ;; CHECK-NEXT:  (nop)
-  ;; CHECK-NEXT: )
   (func $e)
   ;; CHECK:      (func $f (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
@@ -401,41 +361,152 @@
   (func $g)
 )
 
-;; CHECK:      (func $start (type $none_=>_none)
-;; CHECK-NEXT:  (global.set $test-table
-;; CHECK-NEXT:   (array.new_default $[mut:ref?|data|]
-;; CHECK-NEXT:    (i32.const 7)
+;; CHECK:      (func $itable$dispatch$1$0$0 (type $i32_=>_none) (param $0 i32)
+;; CHECK-NEXT:  (block
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (block $switch$1$leave
+;; CHECK-NEXT:   (block $switch$1$default
+;; CHECK-NEXT:    (block $switch$1$case$2
+;; CHECK-NEXT:     (br_table $switch$1$case$2 $switch$1$default
+;; CHECK-NEXT:      (local.get $0)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (block
+;; CHECK-NEXT:      (call $a)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (br $switch$1$leave)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (block
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (unreachable)
+;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
-;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
-;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 0)
-;; CHECK-NEXT:   (struct.new $vtable-1
-;; CHECK-NEXT:    (ref.func $a)
+;; CHECK-NEXT: )
+
+;; CHECK:      (func $itable$dispatch$2$1$0 (type $i32_=>_none) (param $0 i32)
+;; CHECK-NEXT:  (block
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (block $switch$1$leave
+;; CHECK-NEXT:   (block $switch$1$default
+;; CHECK-NEXT:    (block $switch$1$case$2
+;; CHECK-NEXT:     (br_table $switch$1$case$2 $switch$1$default
+;; CHECK-NEXT:      (local.get $0)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (block
+;; CHECK-NEXT:      (call $b)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (br $switch$1$leave)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (block
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (unreachable)
+;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
-;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
-;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 1)
-;; CHECK-NEXT:   (struct.new $vtable-2
-;; CHECK-NEXT:    (ref.func $b)
-;; CHECK-NEXT:    (ref.func $c)
+;; CHECK-NEXT: )
+
+;; CHECK:      (func $itable$dispatch$2$1$1 (type $i32_=>_none) (param $0 i32)
+;; CHECK-NEXT:  (block
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (block $switch$1$leave
+;; CHECK-NEXT:   (block $switch$1$default
+;; CHECK-NEXT:    (block $switch$1$case$2
+;; CHECK-NEXT:     (br_table $switch$1$case$2 $switch$1$default
+;; CHECK-NEXT:      (local.get $0)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (block
+;; CHECK-NEXT:      (call $c)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (br $switch$1$leave)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (block
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (unreachable)
+;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
-;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
-;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 3)
-;; CHECK-NEXT:   (struct.new $vtable-3
-;; CHECK-NEXT:    (ref.func $d)
-;; CHECK-NEXT:    (ref.func $e)
-;; CHECK-NEXT:    (ref.func $f)
+;; CHECK-NEXT: )
+
+;; CHECK:      (func $itable$dispatch$4$2$0 (type $i32_=>_none) (param $0 i32)
+;; CHECK-NEXT:  (block
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (block $switch$1$leave
+;; CHECK-NEXT:   (block $switch$1$default
+;; CHECK-NEXT:    (block $switch$1$case$2
+;; CHECK-NEXT:     (br_table $switch$1$case$2 $switch$1$default
+;; CHECK-NEXT:      (local.get $0)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (block
+;; CHECK-NEXT:      (call $d)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (br $switch$1$leave)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (block
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (unreachable)
+;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
-;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
-;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 6)
-;; CHECK-NEXT:   (struct.new $vtable-1
-;; CHECK-NEXT:    (ref.func $g)
+;; CHECK-NEXT: )
+
+;; CHECK:      (func $itable$dispatch$4$2$2 (type $i32_=>_none) (param $0 i32)
+;; CHECK-NEXT:  (block
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (block $switch$1$leave
+;; CHECK-NEXT:   (block $switch$1$default
+;; CHECK-NEXT:    (block $switch$1$case$2
+;; CHECK-NEXT:     (br_table $switch$1$case$2 $switch$1$default
+;; CHECK-NEXT:      (local.get $0)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (block
+;; CHECK-NEXT:      (call $f)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (br $switch$1$leave)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (block
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (unreachable)
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:  )
+;; CHECK-NEXT: )
+
+;; CHECK:      (func $itable$dispatch$5$0$0 (type $i32_=>_none) (param $0 i32)
+;; CHECK-NEXT:  (block
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (block $switch$1$leave
+;; CHECK-NEXT:   (block $switch$1$default
+;; CHECK-NEXT:    (block $switch$1$case$2
+;; CHECK-NEXT:     (br_table $switch$1$case$2 $switch$1$default
+;; CHECK-NEXT:      (local.get $0)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (block
+;; CHECK-NEXT:      (call $g)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (br $switch$1$leave)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (block
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (unreachable)
+;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT: )
@@ -446,30 +517,24 @@
   ;; 0 3 4 7 8. The second itable global will contain 9 which is the total
   ;; size of each itable, and where that itable starts in the unified table.
 
-  ;; CHECK:      (type $none_=>_none (func_subtype func))
-  (type $none_=>_none (func_subtype func))
-
-  (type $itable (array (mut (ref null data))))
-
   ;; CHECK:      (type $object (struct_subtype (field $itable i32) data))
 
   ;; CHECK:      (type $ref|$object|_=>_none (func_subtype (param (ref $object)) func))
 
   ;; CHECK:      (type $none_=>_none (func_subtype func))
+  (type $none_=>_none (func_subtype func))
 
-  ;; CHECK:      (type $vtable-1 (struct_subtype (field (ref $none_=>_none)) data))
+  (type $itable (array (mut (ref null data))))
+
   (type $vtable-1 (struct (field (ref $none_=>_none))))
-  ;; CHECK:      (type $[mut:ref?|data|] (array_subtype (mut (ref null data)) data))
-
-  ;; CHECK:      (type $none_=>_ref|$object| (func_subtype (result (ref $object)) func))
-
-  ;; CHECK:      (type $vtable-3 (struct_subtype (field (ref $none_=>_none)) (field (ref $none_=>_none)) (field (ref $none_=>_none)) data))
-
-  ;; CHECK:      (type $vtable-2 (struct_subtype (field (ref $none_=>_none)) (field (ref $none_=>_none)) data))
   (type $vtable-2 (struct (field (ref $none_=>_none)) (field (ref $none_=>_none))))
   (type $vtable-3 (struct (field (ref $none_=>_none)) (field (ref $none_=>_none)) (field (ref $none_=>_none))))
 
   (type $object (struct (field $itable (ref $itable))))
+
+  ;; CHECK:      (type $i32_=>_none (func_subtype (param i32) func))
+
+  ;; CHECK:      (type $none_=>_ref|$object| (func_subtype (result (ref $object)) func))
 
   ;; CHECK:      (global $itable-1 i32 (i32.const 0))
   (global $itable-1 (ref $itable) (array.init_static $itable
@@ -495,7 +560,7 @@
     ;; Nothing for category #4. A null will be emitted instead.
   ))
 
-  ;; CHECK:      (global $itable-2 i32 (i32.const 9))
+  ;; CHECK:      (global $itable-2 i32 (i32.const 1))
   (global $itable-2 (ref $itable) (array.init_static $itable
     ;; Category #0, here of size 3. This will have base 0.
     (struct.new $vtable-3
@@ -520,12 +585,6 @@
     )
   ))
 
-  ;; CHECK:      (global $test-table (mut (ref null $[mut:ref?|data|])) (ref.null $[mut:ref?|data|]))
-
-  ;; CHECK:      (table $dispatch-table 18 18 funcref)
-
-  ;; CHECK:      (elem (table $dispatch-table) (i32.const 0) funcref (ref.func $a) (ref.func $b) (ref.null func) (ref.null func) (ref.func $d) (ref.func $e) (ref.func $f) (ref.func $g) (ref.null func) (ref.func $a-2) (ref.func $b-2) (ref.func $c-2) (ref.func $d-2) (ref.func $e-2) (ref.null func) (ref.null func) (ref.null func) (ref.func $f-2))
-
   ;; CHECK:      (export "new-1" (func $new-1))
 
   ;; CHECK:      (export "call-1-1-0" (func $call-1-1-0))
@@ -546,8 +605,6 @@
 
   ;; CHECK:      (export "call-2-1-4" (func $call-2-1-4))
 
-  ;; CHECK:      (start $start)
-
   ;; CHECK:      (func $new-1 (type $none_=>_ref|$object|) (result (ref $object))
   ;; CHECK-NEXT:  (struct.new $object
   ;; CHECK-NEXT:   (global.get $itable-1)
@@ -560,13 +617,10 @@
   )
 
   ;; CHECK:      (func $call-1-1-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call $itable$dispatch$0$0$0
   ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (i32.add
-  ;; CHECK-NEXT:     (struct.get $object $itable
-  ;; CHECK-NEXT:      (local.get $ref)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (i32.const 0)
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (i32.const 0)
   ;; CHECK-NEXT:   )
@@ -589,13 +643,10 @@
   )
 
   ;; CHECK:      (func $call-1-2-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call $itable$dispatch$2$1$0
   ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (i32.add
-  ;; CHECK-NEXT:     (struct.get $object $itable
-  ;; CHECK-NEXT:      (local.get $ref)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (i32.const 4)
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (i32.const 0)
   ;; CHECK-NEXT:   )
@@ -618,13 +669,10 @@
   )
 
   ;; CHECK:      (func $call-1-2-1 (type $ref|$object|_=>_none) (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call $itable$dispatch$2$1$1
   ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (i32.add
-  ;; CHECK-NEXT:     (struct.get $object $itable
-  ;; CHECK-NEXT:      (local.get $ref)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (i32.const 4)
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (i32.const 1)
   ;; CHECK-NEXT:   )
@@ -647,13 +695,10 @@
   )
 
   ;; CHECK:      (func $call-1-3-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call $itable$dispatch$3$2$0
   ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (i32.add
-  ;; CHECK-NEXT:     (struct.get $object $itable
-  ;; CHECK-NEXT:      (local.get $ref)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (i32.const 7)
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (i32.const 0)
   ;; CHECK-NEXT:   )
@@ -687,13 +732,10 @@
   )
 
   ;; CHECK:      (func $call-2-1-0 (type $ref|$object|_=>_none) (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call $itable$dispatch$0$1$0
   ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (i32.add
-  ;; CHECK-NEXT:     (struct.get $object $itable
-  ;; CHECK-NEXT:      (local.get $ref)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (i32.const 0)
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (i32.const 0)
   ;; CHECK-NEXT:   )
@@ -716,13 +758,10 @@
   )
 
   ;; CHECK:      (func $call-2-1-1 (type $ref|$object|_=>_none) (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call $itable$dispatch$1$2$0
   ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (i32.add
-  ;; CHECK-NEXT:     (struct.get $object $itable
-  ;; CHECK-NEXT:      (local.get $ref)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (i32.const 3)
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (i32.const 0)
   ;; CHECK-NEXT:   )
@@ -745,13 +784,10 @@
   )
 
   ;; CHECK:      (func $call-2-1-2 (type $ref|$object|_=>_none) (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call $itable$dispatch$2$2$0
   ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (i32.add
-  ;; CHECK-NEXT:     (struct.get $object $itable
-  ;; CHECK-NEXT:      (local.get $ref)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (i32.const 4)
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (i32.const 0)
   ;; CHECK-NEXT:   )
@@ -774,13 +810,10 @@
   )
 
   ;; CHECK:      (func $call-2-1-4 (type $ref|$object|_=>_none) (param $ref (ref $object))
-  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $none_=>_none)
+  ;; CHECK-NEXT:  (call $itable$dispatch$4$2$0
   ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (i32.add
-  ;; CHECK-NEXT:     (struct.get $object $itable
-  ;; CHECK-NEXT:      (local.get $ref)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (i32.const 8)
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (i32.const 0)
   ;; CHECK-NEXT:   )
@@ -806,9 +839,6 @@
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $a)
-  ;; CHECK:      (func $b (type $none_=>_none)
-  ;; CHECK-NEXT:  (nop)
-  ;; CHECK-NEXT: )
   (func $b)
   (func $c)
   ;; CHECK:      (func $d (type $none_=>_none)
@@ -819,9 +849,6 @@
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $e)
-  ;; CHECK:      (func $f (type $none_=>_none)
-  ;; CHECK-NEXT:  (nop)
-  ;; CHECK-NEXT: )
   (func $f)
   ;; CHECK:      (func $g (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
@@ -832,13 +859,7 @@
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $a-2)
-  ;; CHECK:      (func $b-2 (type $none_=>_none)
-  ;; CHECK-NEXT:  (nop)
-  ;; CHECK-NEXT: )
   (func $b-2)
-  ;; CHECK:      (func $c-2 (type $none_=>_none)
-  ;; CHECK-NEXT:  (nop)
-  ;; CHECK-NEXT: )
   (func $c-2)
   ;; CHECK:      (func $d-2 (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
@@ -854,64 +875,202 @@
   (func $f-2)
 )
 
-;; CHECK:      (func $start (type $none_=>_none)
-;; CHECK-NEXT:  (global.set $test-table
-;; CHECK-NEXT:   (array.new_default $[mut:ref?|data|]
-;; CHECK-NEXT:    (i32.const 18)
+;; CHECK:      (func $itable$dispatch$0$0$0 (type $i32_=>_none) (param $0 i32)
+;; CHECK-NEXT:  (block
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (block $switch$1$leave
+;; CHECK-NEXT:   (block $switch$1$default
+;; CHECK-NEXT:    (block $switch$1$case$2
+;; CHECK-NEXT:     (br_table $switch$1$case$2 $switch$1$default
+;; CHECK-NEXT:      (local.get $0)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (block
+;; CHECK-NEXT:      (call $a)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (br $switch$1$leave)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (block
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (unreachable)
+;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
-;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
-;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 0)
-;; CHECK-NEXT:   (struct.new $vtable-2
-;; CHECK-NEXT:    (ref.func $a)
-;; CHECK-NEXT:    (ref.func $b)
+;; CHECK-NEXT: )
+
+;; CHECK:      (func $itable$dispatch$0$1$0 (type $i32_=>_none) (param $0 i32)
+;; CHECK-NEXT:  (block
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (block $switch$1$leave
+;; CHECK-NEXT:   (block $switch$1$default
+;; CHECK-NEXT:    (block $switch$1$case$2
+;; CHECK-NEXT:     (br_table $switch$1$default $switch$1$case$2 $switch$1$default
+;; CHECK-NEXT:      (local.get $0)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (block
+;; CHECK-NEXT:      (call $a-2)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (br $switch$1$leave)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (block
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (unreachable)
+;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
-;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
-;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 4)
-;; CHECK-NEXT:   (struct.new $vtable-3
-;; CHECK-NEXT:    (ref.func $d)
-;; CHECK-NEXT:    (ref.func $e)
-;; CHECK-NEXT:    (ref.func $f)
+;; CHECK-NEXT: )
+
+;; CHECK:      (func $itable$dispatch$2$1$0 (type $i32_=>_none) (param $0 i32)
+;; CHECK-NEXT:  (block
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (block $switch$1$leave
+;; CHECK-NEXT:   (block $switch$1$default
+;; CHECK-NEXT:    (block $switch$1$case$2
+;; CHECK-NEXT:     (br_table $switch$1$case$2 $switch$1$default
+;; CHECK-NEXT:      (local.get $0)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (block
+;; CHECK-NEXT:      (call $d)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (br $switch$1$leave)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (block
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (unreachable)
+;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
-;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
-;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 7)
-;; CHECK-NEXT:   (struct.new $vtable-1
-;; CHECK-NEXT:    (ref.func $g)
+;; CHECK-NEXT: )
+
+;; CHECK:      (func $itable$dispatch$2$1$1 (type $i32_=>_none) (param $0 i32)
+;; CHECK-NEXT:  (block
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (block $switch$1$leave
+;; CHECK-NEXT:   (block $switch$1$default
+;; CHECK-NEXT:    (block $switch$1$case$2
+;; CHECK-NEXT:     (br_table $switch$1$case$2 $switch$1$default
+;; CHECK-NEXT:      (local.get $0)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (block
+;; CHECK-NEXT:      (call $e)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (br $switch$1$leave)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (block
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (unreachable)
+;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
-;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
-;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 9)
-;; CHECK-NEXT:   (struct.new $vtable-3
-;; CHECK-NEXT:    (ref.func $a-2)
-;; CHECK-NEXT:    (ref.func $b-2)
-;; CHECK-NEXT:    (ref.func $c-2)
+;; CHECK-NEXT: )
+
+;; CHECK:      (func $itable$dispatch$2$2$0 (type $i32_=>_none) (param $0 i32)
+;; CHECK-NEXT:  (block
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (block $switch$1$leave
+;; CHECK-NEXT:   (block $switch$1$default
+;; CHECK-NEXT:    (block $switch$1$case$2
+;; CHECK-NEXT:     (br_table $switch$1$default $switch$1$case$2 $switch$1$default
+;; CHECK-NEXT:      (local.get $0)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (block
+;; CHECK-NEXT:      (call $e-2)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (br $switch$1$leave)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (block
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (unreachable)
+;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
-;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
-;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 12)
-;; CHECK-NEXT:   (struct.new $vtable-1
-;; CHECK-NEXT:    (ref.func $d-2)
+;; CHECK-NEXT: )
+
+;; CHECK:      (func $itable$dispatch$3$2$0 (type $i32_=>_none) (param $0 i32)
+;; CHECK-NEXT:  (block
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (block $switch$1$leave
+;; CHECK-NEXT:   (block $switch$1$default
+;; CHECK-NEXT:    (block $switch$1$case$2
+;; CHECK-NEXT:     (br_table $switch$1$case$2 $switch$1$default
+;; CHECK-NEXT:      (local.get $0)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (block
+;; CHECK-NEXT:      (call $g)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (br $switch$1$leave)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (block
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (unreachable)
+;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
-;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
-;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 13)
-;; CHECK-NEXT:   (struct.new $vtable-1
-;; CHECK-NEXT:    (ref.func $e-2)
+;; CHECK-NEXT: )
+
+;; CHECK:      (func $itable$dispatch$1$2$0 (type $i32_=>_none) (param $0 i32)
+;; CHECK-NEXT:  (block
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (block $switch$1$leave
+;; CHECK-NEXT:   (block $switch$1$default
+;; CHECK-NEXT:    (block $switch$1$case$2
+;; CHECK-NEXT:     (br_table $switch$1$default $switch$1$case$2 $switch$1$default
+;; CHECK-NEXT:      (local.get $0)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (block
+;; CHECK-NEXT:      (call $d-2)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (br $switch$1$leave)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (block
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (unreachable)
+;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
-;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
-;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 17)
-;; CHECK-NEXT:   (struct.new $vtable-1
-;; CHECK-NEXT:    (ref.func $f-2)
+;; CHECK-NEXT: )
+
+;; CHECK:      (func $itable$dispatch$4$2$0 (type $i32_=>_none) (param $0 i32)
+;; CHECK-NEXT:  (block
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (block $switch$1$leave
+;; CHECK-NEXT:   (block $switch$1$default
+;; CHECK-NEXT:    (block $switch$1$case$2
+;; CHECK-NEXT:     (br_table $switch$1$default $switch$1$case$2 $switch$1$default
+;; CHECK-NEXT:      (local.get $0)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (block
+;; CHECK-NEXT:      (call $f-2)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (br $switch$1$leave)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (block
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (unreachable)
+;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT: )
@@ -920,26 +1079,25 @@
 
   ;; CHECK:      (type $object (struct_subtype (field $itable i32) data))
 
-  ;; CHECK:      (type $ftype (func_subtype (param (ref null $object) (ref null $sub-object)) func))
-  (type $ftype (func_subtype (param (ref null $object)) (param (ref null $sub-object)) func))
-
-  (type $itable (array (mut (ref null data))))
-
-  ;; CHECK:      (type $[mut:ref?|data|] (array_subtype (mut (ref null data)) data))
-
-  ;; CHECK:      (type $none_=>_none (func_subtype func))
-
   ;; CHECK:      (type $sub-object (struct_subtype (field $itable i32) (field i32) data))
 
   ;; CHECK:      (type $none_=>_ref|$object| (func_subtype (result (ref $object)) func))
 
   ;; CHECK:      (type $ref|$object|_ref|$sub-object|_=>_none (func_subtype (param (ref $object) (ref $sub-object)) func))
 
-  ;; CHECK:      (type $vtable (struct_subtype (field (ref $ftype)) data))
+  ;; CHECK:      (type $none_=>_none (func_subtype func))
+
+  ;; CHECK:      (type $ftype (func_subtype (param (ref null $object) (ref null $sub-object)) func))
+  (type $ftype (func_subtype (param (ref null $object)) (param (ref null $sub-object)) func))
+
+  (type $itable (array (mut (ref null data))))
+
   (type $vtable (struct (field (ref $ftype))))
 
   (type $object (struct (field $itable (ref $itable))))
   (type $sub-object (struct (field $itable (ref $itable)) (field i32)))
+
+  ;; CHECK:      (type $ref?|$object|_ref?|$sub-object|_i32_=>_none (func_subtype (param (ref null $object) (ref null $sub-object) i32) func))
 
   ;; CHECK:      (global $itable i32 (i32.const 0))
   (global $itable (ref $itable) (array.init_static $itable
@@ -948,19 +1106,11 @@
     )
   ))
 
-  ;; CHECK:      (global $test-table (mut (ref null $[mut:ref?|data|])) (ref.null $[mut:ref?|data|]))
-
-  ;; CHECK:      (table $dispatch-table 1 1 funcref)
-
-  ;; CHECK:      (elem (i32.const 0) $a)
-
   ;; CHECK:      (export "new" (func $new))
 
   ;; CHECK:      (export "call" (func $call))
 
   ;; CHECK:      (export "itable-in-local" (func $itable-in-local))
-
-  ;; CHECK:      (start $start)
 
   ;; CHECK:      (func $new (type $none_=>_ref|$object|) (result (ref $object))
   ;; CHECK-NEXT:  (struct.new $object
@@ -974,15 +1124,12 @@
   )
 
   ;; CHECK:      (func $call (type $ref|$object|_ref|$sub-object|_=>_none) (param $ref (ref $object)) (param $sub-ref (ref $sub-object))
-  ;; CHECK-NEXT:  (call_indirect $dispatch-table (type $ftype)
+  ;; CHECK-NEXT:  (call $itable$dispatch$0$0$0
   ;; CHECK-NEXT:   (local.get $ref)
   ;; CHECK-NEXT:   (local.get $sub-ref)
   ;; CHECK-NEXT:   (i32.add
-  ;; CHECK-NEXT:    (i32.add
-  ;; CHECK-NEXT:     (struct.get $object $itable
-  ;; CHECK-NEXT:      (local.get $ref)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (i32.const 0)
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (i32.const 0)
   ;; CHECK-NEXT:   )
@@ -1129,17 +1276,30 @@
   ;; CHECK-NEXT: )
   (func $a (param (ref null $object) (ref null $sub-object)))
 )
-;; CHECK:      (func $start (type $none_=>_none)
-;; CHECK-NEXT:  (global.set $test-table
-;; CHECK-NEXT:   (array.new_default $[mut:ref?|data|]
-;; CHECK-NEXT:    (i32.const 1)
-;; CHECK-NEXT:   )
+;; CHECK:      (func $itable$dispatch$0$0$0 (type $ref?|$object|_ref?|$sub-object|_i32_=>_none) (param $0 (ref null $object)) (param $1 (ref null $sub-object)) (param $2 i32)
+;; CHECK-NEXT:  (block
 ;; CHECK-NEXT:  )
-;; CHECK-NEXT:  (array.set $[mut:ref?|data|]
-;; CHECK-NEXT:   (global.get $test-table)
-;; CHECK-NEXT:   (i32.const 0)
-;; CHECK-NEXT:   (struct.new $vtable
-;; CHECK-NEXT:    (ref.func $a)
+;; CHECK-NEXT:  (block $switch$1$leave
+;; CHECK-NEXT:   (block $switch$1$default
+;; CHECK-NEXT:    (block $switch$1$case$2
+;; CHECK-NEXT:     (br_table $switch$1$case$2 $switch$1$default
+;; CHECK-NEXT:      (local.get $2)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (block
+;; CHECK-NEXT:      (call $a
+;; CHECK-NEXT:       (local.get $0)
+;; CHECK-NEXT:       (local.get $1)
+;; CHECK-NEXT:      )
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (br $switch$1$leave)
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (block
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (unreachable)
+;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT: )
