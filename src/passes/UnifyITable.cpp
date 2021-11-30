@@ -193,11 +193,12 @@ struct UnifyITable : public Pass {
           if (!mapping.typeIndexes.count(type)) {
             auto index = mapping.typeIndexes.size();
             mapping.typeIndexes[type] = index;
+std::cout << "Index type " << type << " : " << module->typeNames[type].name << '\n';
           }
 
           // Note the type is used in the category.
           mapping.categoryTypes[category].insert(type);
-          mapping.numCategories = std::max(mapping.numCategories, category);
+          mapping.numCategories = std::max(mapping.numCategories, category + 1);
         } else {
           WASM_UNREACHABLE("bad array.init operand");
         }
@@ -280,9 +281,9 @@ struct UnifyITable : public Pass {
       //    in |inPattern|, and are altered accordingly (see details below).
 
       struct PatternInfo {
-        Index category;
+        Index category = -1;
         HeapType type;
-        Index vtableFieldIndex;
+        Index vtableFieldIndex = -1;
         Type vtableFieldType; // TODO needed?
       };
 
@@ -376,8 +377,9 @@ struct UnifyITable : public Pass {
           // category index, which we can now note.
           Index categoryIndex = curr->index->cast<Const>()->value.geti32();
           assert(categoryIndex < mapping.numCategories);
-          auto& info = inPattern[curr] = inPattern[curr->ref];
-          info.category = categoryIndex;
+          inPattern[curr->ref].category = categoryIndex;
+//std::cout << "arrayGet " << categoryIndex << '\n';
+          replaceCurrent(curr->ref);
         }
       }
 
@@ -396,11 +398,22 @@ struct UnifyITable : public Pass {
       void visitRefTest(RefTest* curr) {
         if (inPattern.count(curr->ref)) {
           auto& info = inPattern[curr->ref];
-
           // Call the proper supports method.
           Builder builder(*getModule());
+
+          auto name = parent.getSupportsName(info.category, curr->getIntendedType());
+          if (!getModule()->getFunctionOrNull(name)) {
+            // We have not even created a support function for this combination,
+            // which means it is impossible.
+            replaceCurrent(builder.makeSequence(
+              builder.makeDrop(curr->ref),
+              builder.makeConst(int32_t(0))
+            ));
+            return;
+          }
+
           replaceCurrent(builder.makeCall(
-            parent.getSupportsName(info.category, info.type),
+            name,
             {curr->ref},
             Type::i32
           ));
@@ -481,11 +494,12 @@ struct UnifyITable : public Pass {
   }
 
   std::string getSupportsName(Index category, HeapType type) {
-    return "itable$supports$" + std::to_string(category) + '$' + std::to_string(mapping.typeIndexes[type]);
+std::cout << "gSN  " << type << " : " << module->typeNames[type].name << '\n';
+    return "itable$supports$" + std::to_string(category) + '$' + std::to_string(mapping.typeIndexes.at(type));
   }
 
   std::string getDispatchName(Index category, HeapType type, Index vtableFieldIndex) {
-    return "itable$dispatch$" + std::to_string(category) + '$' + std::to_string(mapping.typeIndexes[type]) + '$' + std::to_string(vtableFieldIndex);
+    return "itable$dispatch$" + std::to_string(category) + '$' + std::to_string(mapping.typeIndexes.at(type)) + '$' + std::to_string(vtableFieldIndex);
   }
 
 private:
