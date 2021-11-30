@@ -685,8 +685,6 @@
       ;; Call category #0 with offset 0. This would end up calling $a for
       ;; itable 0 or $a-2 for itable 1. As itable 1 has the wrong vtable type,
       ;; we would trap there, so this will either call $a or trap.
-      ;; TODO: make sure we have a test where both itables have the same vtable
-      ;;       type
       (struct.get $vtable-2 0
         (ref.cast_static $vtable-2
           (array.get $itable
