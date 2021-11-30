@@ -1349,9 +1349,11 @@
     (ref.null data)
   ))
 
-  ;; CHECK:      (export "call" (func $call-with-no-itable))
+  ;; CHECK:      (export "call" (func $call))
 
-  ;; CHECK:      (func $call-with-no-itable (type $ref|$object|_=>_none) (param $ref (ref $object))
+  ;; CHECK:      (export "test" (func $test))
+
+  ;; CHECK:      (func $call (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (call_ref
   ;; CHECK-NEXT:   (struct.get $vtable-1 0
   ;; CHECK-NEXT:    (ref.cast_static $vtable-1
@@ -1367,7 +1369,7 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  (func $call-with-no-itable (export "call") (param $ref (ref $object))
+  (func $call (export "call") (param $ref (ref $object))
     ;; No vtable is created for this itable, so we know this call will trap.
     (call_ref
       (struct.get $vtable-1 0
@@ -1378,6 +1380,33 @@
             )
             (i32.const 0)
           )
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $test (type $ref|$object|_=>_none) (param $ref (ref $object))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.test_static $vtable-1
+  ;; CHECK-NEXT:    (block
+  ;; CHECK-NEXT:     (drop
+  ;; CHECK-NEXT:      (struct.get $object $itable
+  ;; CHECK-NEXT:       (local.get $ref)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (unreachable)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $test (export "test") (param $ref (ref $object))
+    (drop
+      (ref.test_static $vtable-1
+        (array.get $itable
+          (struct.get $object $itable
+            (local.get $ref)
+          )
+          (i32.const 0)
         )
       )
     )
@@ -1404,9 +1433,11 @@
 
   ;; CHECK:      (type $ref|$object|_=>_none (func_subtype (param (ref $object)) func))
 
-  ;; CHECK:      (export "call" (func $call-with-no-itable))
+  ;; CHECK:      (export "call" (func $call))
 
-  ;; CHECK:      (func $call-with-no-itable (type $ref|$object|_=>_none) (param $ref (ref $object))
+  ;; CHECK:      (export "test" (func $test))
+
+  ;; CHECK:      (func $call (type $ref|$object|_=>_none) (param $ref (ref $object))
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (struct.get $object $itable
   ;; CHECK-NEXT:    (local.get $ref)
@@ -1414,7 +1445,7 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (unreachable)
   ;; CHECK-NEXT: )
-  (func $call-with-no-itable (export "call") (param $ref (ref $object))
+  (func $call (export "call") (param $ref (ref $object))
     ;; We have vtable-1 in category 0, but here we cast to vtable-2, which means
     ;; that no valid cast is possible and we will trap anyhow.
     (call_ref
@@ -1426,6 +1457,31 @@
             )
             (i32.const 0)
           )
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $test (type $ref|$object|_=>_none) (param $ref (ref $object))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (struct.get $object $itable
+  ;; CHECK-NEXT:      (local.get $ref)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $test (export "test") (param $ref (ref $object))
+    (drop
+      (ref.test_static $vtable-2
+        (array.get $itable
+          (struct.get $object $itable
+            (local.get $ref)
+          )
+          (i32.const 0)
         )
       )
     )

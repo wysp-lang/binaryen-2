@@ -407,7 +407,16 @@ struct UnifyITable : public Pass {
           // Call the proper supports method.
           Builder builder(*getModule());
 
-          auto name = parent.getSupportsName(info.category, curr->getIntendedType());
+          auto type = curr->getIntendedType();
+          if (mapping.typeIndexes.count(type) == 0) {
+            replaceCurrent(builder.makeSequence(
+              builder.makeDrop(curr->ref),
+              builder.makeConst(int32_t(0))
+            ));
+            return;
+          }
+
+          auto name = parent.getSupportsName(info.category, type);
           if (!getModule()->getFunctionOrNull(name)) {
             // We have not even created a support function for this combination,
             // which means it is impossible.
