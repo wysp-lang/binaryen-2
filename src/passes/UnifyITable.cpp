@@ -221,7 +221,9 @@ struct UnifyITable : public Pass {
         // vtable.
         auto& fields = type.getStruct().fields;
         for (Index i = 0; i < fields.size(); i++) {
-          generateDispatchFunc(category, type, i, fields[i].type);
+          if (fields[i].type.isFunction()) {
+            generateDispatchFunc(category, type, i, fields[i].type);
+          }
         }
       }
     }
@@ -390,7 +392,6 @@ struct UnifyITable : public Pass {
           }
 
           inPattern[curr->ref].category = categoryIndex;
-//std::cout << "arrayGet " << categoryIndex << '\n';
           replaceCurrent(curr->ref);
         }
       }
