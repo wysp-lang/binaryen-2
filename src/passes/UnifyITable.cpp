@@ -375,7 +375,19 @@ struct UnifyITable : public Pass {
           // Our reference is an itable base. The array.get offset is the
           // category index, which we can now note.
           Index categoryIndex = curr->index->cast<Const>()->value.geti32();
-          assert(categoryIndex < mapping.numCategories);
+
+          if (categoryIndex >= mapping.numCategories) {
+            // This is not a valid category - there is nothing here that we can
+            // do anything valid with. A call_ref will trap if we attempt it,
+            // so we can just trap here.
+            Builder builder(*getModule());
+            replaceCurrent(builder.makeSequence(
+              builder.makeDrop(curr->ref),
+              builder.makeUnreachable()
+            ));
+            return;
+          }
+
           inPattern[curr->ref].category = categoryIndex;
 //std::cout << "arrayGet " << categoryIndex << '\n';
           replaceCurrent(curr->ref);

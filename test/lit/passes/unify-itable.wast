@@ -1345,6 +1345,7 @@
   ;; CHECK-NEXT: )
   (func $a (param (ref null $object) (ref null $sub-object)))
 )
+
 ;; CHECK:      (func $itable$dispatch$0$0$0 (type $ref?|$object|_ref?|$sub-object|_i32_=>_none) (param $0 (ref null $object)) (param $1 (ref null $sub-object)) (param $2 i32)
 ;; CHECK-NEXT:  (block
 ;; CHECK-NEXT:  )
@@ -1372,3 +1373,58 @@
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT: )
+(module
+  (type $itable (array (mut (ref null data))))
+
+  ;; CHECK:      (type $object (struct_subtype (field $itable i32) data))
+
+  ;; CHECK:      (type $vtable-1 (struct_subtype (field (ref $none_=>_none)) data))
+
+  ;; CHECK:      (type $ref|$object|_=>_none (func_subtype (param (ref $object)) func))
+
+  ;; CHECK:      (type $none_=>_none (func_subtype func))
+  (type $none_=>_none (func_subtype func))
+
+  (type $vtable-1 (struct (field (ref $none_=>_none))))
+
+  (type $object (struct (field $itable (ref $itable))))
+
+  (global $itable-1 (ref $itable) (array.init_static $itable
+    ;; The itable just contains a null - no vtables.
+    (ref.null data)
+  ))
+
+  ;; CHECK:      (export "call" (func $call-with-no-itable))
+
+  ;; CHECK:      (func $call-with-no-itable (type $ref|$object|_=>_none) (param $ref (ref $object))
+  ;; CHECK-NEXT:  (call_ref
+  ;; CHECK-NEXT:   (struct.get $vtable-1 0
+  ;; CHECK-NEXT:    (ref.cast_static $vtable-1
+  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:      (drop
+  ;; CHECK-NEXT:       (struct.get $object $itable
+  ;; CHECK-NEXT:        (local.get $ref)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (unreachable)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $call-with-no-itable (export "call") (param $ref (ref $object))
+    ;; No vtable is created for this itable, so we know this call will trap.
+    (call_ref
+      (struct.get $vtable-1 0
+        (ref.cast_static $vtable-1
+          (array.get $itable
+            (struct.get $object $itable
+              (local.get $ref)
+            )
+            (i32.const 0)
+          )
+        )
+      )
+    )
+  )
+)
