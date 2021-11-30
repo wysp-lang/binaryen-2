@@ -40,6 +40,8 @@
 
   ;; CHECK:      (type $none_=>_ref|$object| (func_subtype (result (ref $object)) func))
 
+  ;; CHECK:      (type $i32_=>_i32 (func_subtype (param i32) (result i32) func))
+
   ;; CHECK:      (global $itable-1 i32 (i32.const 0))
   (global $itable-1 (ref $itable) (array.init_static $itable
     ;; Category #0, of size 0.
@@ -280,6 +282,13 @@
   ;; CHECK-NEXT:    (i32.const 0)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (call $itable$supports$4$2
+  ;; CHECK-NEXT:    (struct.get $object $itable
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   (func $test (export "test") (param $ref (ref $object))
     ;; Use a ref.test on a vtable from an itable. We support this by doing a
@@ -292,17 +301,32 @@
           (struct.get $object $itable
             (local.get $ref)
           )
-          (i32.const 0) ;; category 0 has base 0
+          (i32.const 0) ;; This category has no content, so we will just emit
+                        ;; a constant 0 here - we know at compile time that it
+                        ;; is not supported.
         )
       )
     )
     (drop
-      (ref.test_static $vtable-2
+      (ref.test_static $vtable-1 ;; This is not even a valid vtable for this
+                                 ;; category, so once more we can emit a 0.
         (array.get $itable
           (struct.get $object $itable
             (local.get $ref)
           )
-          (i32.const 4) ;; category 4 has base 3.
+          (i32.const 4)
+        )
+      )
+    )
+    (drop
+      (ref.test_static $vtable-3 ;; This is a valid vtable, and we'll call.
+                                 ;; In fact this module has just one possible
+                                 ;; vtable, so we could do even better here TODO
+        (array.get $itable
+          (struct.get $object $itable
+            (local.get $ref)
+          )
+          (i32.const 4)
         )
       )
     )
@@ -431,6 +455,34 @@
 ;; CHECK-NEXT:   (block
 ;; CHECK-NEXT:    (block
 ;; CHECK-NEXT:     (unreachable)
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:  )
+;; CHECK-NEXT: )
+
+;; CHECK:      (func $itable$supports$4$2 (type $i32_=>_i32) (param $0 i32) (result i32)
+;; CHECK-NEXT:  (block
+;; CHECK-NEXT:  )
+;; CHECK-NEXT:  (block $switch$1$leave
+;; CHECK-NEXT:   (block $switch$1$default
+;; CHECK-NEXT:    (block $switch$1$case$2
+;; CHECK-NEXT:     (br_table $switch$1$case$2 $switch$1$default
+;; CHECK-NEXT:      (local.get $0)
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (block
+;; CHECK-NEXT:      (return
+;; CHECK-NEXT:       (i32.const 1)
+;; CHECK-NEXT:      )
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:    )
+;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (block
+;; CHECK-NEXT:    (block
+;; CHECK-NEXT:     (return
+;; CHECK-NEXT:      (i32.const 0)
+;; CHECK-NEXT:     )
 ;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
 ;; CHECK-NEXT:  )
