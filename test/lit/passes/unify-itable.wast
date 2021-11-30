@@ -571,8 +571,6 @@
 
   ;; CHECK:      (type $object (struct_subtype (field $itable i32) data))
 
-  ;; CHECK:      (type $ref|$object|_=>_none (func_subtype (param (ref $object)) func))
-
   ;; CHECK:      (type $none_=>_none (func_subtype func))
   (type $none_=>_none (func_subtype func))
 
@@ -583,6 +581,8 @@
   (type $vtable-3 (struct (field (ref $none_=>_none)) (field (ref $none_=>_none)) (field (ref $none_=>_none))))
 
   (type $object (struct (field $itable (ref $itable))))
+
+  ;; CHECK:      (type $ref|$object|_=>_none (func_subtype (param (ref $object)) func))
 
   ;; CHECK:      (type $i32_=>_none (func_subtype (param i32) func))
 
@@ -628,12 +628,14 @@
     (struct.new $vtable-1
       (ref.func $e-2)
     )
-    ;; Category #3, of size 0.
-    (ref.null data)
-    ;; Category #4, of size 2, only present in this itable. This will have base
-    ;; 8.
+    ;; Category #3, of size 1.
     (struct.new $vtable-1
       (ref.func $f-2)
+    )
+    ;; Category #4, of size 1, only present in this itable. This will have base
+    ;; 8.
+    (struct.new $vtable-1
+      (ref.func $g-2)
     )
   ))
 
@@ -763,7 +765,7 @@
   ;; CHECK-NEXT: )
   (func $call-1-3-0 (export "call-1-3-0") (param $ref (ref $object))
     (call_ref
-      ;; Call itable 1's category #3 with offset 0. Call $g or trap.
+      ;; Call category #3 with offset 0. Call $g or $f-2
       (struct.get $vtable-1 0
         (ref.cast_static $vtable-1
           (array.get $itable
@@ -930,6 +932,10 @@
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $f-2)
+  ;; CHECK:      (func $g-2 (type $none_=>_none)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $g-2)
 )
 
 ;; CHECK:      (func $itable$dispatch$0$0$0 (type $i32_=>_none) (param $0 i32)
@@ -1062,14 +1068,22 @@
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT:  (block $switch$1$leave
 ;; CHECK-NEXT:   (block $switch$1$default
-;; CHECK-NEXT:    (block $switch$1$case$2
-;; CHECK-NEXT:     (br_table $switch$1$case$2 $switch$1$default
-;; CHECK-NEXT:      (local.get $0)
+;; CHECK-NEXT:    (block $switch$1$case$3
+;; CHECK-NEXT:     (block $switch$1$case$2
+;; CHECK-NEXT:      (br_table $switch$1$case$2 $switch$1$case$3 $switch$1$default
+;; CHECK-NEXT:       (local.get $0)
+;; CHECK-NEXT:      )
 ;; CHECK-NEXT:     )
+;; CHECK-NEXT:     (block
+;; CHECK-NEXT:      (block
+;; CHECK-NEXT:       (call $g)
+;; CHECK-NEXT:      )
+;; CHECK-NEXT:     )
+;; CHECK-NEXT:     (br $switch$1$leave)
 ;; CHECK-NEXT:    )
 ;; CHECK-NEXT:    (block
 ;; CHECK-NEXT:     (block
-;; CHECK-NEXT:      (call $g)
+;; CHECK-NEXT:      (call $f-2)
 ;; CHECK-NEXT:     )
 ;; CHECK-NEXT:    )
 ;; CHECK-NEXT:    (br $switch$1$leave)
@@ -1119,7 +1133,7 @@
 ;; CHECK-NEXT:    )
 ;; CHECK-NEXT:    (block
 ;; CHECK-NEXT:     (block
-;; CHECK-NEXT:      (call $f-2)
+;; CHECK-NEXT:      (call $g-2)
 ;; CHECK-NEXT:     )
 ;; CHECK-NEXT:    )
 ;; CHECK-NEXT:    (br $switch$1$leave)
