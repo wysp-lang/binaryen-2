@@ -25,18 +25,18 @@
 
   ;; CHECK:      (type $ref|$object|_=>_none (func_subtype (param (ref $object)) func))
 
+  ;; CHECK:      (type $i32_=>_none (func_subtype (param i32) func))
+
   ;; CHECK:      (type $none_=>_none (func_subtype func))
   (type $none_=>_none (func_subtype func))
 
   (type $itable (array (mut (ref null data))))
 
   (type $vtable-1 (struct (field (ref $none_=>_none))))
-  (type $vtable-2 (struct (field (ref $none_=>_none)) (field (ref $none_=>_none))))
+  (type $vtable-2 (struct (field (ref null $none_=>_none)) (field (ref $none_=>_none))))
   (type $vtable-3 (struct (field (ref $none_=>_none)) (field (ref $none_=>_none)) (field (ref $none_=>_none))))
 
   (type $object (struct (field $itable (ref $itable))))
-
-  ;; CHECK:      (type $i32_=>_none (func_subtype (param i32) func))
 
   ;; CHECK:      (type $none_=>_ref|$object| (func_subtype (result (ref $object)) func))
 
@@ -52,7 +52,7 @@
     )
     ;; Category #2, of size 2. This will have base 1.
     (struct.new $vtable-2
-      (ref.func $b)
+      (ref.null $none_=>_none)
       (ref.func $c)
     )
     ;; Category #3, of size 0.
@@ -343,9 +343,6 @@
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $a)
-  ;; CHECK:      (func $b (type $none_=>_none)
-  ;; CHECK-NEXT:  (nop)
-  ;; CHECK-NEXT: )
   (func $b)
   ;; CHECK:      (func $c (type $none_=>_none)
   ;; CHECK-NEXT:  (nop)
@@ -394,26 +391,9 @@
 
 ;; CHECK:      (func $itable$dispatch$2$1$0 (type $i32_=>_none) (param $0 i32)
 ;; CHECK-NEXT:  (block
-;; CHECK-NEXT:  )
-;; CHECK-NEXT:  (block $switch$1$leave
-;; CHECK-NEXT:   (block $switch$1$default
-;; CHECK-NEXT:    (block $switch$1$case$2
-;; CHECK-NEXT:     (br_table $switch$1$case$2 $switch$1$default
-;; CHECK-NEXT:      (local.get $0)
-;; CHECK-NEXT:     )
-;; CHECK-NEXT:    )
-;; CHECK-NEXT:    (block
-;; CHECK-NEXT:     (block
-;; CHECK-NEXT:      (call $b)
-;; CHECK-NEXT:     )
-;; CHECK-NEXT:    )
-;; CHECK-NEXT:    (br $switch$1$leave)
-;; CHECK-NEXT:   )
 ;; CHECK-NEXT:   (block
-;; CHECK-NEXT:    (block
-;; CHECK-NEXT:     (unreachable)
-;; CHECK-NEXT:    )
 ;; CHECK-NEXT:   )
+;; CHECK-NEXT:   (unreachable)
 ;; CHECK-NEXT:  )
 ;; CHECK-NEXT: )
 

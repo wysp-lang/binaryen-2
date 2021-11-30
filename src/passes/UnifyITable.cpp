@@ -186,7 +186,13 @@ struct UnifyITable : public Pass {
           auto type = operand->type.getHeapType();
           vtable.type = type;
           for (auto* operand : new_->operands) {
-            vtable.funcs.push_back(operand->cast<RefFunc>()->func);
+            if (auto* refFunc = operand->dynCast<RefFunc>()) {
+              vtable.funcs.push_back(refFunc->func);
+            } else if (operand->is<RefNull>()) {
+              vtable.funcs.push_back(Name());
+            } else {
+              WASM_UNREACHABLE("bad vtable item");
+            }
           }
 
           // Index the type if we haven't already seen it.
@@ -590,11 +596,19 @@ private:
           for (Index i = 0; i < params.size(); i++) {
             args.push_back(builder->makeLocalGet(i, params[i]));
           }
-          Expression* call = builder->makeCall(vtable.funcs[vtableFieldIndex], args, results);
-          if (results != Type::none) {
-            call = builder->makeReturn(call);
+          Expression* expr;
+          Name func = vtable.funcs[vtableFieldIndex];
+          if (func.is()) {
+            expr = builder->makeCall(func, args, results);
+            if (results != Type::none) {
+              expr = builder->makeReturn(expr);
+            }
+          } else {
+            // There is no function to call here, so trap.
+            args.push_back(builder->makeUnreachable());
+            expr = builder->makeBlock(args);
           }
-          indexToCode[itableIndex] = call;
+          indexToCode[itableIndex] = expr;
         }
       }
     }
