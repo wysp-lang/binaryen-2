@@ -193,7 +193,6 @@ struct UnifyITable : public Pass {
           if (!mapping.typeIndexes.count(type)) {
             auto index = mapping.typeIndexes.size();
             mapping.typeIndexes[type] = index;
-std::cout << "Index type " << type << " : " << module->typeNames[type].name << '\n';
           }
 
           // Note the type is used in the category.
@@ -494,7 +493,6 @@ std::cout << "Index type " << type << " : " << module->typeNames[type].name << '
   }
 
   std::string getSupportsName(Index category, HeapType type) {
-std::cout << "gSN  " << type << " : " << module->typeNames[type].name << '\n';
     return "itable$supports$" + std::to_string(category) + '$' + std::to_string(mapping.typeIndexes.at(type));
   }
 

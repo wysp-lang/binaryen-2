@@ -680,7 +680,11 @@
   ;; CHECK-NEXT: )
   (func $call-1-1-0 (export "call-1-1-0") (param $ref (ref $object))
     (call_ref
-      ;; Call itable 1's category #0 with offset 0.
+      ;; Call category #0 with offset 0. This would end up calling $a for
+      ;; itable 0 or $a-2 for itable 1. As itable 1 has the wrong vtable type,
+      ;; we would trap there, so this will either call $a or trap.
+      ;; TODO: make sure we have a test where both itables have the same vtable
+      ;;       type
       (struct.get $vtable-2 0
         (ref.cast_static $vtable-2
           (array.get $itable
@@ -706,7 +710,8 @@
   ;; CHECK-NEXT: )
   (func $call-1-2-0 (export "call-1-2-0") (param $ref (ref $object))
     (call_ref
-      ;; Call itable 1's category #2 with offset 0.
+      ;; Call category #2 with offset 0 and vtable-3. Once again this is itable
+      ;; 0 or we will trap, so we either trap or call $d
       (struct.get $vtable-3 0
         (ref.cast_static $vtable-3
           (array.get $itable
@@ -732,7 +737,7 @@
   ;; CHECK-NEXT: )
   (func $call-1-2-1 (export "call-1-2-1") (param $ref (ref $object))
     (call_ref
-      ;; Call itable 1's category #0 with offset 1.
+      ;; Call itable 1's category #2 with offset 1. This will call $e or trap.
       (struct.get $vtable-3 1
         (ref.cast_static $vtable-3
           (array.get $itable
@@ -758,7 +763,7 @@
   ;; CHECK-NEXT: )
   (func $call-1-3-0 (export "call-1-3-0") (param $ref (ref $object))
     (call_ref
-      ;; Call itable 1's category #3 with offset 0.
+      ;; Call itable 1's category #3 with offset 0. Call $g or trap.
       (struct.get $vtable-1 0
         (ref.cast_static $vtable-1
           (array.get $itable
