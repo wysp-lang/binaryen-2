@@ -2183,7 +2183,7 @@
   (type $struct (struct (mut anyref)))
   ;; CHECK:      (type $none_=>_none (func_subtype func))
 
-  ;; CHECK:      (func $sets
+  ;; CHECK:      (func $sets (type $none_=>_none)
   ;; CHECK-NEXT:  (struct.set $struct 0
   ;; CHECK-NEXT:   (ref.null $struct)
   ;; CHECK-NEXT:   (ref.null any)
@@ -2203,7 +2203,7 @@
       (ref.null func)
     )
   )
-  ;; CHECK:      (func $sets-2
+  ;; CHECK:      (func $sets-2 (type $none_=>_none)
   ;; CHECK-NEXT:  (struct.set $struct 0
   ;; CHECK-NEXT:   (ref.null $struct)
   ;; CHECK-NEXT:   (ref.null func)
@@ -2224,7 +2224,7 @@
       (ref.null data)
     )
   )
-  ;; CHECK:      (func $get
+  ;; CHECK:      (func $get (type $none_=>_none)
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (block (result funcref)
   ;; CHECK-NEXT:    (drop
