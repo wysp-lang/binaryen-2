@@ -559,8 +559,10 @@ struct TypeBuilder {
   ~TypeBuilder();
 
   TypeBuilder(TypeBuilder& other) = delete;
-  TypeBuilder(TypeBuilder&& other) = delete;
   TypeBuilder& operator=(TypeBuilder&) = delete;
+
+  TypeBuilder(TypeBuilder&& other);
+  TypeBuilder& operator=(TypeBuilder&& other);
 
   // Append `n` new uninitialized HeapType slots to the end of the TypeBuilder.
   void grow(size_t n);
@@ -575,6 +577,13 @@ struct TypeBuilder {
   void setHeapType(size_t i, const Struct& struct_);
   void setHeapType(size_t i, Struct&& struct_);
   void setHeapType(size_t i, Array array);
+
+  // This is an ugly hack around the fact that temp heap types initialized with
+  // BasicHeapTypes are not themselves considered basic, so `HeapType::isBasic`
+  // and `HeapType::getBasic` do not work as expected with them. Call these
+  // methods instead.
+  bool isBasic(size_t i);
+  HeapType::BasicHeapType getBasic(size_t i);
 
   // Gets the temporary HeapType at index `i`. This HeapType should only be used
   // to construct temporary Types using the methods below.
