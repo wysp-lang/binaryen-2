@@ -2177,7 +2177,11 @@
 ;; Different nulls are written. But, all nulls compare equal, and so when we
 ;; look for the same literal in all places, we do find that is the case. Which
 ;; of the nulls is chosen is determined by the deterministic process of merging
-;; the function contents: in practice, the first null in the last function.
+;; the function contents: in practice, the first null in the last function:
+;;   * The first null since it is noted first, and when other values arrive
+;;     later that compare equal they not not cause any change.
+;;   * The last function since we merge them in in order, and the last one
+;;     tramples the previous ones.
 (module
   ;; CHECK:      (type $struct (struct_subtype (field (mut anyref)) data))
   (type $struct (struct (mut anyref)))
@@ -2190,7 +2194,7 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (struct.set $struct 0
   ;; CHECK-NEXT:   (ref.null $struct)
-  ;; CHECK-NEXT:   (ref.null func)
+  ;; CHECK-NEXT:   (ref.null eq)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   (func $sets
@@ -2200,7 +2204,7 @@
     )
     (struct.set $struct 0
       (ref.null $struct)
-      (ref.null func)
+      (ref.null eq)
     )
   )
   ;; CHECK:      (func $sets-2 (type $none_=>_none)
@@ -2238,6 +2242,8 @@
   ;; CHECK-NEXT: )
   (func $get
     (drop
+      ;; This get will be optimized into a constant of ref.null func, since
+      ;; that is the null that "won".
       (struct.get $struct 0
         (ref.null $struct)
       )
