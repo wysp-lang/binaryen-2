@@ -244,7 +244,7 @@ struct Optimizer
     // Build a dominator tree, which then tells us what to remove: if a call
     // appears in block A, then we do not need to make any calls in any blocks
     // dominated by A.
-    DomTree<Parent::BasicBlock> domTree(basicBlocks);
+    cfg::DomTree<Parent::BasicBlock> domTree(basicBlocks);
 
     // Perform the work by going through the blocks in reverse postorder and
     // filling out which "once" globals have been written to.

@@ -23,13 +23,13 @@
 // This assumes the input is reducible.
 //
 
-#ifndef domtree_h
-#define domtree_h
+#ifndef cfg_domtree_h
+#define cfg_domtree_h
 
 #include "cfg-traversal.h"
 #include "wasm.h"
 
-namespace wasm {
+namespace wasm::cfg {
 
 //
 // DomTree receives an input CFG which has a list of basic blocks in reverse
@@ -51,11 +51,11 @@ template<typename BasicBlock> struct DomTree {
   // irrelevant.
   enum { nonsense = Index(-1) };
 
-  DomTree(std::vector<std::unique_ptr<BasicBlock>>& blocks);
+  DomTree(const std::vector<std::unique_ptr<BasicBlock>>& blocks);
 };
 
 template<typename BasicBlock>
-DomTree<BasicBlock>::DomTree(std::vector<std::unique_ptr<BasicBlock>>& blocks) {
+DomTree<BasicBlock>::DomTree(const std::vector<std::unique_ptr<BasicBlock>>& blocks) {
   // Compute the dominator tree using the "engineered algorithm" in [1]. Minor
   // differences in notation from the source include:
   //
@@ -174,6 +174,6 @@ DomTree<BasicBlock>::DomTree(std::vector<std::unique_ptr<BasicBlock>>& blocks) {
   iDoms[0] = nonsense;
 }
 
-} // namespace wasm
+} // namespace wasm::cfg
 
-#endif // domtree_h
+#endif // cfg_domtree_h
