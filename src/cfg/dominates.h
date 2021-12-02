@@ -19,6 +19,7 @@
 
 #include "cfg/domtree.h"
 #include "cfg/locations.h"
+#include "ir/effects.h"
 #include "support/unique_deferring_queue.h"
 #include "wasm-traversal.h"
 #include "wasm.h"
@@ -120,7 +121,7 @@ template<typename BasicBlock> struct DominationChecker {
       }
       for (Index i = positionStart; i < positionEnd; i++) {
         assert(i < list.size());
-        EffectAnalyer currEffects(passOptions, wasm);
+        EffectAnalyzer currEffects(passOptions, wasm);
         currEffects.visit(list[i]);
         if (currEffects.invalidates(effects)) {
           return true;
