@@ -102,5 +102,24 @@ int main() {
     CHECK_SYMMETRIC(checker.dominates, entryB, nextB);
   }
 
+  // Domination with an intermediate block, entry => middle => last
+  {
+    CFG cfg;
+    auto* entry = cfg.add();
+    auto* middle = cfg.add();
+    auto* last = cfg.add();
+    cfg.connect(entry, middle);
+    cfg.connect(middle, last);
+    auto* entryA = entry->addItem(builder.makeNop());
+    auto* middleA = middle->addItem(builder.makeNop());
+    auto* lastA = last->addItem(builder.makeNop());
+
+    cfg::DominationChecker<BasicBlock> checker(cfg);
+
+    CHECK_SYMMETRIC(checker.dominates, entryA, middleA);
+    CHECK_SYMMETRIC(checker.dominates, entryA, lastA);
+    CHECK_SYMMETRIC(checker.dominates, middleA, lastA);
+  }
+
   std::cout << "success.\n";
 }
