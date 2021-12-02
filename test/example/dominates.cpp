@@ -333,6 +333,29 @@ void test_dominates_without_interference() {
     // When we check for a dominating d, we run into b's effects.
     CHECK_FALSE(checker.dominatesWithoutInterference, aX, dX, sideEffects, {});
   }
+
+  // As above, but no effects on b.
+  {
+    CFG cfg;
+    auto* entry = cfg.add();
+    auto* a = cfg.add();
+    auto* b = cfg.add();
+    auto* c = cfg.add();
+    auto* d = cfg.add();
+    cfg.connect(entry, a);
+    cfg.connect(a, b);
+    cfg.connect(a, c);
+    cfg.connect(b, d);
+    cfg.connect(c, d);
+    auto* aX = a->addItem(makeNop());
+    auto* bX = b->addItem(makeNop());
+    auto* cX = c->addItem(makeNop());
+    auto* dX = d->addItem(makeNop());
+
+    cfg::DominationChecker<BasicBlock> checker(cfg);
+
+    CHECK_TRUE(checker.dominatesWithoutInterference, aX, dX, sideEffects, {});
+  }
 }
 
 int main() {
