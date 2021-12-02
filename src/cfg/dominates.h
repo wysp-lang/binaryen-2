@@ -14,19 +14,6 @@
  * limitations under the License.
  */
 
-//
-// Convert the AST to a CFG, while traversing it.
-//
-// Note that this is not the same as the relooper CFG. The relooper is
-// designed for compilation to an AST, this is for processing. There is
-// no built-in support for transforming this CFG into the AST back
-// again, it is just metadata on the side for computation purposes.
-//
-// Usage: As the traversal proceeds, you can note information and add it to
-// the current basic block using currBasicBlock, on the contents
-// property, whose type is user-defined.
-//
-
 #ifndef cfg_dominates_h
 #define cfg_dominates_h
 
@@ -37,6 +24,10 @@
 
 namespace wasm::cfg {
 
+// A tool to check whether expressions dominate each other. At creation time
+// this constructs a dominator tree and a mapping of expressions to their
+// basic blocks, and then calls to dominates(x, y) use those data structures to
+// give an answer to whether x dominates y.
 template<typename BasicBlock> struct DominationChecker {
   DomTree<BasicBlock> domTree;
   BlockLocations<BasicBlock> blockLocations;
