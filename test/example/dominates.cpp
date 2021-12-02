@@ -54,10 +54,10 @@ int main() {
     assert(checker.dominates(first, third));
     assert(checker.dominates(second, third));
 
-    // Things do not dominate those before them.
-    assert(checker.dominates(second, first));
-    assert(checker.dominates(third, first));
-    assert(checker.dominates(third, second));
+    // Things do *not* dominate those before them.
+    assert(!checker.dominates(second, first));
+    assert(!checker.dominates(third, first));
+    assert(!checker.dominates(third, second));
   }
 
   std::cout << "success.\n";
