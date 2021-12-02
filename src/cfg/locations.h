@@ -43,8 +43,10 @@ template<typename BasicBlock> struct BlockLocations {
   BlockLocations(const std::vector<std::unique_ptr<BasicBlock>>& blocks) {
     for (Index blockIndex = 0; blockIndex < blocks.size(); blockIndex++) {
       auto& list = blocks[blockIndex]->contents.list;
-      for (Index positionIndex = 0; positionIndex < list.size(); positionIndex++) {
-        locations.emplace(list[positionIndex], Location{blockIndex, positionIndex});
+      for (Index positionIndex = 0; positionIndex < list.size();
+           positionIndex++) {
+        locations.emplace(list[positionIndex],
+                          Location{blockIndex, positionIndex});
       }
     }
   }
