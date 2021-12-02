@@ -34,6 +34,20 @@ int main() {
   Module temp;
   Builder builder(temp);
 
+  // Do a check of
+  //   assert( check(left, right) );
+  // and also check the reverse (right, left) combination. If left == right then
+  // that must assert as true, the same as unflipped. Otherwise, it must check
+  // as the reverse, as domination of different items is antisymmetrical.
+  #define CHECK_SYMMETRIC(check, left, right) { \
+    assert(check(left, right)); \
+    if (left == right) { \
+      assert(check(right, left)); \
+    } else { \
+      assert(!check(right, left)); \
+    } \
+  }
+
   // An CFG with just an entry.
   {
     CFG cfg;
@@ -45,19 +59,14 @@ int main() {
     cfg::DominationChecker<BasicBlock> checker(cfg);
 
     // Things dominate themselves.
-    assert(checker.dominates(first, first));
-    assert(checker.dominates(second, second));
-    assert(checker.dominates(third, third));
+    CHECK_SYMMETRIC(checker.dominates, first, first);
+    CHECK_SYMMETRIC(checker.dominates, second, second);
+    CHECK_SYMMETRIC(checker.dominates, third, third);
 
     // Things dominate those after them.
-    assert(checker.dominates(first, second));
-    assert(checker.dominates(first, third));
-    assert(checker.dominates(second, third));
-
-    // Things do *not* dominate those before them.
-    assert(!checker.dominates(second, first));
-    assert(!checker.dominates(third, first));
-    assert(!checker.dominates(third, second));
+    CHECK_SYMMETRIC(checker.dominates, first, second);
+    CHECK_SYMMETRIC(checker.dominates, first, third);
+    CHECK_SYMMETRIC(checker.dominates, second, third);
   }
 
   // entry => next, with items in both.
@@ -74,26 +83,20 @@ int main() {
     cfg::DominationChecker<BasicBlock> checker(cfg);
 
     // Things dominate themselves in all blocks.
-    assert(checker.dominates(entryA, entryA));
-    assert(checker.dominates(entryB, entryB));
-    assert(checker.dominates(nextA, nextA));
-    assert(checker.dominates(nextB, nextB));
+    CHECK_SYMMETRIC(checker.dominates, entryA, entryA);
+    CHECK_SYMMETRIC(checker.dominates, entryB, entryB);
+    CHECK_SYMMETRIC(checker.dominates, nextA, nextA);
+    CHECK_SYMMETRIC(checker.dominates, nextB, nextB);
 
     // Things dominate things after them in the same block.
-    assert(checker.dominates(entryA, entryB));
-    assert(checker.dominates(nextA, nextB));
-    assert(!checker.dominates(entryB, entryA));
-    assert(!checker.dominates(nextB, nextA));
+    CHECK_SYMMETRIC(checker.dominates, entryA, entryB);
+    CHECK_SYMMETRIC(checker.dominates, nextA, nextB);
 
     // The entry block items dominate items in the next block.
-    assert(checker.dominates(entryA, nextA));
-    assert(checker.dominates(entryA, nextB));
-    assert(checker.dominates(entryB, nextA));
-    assert(checker.dominates(entryB, nextB));
-    assert(!checker.dominates(nextA, entryA));
-    assert(!checker.dominates(nextA, entryB));
-    assert(!checker.dominates(nextB, entryA));
-    assert(!checker.dominates(nextB, entryB));
+    CHECK_SYMMETRIC(checker.dominates, entryA, nextA);
+    CHECK_SYMMETRIC(checker.dominates, entryA, nextB);
+    CHECK_SYMMETRIC(checker.dominates, entryB, nextA);
+    CHECK_SYMMETRIC(checker.dominates, entryB, nextB);
   }
 
   std::cout << "success.\n";
