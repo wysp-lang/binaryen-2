@@ -292,6 +292,46 @@ void test_dominates_without_interference() {
     // Multiple nops in the middle do not prevent first from dominating fourth
     // without interference.
     CHECK_TRUE(checker.dominatesWithoutInterference, first, fourth, sideEffects, {});
+
+    // However, if we turn the entry into a loop, then we do scan the entire
+    // block, and get interference.
+    cfg.connect(entry, entry);
+    CHECK_FALSE(checker.dominatesWithoutInterference, second, third, sideEffects, {});
+    CHECK_FALSE(checker.dominatesWithoutInterference, first, fourth, sideEffects, {});
+  }
+
+  // An if with side effects on one arm.
+  //            !
+  //            b
+  //           / \
+  // entry -> a   d
+  //           \ /
+  //            c
+  {
+    CFG cfg;
+    auto* entry = cfg.add();
+    auto* a = cfg.add();
+    auto* b = cfg.add();
+    auto* c = cfg.add();
+    auto* d = cfg.add();
+    cfg.connect(entry, a);
+    cfg.connect(a, b);
+    cfg.connect(a, c);
+    cfg.connect(b, d);
+    cfg.connect(c, d);
+    auto* aX = a->addItem(makeNop());
+    auto* bX = b->addItem(makeSideEffects());
+    auto* cX = c->addItem(makeNop());
+    auto* dX = d->addItem(makeNop());
+
+    cfg::DominationChecker<BasicBlock> checker(cfg);
+
+    // Paths not going through all of b have no problem.
+    CHECK_TRUE(checker.dominatesWithoutInterference, aX, bX, sideEffects, {});
+    CHECK_TRUE(checker.dominatesWithoutInterference, aX, cX, sideEffects, {});
+
+    // When we check for a dominating d, we run into b's effects.
+    CHECK_FALSE(checker.dominatesWithoutInterference, aX, dX, sideEffects, {});
   }
 }
 
