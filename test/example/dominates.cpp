@@ -1,7 +1,7 @@
 #include <cassert>
 #include <iostream>
 
-#include <cfg/domtree.h>
+#include <cfg/dominates.h>
 #include <wasm.h>
 
 using namespace wasm;
@@ -42,7 +42,7 @@ int main() {
     auto* second = entry->addItem(builder.makeNop());
     auto* third = entry->addItem(builder.makeNop());
 
-    DominationChecker<BasicBlock> checker(cfg);
+    cfg::DominationChecker<BasicBlock> checker(cfg);
 
     // Things dominate themselves.
     assert(checker.dominates(first, first));
