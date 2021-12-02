@@ -41,10 +41,10 @@ template<typename BasicBlock> struct BlockLocations {
   std::unordered_map<Expression*, Location> locations;
 
   BlockLocations(const std::vector<std::unique_ptr<BasicBlock>>& blocks) {
-    for (Index blockIndex = 0; i < blocks.size(); blockIndex++) {
+    for (Index blockIndex = 0; blockIndex < blocks.size(); blockIndex++) {
       auto& list = blocks[blockIndex]->contents.list;
-      for (Index positionIndex = 0; i < list.size(); positionIndex++) {
-        locations.emplace(list[positionIndex], {blockIndex, positionIndex});
+      for (Index positionIndex = 0; positionIndex < list.size(); positionIndex++) {
+        locations.emplace(list[positionIndex], Location{blockIndex, positionIndex});
       }
     }
   }

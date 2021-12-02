@@ -54,8 +54,8 @@ template<typename BasicBlock> struct DominationChecker {
       return true;
     }
 
-    const auto xLocation = locations.locations[x];
-    const auto yLocation = locations.locations[y];
+    const auto xLocation = blockLocations.locations[x];
+    const auto yLocation = blockLocations.locations[y];
 
     // Start seeking from the original location of y, go back through y's
     // dominators and look for x there. Iff x dominates a chain of blocks up to
@@ -83,7 +83,7 @@ template<typename BasicBlock> struct DominationChecker {
       }
 
       // Otherwise, keep looking back through the domtree.
-      seekBlockIndex = domTree[seekBlockIndex];
+      seekBlockIndex = domTree.iDoms[seekBlockIndex];
       if (seekBlockIndex == DomTree<BasicBlock>::nonsense) {
         // There is no dominator of the previous block, which means we are in
         // unreachable code, and so x does not dominate y (but that isn't really
