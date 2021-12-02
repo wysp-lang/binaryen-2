@@ -30,12 +30,10 @@ struct CFG : public std::vector<std::unique_ptr<BasicBlock>> {
   void connect(BasicBlock* pred, BasicBlock* succ) { succ->addPred(pred); }
 };
 
-int main() {
-  Module temp;
-  Builder builder(temp);
-
 // Do a check of
+//
 //   assert( check(left, right) );
+//
 // and also check the reverse (right, left) combination. If left == right then
 // that must assert as true, the same as unflipped. Otherwise, it must check
 // as the reverse, as domination of different items is antisymmetrical.
@@ -48,6 +46,10 @@ int main() {
       assert(!check(right, left));                                             \
     }                                                                          \
   }
+
+int main() {
+  Module temp;
+  Builder builder(temp);
 
   // An CFG with just an entry.
   {
