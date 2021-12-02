@@ -19,6 +19,7 @@
 
 #include "cfg/domtree.h"
 #include "cfg/locations.h"
+#include "support/unique_deferring_queue.h"
 #include "wasm-traversal.h"
 #include "wasm.h"
 
@@ -29,11 +30,12 @@ namespace wasm::cfg {
 // basic blocks, and then calls to dominates(x, y) use those data structures to
 // give an answer to whether x dominates y.
 template<typename BasicBlock> struct DominationChecker {
+  const std::vector<std::unique_ptr<BasicBlock>>& blocks;
   DomTree<BasicBlock> domTree;
   BlockLocations<BasicBlock> blockLocations;
 
   DominationChecker(const std::vector<std::unique_ptr<BasicBlock>>& blocks)
-    : domTree(blocks), blockLocations(blocks) {}
+    : blocks(blocks), domTree(blocks), blockLocations(blocks) {}
 
   // Returns whether x dominates y, that is, whether every code path from the
   // entry to y must pass through x.
@@ -51,7 +53,6 @@ template<typename BasicBlock> struct DominationChecker {
     // Start seeking from the original location of y, go back through y's
     // dominators and look for x there. Iff x dominates a chain of blocks up to
     // y then it dominates y.
-    auto* seek = y;
     Index seekBlockIndex = yLocation.blockIndex;
     while (1) {
       if (xLocation.blockIndex > seekBlockIndex) {
@@ -89,6 +90,86 @@ template<typename BasicBlock> struct DominationChecker {
         return false;
       }
     }
+  }
+
+  // Checks whether x dominates y, and if it does so, that it also dominates it
+  // without any effects interfering in the middle. That is, all paths from x
+  // to y are free from effects that would invalidate the given effects. A set
+  // of expressions to ignore the effects of is also provided.
+  bool dominatesWithoutInterference(Expression* x, Expression* y, EffectAnalyzer& effects, std::unordered_set<Expression*>& ignoreEffectsOf, Module& wasm, const PassOptions& passOptions) {
+    if (x == y) {
+      return true;
+    }
+    if (!dominates(x, y)) {
+      return false;
+    }
+
+    // x dominates y, so what we have left to check is for effects along the
+    // way.
+    const auto xLocation = blockLocations.locations[x];
+    const auto yLocation = blockLocations.locations[y];
+
+    // Define a helper function to check for effects in a range of positions
+    // inside a block, which returns true if we found a problem. The range is in
+    // [x, y) form, that is, y is not checked.
+    // We allow positionEnd to be -1, which is interpreted as the end of the
+    // list.
+    auto hasInterference = [&](const std::vector<Expression*>& list, Index positionStart, Index positionEnd) {
+      if (positionEnd == Index(-1)) {
+        positionEnd = list.size();
+      }
+      for (Index i = positionStart; i < positionEnd; i++) {
+        assert(i < list.size());
+        EffectAnalyer currEffects(passOptions, wasm);
+        currEffects.visit(list[i]);
+        if (currEffects.invalidates(effects)) {
+          return true;
+        }
+      }
+      return false;
+      // TODO: add memoization?
+    };
+
+    // First, look for effects inside x's and y's blocks, after x and before y.
+    // Often effects right next to x and y can save us looking any further.
+    if (hasInterference(blocks[xLocation.blockIndex].contents.list, xLocation.positionIndex + 1, Index(-1)) ||
+        hasInterference(blocks[yLocation.blockIndex].contents.list, 0, yLocation.positionIndex)) {
+      return false;
+    }
+
+    auto* xBlock = blocks[xLocation.blockIndex].get();
+    auto* yBlock = blocks[yLocation.blockIndex].get();
+
+    // Look through the blocks between them, using a work queue of blocks to
+    // scan. We ignore repeats here since we only need to ever scan a block
+    // once.
+    UniqueNonrepeatingDeferredQueue<BasicBlock*> work;
+    for (auto* pred : yBlock->preds) {
+      work.push(pred);
+    }
+    while (!work.empty()) {
+      auto* currBlock = work.pop();
+
+      // This is the first time we reach this block; scan it. (Note that we we
+      // might reach y's block here, which we have partially scanned before; but
+      // it is correct to scan all of that block now, as it is inside a loop and
+      // therefore all the block is on a path from x to y.)
+      if (hasInterference(currBlock->contents.list, 0, Index(-1))) {
+        return false;
+      }
+
+      for (auto* pred : currBlock->preds) {
+        // As x dominates y, we know that if we keep going back through the
+        // preds then eventually we will reach x, at which point we can stop.
+        if (pred != xBlock) {
+          work.push(pred);
+        }
+      }
+    }
+
+    // We saw before that x dominates y, and we found no interference along the
+    // way, so we succeeded in showing that x dominates y without interference.
+    return true;
   }
 };
 
