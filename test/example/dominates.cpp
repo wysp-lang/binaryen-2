@@ -274,7 +274,25 @@ void test_dominates_without_interference() {
     CHECK_TRUE(checker.dominatesWithoutInterference, first, third, sideEffects, {second});
   }
 
-  // TODO: more effects at start and end of block
+  {
+    CFG cfg;
+    auto* entry = cfg.add();
+    auto* first = entry->addItem(makeSideEffects());
+    auto* second = entry->addItem(makeNop());
+    auto* third = entry->addItem(makeNop());
+    auto* fourth = entry->addItem(makeSideEffects());
+
+    cfg::DominationChecker<BasicBlock> checker(cfg);
+
+    // second dominates third without effects, even though there are effects
+    // both before and after them (so if we scanned to far in either direction
+    // in this block we'd fail).
+    CHECK_TRUE(checker.dominatesWithoutInterference, second, third, sideEffects, {});
+
+    // Multiple nops in the middle do not prevent first from dominating fourth
+    // without interference.
+    CHECK_TRUE(checker.dominatesWithoutInterference, first, fourth, sideEffects, {});
+  }
 }
 
 int main() {
