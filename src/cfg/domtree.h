@@ -55,7 +55,8 @@ template<typename BasicBlock> struct DomTree {
 };
 
 template<typename BasicBlock>
-DomTree<BasicBlock>::DomTree(const std::vector<std::unique_ptr<BasicBlock>>& blocks) {
+DomTree<BasicBlock>::DomTree(
+  const std::vector<std::unique_ptr<BasicBlock>>& blocks) {
   // Compute the dominator tree using the "engineered algorithm" in [1]. Minor
   // differences in notation from the source include:
   //

@@ -41,8 +41,8 @@ template<typename BasicBlock> struct DominationChecker {
   DomTree<BasicBlock> domTree;
   BlockLocations<BasicBlock> blockLocations;
 
-  DominationChecker(const std::vector<std::unique_ptr<BasicBlock>>& blocks) :
-    domTree(blocks), blockLocations(blocks) {}
+  DominationChecker(const std::vector<std::unique_ptr<BasicBlock>>& blocks)
+    : domTree(blocks), blockLocations(blocks) {}
 
   // Returns whether x dominates y, that is, whether every code path from the
   // entry to y must pass through x.
@@ -57,9 +57,9 @@ template<typename BasicBlock> struct DominationChecker {
     const auto xLocation = locations.locations[x];
     const auto yLocation = locations.locations[y];
 
-    // Start seeking from the original location of y, go back through y's dominators
-    // and look for x there. Iff x dominates a chain of blocks up to y then it
-    // dominates y.
+    // Start seeking from the original location of y, go back through y's
+    // dominators and look for x there. Iff x dominates a chain of blocks up to
+    // y then it dominates y.
     auto* seek = y;
     Index seekBlockIndex = yLocation.blockIndex;
     while (1) {
