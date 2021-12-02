@@ -271,7 +271,7 @@ void test_dominates_without_interference() {
     CHECK_TRUE(checker.dominatesWithoutInterference, first, third, noEffects, {});
 
     // If we ignore the middle item then things are also ok again.
-    CHECK_FALSE(checker.dominatesWithoutInterference, first, third, sideEffects, {second});
+    CHECK_TRUE(checker.dominatesWithoutInterference, first, third, sideEffects, {second});
   }
 
   // TODO: more effects at start and end of block

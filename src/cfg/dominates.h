@@ -121,6 +121,10 @@ template<typename BasicBlock> struct DominationChecker {
       }
       for (Index i = positionStart; i < positionEnd; i++) {
         assert(i < list.size());
+        auto* curr = list[i];
+        if (ignoreEffectsOf.count(curr)) {
+          continue;
+        }
         EffectAnalyzer currEffects(passOptions, wasm);
         currEffects.visit(list[i]);
         if (currEffects.invalidates(effects)) {
