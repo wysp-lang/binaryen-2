@@ -37,7 +37,7 @@ struct CFG : public std::vector<std::unique_ptr<BasicBlock>> {
 // and also check the reverse (right, left) combination. If left == right then
 // that must assert as true, the same as unflipped. Otherwise, it must check
 // as the reverse, as domination of different items is antisymmetrical.
-#define CHECK_TRUE(check, left, right)                                    \
+#define CHECK_TRUE(check, left, right)                                         \
   {                                                                            \
     assert(check(left, right));                                                \
     if (left == right) {                                                       \
@@ -50,12 +50,11 @@ struct CFG : public std::vector<std::unique_ptr<BasicBlock>> {
 // As above, but check that the result is false for both (left, right) and
 // (right, left). This is the case for two blocks where neither domiantes the
 // other.
-#define CHECK_FALSE(check, left, right)                                    \
+#define CHECK_FALSE(check, left, right)                                        \
   {                                                                            \
-    assert(!check(left, right));                                                \
-    assert(!check(right, left));                                             \
+    assert(!check(left, right));                                               \
+    assert(!check(right, left));                                               \
   }
-
 
 int main() {
   Module temp;
