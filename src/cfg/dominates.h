@@ -97,7 +97,7 @@ template<typename BasicBlock> struct DominationChecker {
   // without any effects interfering in the middle. That is, all paths from x
   // to y are free from effects that would invalidate the given effects. A set
   // of expressions to ignore the effects of is also provided.
-  bool dominatesWithoutInterference(Expression* x, Expression* y, EffectAnalyzer& effects, std::unordered_set<Expression*>& ignoreEffectsOf, Module& wasm, const PassOptions& passOptions) {
+  bool dominatesWithoutInterference(Expression* x, Expression* y, EffectAnalyzer& effects, const std::unordered_set<Expression*>& ignoreEffectsOf, Module& wasm, const PassOptions& passOptions) {
     if (x == y) {
       return true;
     }
@@ -133,9 +133,15 @@ template<typename BasicBlock> struct DominationChecker {
 
     // First, look for effects inside x's and y's blocks, after x and before y.
     // Often effects right next to x and y can save us looking any further.
-    if (hasInterference(blocks[xLocation.blockIndex].contents.list, xLocation.positionIndex + 1, Index(-1)) ||
-        hasInterference(blocks[yLocation.blockIndex].contents.list, 0, yLocation.positionIndex)) {
-      return false;
+    if (xLocation.blockIndex != yLocation.blockIndex) {
+      if (hasInterference(blocks[xLocation.blockIndex]->contents.list, xLocation.positionIndex + 1, Index(-1)) ||
+          hasInterference(blocks[yLocation.blockIndex]->contents.list, 0, yLocation.positionIndex)) {
+        return false;
+      }
+    } else {
+      if (hasInterference(blocks[xLocation.blockIndex]->contents.list, xLocation.positionIndex + 1, yLocation.positionIndex)) {
+        return false;
+      }
     }
 
     auto* xBlock = blocks[xLocation.blockIndex].get();
@@ -145,7 +151,7 @@ template<typename BasicBlock> struct DominationChecker {
     // scan. We ignore repeats here since we only need to ever scan a block
     // once.
     UniqueNonrepeatingDeferredQueue<BasicBlock*> work;
-    for (auto* pred : yBlock->preds) {
+    for (auto* pred : yBlock->in) {
       work.push(pred);
     }
     while (!work.empty()) {
@@ -159,7 +165,7 @@ template<typename BasicBlock> struct DominationChecker {
         return false;
       }
 
-      for (auto* pred : currBlock->preds) {
+      for (auto* pred : currBlock->in) {
         // As x dominates y, we know that if we keep going back through the
         // preds then eventually we will reach x, at which point we can stop.
         if (pred != xBlock) {
