@@ -17,6 +17,10 @@
 //
 // CSE
 //
+// Full-function analysis.
+//
+// Can handle even nested control flow.
+//
 // TODO: use value numbering to get GVN
 //
 
@@ -226,7 +230,41 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
       return;
     }
 
-    // We have filled
+    // TODO: do an effects phase here? Also front to back
+
+    // We have filled in |exprInfos| with copy information, and we've found at
+    // least one relevant copy. We can now apply those copies. We start at the
+    // end and go back, so that we always apply the largest possible match,
+    // that is, if we have
+    //
+    //   A  B  C  ...  A  B  C
+    //
+    // where C is the parent of A and B, then we want to see C first so that we
+    // can replace all of it.
+    //
+    // To see which copies can actually be optimized, we need to see that the
+    // first dominates the second.
+    cfg::DominationChecker<BasicBlock> dominationChecker(basicBlocks);
+
+    for (int i = int(exprInfos.size()) - 1; i >= 0; i--) {
+      auto& exprInfo = exprInfos[i];
+      auto& copyInfo = exprInfo.copyInfo;
+      auto* original = exprInfo.original;
+
+      if (copyInfo.copyOf == Index(-1)) {
+        continue;
+      }
+
+      auto* copySource = exprInfos[copyInfo.copyOf].original;
+
+      // There is a copy. See if the first dominates the second, and it does so
+      // without any effects getting in the way.
+      if (!dominationChecker.dominatesWithoutInterference(copySource, original)) {
+        continue;
+      }
+
+      // Everything looks good, so we can optimize here.
+    }
 
 
 
