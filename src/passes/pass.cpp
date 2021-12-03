@@ -117,9 +117,7 @@ void PassRegistry::registerPasses() {
   registerPass("cfp",
                "propagate constant struct field values",
                createConstantFieldPropagationPass);
-  registerPass("cse",
-               "common subexpression elimination",
-               createCSEPass);
+  registerPass("cse", "common subexpression elimination", createCSEPass);
   registerPass(
     "dce", "removes unreachable code", createDeadCodeEliminationPass);
   registerPass("dealign",

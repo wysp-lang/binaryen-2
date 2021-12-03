@@ -23,15 +23,16 @@
 //
 // TODO: use value numbering to get GVN.
 // TODO: use a LocalGraph to match gets with tees (gets with gets should already
-//       work as they compare equal + we track effects). part of value numbering?
+//       work as they compare equal + we track effects). part of value
+//       numbering?
 //
 
 #include <algorithm>
 #include <memory>
 
 #include "cfg/cfg-traversal.h"
-#include "cfg/domtree.h"
 #include "cfg/dominates.h"
+#include "cfg/domtree.h"
 #include "ir/cost.h"
 #include "ir/effects.h"
 #include "ir/iteration.h"
@@ -66,10 +67,11 @@ struct HSEHasher {
   }
 };
 
-// A full equality check for HashedShallowExpressions. The hash is used as a speedup,
-// but if it matches we still verify the contents are identical.
+// A full equality check for HashedShallowExpressions. The hash is used as a
+// speedup, but if it matches we still verify the contents are identical.
 struct HSEComparer {
-  bool operator()(const HashedShallowExpression a, const HashedShallowExpression b) const {
+  bool operator()(const HashedShallowExpression a,
+                  const HashedShallowExpression b) const {
     if (a.digest != b.digest) {
       return false;
     }
@@ -77,13 +79,13 @@ struct HSEComparer {
   }
 };
 
-// Maps hashed shallow expressions to the list of expressions that match. That is, all
-// expressions that are equivalent (same hash, and also compare equal) will
-// be in a vector for the corresponding entry in this map.
+// Maps hashed shallow expressions to the list of expressions that match. That
+// is, all expressions that are equivalent (same hash, and also compare equal)
+// will be in a vector for the corresponding entry in this map.
 using HashedShallowExprs = std::unordered_map<HashedShallowExpression,
-                                       SmallVector<Expression*, 1>,
-                                       HSEHasher,
-                                       HSEComparer>;
+                                              SmallVector<Expression*, 1>,
+                                              HSEHasher,
+                                              HSEComparer>;
 
 // Additional information for each basic block.
 struct CSEBasicBlockInfo {
@@ -93,7 +95,9 @@ struct CSEBasicBlockInfo {
 
 } // anonymous namespace
 
-struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSEBasicBlockInfo>> {
+struct CSE
+  : public WalkerPass<
+      CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSEBasicBlockInfo>> {
   bool isFunctionParallel() override { return true; }
 
   // FIXME DWARF updating does not handle local changes yet.
@@ -130,7 +134,8 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
     // modified this one to store its value in a tee.
     bool addedTee = false;
 
-    ExprInfo(Expression* original, Expression** currp) : original(original), currp(currp) {}
+    ExprInfo(Expression* original, Expression** currp)
+      : original(original), currp(currp) {}
   };
 
   // Info for each (reachable) expression in the function, in post-order.
@@ -140,14 +145,16 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
     if (currBasicBlock) {
       // Note each (reachable) expression and the exprInfo for it to it.
       currBasicBlock->contents.list.push_back(curr);
-      currBasicBlock->contents.exprInfos.push_back(CSEBasicBlockInfo::ExprInfo(curr, getCurrentPointer()));
+      currBasicBlock->contents.exprInfos.push_back(
+        CSEBasicBlockInfo::ExprInfo(curr, getCurrentPointer()));
     }
   }
 
   void doWalkFunction(Function* func) {
     // First scan the code to find all the expressions and basic blocks. This
     // fills in |blocks| and starts to fill in |exprInfos|.
-    WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>>>::doWalkFunction(func);
+    WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>>>::doWalkFunction(
+      func);
 
     // Do another pass to find repeated expressions. We are looking for complete
     // expressions, including children, that recur, and so it is efficient to do
@@ -299,16 +306,18 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
       // Note that we compute effects here in a way that is potentially
       // quadratic (as we'll check child effects later potentially). But it is
       // necessary to check like this
-      // TODO: do an effects phase earlier? Also front to back? But the problem is
+      // TODO: do an effects phase earlier? Also front to back? But the problem
+      // is
       //       that a parent might not have effects while a child does, if the
       //       child breaks to the parent, e.g. - so we do need quadratic work
       //       here in general. but likely that is ok as it is rare to have
       //       copies?
       EffectAnalyzer effects(runner->options, *module, original);
 
-      // Side effects prevent us from removing a copy. We also cannot optimize away something that is intrinsically
-      // nondeterministic: even if it has no side effects, if it may return a
-      // different result each time, then we cannot optimize away repeats.
+      // Side effects prevent us from removing a copy. We also cannot optimize
+      // away something that is intrinsically nondeterministic: even if it has
+      // no side effects, if it may return a different result each time, then we
+      // cannot optimize away repeats.
       if (effects.hasSideEffects() ||
           Properties::isGenerative(curr, module->features)) {
         continue;
@@ -325,13 +334,12 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
       for (Index j = firstChild; j <= i; j++) {
         ignoreEffectsOf.insert(exprInfos[j].original);
       }
-      if (!dominationChecker.dominatesWithoutInterference(
-        source,
-        original,
-        effects,
-        ignoreEffectsOf,
-        *module,
-        runner->options)) {
+      if (!dominationChecker.dominatesWithoutInterference(source,
+                                                          original,
+                                                          effects,
+                                                          ignoreEffectsOf,
+                                                          *module,
+                                                          runner->options)) {
         continue;
       }
 
@@ -345,7 +353,8 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
         *sourceInfo.currp = builder.makeLocalTee(temp, sourceInfo.original);
         sourceInfo.addedTee = true;
       }
-      *exprInfo.currp = builder.makeLocalGet((*sourceInfo.currp)->cast<LocalSet>()->index, original->type);
+      *exprInfo.currp = builder.makeLocalGet(
+        (*sourceInfo.currp)->cast<LocalSet>()->index, original->type);
 
       // Skip over all of our children before the next loop iteration, since we
       // have optimized the entire expression, including them, into a single
@@ -356,13 +365,6 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
       assert(childrenSize < i);
       i -= childrenSize;
     }
-
-
-
-
-
-
-
 
     // Fix up any nondefaultable locals that we've added.
     TypeUpdating::handleNonDefaultableLocals(func, *getModule());
