@@ -155,7 +155,6 @@ struct CSE
   }
 
   void doWalkFunction(Function* func) {
-std::cout << "func " << func->name << '\n';
     // First scan the code to find all the expressions and basic blocks. This
     // fills in |blocks| and starts to fill in |exprInfos|.
     WalkerPass<
@@ -280,7 +279,6 @@ std::cout << "func " << func->name << '\n';
       // value as i. This is the beginning of the range of indexes that includes
       // the expression and all its children.
       auto firstChild = i - int(copyInfo.fullSize) + 1;
-std::cout << "i " << i << " , fullSize " << copyInfo.fullSize << " , fristChil " << firstChild << '\n';
       assert(firstChild >= 0 && firstChild <= i);
 
       // When we optimize we replace all of this expression and its children
