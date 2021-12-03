@@ -1298,9 +1298,14 @@
  ;; CHECK-NEXT:   (i32.const 0)
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (i32.store8
- ;; CHECK-NEXT:   (i32.add
- ;; CHECK-NEXT:    (local.get $0)
- ;; CHECK-NEXT:    (i32.const 19)
+ ;; CHECK-NEXT:   (i32.sub
+ ;; CHECK-NEXT:    (local.tee $1
+ ;; CHECK-NEXT:     (i32.add
+ ;; CHECK-NEXT:      (local.get $0)
+ ;; CHECK-NEXT:      (i32.const 20)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (i32.const 1)
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:   (i32.const 0)
  ;; CHECK-NEXT:  )
@@ -1320,12 +1325,7 @@
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (i32.store8
  ;; CHECK-NEXT:   (i32.sub
- ;; CHECK-NEXT:    (local.tee $1
- ;; CHECK-NEXT:     (i32.add
- ;; CHECK-NEXT:      (local.get $0)
- ;; CHECK-NEXT:      (i32.const 20)
- ;; CHECK-NEXT:     )
- ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (local.get $1)
  ;; CHECK-NEXT:    (i32.const 2)
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:   (i32.const 0)
@@ -1345,9 +1345,9 @@
  ;; CHECK-NEXT:   (i32.const 0)
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (i32.store8
- ;; CHECK-NEXT:   (i32.add
- ;; CHECK-NEXT:    (local.get $0)
- ;; CHECK-NEXT:    (i32.const 16)
+ ;; CHECK-NEXT:   (i32.sub
+ ;; CHECK-NEXT:    (local.get $1)
+ ;; CHECK-NEXT:    (i32.const 4)
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:   (i32.const 0)
  ;; CHECK-NEXT:  )
