@@ -54,8 +54,10 @@ struct HashedShallowExpression {
   Expression* expr;
   size_t digest;
 
-  HashedShallowExpression(Expression* expr, size_t digest)
-    : expr(expr), digest(digest) {}
+  HashedShallowExpression(Expression* expr)
+    : expr(expr) {
+    digest = ExpressionAnalyzer::shallowHash(expr);
+  }
 
   HashedShallowExpression(const HashedShallowExpression& other)
     : expr(other.expr), digest(other.digest) {}
@@ -93,6 +95,8 @@ struct CSEBasicBlockInfo {
   std::vector<Expression*> list;
 };
 
+static const Index ImpossibleIndex = -1;
+
 } // anonymous namespace
 
 struct CSE
@@ -111,13 +115,13 @@ struct CSE
     // appears before.
     // TODO: This could be a set of copies, which would let us optimize a few
     //       more cases. Right now we just store the last copy seen here.
-    Index copyOf = -1;
+    Index copyOf = ImpossibleIndex;
 
     // The complete size of the expression, that is, including nested children.
     // This in combination with copyOf lets us compute copies in parent
     // expressions using info from their children, which avoids quadratic
     // repeated work.
-    Index fullSize = -1;
+    Index fullSize = ImpossibleIndex;
   };
 
   struct ExprInfo {
@@ -139,21 +143,22 @@ struct CSE
   };
 
   // Info for each (reachable) expression in the function, in post-order.
-  std::vector<Expression*> exprInfos;
+  std::vector<ExprInfo> exprInfos;
 
   void visitExpression(Expression* curr) {
     if (currBasicBlock) {
       // Note each (reachable) expression and the exprInfo for it to it.
       currBasicBlock->contents.list.push_back(curr);
-      currBasicBlock->contents.exprInfos.push_back(
-        CSEBasicBlockInfo::ExprInfo(curr, getCurrentPointer()));
+      exprInfos.push_back(
+        ExprInfo(curr, getCurrentPointer()));
     }
   }
 
   void doWalkFunction(Function* func) {
     // First scan the code to find all the expressions and basic blocks. This
     // fills in |blocks| and starts to fill in |exprInfos|.
-    WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>>>::doWalkFunction(
+    WalkerPass<
+      CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSEBasicBlockInfo>>::doWalkFunction(
       func);
 
     // Do another pass to find repeated expressions. We are looking for complete
@@ -198,7 +203,7 @@ struct CSE
       // Pop any children and see if we are part of a copy that
       // includes them.
       auto numChildren = ChildIterator(exprInfo.original).getNumChildren();
-      Index totalSize = 1;
+      Index fullSize = 1;
       for (Index child = 0; child < numChildren; child++) {
         auto childInfo = stack.back();
         stack.pop_back();
@@ -207,28 +212,26 @@ struct CSE
         // copy of ourselves, and also for all of our children to appear in the
         // right positions as children of that previous appearance. Once
         // anything is not perfectly aligned, we have failed to find a copy.
-        if (copyInfo.copyOf != -1) {
+        if (copyInfo.copyOf != ImpossibleIndex) {
           // The child's location is our own plus a shift of the
           // size we've seen so far. That is, the first child is right before
           // us in the vector, and the one before it is at an additiona offset
           // of the size of the last child, and so forth.
-          auto childPosition = i - totalSize;
-
           // Check if this child has a copy, and that copy is perfectly aligned
           // with the parent that we found ourselves to be a shallow copy of.
-          if (childInfo.copyOf == Index(-1) ||
-              childInfo.copyOf != copyInfo.copyOf - totalSize) {
-            copyInfo.copyOf = -1;
+          if (childInfo.copyOf == ImpossibleIndex ||
+              childInfo.copyOf != copyInfo.copyOf - fullSize) {
+            copyInfo.copyOf = ImpossibleIndex;
           }
         }
 
         // Regardless of copyOf status, keep accumulating the sizes of the
         // children. TODO: this is not really necessary since without a copy we
         // never look at the size, but that is a little subtle
-        totalSize += childInfo.totalSize;
+        fullSize += childInfo.fullSize;
       }
 
-      if (copyInfo.copyOf != Index(-1) && isRelevant(original)) {
+      if (copyInfo.copyOf != ImpossibleIndex && isRelevant(original)) {
         foundRelevantCopy = true;
       }
 
@@ -253,16 +256,20 @@ struct CSE
     // first dominates the second.
     cfg::DominationChecker<BasicBlock> dominationChecker(basicBlocks);
 
-    for (int i = int(exprInfos.size()) - 1; i >= 0; i--) {
-      auto& exprInfo = exprInfos[i]; // rename to info or currInfo?
-      auto& copyInfo = exprInfo.copyInfo;
-      auto* original = exprInfo.original;
+    auto* module = getModule();
+    auto& passOptions = getPassOptions();
+    Builder builder(*module);
 
-      if (copyInfo.copyOf == Index(-1)) {
+    for (int i = int(exprInfos.size()) - 1; i >= 0; i--) {
+      auto& currInfo = exprInfos[i]; // rename to info or currInfo?
+      auto& copyInfo = currInfo.copyInfo;
+      auto* curr = currInfo.original;
+
+      if (copyInfo.copyOf == ImpossibleIndex) {
         continue;
       }
 
-      if (!isRelevant(original)) {
+      if (!isRelevant(curr)) {
         // This has a copy, but it is not relevant to optimize. (We mus still
         // track such things as copies as their parents may be relevant.)
         continue;
@@ -271,8 +278,8 @@ struct CSE
       // The index of the first child, or if there is no such child, the same
       // value as i. This is the beginning of the range of indexes that includes
       // the expression and all its children.
-      Index firstChild = i - copyInfo.totalSize + 1;
-      assert(firstChild <= i);
+      auto firstChild = i - int(copyInfo.fullSize) + 1;
+      assert(firstChild >= 0 && firstChild <= i);
 
       // When we optimize we replace all of this expression and its children
       // with a local.get. We can't do that if we've added a tee anywhere among
@@ -283,7 +290,7 @@ struct CSE
       // copy with some extra care, or perhaps we can just do another
       // cycle.
       bool modified = false;
-      for (Index j = firstChild; j <= i; j++) {
+      for (int j = firstChild; j <= i; j++) {
         if (exprInfos[j].addedTee) {
           modified = true;
           break;
@@ -298,7 +305,7 @@ struct CSE
 
       // There is a copy. See if the first dominates the second, as if not then
       // we can just skip.
-      if (!dominationChecker.dominates(source, original)) {
+      if (!dominationChecker.dominates(source, curr)) {
         continue;
       }
 
@@ -312,7 +319,7 @@ struct CSE
       //       child breaks to the parent, e.g. - so we do need quadratic work
       //       here in general. but likely that is ok as it is rare to have
       //       copies?
-      EffectAnalyzer effects(runner->options, *module, original);
+      EffectAnalyzer effects(passOptions, *module, curr);
 
       // Side effects prevent us from removing a copy. We also cannot optimize
       // away something that is intrinsically nondeterministic: even if it has
@@ -331,15 +338,15 @@ struct CSE
       // children, as dominationChecker is not aware of nesting (it just looks
       // shallowly).
       std::unordered_set<Expression*> ignoreEffectsOf;
-      for (Index j = firstChild; j <= i; j++) {
+      for (int j = firstChild; j <= i; j++) {
         ignoreEffectsOf.insert(exprInfos[j].original);
       }
       if (!dominationChecker.dominatesWithoutInterference(source,
-                                                          original,
+                                                          curr,
                                                           effects,
                                                           ignoreEffectsOf,
                                                           *module,
-                                                          runner->options)) {
+                                                          passOptions)) {
         continue;
       }
 
@@ -349,17 +356,17 @@ struct CSE
         // This is the first time we add a tee on the source in order to use its
         // value later (that is, we've not found another copy of |source|
         // earlier).
-        auto temp = builder.addVar(getFunction(), original->type);
-        *sourceInfo.currp = builder.makeLocalTee(temp, sourceInfo.original);
+        auto temp = builder.addVar(getFunction(), curr->type);
+        *sourceInfo.currp = builder.makeLocalTee(temp, sourceInfo.original, curr->type);
         sourceInfo.addedTee = true;
       }
-      *exprInfo.currp = builder.makeLocalGet(
-        (*sourceInfo.currp)->cast<LocalSet>()->index, original->type);
+      *currInfo.currp = builder.makeLocalGet(
+        (*sourceInfo.currp)->cast<LocalSet>()->index, curr->type);
 
       // Skip over all of our children before the next loop iteration, since we
       // have optimized the entire expression, including them, into a single
       // local.get.
-      auto childrenSize = copyInfo.totalSize - 1;
+      int childrenSize = copyInfo.fullSize - 1;
       // < and not <= becauase not only the children exist, but also the copy
       // before us that we optimize to.
       assert(childrenSize < i);
@@ -389,6 +396,8 @@ private:
         !TypeUpdating::canHandleAsLocal(curr->type)) {
       return false;
     }
+
+    auto& options = getPassOptions();
 
     // If the size is at least 3, then if we have two of them we have 6,
     // and so adding one set+one get and removing one of the items itself
