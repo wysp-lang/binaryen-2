@@ -2,6 +2,7 @@
 ;; NOTE: This test was ported using port_test.py and could be cleaned up.
 
 ;; RUN: foreach %s %t wasm-opt --local-cse -S -o - | filecheck %s
+;; RUN: foreach %s %t wasm-opt --cse       -S -o - | filecheck %s --check-prefix NONLC
 
 (module
   (memory 100 100)

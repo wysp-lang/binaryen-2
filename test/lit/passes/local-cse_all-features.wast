@@ -2,6 +2,7 @@
 ;; NOTE: This test was ported using port_test.py and could be cleaned up.
 
 ;; RUN: foreach %s %t wasm-opt --local-cse --all-features -S -o - | filecheck %s
+;; RUN: foreach %s %t wasm-opt --cse       --all-features -S -o - | filecheck %s --check-prefix NONLC
 
 (module
   ;; CHECK:      (type $i32_=>_i32 (func (param i32) (result i32)))
