@@ -356,6 +356,52 @@ void test_dominates_without_interference() {
 
     CHECK_TRUE(checker.dominatesWithoutInterference, aX, dX, sideEffects, {});
   }
+
+  //         entry                    middle                  last
+  //  [effects, no effects] -> [no effects, effects] -> [effects, effects]
+  //    entryX    entryY         middleX    middleY       lastX    lastY
+  {
+    CFG cfg;
+    auto* entry = cfg.add();
+    auto* middle = cfg.add();
+    auto* last = cfg.add();
+    cfg.connect(entry, middle);
+    cfg.connect(middle, last);
+    auto* entryX = entry->addItem(makeSideEffects());
+    auto* entryY = entry->addItem(makeNop());
+    auto* middleX = middle->addItem(makeNop());
+    auto* middleY = middle->addItem(makeSideEffects());
+    auto* lastX = last->addItem(makeSideEffects());
+    auto* lastY = last->addItem(makeSideEffects());
+
+    cfg::DominationChecker<BasicBlock> checker(cfg);
+
+    // entryX dominates without issue all the way to middleY. From there on,
+    // middleY interferes.
+    CHECK_TRUE(checker.dominatesWithoutInterference, entryX, entryY, sideEffects, {});
+    CHECK_TRUE(checker.dominatesWithoutInterference, entryX, middleX, sideEffects, {});
+    CHECK_TRUE(checker.dominatesWithoutInterference, entryX, middleY, sideEffects, {});
+    CHECK_FALSE(checker.dominatesWithoutInterference, entryX, lastX, sideEffects, {});
+    CHECK_FALSE(checker.dominatesWithoutInterference, entryX, lastY, sideEffects, {});
+
+    // Likewise for entryY.
+    CHECK_TRUE(checker.dominatesWithoutInterference, entryY, middleX, sideEffects, {});
+    CHECK_TRUE(checker.dominatesWithoutInterference, entryY, middleY, sideEffects, {});
+    CHECK_FALSE(checker.dominatesWithoutInterference, entryY, lastX, sideEffects, {});
+    CHECK_FALSE(checker.dominatesWithoutInterference, entryY, lastY, sideEffects, {});
+
+    // Likewise for middleX.
+    CHECK_TRUE(checker.dominatesWithoutInterference, middleX, middleY, sideEffects, {});
+    CHECK_FALSE(checker.dominatesWithoutInterference, middleX, lastX, sideEffects, {});
+    CHECK_FALSE(checker.dominatesWithoutInterference, middleX, lastY, sideEffects, {});
+
+    // middleY dominates lastX without issue, but then lastX interferes.
+    CHECK_TRUE(checker.dominatesWithoutInterference, middleX, lastX, sideEffects, {});
+    CHECK_FALSE(checker.dominatesWithoutInterference, middleX, lastY, sideEffects, {});
+
+    // lastX dominates lastY without issue as there is nothing between them.
+    CHECK_FALSE(checker.dominatesWithoutInterference, lastX, lastY, sideEffects, {});
+  }
 }
 
 int main() {
