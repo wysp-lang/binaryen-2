@@ -375,7 +375,6 @@ void test_dominates_without_interference() {
     auto* lastY = last->addItem(makeSideEffects());
 
     cfg::DominationChecker<BasicBlock> checker(cfg);
-
     // entryX dominates without issue all the way to middleY. From there on,
     // middleY interferes.
     CHECK_TRUE(checker.dominatesWithoutInterference, entryX, entryY, sideEffects, {});
@@ -396,11 +395,11 @@ void test_dominates_without_interference() {
     CHECK_FALSE(checker.dominatesWithoutInterference, middleX, lastY, sideEffects, {});
 
     // middleY dominates lastX without issue, but then lastX interferes.
-    CHECK_TRUE(checker.dominatesWithoutInterference, middleX, lastX, sideEffects, {});
-    CHECK_FALSE(checker.dominatesWithoutInterference, middleX, lastY, sideEffects, {});
+    CHECK_TRUE(checker.dominatesWithoutInterference, middleY, lastX, sideEffects, {});
+    CHECK_FALSE(checker.dominatesWithoutInterference, middleY, lastY, sideEffects, {});
 
     // lastX dominates lastY without issue as there is nothing between them.
-    CHECK_FALSE(checker.dominatesWithoutInterference, lastX, lastY, sideEffects, {});
+    CHECK_TRUE(checker.dominatesWithoutInterference, lastX, lastY, sideEffects, {});
   }
 }
 

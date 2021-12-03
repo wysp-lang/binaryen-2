@@ -102,6 +102,7 @@ std::cout << "waka1\n";
     if (x == y) {
       return true;
     }
+std::cout << "waka1.5\n";
     if (!dominates(x, y)) {
       return false;
     }
@@ -155,18 +156,20 @@ std::cout << "waka5\n";
 
     auto* xBlock = blocks[xLocation.blockIndex].get();
     auto* yBlock = blocks[yLocation.blockIndex].get();
-
+std::cout << "xblock " << xBlock << " : ylock " << yBlock << '\n';
     // Look through the blocks between them, using a work queue of blocks to
     // scan. We ignore repeats here since we only need to ever scan a block
     // once.
     UniqueNonrepeatingDeferredQueue<BasicBlock*> work;
-    for (auto* pred : yBlock->in) {
+    if (xBlock != yBlock) {
+      for (auto* pred : yBlock->in) {
 std::cout << "waka6\n";
-      work.push(pred);
+        work.push(pred);
+      }
     }
     while (!work.empty()) {
-std::cout << "waka7\n";
       auto* currBlock = work.pop();
+std::cout << "waka7 " << currBlock << "\n";
 
       // As x dominates y, we know that if we keep going back through the
       // preds then eventually we will reach x, at which point we can stop
