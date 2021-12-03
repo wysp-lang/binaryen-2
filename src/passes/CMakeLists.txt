@@ -18,6 +18,7 @@ set(passes_SOURCES
   CodeFolding.cpp
   ConstantFieldPropagation.cpp
   ConstHoisting.cpp
+  CSE.cpp
   DataFlowOpts.cpp
   DeadArgumentElimination.cpp
   DeadCodeElimination.cpp

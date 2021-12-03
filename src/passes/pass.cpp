@@ -117,6 +117,9 @@ void PassRegistry::registerPasses() {
   registerPass("cfp",
                "propagate constant struct field values",
                createConstantFieldPropagationPass);
+  registerPass("cse",
+               "common subexpression elimination",
+               createCSEPass);
   registerPass(
     "dce", "removes unreachable code", createDeadCodeEliminationPass);
   registerPass("dealign",
@@ -461,7 +464,7 @@ void PassRunner::addDefaultFunctionOptimizationPasses() {
     // new and redundant ones, which make things seem different if we do not
     // run some amount of simplify-locals first).
     addIfNoDWARFIssues("simplify-locals-notee-nostructure");
-    addIfNoDWARFIssues("local-cse");
+    addIfNoDWARFIssues("cse");
     // TODO: add rereloop etc. here
   }
   addIfNoDWARFIssues("dce");
@@ -510,7 +513,7 @@ void PassRunner::addDefaultFunctionOptimizationPasses() {
   }
   addIfNoDWARFIssues("coalesce-locals");
   if (options.optimizeLevel >= 3 || options.shrinkLevel >= 1) {
-    addIfNoDWARFIssues("local-cse");
+    addIfNoDWARFIssues("cse");
   }
   addIfNoDWARFIssues("simplify-locals");
   addIfNoDWARFIssues("vacuum");
