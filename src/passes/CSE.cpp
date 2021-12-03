@@ -21,7 +21,9 @@
 //
 // Can handle even nested control flow.
 //
-// TODO: use value numbering to get GVN
+// TODO: use value numbering to get GVN.
+// TODO: use a LocalGraph to match gets with tees (gets with gets should already
+//       work as they compare equal + we track effects). part of value numbering?
 //
 
 #include <algorithm>
@@ -230,8 +232,6 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
       return;
     }
 
-    // TODO: do an effects phase here? Also front to back
-
     // We have filled in |exprInfos| with copy information, and we've found at
     // least one relevant copy. We can now apply those copies. We start at the
     // end and go back, so that we always apply the largest possible match,
@@ -257,13 +257,56 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
 
       auto* copySource = exprInfos[copyInfo.copyOf].original;
 
-      // There is a copy. See if the first dominates the second, and it does so
-      // without any effects getting in the way.
-      if (!dominationChecker.dominatesWithoutInterference(copySource, original)) {
+      // There is a copy. See if the first dominates the second, as if not then
+      // we can just skip.
+      if (!dominationChecker.dominates(copySource, original)) {
         continue;
       }
 
-      // Everything looks good, so we can optimize here.
+      // It dominates. Check for effects getting in the way.
+      // Note that we compute effects here in a way that is potentially
+      // quadratic (as we'll check child effects later potentially). But it is
+      // necessary to check like this
+      // TODO: do an effects phase earlier? Also front to back? But the problem is
+      //       that a parent might not have effects while a child does, if the
+      //       child breaks to the parent, e.g. - so we do need quadratic work
+      //       here in general. but likely that is ok as it is rare to have
+      //       copies?
+      EffectAnalyzer effects(runner->options, *module, original);
+
+      // Side effects prevent us from removing a copy. We also cannot optimize away something that is intrinsically
+      // nondeterministic: even if it has no side effects, if it may return a
+      // different result each time, then we cannot optimize away repeats.
+      if (effects.hasSideEffects() ||
+          Properties::isGenerative(curr, module->features)) {
+        continue;
+      }
+
+      // Everything looks good so far. Finally, check for effects along the way,
+      // to verify that the first value will not be any different at the
+      // second appearance.
+      //
+      // While checking for effects we must skip the pattern itself, including
+      // children, as dominationChecker is not aware of nesting (it just looks
+      // shallowly).
+      std::unordered_set<Expression*> ignoreEffectsOf;
+      // |i| must be at least as large as the size of the expression that is
+      // based at |i| and includes its children.
+      assert(i > copyInfo.totalSize);
+      for (Index j = i - copyInfo.totalSize + 1; j <= i; j++) {
+        ignoreEffectsOf.insert(exprInfos[j].original);
+      }
+      if (!dominationChecker.dominatesWithoutInterference(
+        copySource,
+        original,
+        effects,
+        ignoreEffectsOf,
+        *module,
+        runner->options)) {
+        continue;
+      }
+
+      // Everything looks good! We can optimize here.
     }
 
 
