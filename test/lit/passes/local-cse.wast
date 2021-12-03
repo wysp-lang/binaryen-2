@@ -633,12 +633,12 @@
   ;; NONLC:      (func $global
   ;; NONLC-NEXT:  (local $0 i32)
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (global.get $glob)
-  ;; NONLC-NEXT:  )
-  ;; NONLC-NEXT:  (drop
   ;; NONLC-NEXT:   (local.tee $0
   ;; NONLC-NEXT:    (global.get $glob)
   ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.get $0)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (global.set $other-glob
   ;; NONLC-NEXT:   (i32.const 100)

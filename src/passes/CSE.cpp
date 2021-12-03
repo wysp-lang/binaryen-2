@@ -285,14 +285,19 @@ std::cout << "i " << i << " , fullSize " << copyInfo.fullSize << " , fristChil "
 
       // When we optimize we replace all of this expression and its children
       // with a local.get. We can't do that if we've added a tee anywhere among
-      // them - we'd be removing the tee that is read later. That is, any
+      // the children - we'd be removing the tee that is read later. That is, any
       // already-performed modification to this must be handled carefully, and
       // for now we just skip this case.
+      //
+      // We *can* easily handle the case of the entire expression, as opposed to
+      // one of the children: we can simply move the tee to the copy before us,
+      // which we handle later down. So we only exit here based on the children.
+      //
       // TODO We can optimize this to an even earlier
       // copy with some extra care, or perhaps we can just do another
       // cycle.
       bool modified = false;
-      for (int j = firstChild; j <= i; j++) {
+      for (int j = firstChild + 1; j <= i; j++) {
         if (exprInfos[j].addedTee) {
           modified = true;
           break;
@@ -371,9 +376,20 @@ std::cout << "i " << i << " , fullSize " << copyInfo.fullSize << " , fristChil "
       if (!sourceInfo.addedTee) {
         // This is the first time we add a tee on the source in order to use its
         // value later (that is, we've not found another copy of |source|
-        // earlier).
-        auto temp = builder.addVar(getFunction(), curr->type);
-        *sourceInfo.currp = builder.makeLocalTee(temp, sourceInfo.original, curr->type);
+        // earlier), so add a new local and add a tee.
+        //
+        // If |curr| already has a tee placed on it - which can happen if it is
+        // the source for some appearance we've already optimized - then we've
+        // already allocated a local, and can reuse that. Note that this is safe
+        // to do as the previous copy is dominated by |curr|, and |curr| is
+        // dominated by |source|, so |source| dominates the previous copy.
+        Index tempLocal;
+        if (currInfo.addedTee) {
+          tempLocal = (*currInfo.currp)->cast<LocalSet>()->index;
+        } else {
+          tempLocal = builder.addVar(getFunction(), curr->type);
+        }
+        *sourceInfo.currp = builder.makeLocalTee(tempLocal, sourceInfo.original, curr->type);
         sourceInfo.addedTee = true;
       }
       *currInfo.currp = builder.makeLocalGet(
