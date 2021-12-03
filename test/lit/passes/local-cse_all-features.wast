@@ -26,6 +26,27 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (i32.const 20)
   ;; CHECK-NEXT: )
+  ;; NONLC:      (type $i32_=>_i32 (func (param i32) (result i32)))
+
+  ;; NONLC:      (type $none_=>_none (func))
+
+  ;; NONLC:      (elem declare func $calls $ref.func)
+
+  ;; NONLC:      (func $calls (param $x i32) (result i32)
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (call_ref
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:    (ref.func $calls)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (call_ref
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:    (ref.func $calls)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (i32.const 20)
+  ;; NONLC-NEXT: )
   (func $calls (param $x i32) (result i32)
     ;; The side effects of calls prevent optimization.
     (drop
@@ -45,6 +66,14 @@
   ;; CHECK-NEXT:   (ref.func $ref.func)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
+  ;; NONLC:      (func $ref.func
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (ref.func $ref.func)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (ref.func $ref.func)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
   (func $ref.func
     ;; RefFunc and other constants should be ignored - don't undo the effects
     ;; of constant propagation.
@@ -59,9 +88,11 @@
 
 (module
   ;; CHECK:      (type $A (struct (field i32)))
+  ;; NONLC:      (type $A (struct (field i32)))
   (type $A (struct (field i32)))
 
   ;; CHECK:      (type $B (array (mut i32)))
+  ;; NONLC:      (type $B (array (mut i32)))
   (type $B (array (mut i32)))
 
 
@@ -89,6 +120,32 @@
   ;; CHECK-NEXT:   (local.get $1)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
+  ;; NONLC:      (type $ref|$A|_=>_none (func (param (ref $A))))
+
+  ;; NONLC:      (type $ref?|$A|_=>_none (func (param (ref null $A))))
+
+  ;; NONLC:      (type $none_=>_none (func))
+
+  ;; NONLC:      (type $ref?|$B|_ref|$A|_=>_none (func (param (ref null $B) (ref $A))))
+
+  ;; NONLC:      (func $struct-gets-nullable (param $ref (ref null $A))
+  ;; NONLC-NEXT:  (local $1 i32)
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (struct.get $A 0
+  ;; NONLC-NEXT:    (local.get $ref)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.tee $1
+  ;; NONLC-NEXT:    (struct.get $A 0
+  ;; NONLC-NEXT:     (local.get $ref)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.get $1)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
   (func $struct-gets-nullable (param $ref (ref null $A))
     ;; Repeated loads from a struct can be optimized, even with a nullable
     ;; reference: if we trap, it does not matter that we replaced the later
@@ -126,6 +183,24 @@
   ;; CHECK-NEXT:   (local.get $1)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
+  ;; NONLC:      (func $struct-gets (param $ref (ref $A))
+  ;; NONLC-NEXT:  (local $1 i32)
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (struct.get $A 0
+  ;; NONLC-NEXT:    (local.get $ref)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.tee $1
+  ;; NONLC-NEXT:    (struct.get $A 0
+  ;; NONLC-NEXT:     (local.get $ref)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.get $1)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
   (func $struct-gets (param $ref (ref $A))
     ;; Repeated loads from a struct can be optimized.
     ;;
@@ -167,6 +242,22 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
+  ;; NONLC:      (func $non-nullable-value (param $ref (ref $A))
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (select (result (ref $A))
+  ;; NONLC-NEXT:    (local.get $ref)
+  ;; NONLC-NEXT:    (local.get $ref)
+  ;; NONLC-NEXT:    (i32.const 1)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (select (result (ref $A))
+  ;; NONLC-NEXT:    (local.get $ref)
+  ;; NONLC-NEXT:    (local.get $ref)
+  ;; NONLC-NEXT:    (i32.const 1)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
   (func $non-nullable-value (param $ref (ref $A))
     ;; The value that is repeated is non-nullable, which we must do some fixups
     ;; for after creating a local of that type.
@@ -214,6 +305,34 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
+  ;; NONLC:      (func $creations
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (struct.new_with_rtt $A
+  ;; NONLC-NEXT:    (i32.const 1)
+  ;; NONLC-NEXT:    (rtt.canon $A)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (struct.new_with_rtt $A
+  ;; NONLC-NEXT:    (i32.const 1)
+  ;; NONLC-NEXT:    (rtt.canon $A)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (array.new_with_rtt $B
+  ;; NONLC-NEXT:    (i32.const 1)
+  ;; NONLC-NEXT:    (i32.const 1)
+  ;; NONLC-NEXT:    (rtt.canon $B)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (array.new_with_rtt $B
+  ;; NONLC-NEXT:    (i32.const 1)
+  ;; NONLC-NEXT:    (i32.const 1)
+  ;; NONLC-NEXT:    (rtt.canon $B)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
   (func $creations
     ;; Allocating GC data has no side effects, but each allocation is unique
     ;; and so we cannot replace separate allocations with a single one.
@@ -267,6 +386,30 @@
   ;; CHECK-NEXT:   (local.get $2)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
+  ;; NONLC:      (func $structs-and-arrays-do-not-alias (param $array (ref null $B)) (param $struct (ref $A))
+  ;; NONLC-NEXT:  (local $2 i32)
+  ;; NONLC-NEXT:  (array.set $B
+  ;; NONLC-NEXT:   (local.get $array)
+  ;; NONLC-NEXT:   (i32.const 0)
+  ;; NONLC-NEXT:   (struct.get $A 0
+  ;; NONLC-NEXT:    (local.get $struct)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (array.set $B
+  ;; NONLC-NEXT:   (local.get $array)
+  ;; NONLC-NEXT:   (i32.const 1)
+  ;; NONLC-NEXT:   (local.tee $2
+  ;; NONLC-NEXT:    (struct.get $A 0
+  ;; NONLC-NEXT:     (local.get $struct)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (array.set $B
+  ;; NONLC-NEXT:   (local.get $array)
+  ;; NONLC-NEXT:   (i32.const 2)
+  ;; NONLC-NEXT:   (local.get $2)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
   (func $structs-and-arrays-do-not-alias (param $array (ref null $B)) (param $struct (ref $A))
     ;; ArraySets to consecutive elements, using some fixed StructGet value. This
     ;; common pattern in j2cl can be optimized, as structs and arrays do not
@@ -325,6 +468,44 @@
   ;; CHECK-NEXT:   (local.get $2)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
+  ;; NONLC:      (type $i32_i32_=>_i32 (func (param i32 i32) (result i32)))
+
+  ;; NONLC:      (func $div16_internal (param $0 i32) (param $1 i32) (result i32)
+  ;; NONLC-NEXT:  (i32.add
+  ;; NONLC-NEXT:   (i32.xor
+  ;; NONLC-NEXT:    (i32.shr_s
+  ;; NONLC-NEXT:     (i32.shl
+  ;; NONLC-NEXT:      (local.get $0)
+  ;; NONLC-NEXT:      (i32.const 16)
+  ;; NONLC-NEXT:     )
+  ;; NONLC-NEXT:     (i32.const 16)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:    (i32.shr_s
+  ;; NONLC-NEXT:     (i32.shl
+  ;; NONLC-NEXT:      (local.get $1)
+  ;; NONLC-NEXT:      (i32.const 16)
+  ;; NONLC-NEXT:     )
+  ;; NONLC-NEXT:     (i32.const 16)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (i32.xor
+  ;; NONLC-NEXT:    (i32.shr_s
+  ;; NONLC-NEXT:     (i32.shl
+  ;; NONLC-NEXT:      (local.get $0)
+  ;; NONLC-NEXT:      (i32.const 16)
+  ;; NONLC-NEXT:     )
+  ;; NONLC-NEXT:     (i32.const 16)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:    (i32.shr_s
+  ;; NONLC-NEXT:     (i32.shl
+  ;; NONLC-NEXT:      (local.get $1)
+  ;; NONLC-NEXT:      (i32.const 16)
+  ;; NONLC-NEXT:     )
+  ;; NONLC-NEXT:     (i32.const 16)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
   (func $div16_internal (param $0 i32) (param $1 i32) (result i32)
     (i32.add
       (i32.xor

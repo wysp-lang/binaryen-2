@@ -68,6 +68,74 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
+  ;; NONLC:      (type $none_=>_none (func))
+
+  ;; NONLC:      (type $i32_=>_i32 (func (param i32) (result i32)))
+
+  ;; NONLC:      (type $none_=>_i64 (func (result i64)))
+
+  ;; NONLC:      (memory $0 100 100)
+
+  ;; NONLC:      (func $basics
+  ;; NONLC-NEXT:  (local $x i32)
+  ;; NONLC-NEXT:  (local $y i32)
+  ;; NONLC-NEXT:  (local $2 i32)
+  ;; NONLC-NEXT:  (local $3 i32)
+  ;; NONLC-NEXT:  (local $4 i32)
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (i32.add
+  ;; NONLC-NEXT:    (i32.const 1)
+  ;; NONLC-NEXT:    (i32.const 2)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.tee $4
+  ;; NONLC-NEXT:    (i32.add
+  ;; NONLC-NEXT:     (i32.const 1)
+  ;; NONLC-NEXT:     (i32.const 2)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (if
+  ;; NONLC-NEXT:   (i32.const 0)
+  ;; NONLC-NEXT:   (nop)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.get $4)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.tee $3
+  ;; NONLC-NEXT:    (i32.add
+  ;; NONLC-NEXT:     (local.get $x)
+  ;; NONLC-NEXT:     (local.get $y)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.get $3)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.tee $2
+  ;; NONLC-NEXT:    (i32.add
+  ;; NONLC-NEXT:     (local.get $x)
+  ;; NONLC-NEXT:     (local.get $y)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (call $basics)
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.get $2)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (local.set $x
+  ;; NONLC-NEXT:   (i32.const 100)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (i32.add
+  ;; NONLC-NEXT:    (local.get $x)
+  ;; NONLC-NEXT:    (local.get $y)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
   (func $basics
     (local $x i32)
     (local $y i32)
@@ -134,6 +202,34 @@
   ;; CHECK-NEXT:   (local.get $2)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
+  ;; NONLC:      (func $recursive1
+  ;; NONLC-NEXT:  (local $x i32)
+  ;; NONLC-NEXT:  (local $y i32)
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (i32.add
+  ;; NONLC-NEXT:    (i32.const 1)
+  ;; NONLC-NEXT:    (i32.add
+  ;; NONLC-NEXT:     (i32.const 2)
+  ;; NONLC-NEXT:     (i32.const 3)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (i32.add
+  ;; NONLC-NEXT:    (i32.const 1)
+  ;; NONLC-NEXT:    (i32.add
+  ;; NONLC-NEXT:     (i32.const 2)
+  ;; NONLC-NEXT:     (i32.const 3)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (i32.add
+  ;; NONLC-NEXT:    (i32.const 2)
+  ;; NONLC-NEXT:    (i32.const 3)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
   (func $recursive1
     (local $x i32)
     (local $y i32)
@@ -191,6 +287,34 @@
   ;; CHECK-NEXT:   (local.get $3)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
+  ;; NONLC:      (func $recursive2
+  ;; NONLC-NEXT:  (local $x i32)
+  ;; NONLC-NEXT:  (local $y i32)
+  ;; NONLC-NEXT:  (local $2 i32)
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (i32.add
+  ;; NONLC-NEXT:    (i32.const 1)
+  ;; NONLC-NEXT:    (i32.add
+  ;; NONLC-NEXT:     (i32.const 2)
+  ;; NONLC-NEXT:     (i32.const 3)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.tee $2
+  ;; NONLC-NEXT:    (i32.add
+  ;; NONLC-NEXT:     (i32.const 2)
+  ;; NONLC-NEXT:     (i32.const 3)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (i32.add
+  ;; NONLC-NEXT:    (i32.const 1)
+  ;; NONLC-NEXT:    (local.get $2)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
   (func $recursive2
     (local $x i32)
     (local $y i32)
@@ -241,6 +365,28 @@
   ;; CHECK-NEXT:   (local.get $2)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
+  ;; NONLC:      (func $self
+  ;; NONLC-NEXT:  (local $x i32)
+  ;; NONLC-NEXT:  (local $y i32)
+  ;; NONLC-NEXT:  (local $2 i32)
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (i32.add
+  ;; NONLC-NEXT:    (local.tee $2
+  ;; NONLC-NEXT:     (i32.add
+  ;; NONLC-NEXT:      (i32.const 2)
+  ;; NONLC-NEXT:      (i32.const 3)
+  ;; NONLC-NEXT:     )
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:    (local.get $2)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (i32.add
+  ;; NONLC-NEXT:    (i32.const 2)
+  ;; NONLC-NEXT:    (i32.const 3)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
   (func $self
     (local $x i32)
     (local $y i32)
@@ -279,6 +425,19 @@
   ;; CHECK-NEXT:   (local.get $0)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
+  ;; NONLC:      (func $loads
+  ;; NONLC-NEXT:  (local $0 i32)
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.tee $0
+  ;; NONLC-NEXT:    (i32.load
+  ;; NONLC-NEXT:     (i32.const 10)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.get $0)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
   (func $loads
     ;; The possible trap on loads does not prevent optimization, since if we
     ;; trap then it doesn't matter that we replaced the later expression.
@@ -303,6 +462,19 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (i32.const 10)
   ;; CHECK-NEXT: )
+  ;; NONLC:      (func $calls (param $x i32) (result i32)
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (call $calls
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (call $calls
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (i32.const 10)
+  ;; NONLC-NEXT: )
   (func $calls (param $x i32) (result i32)
     ;; The side effects of calls prevent optimization.
     (drop
@@ -333,6 +505,25 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (local.get $temp)
   ;; CHECK-NEXT: )
+  ;; NONLC:      (func $many-sets (result i64)
+  ;; NONLC-NEXT:  (local $temp i64)
+  ;; NONLC-NEXT:  (local $1 i64)
+  ;; NONLC-NEXT:  (local.set $temp
+  ;; NONLC-NEXT:   (local.tee $1
+  ;; NONLC-NEXT:    (i64.add
+  ;; NONLC-NEXT:     (i64.const 1)
+  ;; NONLC-NEXT:     (i64.const 2)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (local.set $temp
+  ;; NONLC-NEXT:   (i64.const 9999)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (local.set $temp
+  ;; NONLC-NEXT:   (local.get $1)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (local.get $temp)
+  ;; NONLC-NEXT: )
   (func $many-sets (result i64)
     (local $temp i64)
     ;; Assign to $temp three times here. We can optimize the add regardless of
@@ -370,6 +561,20 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
+  ;; NONLC:      (func $switch-children (param $x i32) (result i32)
+  ;; NONLC-NEXT:  (local $1 i32)
+  ;; NONLC-NEXT:  (block $label$1 (result i32)
+  ;; NONLC-NEXT:   (br_table $label$1 $label$1
+  ;; NONLC-NEXT:    (local.tee $1
+  ;; NONLC-NEXT:     (i32.and
+  ;; NONLC-NEXT:      (local.get $x)
+  ;; NONLC-NEXT:      (i32.const 3)
+  ;; NONLC-NEXT:     )
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:    (local.get $1)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
   (func $switch-children (param $x i32) (result i32)
     (block $label$1 (result i32)
       ;; We can optimize the two children of this switch. This test verifies
@@ -393,9 +598,13 @@
   ;; CHECK:      (type $none_=>_none (func))
 
   ;; CHECK:      (global $glob (mut i32) (i32.const 1))
+  ;; NONLC:      (type $none_=>_none (func))
+
+  ;; NONLC:      (global $glob (mut i32) (i32.const 1))
   (global $glob (mut i32) (i32.const 1))
 
   ;; CHECK:      (global $other-glob (mut i32) (i32.const 1))
+  ;; NONLC:      (global $other-glob (mut i32) (i32.const 1))
   (global $other-glob (mut i32) (i32.const 1))
 
   ;; CHECK:      (func $global
@@ -421,6 +630,29 @@
   ;; CHECK-NEXT:   (global.get $glob)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
+  ;; NONLC:      (func $global
+  ;; NONLC-NEXT:  (local $0 i32)
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (global.get $glob)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.tee $0
+  ;; NONLC-NEXT:    (global.get $glob)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (global.set $other-glob
+  ;; NONLC-NEXT:   (i32.const 100)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.get $0)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (global.set $glob
+  ;; NONLC-NEXT:   (i32.const 200)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (global.get $glob)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
   (func $global
     ;; We should optimize redundant global.get operations.
     (drop (global.get $glob))
