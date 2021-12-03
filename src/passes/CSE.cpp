@@ -128,7 +128,7 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
 
     // Whether this is the first of a set of repeated expressions, and we have
     // modified this one to store its value in a tee.
-    bool replacedWithTee = false;
+    bool addedTee = false;
 
     ExprInfo(Expression* original, Expression** currp) : original(original), currp(currp) {}
   };
@@ -247,7 +247,7 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
     cfg::DominationChecker<BasicBlock> dominationChecker(basicBlocks);
 
     for (int i = int(exprInfos.size()) - 1; i >= 0; i--) {
-      auto& exprInfo = exprInfos[i];
+      auto& exprInfo = exprInfos[i]; // rename to info or currInfo?
       auto& copyInfo = exprInfo.copyInfo;
       auto* original = exprInfo.original;
 
@@ -255,11 +255,43 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
         continue;
       }
 
-      auto* copySource = exprInfos[copyInfo.copyOf].original;
+      if (!isRelevant(original)) {
+        // This has a copy, but it is not relevant to optimize. (We mus still
+        // track such things as copies as their parents may be relevant.)
+        continue;
+      }
+
+      // The index of the first child, or if there is no such child, the same
+      // value as i. This is the beginning of the range of indexes that includes
+      // the expression and all its children.
+      Index firstChild = i - copyInfo.totalSize + 1;
+      assert(firstChild <= i);
+
+      // When we optimize we replace all of this expression and its children
+      // with a local.get. We can't do that if we've added a tee anywhere among
+      // them - we'd be removing the tee that is read later. That is, any
+      // already-performed modification to this must be handled carefully, and
+      // for now we just skip this case.
+      // TODO We can optimize this to an even earlier
+      // copy with some extra care, or perhaps we can just do another
+      // cycle.
+      bool modified = false;
+      for (Index j = firstChild; j <= i; j++) {
+        if (exprInfos[j].addedTee) {
+          modified = true;
+          break;
+        }
+      }
+
+      if (modified) {
+        continue;
+      }
+
+      auto* source = exprInfos[copyInfo.copyOf].original;
 
       // There is a copy. See if the first dominates the second, as if not then
       // we can just skip.
-      if (!dominationChecker.dominates(copySource, original)) {
+      if (!dominationChecker.dominates(source, original)) {
         continue;
       }
 
@@ -290,14 +322,11 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
       // children, as dominationChecker is not aware of nesting (it just looks
       // shallowly).
       std::unordered_set<Expression*> ignoreEffectsOf;
-      // |i| must be at least as large as the size of the expression that is
-      // based at |i| and includes its children.
-      assert(i > copyInfo.totalSize);
-      for (Index j = i - copyInfo.totalSize + 1; j <= i; j++) {
+      for (Index j = firstChild; j <= i; j++) {
         ignoreEffectsOf.insert(exprInfos[j].original);
       }
       if (!dominationChecker.dominatesWithoutInterference(
-        copySource,
+        source,
         original,
         effects,
         ignoreEffectsOf,
@@ -307,6 +336,16 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
       }
 
       // Everything looks good! We can optimize here.
+      auto& sourceInfo = exprInfos[copyInfo.copyOf];
+      if (!sourceInfo.addedTee) {
+        // This is the first time we add a tee on the source in order to use its
+        // value later (that is, we've not found another copy of |source|
+        // earlier).
+        auto temp = builder.addVar(getFunction(), original->type);
+        *sourceInfo.currp = builder.makeLocalTee(temp, sourceInfo.original);
+        sourceInfo.addedTee = true;
+      }
+      *exprInfo.currp = builder.makeLocalGet((*sourceInfo.currp)->cast<LocalSet>()->index, original->type);
     }
 
 
