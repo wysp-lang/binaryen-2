@@ -440,6 +440,11 @@ std::cout << "NOWEY\n";
     CHECK_FALSE(checker.dominatesWithoutInterference, entryY, loopX, sideEffects, {});
     CHECK_FALSE(checker.dominatesWithoutInterference, entryY, loopY, sideEffects, {});
     CHECK_FALSE(checker.dominatesWithoutInterference, entryY, loopZ, sideEffects, {});
+
+    // Inside the loop things are normal, as if we were not in a loop.
+    CHECK_TRUE(checker.dominatesWithoutInterference, loopX, loopY, sideEffects, {});
+    CHECK_TRUE(checker.dominatesWithoutInterference, loopY, loopZ, sideEffects, {});
+    CHECK_FALSE(checker.dominatesWithoutInterference, loopX, loopZ, sideEffects, {});
   }
 }
 
