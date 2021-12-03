@@ -183,23 +183,23 @@ void test_dominates_without_interference() {
 // and also check the reverse (right, left) combination. If left == right then
 // that must assert as true, the same as unflipped. Otherwise, it must check
 // as the reverse, as domination of different items is antisymmetrical.
-#define CHECK_TRUE(check, left, right, effects, ignore)                                         \
+#define CHECK_TRUE(check, left, right, effects, ignore)                        \
   {                                                                            \
-    assert(check(left, right, effects, ignore, temp, options));                                                \
+    assert(check(left, right, effects, ignore, temp, options));                \
     if (left == right) {                                                       \
-      assert(check(right, left, effects, ignore, temp, options));                                              \
+      assert(check(right, left, effects, ignore, temp, options));              \
     } else {                                                                   \
-      assert(!check(right, left, effects, ignore, temp, options));                                             \
+      assert(!check(right, left, effects, ignore, temp, options));             \
     }                                                                          \
   }
 
 // As above, but check that the result is false for both (left, right) and
 // (right, left). This is the case for two blocks where neither dominates the
 // other.
-#define CHECK_FALSE(check, left, right, effects, ignore)                                        \
+#define CHECK_FALSE(check, left, right, effects, ignore)                       \
   {                                                                            \
-    assert(!check(left, right, effects, ignore, temp, options));                                               \
-    assert(!check(right, left, effects, ignore, temp, options));                                               \
+    assert(!check(left, right, effects, ignore, temp, options));               \
+    assert(!check(right, left, effects, ignore, temp, options));               \
   }
 
   auto noEffects = EffectAnalyzer(options, temp);
@@ -207,9 +207,7 @@ void test_dominates_without_interference() {
   auto sideEffects = EffectAnalyzer(options, temp);
   sideEffects.calls = true;
 
-  auto makeNop = [&]() {
-    return builder.makeNop();
-  };
+  auto makeNop = [&]() { return builder.makeNop(); };
 
   auto makeSideEffects = [&]() {
     return builder.makeCall("something", {}, Type::i32);
@@ -225,11 +223,14 @@ void test_dominates_without_interference() {
     cfg::DominationChecker<BasicBlock> checker(cfg);
 
     // Things dominate themselves without interference
-    CHECK_TRUE(checker.dominatesWithoutInterference, first, first, noEffects, {});
-    CHECK_TRUE(checker.dominatesWithoutInterference, second, second, noEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, first, first, noEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, second, second, noEffects, {});
 
     // And the first dominates the second too.
-    CHECK_TRUE(checker.dominatesWithoutInterference, first, second, noEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, first, second, noEffects, {});
   }
 
   // As above, but now both have side effects. However, there is nothing in
@@ -242,9 +243,12 @@ void test_dominates_without_interference() {
 
     cfg::DominationChecker<BasicBlock> checker(cfg);
 
-    CHECK_TRUE(checker.dominatesWithoutInterference, first, first, sideEffects, {});
-    CHECK_TRUE(checker.dominatesWithoutInterference, second, second, sideEffects, {});
-    CHECK_TRUE(checker.dominatesWithoutInterference, first, second, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, first, first, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, second, second, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, first, second, sideEffects, {});
   }
 
   // Add a side effect in the middle.
@@ -258,20 +262,31 @@ void test_dominates_without_interference() {
     cfg::DominationChecker<BasicBlock> checker(cfg);
 
     // Identical or adjacent things are still fine.
-    CHECK_TRUE(checker.dominatesWithoutInterference, first, first, sideEffects, {});
-    CHECK_TRUE(checker.dominatesWithoutInterference, second, second, sideEffects, {});
-    CHECK_TRUE(checker.dominatesWithoutInterference, third, third, sideEffects, {});
-    CHECK_TRUE(checker.dominatesWithoutInterference, first, second, sideEffects, {});
-    CHECK_TRUE(checker.dominatesWithoutInterference, second, third, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, first, first, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, second, second, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, third, third, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, first, second, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, second, third, sideEffects, {});
 
     // But first has interference on the way to dominate third.
-    CHECK_FALSE(checker.dominatesWithoutInterference, first, third, sideEffects, {});
+    CHECK_FALSE(
+      checker.dominatesWithoutInterference, first, third, sideEffects, {});
 
     // If we replace sideEffects with noEffects then things are ok again.
-    CHECK_TRUE(checker.dominatesWithoutInterference, first, third, noEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, first, third, noEffects, {});
 
     // If we ignore the middle item then things are also ok again.
-    CHECK_TRUE(checker.dominatesWithoutInterference, first, third, sideEffects, {second});
+    CHECK_TRUE(checker.dominatesWithoutInterference,
+               first,
+               third,
+               sideEffects,
+               {second});
   }
 
   {
@@ -287,17 +302,21 @@ void test_dominates_without_interference() {
     // second dominates third without effects, even though there are effects
     // both before and after them (so if we scanned to far in either direction
     // in this block we'd fail).
-    CHECK_TRUE(checker.dominatesWithoutInterference, second, third, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, second, third, sideEffects, {});
 
     // Multiple nops in the middle do not prevent first from dominating fourth
     // without interference.
-    CHECK_TRUE(checker.dominatesWithoutInterference, first, fourth, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, first, fourth, sideEffects, {});
 
     // Even if we turn the entry into a loop we do not get interference, since
     // we do not scan back past the dominating item.
     cfg.connect(entry, entry);
-    CHECK_TRUE(checker.dominatesWithoutInterference, second, third, sideEffects, {});
-    CHECK_TRUE(checker.dominatesWithoutInterference, first, fourth, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, second, third, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, first, fourth, sideEffects, {});
   }
 
   // An if with side effects on one arm.
@@ -377,29 +396,44 @@ void test_dominates_without_interference() {
     cfg::DominationChecker<BasicBlock> checker(cfg);
     // entryX dominates without issue all the way to middleY. From there on,
     // middleY interferes.
-    CHECK_TRUE(checker.dominatesWithoutInterference, entryX, entryY, sideEffects, {});
-    CHECK_TRUE(checker.dominatesWithoutInterference, entryX, middleX, sideEffects, {});
-    CHECK_TRUE(checker.dominatesWithoutInterference, entryX, middleY, sideEffects, {});
-    CHECK_FALSE(checker.dominatesWithoutInterference, entryX, lastX, sideEffects, {});
-    CHECK_FALSE(checker.dominatesWithoutInterference, entryX, lastY, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, entryX, entryY, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, entryX, middleX, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, entryX, middleY, sideEffects, {});
+    CHECK_FALSE(
+      checker.dominatesWithoutInterference, entryX, lastX, sideEffects, {});
+    CHECK_FALSE(
+      checker.dominatesWithoutInterference, entryX, lastY, sideEffects, {});
 
     // Likewise for entryY.
-    CHECK_TRUE(checker.dominatesWithoutInterference, entryY, middleX, sideEffects, {});
-    CHECK_TRUE(checker.dominatesWithoutInterference, entryY, middleY, sideEffects, {});
-    CHECK_FALSE(checker.dominatesWithoutInterference, entryY, lastX, sideEffects, {});
-    CHECK_FALSE(checker.dominatesWithoutInterference, entryY, lastY, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, entryY, middleX, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, entryY, middleY, sideEffects, {});
+    CHECK_FALSE(
+      checker.dominatesWithoutInterference, entryY, lastX, sideEffects, {});
+    CHECK_FALSE(
+      checker.dominatesWithoutInterference, entryY, lastY, sideEffects, {});
 
     // Likewise for middleX.
-    CHECK_TRUE(checker.dominatesWithoutInterference, middleX, middleY, sideEffects, {});
-    CHECK_FALSE(checker.dominatesWithoutInterference, middleX, lastX, sideEffects, {});
-    CHECK_FALSE(checker.dominatesWithoutInterference, middleX, lastY, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, middleX, middleY, sideEffects, {});
+    CHECK_FALSE(
+      checker.dominatesWithoutInterference, middleX, lastX, sideEffects, {});
+    CHECK_FALSE(
+      checker.dominatesWithoutInterference, middleX, lastY, sideEffects, {});
 
     // middleY dominates lastX without issue, but then lastX interferes.
-    CHECK_TRUE(checker.dominatesWithoutInterference, middleY, lastX, sideEffects, {});
-    CHECK_FALSE(checker.dominatesWithoutInterference, middleY, lastY, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, middleY, lastX, sideEffects, {});
+    CHECK_FALSE(
+      checker.dominatesWithoutInterference, middleY, lastY, sideEffects, {});
 
     // lastX dominates lastY without issue as there is nothing between them.
-    CHECK_TRUE(checker.dominatesWithoutInterference, lastX, lastY, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, lastX, lastY, sideEffects, {});
   }
 
   // An entry block leading to a loop:
@@ -430,20 +464,30 @@ void test_dominates_without_interference() {
     // entryX dominates entryY, but it runs into effects with all the others
     // due to the loop: we may go through the entire loop block on our way, and
     // it has effects.
-    CHECK_TRUE(checker.dominatesWithoutInterference, entryX, entryY, sideEffects, {});
-    CHECK_FALSE(checker.dominatesWithoutInterference, entryX, loopX, sideEffects, {});
-    CHECK_FALSE(checker.dominatesWithoutInterference, entryX, loopY, sideEffects, {});
-    CHECK_FALSE(checker.dominatesWithoutInterference, entryX, loopZ, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, entryX, entryY, sideEffects, {});
+    CHECK_FALSE(
+      checker.dominatesWithoutInterference, entryX, loopX, sideEffects, {});
+    CHECK_FALSE(
+      checker.dominatesWithoutInterference, entryX, loopY, sideEffects, {});
+    CHECK_FALSE(
+      checker.dominatesWithoutInterference, entryX, loopZ, sideEffects, {});
 
     // And similar for entryY
-    CHECK_FALSE(checker.dominatesWithoutInterference, entryY, loopX, sideEffects, {});
-    CHECK_FALSE(checker.dominatesWithoutInterference, entryY, loopY, sideEffects, {});
-    CHECK_FALSE(checker.dominatesWithoutInterference, entryY, loopZ, sideEffects, {});
+    CHECK_FALSE(
+      checker.dominatesWithoutInterference, entryY, loopX, sideEffects, {});
+    CHECK_FALSE(
+      checker.dominatesWithoutInterference, entryY, loopY, sideEffects, {});
+    CHECK_FALSE(
+      checker.dominatesWithoutInterference, entryY, loopZ, sideEffects, {});
 
     // Inside the loop things are normal, as if we were not in a loop.
-    CHECK_TRUE(checker.dominatesWithoutInterference, loopX, loopY, sideEffects, {});
-    CHECK_TRUE(checker.dominatesWithoutInterference, loopY, loopZ, sideEffects, {});
-    CHECK_FALSE(checker.dominatesWithoutInterference, loopX, loopZ, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, loopX, loopY, sideEffects, {});
+    CHECK_TRUE(
+      checker.dominatesWithoutInterference, loopY, loopZ, sideEffects, {});
+    CHECK_FALSE(
+      checker.dominatesWithoutInterference, loopX, loopZ, sideEffects, {});
   }
 }
 

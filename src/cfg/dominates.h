@@ -97,7 +97,13 @@ template<typename BasicBlock> struct DominationChecker {
   // without any effects interfering in the middle. That is, all paths from x
   // to y are free from effects that would invalidate the given effects. A set
   // of expressions to ignore the effects of is also provided.
-  bool dominatesWithoutInterference(Expression* x, Expression* y, EffectAnalyzer& effects, const std::unordered_set<Expression*>& ignoreEffectsOf, Module& wasm, const PassOptions& passOptions) {
+  bool dominatesWithoutInterference(
+    Expression* x,
+    Expression* y,
+    EffectAnalyzer& effects,
+    const std::unordered_set<Expression*>& ignoreEffectsOf,
+    Module& wasm,
+    const PassOptions& passOptions) {
     if (x == y) {
       return true;
     }
@@ -115,7 +121,9 @@ template<typename BasicBlock> struct DominationChecker {
     // [x, y) form, that is, y is not checked.
     // We allow positionEnd to be -1, which is interpreted as the end of the
     // list.
-    auto hasInterference = [&](const std::vector<Expression*>& list, Index positionStart, Index positionEnd) {
+    auto hasInterference = [&](const std::vector<Expression*>& list,
+                               Index positionStart,
+                               Index positionEnd) {
       if (positionEnd == Index(-1)) {
         positionEnd = list.size();
       }
@@ -138,12 +146,18 @@ template<typename BasicBlock> struct DominationChecker {
     // First, look for effects inside x's and y's blocks, after x and before y.
     // Often effects right next to x and y can save us looking any further.
     if (xLocation.blockIndex != yLocation.blockIndex) {
-      if (hasInterference(blocks[xLocation.blockIndex]->contents.list, xLocation.positionIndex + 1, Index(-1)) ||
-          hasInterference(blocks[yLocation.blockIndex]->contents.list, 0, yLocation.positionIndex)) {
+      if (hasInterference(blocks[xLocation.blockIndex]->contents.list,
+                          xLocation.positionIndex + 1,
+                          Index(-1)) ||
+          hasInterference(blocks[yLocation.blockIndex]->contents.list,
+                          0,
+                          yLocation.positionIndex)) {
         return false;
       }
     } else {
-      if (hasInterference(blocks[xLocation.blockIndex]->contents.list, xLocation.positionIndex + 1, yLocation.positionIndex)) {
+      if (hasInterference(blocks[xLocation.blockIndex]->contents.list,
+                          xLocation.positionIndex + 1,
+                          yLocation.positionIndex)) {
         return false;
       }
       // We have no more blocks to scan, and have scanned the relevant parts
