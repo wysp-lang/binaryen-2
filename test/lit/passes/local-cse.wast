@@ -10,6 +10,8 @@
 
   ;; CHECK:      (type $i32_=>_i32 (func (param i32) (result i32)))
 
+  ;; CHECK:      (type $i32_=>_none (func (param i32)))
+
   ;; CHECK:      (type $none_=>_i64 (func (result i64)))
 
   ;; CHECK:      (memory $0 100 100)
@@ -71,6 +73,8 @@
   ;; NONLC:      (type $none_=>_none (func))
 
   ;; NONLC:      (type $i32_=>_i32 (func (param i32) (result i32)))
+
+  ;; NONLC:      (type $i32_=>_none (func (param i32)))
 
   ;; NONLC:      (type $none_=>_i64 (func (result i64)))
 
@@ -590,6 +594,247 @@
           (i32.const 3)
         )
       )
+    )
+  )
+
+  ;; CHECK:      (func $dominated (param $x i32)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.load
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (i32.load
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; NONLC:      (func $dominated (param $x i32)
+  ;; NONLC-NEXT:  (local $1 i32)
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.tee $1
+  ;; NONLC-NEXT:    (i32.load
+  ;; NONLC-NEXT:     (i32.const 10)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (if
+  ;; NONLC-NEXT:   (local.get $x)
+  ;; NONLC-NEXT:   (drop
+  ;; NONLC-NEXT:    (local.get $1)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
+  (func $dominated (param $x i32)
+    ;; This load is not in the same basic block as the later one, but it
+    ;; dominates it, so we can optimize here in cse (but not local-cse).
+    (drop
+      (i32.load (i32.const 10))
+    )
+    (if
+      (local.get $x)
+      (drop
+        (i32.load (i32.const 10))
+      )
+    )
+  )
+
+  ;; CHECK:      (func $dominated-if-condition
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (i32.load
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (i32.load
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; NONLC:      (func $dominated-if-condition
+  ;; NONLC-NEXT:  (local $0 i32)
+  ;; NONLC-NEXT:  (if
+  ;; NONLC-NEXT:   (local.tee $0
+  ;; NONLC-NEXT:    (i32.load
+  ;; NONLC-NEXT:     (i32.const 10)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (drop
+  ;; NONLC-NEXT:    (local.get $0)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
+  (func $dominated-if-condition
+    ;; As above, but now the load is in the if condition, which still works.
+    (if
+      (i32.load (i32.const 10))
+      (drop
+        (i32.load (i32.const 10))
+      )
+    )
+  )
+
+  ;; CHECK:      (func $dominated-if-condition-interference
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (i32.load
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (block $block
+  ;; CHECK-NEXT:    (call $basics)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (i32.load
+  ;; CHECK-NEXT:      (i32.const 10)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; NONLC:      (func $dominated-if-condition-interference
+  ;; NONLC-NEXT:  (if
+  ;; NONLC-NEXT:   (i32.load
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (block $block
+  ;; NONLC-NEXT:    (call $basics)
+  ;; NONLC-NEXT:    (drop
+  ;; NONLC-NEXT:     (i32.load
+  ;; NONLC-NEXT:      (i32.const 10)
+  ;; NONLC-NEXT:     )
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
+  (func $dominated-if-condition-interference
+    (if
+      (i32.load (i32.const 10))
+      (block
+        ;; This call interferes along the path between the two loads.
+        (call $basics)
+        (drop
+          (i32.load (i32.const 10))
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $dominated-if-condition-interference-later
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (i32.load
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (call $basics)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.load
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; NONLC:      (func $dominated-if-condition-interference-later
+  ;; NONLC-NEXT:  (if
+  ;; NONLC-NEXT:   (i32.load
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (call $basics)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (i32.load
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
+  (func $dominated-if-condition-interference-later
+    (if
+      (i32.load (i32.const 10))
+      ;; This call interferes along the path between the two loads.
+      (call $basics)
+    )
+    (drop
+      (i32.load (i32.const 10))
+    )
+  )
+
+  ;; CHECK:      (func $dominated-if-condition-later
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (i32.load
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (nop)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.load
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; NONLC:      (func $dominated-if-condition-later
+  ;; NONLC-NEXT:  (local $0 i32)
+  ;; NONLC-NEXT:  (if
+  ;; NONLC-NEXT:   (local.tee $0
+  ;; NONLC-NEXT:    (i32.load
+  ;; NONLC-NEXT:     (i32.const 10)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (nop)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.get $0)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
+  (func $dominated-if-condition-later
+    (if
+      (i32.load (i32.const 10))
+      ;; As before, but the call is removed, so we can optimize.
+      (nop)
+    )
+    (drop
+      (i32.load (i32.const 10))
+    )
+  )
+
+  ;; CHECK:      (func $non-dominated-if-condition-later (param $x i32)
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (i32.load
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.load
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; NONLC:      (func $non-dominated-if-condition-later (param $x i32)
+  ;; NONLC-NEXT:  (if
+  ;; NONLC-NEXT:   (local.get $x)
+  ;; NONLC-NEXT:   (drop
+  ;; NONLC-NEXT:    (i32.load
+  ;; NONLC-NEXT:     (i32.const 10)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (i32.load
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
+  (func $non-dominated-if-condition-later (param $x i32)
+    (if
+      (local.get $x)
+      ;; This load does not dominate the later load, sadly.
+      (drop
+        (i32.load (i32.const 10))
+      )
+    )
+    (drop
+      (i32.load (i32.const 10))
     )
   )
 )
