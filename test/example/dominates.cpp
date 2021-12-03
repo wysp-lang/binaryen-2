@@ -211,6 +211,10 @@ void test_dominates_without_interference() {
     return builder.makeNop();
   };
 
+  auto makeSideEffects = [&]() {
+    return builder.makeCall("something", {}, Type::i32);
+  };
+
   // An CFG with just an entry, and nothing has side effects.
   {
     CFG cfg;
@@ -227,10 +231,6 @@ void test_dominates_without_interference() {
     // And the first dominates the second too.
     CHECK_TRUE(checker.dominatesWithoutInterference, first, second, noEffects, {});
   }
-
-  auto makeSideEffects = [&]() {
-    return builder.makeCall("something", {}, Type::i32);
-  };
 
   // As above, but now both have side effects. However, there is nothing in
   // between them, so there is no problem.
@@ -293,11 +293,11 @@ void test_dominates_without_interference() {
     // without interference.
     CHECK_TRUE(checker.dominatesWithoutInterference, first, fourth, sideEffects, {});
 
-    // However, if we turn the entry into a loop, then we do scan the entire
-    // block, and get interference.
+    // Even if we turn the entry into a loop we do not get interference, since
+    // we do not scan back past the dominating item.
     cfg.connect(entry, entry);
-    CHECK_FALSE(checker.dominatesWithoutInterference, second, third, sideEffects, {});
-    CHECK_FALSE(checker.dominatesWithoutInterference, first, fourth, sideEffects, {});
+    CHECK_TRUE(checker.dominatesWithoutInterference, second, third, sideEffects, {});
+    CHECK_TRUE(checker.dominatesWithoutInterference, first, fourth, sideEffects, {});
   }
 
   // An if with side effects on one arm.
