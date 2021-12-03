@@ -158,38 +158,37 @@ std::cout << "waka5\n";
     auto* yBlock = blocks[yLocation.blockIndex].get();
 std::cout << "xblock " << xBlock << " : ylock " << yBlock << '\n';
     // Look through the blocks between them, using a work queue of blocks to
-    // scan. We ignore repeats here since we only need to ever scan a block
+    // scan the preds of. We ignore repeats here since we only need to ever scan a block
     // once.
     UniqueNonrepeatingDeferredQueue<BasicBlock*> work;
     if (xBlock != yBlock) {
-      for (auto* pred : yBlock->in) {
 std::cout << "waka6\n";
-        work.push(pred);
-      }
+      // This is not the trivial case of all in a single block, so we must look
+      // backwards from y's block.
+      work.push(yBlock);
     }
     while (!work.empty()) {
       auto* currBlock = work.pop();
 std::cout << "waka7 " << currBlock << "\n";
 
-      // As x dominates y, we know that if we keep going back through the
-      // preds then eventually we will reach x, at which point we can stop
-      // flowing.
-      if (currBlock == xBlock) {
-        continue;
-      }
-
-      // This is the first time we reach this block; scan it. (Note that we we
-      // might reach y's block here, which we have partially scanned before; but
-      // it is correct to scan all of that block now, as it is inside a loop and
-      // therefore all the block is on a path from x to y.)
-      if (hasInterference(currBlock->contents.list, 0, Index(-1))) {
-std::cout << "waka8\n";
-        return false;
-      }
-
       for (auto* pred : currBlock->in) {
-std::cout << "waka9\n";
 std::cout << "waka10\n";
+        // As x dominates y, we know that if we keep going back through the
+        // preds then eventually we will reach x, at which point we can stop
+        // flowing. That is where our work ends, and as we've scanned the
+        // relevant part of x's block already, we can stop there.
+        if (pred == xBlock) {
+          continue;
+        }
+
+        // This is the first time we reach this block; scan it. (Note that we we
+        // might reach y's block here, which we have partially scanned before; but
+        // it is correct to scan all of that block now, as it is inside a loop and
+        // therefore all the block is on a path from x to y.)
+        if (hasInterference(pred->contents.list, 0, Index(-1))) {
+  std::cout << "waka8\n";
+          return false;
+        }
         work.push(pred);
       }
     }
