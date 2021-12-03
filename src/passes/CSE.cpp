@@ -95,6 +95,21 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
 
   Pass* create() override { return new CSE(); }
 
+  // Information that helps us find copies.
+  struct CopyInfo {
+    // If not -1 then this is the index of a copy of the expression that
+    // appears before.
+    // TODO: This could be a set of copies, which would let us optimize a few
+    //       more cases. Right now we just store the last copy seen here.
+    Index copyOf = -1;
+
+    // The complete size of the expression, that is, including nested children.
+    // This in combination with copyOf lets us compute copies in parent
+    // expressions using info from their children, which avoids quadratic
+    // repeated work.
+    Index fullSize = -1;
+  };
+
   struct ExprInfo {
     // The original expression at this location. It may be replaced later as we
     // optimize.
@@ -103,8 +118,7 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
     // The pointer to the expression, for use if we need to replace the expr.
     Expression** currp;
 
-    // The complete size of the expression, that is, including nested children.
-    Index fullSize = -1;
+    CopyInfo copyInfo;
 
     // Whether this is the first of a set of repeated expressions, and we have
     // modified this one to store its value in a tee.
@@ -136,17 +150,7 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
     // we can see if the parent also repeats.
     // (This could be done during the first pass of ::doWalkFunction, perhaps,
     // for efficiency? TODO but it might be less clear)
-    struct StackInfo {
-      // If not -1 then this is the index of a copy of the expression that
-      // appears before.
-      // TODO: This could be a set of copies, which would let us optimize a few
-      //       more cases. Right now we just store the last copy seen here.
-      Index copyOf;
-
-      // The complete size of the expression, that is, including nested children.
-      Index fullSize;
-    };
-    std::vector<StackInfo> stack;
+    std::vector<CopyInfo> stack;
 
     // Track the shallow expressions that we've seen so far.
     HashedShallowExprs seen;
@@ -156,29 +160,76 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
     // store indexes while we hash.
     std::unordered_map<Expression*, Index> originalIndexes;
 
+    // If we never find any relevant copies to optimize then we will give up
+    // early later.
+    bool foundRelevantCopy = false;
+
     for (Index i = 0; i < exprInfos.size(); i++) {
+      auto& exprInfo = exprInfos[i];
+      auto& copyInfo = exprInfo.copyInfo;
       auto* original = exprInfo.original;
       originalIndexes[original] = i;
-      Index copyOf = -1;
       auto iter = seen.find(original);
       if (iter != seen.end()) {
         // We have seen this before. Note it is a copy of the last of the
         // previous copies.
         auto& previous = iter->second;
         assert(!previous.empty());
-        copyOf = originalIndexes[previous.back()];
+        copyInfo.copyOf = originalIndexes[previous.back()];
         previous.push_back(original);
       } else {
         // We've never seen this before. Add it.
         seen[original].push_back(original);
       }
 
+      // Pop any children and see if we are part of a copy that
+      // includes them.
       auto numChildren = ChildIterator(exprInfo.original).getNumChildren();
-      if (numChildren == 0) {
-        // This is of size one.
-        stack.push_back(StackInfo(copyOf, 1));
+      Index totalSize = 1;
+      for (Index child = 0; child < numChildren; child++) {
+        auto childInfo = stack.back();
+        stack.pop_back();
+
+        // For us to be a copy of something, we need to have found a shallow
+        // copy of ourselves, and also for all of our children to appear in the
+        // right positions as children of that previous appearance. Once
+        // anything is not perfectly aligned, we have failed to find a copy.
+        if (copyInfo.copyOf != -1) {
+          // The child's location is our own plus a shift of the
+          // size we've seen so far. That is, the first child is right before
+          // us in the vector, and the one before it is at an additiona offset
+          // of the size of the last child, and so forth.
+          auto childPosition = i - totalSize;
+
+          // Check if this child has a copy, and that copy is perfectly aligned
+          // with the parent that we found ourselves to be a shallow copy of.
+          if (childInfo.copyOf == Index(-1) ||
+              childInfo.copyOf != copyInfo.copyOf - totalSize) {
+            copyInfo.copyOf = -1;
+          }
+        }
+
+        // Regardless of copyOf status, keep accumulating the sizes of the
+        // children. TODO: this is not really necessary since without a copy we
+        // never look at the size, but that is a little subtle
+        totalSize += childInfo.totalSize;
       }
+
+      if (copyInfo.copyOf != Index(-1) && isRelevant(original)) {
+        foundRelevantCopy = true;
+      }
+
+      stack.push_back(copyInfo);
     }
+
+    if (!foundRelevantCopy) {
+      return;
+    }
+
+    // We have filled
+
+
+
 
 
 
@@ -186,6 +237,43 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
 
     // Fix up any nondefaultable locals that we've added.
     TypeUpdating::handleNonDefaultableLocals(func, *getModule());
+  }
+
+private:
+  // Only some values are relevant to be optimized.
+  bool isRelevant(Expression* curr) {
+    // * Ignore anything that is not a concrete type, as we are looking for
+    //   computed values to reuse, and so none and unreachable are irrelevant.
+    // * Ignore local.get and set, as those are the things we optimize to.
+    // * Ignore constants so that we don't undo the effects of constant
+    //   propagation.
+    // * Ignore things we cannot put in a local, as then we can't do this
+    //   optimization at all.
+    //
+    // More things matter here, like having side effects or not, but computing
+    // them is not cheap, so leave them for later, after we know if there
+    // actually are any requests for reuse of this value (which is rare).
+    if (!curr->type.isConcrete() || curr->is<LocalGet>() ||
+        curr->is<LocalSet>() || Properties::isConstantExpression(curr) ||
+        !TypeUpdating::canHandleAsLocal(curr->type)) {
+      return false;
+    }
+
+    // If the size is at least 3, then if we have two of them we have 6,
+    // and so adding one set+one get and removing one of the items itself
+    // is not detrimental, and may be beneficial.
+    // TODO: investigate size 2
+    if (options.shrinkLevel > 0 && Measurer::measure(curr) >= 3) {
+      return true;
+    }
+
+    // If we focus on speed, any reduction in cost is beneficial, as the
+    // cost of a get is essentially free.
+    if (options.shrinkLevel == 0 && CostAnalyzer(curr).cost > 0) {
+      return true;
+    }
+
+    return false;
   }
 };
 
