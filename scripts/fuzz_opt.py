@@ -1128,6 +1128,7 @@ opt_choices = [
     ["--code-pushing"],
     ["--code-folding"],
     ["--const-hoisting"],
+    ["--cse"],
     ["--dae"],
     ["--dae-optimizing"],
     ["--dce"],
