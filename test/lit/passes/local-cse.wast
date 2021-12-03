@@ -8,9 +8,9 @@
   (memory 100 100)
   ;; CHECK:      (type $none_=>_none (func))
 
-  ;; CHECK:      (type $i32_=>_i32 (func (param i32) (result i32)))
-
   ;; CHECK:      (type $i32_=>_none (func (param i32)))
+
+  ;; CHECK:      (type $i32_=>_i32 (func (param i32) (result i32)))
 
   ;; CHECK:      (type $none_=>_i64 (func (result i64)))
 
@@ -72,9 +72,9 @@
   ;; CHECK-NEXT: )
   ;; NONLC:      (type $none_=>_none (func))
 
-  ;; NONLC:      (type $i32_=>_i32 (func (param i32) (result i32)))
-
   ;; NONLC:      (type $i32_=>_none (func (param i32)))
+
+  ;; NONLC:      (type $i32_=>_i32 (func (param i32) (result i32)))
 
   ;; NONLC:      (type $none_=>_i64 (func (result i64)))
 
@@ -835,6 +835,164 @@
     )
     (drop
       (i32.load (i32.const 10))
+    )
+  )
+
+  ;; CHECK:      (func $large-with-control-flow (param $x i32)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block $foo (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (i32.eqz
+  ;; CHECK-NEXT:      (i32.eqz
+  ;; CHECK-NEXT:       (i32.eqz
+  ;; CHECK-NEXT:        (i32.eqz
+  ;; CHECK-NEXT:         (i32.const 20)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (i32.add
+  ;; CHECK-NEXT:      (i32.const 30)
+  ;; CHECK-NEXT:      (i32.const 40)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 50)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block $foo0 (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (i32.eqz
+  ;; CHECK-NEXT:      (i32.eqz
+  ;; CHECK-NEXT:       (i32.eqz
+  ;; CHECK-NEXT:        (i32.eqz
+  ;; CHECK-NEXT:         (i32.const 20)
+  ;; CHECK-NEXT:        )
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (i32.add
+  ;; CHECK-NEXT:      (i32.const 30)
+  ;; CHECK-NEXT:      (i32.const 40)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 50)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; NONLC:      (func $large-with-control-flow (param $x i32)
+  ;; NONLC-NEXT:  (local $1 i32)
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (block $foo (result i32)
+  ;; NONLC-NEXT:    (drop
+  ;; NONLC-NEXT:     (i32.const 10)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:    (drop
+  ;; NONLC-NEXT:     (i32.eqz
+  ;; NONLC-NEXT:      (i32.eqz
+  ;; NONLC-NEXT:       (i32.eqz
+  ;; NONLC-NEXT:        (i32.eqz
+  ;; NONLC-NEXT:         (i32.const 20)
+  ;; NONLC-NEXT:        )
+  ;; NONLC-NEXT:       )
+  ;; NONLC-NEXT:      )
+  ;; NONLC-NEXT:     )
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:    (drop
+  ;; NONLC-NEXT:     (local.tee $1
+  ;; NONLC-NEXT:      (i32.add
+  ;; NONLC-NEXT:       (i32.const 30)
+  ;; NONLC-NEXT:       (i32.const 40)
+  ;; NONLC-NEXT:      )
+  ;; NONLC-NEXT:     )
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:    (i32.const 50)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (block $foo0 (result i32)
+  ;; NONLC-NEXT:    (drop
+  ;; NONLC-NEXT:     (i32.const 10)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:    (drop
+  ;; NONLC-NEXT:     (i32.eqz
+  ;; NONLC-NEXT:      (i32.eqz
+  ;; NONLC-NEXT:       (i32.eqz
+  ;; NONLC-NEXT:        (i32.eqz
+  ;; NONLC-NEXT:         (i32.const 20)
+  ;; NONLC-NEXT:        )
+  ;; NONLC-NEXT:       )
+  ;; NONLC-NEXT:      )
+  ;; NONLC-NEXT:     )
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:    (drop
+  ;; NONLC-NEXT:     (local.get $1)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:    (i32.const 50)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
+  (func $large-with-control-flow (param $x i32)
+    (drop
+      (block $foo (result i32)
+        (drop
+          (i32.const 10)
+        )
+        (drop
+          (i32.eqz
+            (i32.eqz
+              (i32.eqz
+                (i32.eqz
+                  (i32.const 20)
+                )
+              )
+            )
+          )
+        )
+        (drop
+          (i32.add
+            (i32.const 30)
+            (i32.const 40)
+          )
+        )
+        (i32.const 50)
+      )
+    )
+
+    (drop
+      (block $foo (result i32)
+        (drop
+          (i32.const 10)
+        )
+        (drop
+          (i32.eqz
+            (i32.eqz
+              (i32.eqz
+                (i32.eqz
+                  (i32.const 20)
+                )
+              )
+            )
+          )
+        )
+        (drop
+          (i32.add
+            (i32.const 30)
+            (i32.const 40)
+          )
+        )
+        (i32.const 50)
+      )
     )
   )
 )
