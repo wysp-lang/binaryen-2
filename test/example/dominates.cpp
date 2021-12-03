@@ -431,7 +431,6 @@ void test_dominates_without_interference() {
     // due to the loop: we may go through the entire loop block on our way, and
     // it has effects.
     CHECK_TRUE(checker.dominatesWithoutInterference, entryX, entryY, sideEffects, {});
-std::cout << "NOWEY\n";
     CHECK_FALSE(checker.dominatesWithoutInterference, entryX, loopX, sideEffects, {});
     CHECK_FALSE(checker.dominatesWithoutInterference, entryX, loopY, sideEffects, {});
     CHECK_FALSE(checker.dominatesWithoutInterference, entryX, loopZ, sideEffects, {});

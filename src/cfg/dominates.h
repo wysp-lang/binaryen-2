@@ -98,15 +98,12 @@ template<typename BasicBlock> struct DominationChecker {
   // to y are free from effects that would invalidate the given effects. A set
   // of expressions to ignore the effects of is also provided.
   bool dominatesWithoutInterference(Expression* x, Expression* y, EffectAnalyzer& effects, const std::unordered_set<Expression*>& ignoreEffectsOf, Module& wasm, const PassOptions& passOptions) {
-std::cout << "waka1\n";
     if (x == y) {
       return true;
     }
-std::cout << "waka1.5\n";
     if (!dominates(x, y)) {
       return false;
     }
-std::cout << "waka2\n";
 
     // x dominates y, so what we have left to check is for effects along the
     // way.
@@ -119,7 +116,6 @@ std::cout << "waka2\n";
     // We allow positionEnd to be -1, which is interpreted as the end of the
     // list.
     auto hasInterference = [&](const std::vector<Expression*>& list, Index positionStart, Index positionEnd) {
-std::cout << "hasInt? " << positionStart << ".." << positionEnd << "\n";
       if (positionEnd == Index(-1)) {
         positionEnd = list.size();
       }
@@ -142,13 +138,11 @@ std::cout << "hasInt? " << positionStart << ".." << positionEnd << "\n";
     // First, look for effects inside x's and y's blocks, after x and before y.
     // Often effects right next to x and y can save us looking any further.
     if (xLocation.blockIndex != yLocation.blockIndex) {
-std::cout << "waka4\n";
       if (hasInterference(blocks[xLocation.blockIndex]->contents.list, xLocation.positionIndex + 1, Index(-1)) ||
           hasInterference(blocks[yLocation.blockIndex]->contents.list, 0, yLocation.positionIndex)) {
         return false;
       }
     } else {
-std::cout << "waka5\n";
       if (hasInterference(blocks[xLocation.blockIndex]->contents.list, xLocation.positionIndex + 1, yLocation.positionIndex)) {
         return false;
       }
@@ -160,18 +154,15 @@ std::cout << "waka5\n";
     auto* xBlock = blocks[xLocation.blockIndex].get();
     auto* yBlock = blocks[yLocation.blockIndex].get();
 
-std::cout << "xblock " << xBlock << " : ylock " << yBlock << '\n';
     // Look through the blocks between them, using a work queue of blocks to
     // scan. We ignore repeats here since we only need to ever scan a block
     // once.
     UniqueNonrepeatingDeferredQueue<BasicBlock*> work;
     for (auto* pred : yBlock->in) {
-std::cout << "waka6\n";
       work.push(pred);
     }
     while (!work.empty()) {
       auto* currBlock = work.pop();
-std::cout << "waka7 " << currBlock << "\n";
 
       // As x dominates y, we know that if we keep going back through the
       // preds then eventually we will reach x, at which point we can stop
@@ -185,17 +176,13 @@ std::cout << "waka7 " << currBlock << "\n";
       // it is correct to scan all of that block now, as it is inside a loop and
       // therefore all the block is on a path from x to y.)
       if (hasInterference(currBlock->contents.list, 0, Index(-1))) {
-std::cout << "waka8\n";
         return false;
       }
 
       for (auto* pred : currBlock->in) {
-std::cout << "waka9\n";
-std::cout << "waka10\n";
         work.push(pred);
       }
     }
-std::cout << "waka11\n";
 
     // We saw before that x dominates y, and we found no interference along the
     // way, so we succeeded in showing that x dominates y without interference.
