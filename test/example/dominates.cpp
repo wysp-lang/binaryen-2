@@ -401,6 +401,46 @@ void test_dominates_without_interference() {
     // lastX dominates lastY without issue as there is nothing between them.
     CHECK_TRUE(checker.dominatesWithoutInterference, lastX, lastY, sideEffects, {});
   }
+
+  // An entry block leading to a loop:
+  //
+  // entry -> loop
+  //           ^ |
+  //           |_|
+  //
+  // with contents:
+  //
+  //         entry                          loop
+  //  [effects, no effects] -> [no effects, effects, no effects]
+  //    entryX    entryY         loopX       loopY      loopZ
+  {
+    CFG cfg;
+    auto* entry = cfg.add();
+    auto* loop = cfg.add();
+    cfg.connect(entry, loop);
+    cfg.connect(loop, loop);
+    auto* entryX = entry->addItem(makeSideEffects());
+    auto* entryY = entry->addItem(makeNop());
+    auto* loopX = loop->addItem(makeNop());
+    auto* loopY = loop->addItem(makeSideEffects());
+    auto* loopZ = loop->addItem(makeNop());
+
+    cfg::DominationChecker<BasicBlock> checker(cfg);
+
+    // entryX dominates entryY, but it runs into effects with all the others
+    // due to the loop: we may go through the entire loop block on our way, and
+    // it has effects.
+    CHECK_TRUE(checker.dominatesWithoutInterference, entryX, entryY, sideEffects, {});
+std::cout << "NOWEY\n";
+    CHECK_FALSE(checker.dominatesWithoutInterference, entryX, loopX, sideEffects, {});
+    CHECK_FALSE(checker.dominatesWithoutInterference, entryX, loopY, sideEffects, {});
+    CHECK_FALSE(checker.dominatesWithoutInterference, entryX, loopZ, sideEffects, {});
+
+    // And similar for entryY
+    CHECK_FALSE(checker.dominatesWithoutInterference, entryY, loopX, sideEffects, {});
+    CHECK_FALSE(checker.dominatesWithoutInterference, entryY, loopY, sideEffects, {});
+    CHECK_FALSE(checker.dominatesWithoutInterference, entryY, loopZ, sideEffects, {});
+  }
 }
 
 int main() {
