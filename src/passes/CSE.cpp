@@ -346,6 +346,15 @@ struct CSE : public WalkerPass<CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSE
         sourceInfo.addedTee = true;
       }
       *exprInfo.currp = builder.makeLocalGet((*sourceInfo.currp)->cast<LocalSet>()->index, original->type);
+
+      // Skip over all of our children before the next loop iteration, since we
+      // have optimized the entire expression, including them, into a single
+      // local.get.
+      auto childrenSize = copyInfo.totalSize - 1;
+      // < and not <= becauase not only the children exist, but also the copy
+      // before us that we optimize to.
+      assert(childrenSize < i);
+      i -= childrenSize;
     }
 
 
