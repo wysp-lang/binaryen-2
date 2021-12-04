@@ -822,7 +822,7 @@
 
   ;; CHECK:      (func $large-with-control-flow (param $x i32)
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (block $foo (result i32)
+  ;; CHECK-NEXT:   (block $block (result i32)
   ;; CHECK-NEXT:    (drop
   ;; CHECK-NEXT:     (i32.const 10)
   ;; CHECK-NEXT:    )
@@ -837,17 +837,21 @@
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:    (if (result i32)
   ;; CHECK-NEXT:     (i32.add
   ;; CHECK-NEXT:      (i32.const 30)
   ;; CHECK-NEXT:      (i32.const 40)
   ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i32.const 50)
+  ;; CHECK-NEXT:     (i32.sub
+  ;; CHECK-NEXT:      (local.get $x)
+  ;; CHECK-NEXT:      (i32.const 60)
+  ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 50)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (block $foo0 (result i32)
+  ;; CHECK-NEXT:   (block $block0 (result i32)
   ;; CHECK-NEXT:    (drop
   ;; CHECK-NEXT:     (i32.const 10)
   ;; CHECK-NEXT:    )
@@ -862,13 +866,17 @@
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:    (if (result i32)
   ;; CHECK-NEXT:     (i32.add
   ;; CHECK-NEXT:      (i32.const 30)
   ;; CHECK-NEXT:      (i32.const 40)
   ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (i32.const 50)
+  ;; CHECK-NEXT:     (i32.sub
+  ;; CHECK-NEXT:      (local.get $x)
+  ;; CHECK-NEXT:      (i32.const 60)
+  ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 50)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -876,7 +884,7 @@
   ;; NONLC-NEXT:  (local $1 i32)
   ;; NONLC-NEXT:  (drop
   ;; NONLC-NEXT:   (local.tee $1
-  ;; NONLC-NEXT:    (block $foo (result i32)
+  ;; NONLC-NEXT:    (block $block (result i32)
   ;; NONLC-NEXT:     (drop
   ;; NONLC-NEXT:      (i32.const 10)
   ;; NONLC-NEXT:     )
@@ -891,13 +899,17 @@
   ;; NONLC-NEXT:       )
   ;; NONLC-NEXT:      )
   ;; NONLC-NEXT:     )
-  ;; NONLC-NEXT:     (drop
+  ;; NONLC-NEXT:     (if (result i32)
   ;; NONLC-NEXT:      (i32.add
   ;; NONLC-NEXT:       (i32.const 30)
   ;; NONLC-NEXT:       (i32.const 40)
   ;; NONLC-NEXT:      )
+  ;; NONLC-NEXT:      (i32.const 50)
+  ;; NONLC-NEXT:      (i32.sub
+  ;; NONLC-NEXT:       (local.get $x)
+  ;; NONLC-NEXT:       (i32.const 60)
+  ;; NONLC-NEXT:      )
   ;; NONLC-NEXT:     )
-  ;; NONLC-NEXT:     (i32.const 50)
   ;; NONLC-NEXT:    )
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
@@ -907,7 +919,7 @@
   ;; NONLC-NEXT: )
   (func $large-with-control-flow (param $x i32)
     (drop
-      (block $foo (result i32)
+      (block (result i32)
         (drop
           (i32.const 10)
         )
@@ -922,18 +934,22 @@
             )
           )
         )
-        (drop
+        (if (result i32)
           (i32.add
             (i32.const 30)
             (i32.const 40)
           )
+          (i32.const 50)
+          (i32.sub
+            (local.get $x)
+            (i32.const 60)
+          )
         )
-        (i32.const 50)
       )
     )
 
     (drop
-      (block $foo (result i32)
+      (block (result i32)
         (drop
           (i32.const 10)
         )
@@ -948,13 +964,17 @@
             )
           )
         )
-        (drop
+        (if (result i32)
           (i32.add
             (i32.const 30)
             (i32.const 40)
           )
+          (i32.const 50)
+          (i32.sub
+            (local.get $x)
+            (i32.const 60)
+          )
         )
-        (i32.const 50)
       )
     )
   )
