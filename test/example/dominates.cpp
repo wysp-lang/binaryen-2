@@ -83,7 +83,7 @@ void test_dominates() {
 
     // Things not in the CFG do not dominate anything.
     auto* outside = builder.makeNop();
-    CHECK_FASE(checker.dominates, outside, first);
+    CHECK_FALSE(checker.dominates, outside, first);
   }
 
   // entry => next, with items in both.
