@@ -316,11 +316,12 @@
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:   (call $abort)
  ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (local.set $4
+ ;; CHECK-NEXT:   (global.get $STACKTOP)
+ ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (global.set $STACKTOP
  ;; CHECK-NEXT:   (i32.add
- ;; CHECK-NEXT:    (local.tee $4
- ;; CHECK-NEXT:     (global.get $STACKTOP)
- ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (global.get $STACKTOP)
  ;; CHECK-NEXT:    (i32.const 16)
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )

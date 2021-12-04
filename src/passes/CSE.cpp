@@ -155,7 +155,7 @@ struct CSE
   }
 
   void doWalkFunction(Function* func) {
-std::cout << "func " << func->name << '\n';
+//std::cout << "func " << func->name << '\n';
     // First scan the code to find all the expressions and basic blocks. This
     // fills in |blocks| and starts to fill in |exprInfos|.
     WalkerPass<
@@ -184,14 +184,14 @@ std::cout << "func " << func->name << '\n';
     bool foundRelevantCopy = false;
 
     for (Index i = 0; i < exprInfos.size(); i++) {
-std::cout << "first loop " << i << '\n';
+//std::cout << "first loop " << i << '\n';
       auto& exprInfo = exprInfos[i];
       auto& copyInfo = exprInfo.copyInfo;
       auto* original = exprInfo.original;
       originalIndexes[original] = i;
       auto iter = seen.find(original);
       if (iter != seen.end()) {
-std::cout << "  seen, append\n";
+//std::cout << "  seen, append\n";
         // We have seen this before. Note it is a copy of the last of the
         // previous copies.
         auto& previous = iter->second;
@@ -199,7 +199,7 @@ std::cout << "  seen, append\n";
         copyInfo.copyOf = previous;
         previous.push_back(original);
       } else {
-std::cout << "  novel\n";
+//std::cout << "  novel\n";
         // We've never seen this before. Add it.
         seen[original].push_back(original);
       }
@@ -209,7 +209,7 @@ std::cout << "  novel\n";
       auto numChildren = ChildIterator(exprInfo.original).getNumChildren();
       copyInfo.fullSize = 1;
       for (Index child = 0; child < numChildren; child++) {
-std::cout << "  child " << child << "\n";
+//std::cout << "  child " << child << "\n";
         assert(!stack.empty());
         auto childInfo = stack.back();
         stack.pop_back();
@@ -223,7 +223,7 @@ std::cout << "  child " << child << "\n";
         // (and maybe empty). FIXME refactor
         SmallVector<Expression*, 1> filteredCopiesOf;
         for (auto copy : copyInfo.copyOf) {
-std::cout << "    childCopy1, copy=" << originalIndexes[copy] << " , copyInfo.copyOf=" << copyInfo.copyOf.size() << " , copyInfo.fullSize=" << copyInfo.fullSize << "\n";
+//std::cout << "    childCopy1, copy=" << originalIndexes[copy] << " , copyInfo.copyOf=" << copyInfo.copyOf.size() << " , copyInfo.fullSize=" << copyInfo.fullSize << "\n";
           // The child's location is our own plus a shift of the
           // size we've seen so far. That is, the first child is right before
           // us in the vector, and the one before it is at an additiona offset
@@ -231,9 +231,9 @@ std::cout << "    childCopy1, copy=" << originalIndexes[copy] << " , copyInfo.co
           // Check if this child has a copy, and that copy is perfectly aligned
           // with the parent that we found ourselves to be a shallow copy of.
           for (auto childCopy : childInfo.copyOf) {
-std::cout << "    childCopy2 " << originalIndexes[childCopy] << "  vs  " << (originalIndexes[copy] - copyInfo.fullSize) << "\n";
+//std::cout << "    childCopy2 " << originalIndexes[childCopy] << "  vs  " << (originalIndexes[copy] - copyInfo.fullSize) << "\n";
             if (originalIndexes[childCopy] == originalIndexes[copy] - copyInfo.fullSize) {
-std::cout << "    childCopy3\n";
+//std::cout << "    childCopy3\n";
               filteredCopiesOf.push_back(copy);
               break;
             }
@@ -257,7 +257,7 @@ std::cout << "    childCopy3\n";
     if (!foundRelevantCopy) {
       return;
     }
-std::cout << "phase 2\n";
+//std::cout << "phase 2\n";
 
     // We have filled in |exprInfos| with copy information, and we've found at
     // least one relevant copy. We can now apply those copies. We start at the
