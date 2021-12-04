@@ -223,7 +223,7 @@ std::cout << "  child " << child << "\n";
         // (and maybe empty). FIXME refactor
         SmallVector<Expression*, 1> filteredCopiesOf;
         for (auto copy : copyInfo.copyOf) {
-std::cout << "    childCopy1, copyInfo.copyOf=" << copyInfo.copyOf.size() << " , copyInfo.fullSize=" << copyInfo.fullSize << "\n";
+std::cout << "    childCopy1, copy=" << originalIndexes[copy] << " , copyInfo.copyOf=" << copyInfo.copyOf.size() << " , copyInfo.fullSize=" << copyInfo.fullSize << "\n";
           // The child's location is our own plus a shift of the
           // size we've seen so far. That is, the first child is right before
           // us in the vector, and the one before it is at an additiona offset
@@ -231,8 +231,9 @@ std::cout << "    childCopy1, copyInfo.copyOf=" << copyInfo.copyOf.size() << " ,
           // Check if this child has a copy, and that copy is perfectly aligned
           // with the parent that we found ourselves to be a shallow copy of.
           for (auto childCopy : childInfo.copyOf) {
-            if (childCopy == copy - copyInfo.fullSize) {
-std::cout << "    childCopy2\n";
+std::cout << "    childCopy2 " << originalIndexes[childCopy] << "  vs  " << (originalIndexes[copy] - copyInfo.fullSize) << "\n";
+            if (originalIndexes[childCopy] == originalIndexes[copy] - copyInfo.fullSize) {
+std::cout << "    childCopy3\n";
               filteredCopiesOf.push_back(copy);
               break;
             }
