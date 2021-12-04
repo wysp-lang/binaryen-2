@@ -5,6 +5,7 @@
 #include <wasm.h>
 
 using namespace wasm;
+using namespace wasm::cfg;
 
 struct BasicBlock {
   std::vector<BasicBlock*> in;
