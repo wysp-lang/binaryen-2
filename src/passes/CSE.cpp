@@ -30,6 +30,9 @@
 #include <algorithm>
 #include <memory>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+
 #include "cfg/cfg-traversal.h"
 #include "cfg/dominates.h"
 #include "cfg/domtree.h"
@@ -97,6 +100,49 @@ struct CSEBasicBlockInfo {
 
 static const Index ImpossibleIndex = -1;
 
+// Information that helps us find copies.
+struct CopyInfo {
+  // If not -1 then this is the index of a copy of the expression that
+  // appears before.
+  // TODO: This could be a set of copies, which would let us optimize a few
+  //       more cases. Right now we just store the last copy seen here.
+  SmallVector<Expression*, 1> copyOf;
+
+  // The complete size of the expression, that is, including nested children.
+  // This in combination with copyOf lets us compute copies in parent
+  // expressions using info from their children, which avoids quadratic
+  // repeated work.
+  Index fullSize = ImpossibleIndex;
+};
+
+struct ExprInfo {
+  // The original expression at this location. It may be replaced later as we
+  // optimize.
+  Expression* original;
+
+  // The pointer to the expression, for use if we need to replace the expr.
+  Expression** currp;
+
+  CopyInfo copyInfo;
+
+  // Whether this is the first of a set of repeated expressions, and we have
+  // modified this one to store its value in a tee.
+  bool addedTee = false;
+
+  ExprInfo(Expression* original, Expression** currp)
+    : original(original), currp(currp) {}
+};
+
+struct Linearize : public PostWalker<Linearize, UnifiedExpressionVisitor<Linearize>> {
+  // Info for each (reachable) expression in the function, in post-order.
+  std::vector<ExprInfo> exprInfos;
+
+  void visitExpression(Expression* curr) {
+    exprInfos.push_back(
+      ExprInfo(curr, getCurrentPointer()));
+  }
+};
+
 } // anonymous namespace
 
 struct CSE
@@ -109,58 +155,24 @@ struct CSE
 
   Pass* create() override { return new CSE(); }
 
-  // Information that helps us find copies.
-  struct CopyInfo {
-    // If not -1 then this is the index of a copy of the expression that
-    // appears before.
-    // TODO: This could be a set of copies, which would let us optimize a few
-    //       more cases. Right now we just store the last copy seen here.
-    SmallVector<Expression*, 1> copyOf;
-
-    // The complete size of the expression, that is, including nested children.
-    // This in combination with copyOf lets us compute copies in parent
-    // expressions using info from their children, which avoids quadratic
-    // repeated work.
-    Index fullSize = ImpossibleIndex;
-  };
-
-  struct ExprInfo {
-    // The original expression at this location. It may be replaced later as we
-    // optimize.
-    Expression* original;
-
-    // The pointer to the expression, for use if we need to replace the expr.
-    Expression** currp;
-
-    CopyInfo copyInfo;
-
-    // Whether this is the first of a set of repeated expressions, and we have
-    // modified this one to store its value in a tee.
-    bool addedTee = false;
-
-    ExprInfo(Expression* original, Expression** currp)
-      : original(original), currp(currp) {}
-  };
-
-  // Info for each (reachable) expression in the function, in post-order.
-  std::vector<ExprInfo> exprInfos;
-
   void visitExpression(Expression* curr) {
+//std::cout << "visit\n" << *curr << '\n';
     if (currBasicBlock) {
-      // Note each (reachable) expression and the exprInfo for it to it.
       currBasicBlock->contents.list.push_back(curr);
-      exprInfos.push_back(
-        ExprInfo(curr, getCurrentPointer()));
     }
   }
 
   void doWalkFunction(Function* func) {
-//std::cout << "func " << func->name << '\n';
+std::cout << "func " << func->name << '\n';
     // First scan the code to find all the expressions and basic blocks. This
     // fills in |blocks| and starts to fill in |exprInfos|.
     WalkerPass<
       CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSEBasicBlockInfo>>::doWalkFunction(
       func);
+
+    Linearize linearize;
+    linearize.walk(func->body);
+    auto exprInfos = std::move(linearize.exprInfos);
 
     // Do another pass to find repeated expressions. We are looking for complete
     // expressions, including children, that recur, and so it is efficient to do
@@ -184,14 +196,14 @@ struct CSE
     bool foundRelevantCopy = false;
 
     for (Index i = 0; i < exprInfos.size(); i++) {
-//std::cout << "first loop " << i << '\n';
       auto& exprInfo = exprInfos[i];
       auto& copyInfo = exprInfo.copyInfo;
       auto* original = exprInfo.original;
+std::cout << "first loop " << i << '\n' << *original << '\n';
       originalIndexes[original] = i;
       auto iter = seen.find(original);
       if (iter != seen.end()) {
-//std::cout << "  seen, append\n";
+std::cout << "  seen, append\n";
         // We have seen this before. Note it is a copy of the last of the
         // previous copies.
         auto& previous = iter->second;
@@ -199,7 +211,7 @@ struct CSE
         copyInfo.copyOf = previous;
         previous.push_back(original);
       } else {
-//std::cout << "  novel\n";
+std::cout << "  novel\n";
         // We've never seen this before. Add it.
         seen[original].push_back(original);
       }
@@ -209,9 +221,9 @@ struct CSE
       auto numChildren = ChildIterator(exprInfo.original).getNumChildren();
       copyInfo.fullSize = 1;
       for (Index child = 0; child < numChildren; child++) {
-//std::cout << "  child " << child << "\n";
         assert(!stack.empty());
         auto childInfo = stack.back();
+std::cout << "  child " << child << " of full size " << childInfo.fullSize <<"\n";
         stack.pop_back();
 
         // For us to be a copy of something, we need to have found a shallow
@@ -223,7 +235,7 @@ struct CSE
         // (and maybe empty). FIXME refactor
         SmallVector<Expression*, 1> filteredCopiesOf;
         for (auto copy : copyInfo.copyOf) {
-//std::cout << "    childCopy1, copy=" << originalIndexes[copy] << " , copyInfo.copyOf=" << copyInfo.copyOf.size() << " , copyInfo.fullSize=" << copyInfo.fullSize << "\n";
+std::cout << "    childCopy1, copy=" << originalIndexes[copy] << " , copyInfo.copyOf=" << copyInfo.copyOf.size() << " , copyInfo.fullSize=" << copyInfo.fullSize << "\n";
           // The child's location is our own plus a shift of the
           // size we've seen so far. That is, the first child is right before
           // us in the vector, and the one before it is at an additiona offset
@@ -231,9 +243,9 @@ struct CSE
           // Check if this child has a copy, and that copy is perfectly aligned
           // with the parent that we found ourselves to be a shallow copy of.
           for (auto childCopy : childInfo.copyOf) {
-//std::cout << "    childCopy2 " << originalIndexes[childCopy] << "  vs  " << (originalIndexes[copy] - copyInfo.fullSize) << "\n";
+std::cout << "    childCopy2 " << originalIndexes[childCopy] << "  vs  " << (originalIndexes[copy] - copyInfo.fullSize) << "\n";
             if (originalIndexes[childCopy] == originalIndexes[copy] - copyInfo.fullSize) {
-//std::cout << "    childCopy3\n";
+std::cout << "    childCopy3\n";
               filteredCopiesOf.push_back(copy);
               break;
             }
@@ -246,7 +258,7 @@ struct CSE
         // never look at the size, but that is a little subtle
         copyInfo.fullSize += childInfo.fullSize;
       }
-
+std::cout << *original << " has fullSize " << copyInfo.fullSize << '\n';
       if (!copyInfo.copyOf.empty() && isRelevant(original)) {
         foundRelevantCopy = true;
       }
@@ -257,7 +269,7 @@ struct CSE
     if (!foundRelevantCopy) {
       return;
     }
-//std::cout << "phase 2\n";
+std::cout << "phase 2\n";
 
     // We have filled in |exprInfos| with copy information, and we've found at
     // least one relevant copy. We can now apply those copies. We start at the
@@ -278,6 +290,7 @@ struct CSE
     Builder builder(*module);
 
     for (int i = int(exprInfos.size()) - 1; i >= 0; i--) {
+std::cout << "phae 2 i " << i << '\n';
       auto& currInfo = exprInfos[i]; // rename to info or currInfo?
       auto& copyInfo = currInfo.copyInfo;
       auto* curr = currInfo.original;
@@ -408,6 +421,7 @@ struct CSE
           tempLocal = builder.addVar(getFunction(), curr->type);
         }
         *sourceInfo.currp = builder.makeLocalTee(tempLocal, sourceInfo.original, curr->type);
+std::cout << "TEE\n" << **sourceInfo.currp << '\n';
         sourceInfo.addedTee = true;
       }
       *currInfo.currp = builder.makeLocalGet(
@@ -417,6 +431,7 @@ struct CSE
       // have optimized the entire expression, including them, into a single
       // local.get.
       int childrenSize = copyInfo.fullSize - 1;
+std::cout << "chldrensize " << childrenSize << '\n';
       // < and not <= becauase not only the children exist, but also the copy
       // before us that we optimize to.
       assert(childrenSize < i);
@@ -470,3 +485,5 @@ private:
 Pass* createCSEPass() { return new CSE(); }
 
 } // namespace wasm
+
+#pragma GCC diagnostic pop
