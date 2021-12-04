@@ -1419,6 +1419,98 @@
     )
   )
 
+  ;; CHECK:      (func $loop-conditional-unreachable-2
+  ;; CHECK-NEXT:  (local $x i32)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.add
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (local.get $x)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (i32.const 20)
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (i32.add
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:     (local.get $x)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (i32.add
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:     (local.get $x)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (unreachable)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.add
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (local.get $x)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; NONLC:      (func $loop-conditional-unreachable-2
+  ;; NONLC-NEXT:  (local $x i32)
+  ;; NONLC-NEXT:  (local $1 i32)
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.tee $1
+  ;; NONLC-NEXT:    (i32.add
+  ;; NONLC-NEXT:     (i32.const 10)
+  ;; NONLC-NEXT:     (local.get $x)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (if
+  ;; NONLC-NEXT:   (i32.const 20)
+  ;; NONLC-NEXT:   (drop
+  ;; NONLC-NEXT:    (local.get $1)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (drop
+  ;; NONLC-NEXT:    (local.get $1)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (unreachable)
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (i32.add
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:    (local.get $x)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
+  (func $loop-conditional-unreachable-2 (local $x i32)
+    ;; As above, but the unreachable is after the if, cutting off the final
+    ;; add from being dominated.
+    (drop
+      (i32.add
+        (i32.const 10)
+        (local.get $x)
+      )
+    )
+    (if
+      (i32.const 20)
+      (drop
+        (i32.add
+          (i32.const 10)
+          (local.get $x)
+        )
+      )
+      (drop
+        (i32.add
+          (i32.const 10)
+          (local.get $x)
+        )
+      )
+    )
+    (unreachable)
+    (drop
+      (i32.add
+        (i32.const 10)
+        (local.get $x)
+      )
+    )
+  )
+
   ;; CHECK:      (func $loop-conditional-effect
   ;; CHECK-NEXT:  (local $x i32)
   ;; CHECK-NEXT:  (drop
