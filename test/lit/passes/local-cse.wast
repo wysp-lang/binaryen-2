@@ -201,22 +201,22 @@
   ;; NONLC-NEXT:  (local $x i32)
   ;; NONLC-NEXT:  (local $y i32)
   ;; NONLC-NEXT:  (local $2 i32)
+  ;; NONLC-NEXT:  (local $3 i32)
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (i32.add
-  ;; NONLC-NEXT:    (i32.const 1)
-  ;; NONLC-NEXT:    (local.tee $2
-  ;; NONLC-NEXT:     (i32.add
-  ;; NONLC-NEXT:      (i32.const 2)
-  ;; NONLC-NEXT:      (i32.const 3)
+  ;; NONLC-NEXT:   (local.tee $3
+  ;; NONLC-NEXT:    (i32.add
+  ;; NONLC-NEXT:     (i32.const 1)
+  ;; NONLC-NEXT:     (local.tee $2
+  ;; NONLC-NEXT:      (i32.add
+  ;; NONLC-NEXT:       (i32.const 2)
+  ;; NONLC-NEXT:       (i32.const 3)
+  ;; NONLC-NEXT:      )
   ;; NONLC-NEXT:     )
   ;; NONLC-NEXT:    )
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (i32.add
-  ;; NONLC-NEXT:    (i32.const 1)
-  ;; NONLC-NEXT:    (local.get $2)
-  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (local.get $3)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
   ;; NONLC-NEXT:   (local.get $2)
