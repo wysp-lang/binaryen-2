@@ -125,9 +125,8 @@ struct ExprInfo {
 
   CopyInfo copyInfo;
 
-  // Whether this is the first of a set of repeated expressions, and we should
-  // add a tee here with the corresponding index.
-  Index teeIndex = ImpossibleIndex;
+  // If this has a tee, these are the indexes of locations that read from it.
+  std::vector<Index> teeReads;
 
   ExprInfo(Expression* original, Expression** currp)
     : original(original), currp(currp) {}
@@ -393,29 +392,29 @@ struct CSE
       auto sourceIndex = originalIndexes[source];
       auto& sourceInfo = exprInfos[sourceIndex];
 //std::cout << "optimize!!! " << i << " to " << sourceIndex << "\n";
-      if (sourceInfo.teeIndex == ImpossibleIndex) {
-        // This is the first time we add a tee on the source in order to use its
-        // value later (that is, we've not found another copy of |source|
-        // earlier), so add a new local and add a tee.
-        //
-        // If |curr| already has a tee placed on it - which can happen if it is
-        // the source for some appearance we've already optimized - then we've
-        // already allocated a local, and can reuse that. Note that this is safe
-        // to do as the previous copy is dominated by |curr|, and |curr| is
-        // dominated by |source|, so |source| dominates the previous copy. When
-        // doing so we remove the tee from here, so that we basically are just
-        // moving the single tee backwards.
-        if (currInfo.teeIndex == ImpossibleIndex) {
-          sourceInfo.teeIndex = builder.addVar(getFunction(), curr->type);
-        } else {
-          sourceInfo.teeIndex = currInfo.teeIndex;
-          currInfo.teeIndex = ImpossibleIndex;
+      // This is the first time we add a tee on the source in order to use its
+      // value later (that is, we've not found another copy of |source|
+      // earlier), so add a new local and add a tee.
+      //
+      // If |curr| already has a tee placed on it - which can happen if it is
+      // the source for some appearance we've already optimized - then we've
+      // already allocated a local, and can reuse that. Note that this is safe
+      // to do as the previous copy is dominated by |curr|, and |curr| is
+      // dominated by |source|, so |source| dominates the previous copy. When
+      // doing so we remove the tee from here, so that we basically are just
+      // moving the single tee backwards.
+      auto moveTeeReads = [&](Index from, Index to) {
+        for (auto index : exprInfos[from].teeReads) {
+          exprInfos[to].teeReads.push_back(index);
         }
+        exprInfos[from].teeReads.clear();
+      };
+      moveTeeReads(i, sourceIndex);
 //std::cout << "TEE\n";
         // We'll add the actual tee at the end. That avoids effect confusion,
         // as tees add side effects.
       }
-      *currInfo.currp = builder.makeLocalGet(sourceInfo.teeIndex, curr->type);
+      sourceInfo.teeReads.push_back(i);
 
       // We handled the case of the entire expression already having a tee on
       // it, which was trivial. We must do something similar for our children:
@@ -424,7 +423,7 @@ struct CSE
       // expression, which means that the child also appears earlier, and so we
       // can move the tee earlier.
       for (int j = firstChild; j < i; j++) {
-        if (exprInfos[j].teeIndex != ImpossibleIndex) {
+        if (!exprInfos[j].teeReads.empty()) {
           // Remove the tee from this location and move it to the corresponding
           // location in the source - that is, at the exact same offset from the
           // source as we are from |i|.
@@ -433,15 +432,7 @@ struct CSE
           int k = sourceIndex - offsetInExpression;
           assert(k >= 0);
 //std::cout << "move tee from " << j << " to " << k << '\n';
-          auto& subSourceInfo = exprInfos[k];
-          // It should not be possible for another tee to already have been
-          // added to the new sub-source, as anything in higher indexes would
-          // have used the current location (j), and we haven't scanned lower
-          // indexes yet (when we do scan lower indexes, we may end up reusing
-          // this tee for more copies).
-          assert(subSourceInfo.teeIndex == ImpossibleIndex);
-          subSourceInfo.teeIndex = exprInfos[j].teeIndex;
-          exprInfos[j].teeIndex = ImpossibleIndex;
+          moveTeeReads(j, k);
         }
       }
 
@@ -462,9 +453,14 @@ struct CSE
 
 Index z = 0;
     for (auto& info : exprInfos) {
-      if (info.teeIndex != ImpossibleIndex) {
-//std::cout << "maek tee on " << z << '\n';
-        *info.currp = builder.makeLocalTee(info.teeIndex, info.original, info.original->type);
+      if (!info.teeReads.empty()) {
+        auto* original = info.original;
+        auto type = original->type;
+        auto tempLocal = builder.addVar(getFunction(), type);
+        *info.currp = builder.makeLocalTee(tempLocal, original, type);
+        for (auto read : info.teeReads) {
+          *exprInfos[read].currp = builder.makeLocalGet(tempLocal, type);
+        }
       }
 z++;
     }
