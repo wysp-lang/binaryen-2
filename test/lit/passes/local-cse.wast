@@ -1116,6 +1116,70 @@
       )
     )
   )
+
+  ;; CHECK:      (func $loop-inside
+  ;; CHECK-NEXT:  (local $x i32)
+  ;; CHECK-NEXT:  (local $1 i32)
+  ;; CHECK-NEXT:  (loop $loop
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (local.tee $1
+  ;; CHECK-NEXT:     (i32.add
+  ;; CHECK-NEXT:      (i32.const 10)
+  ;; CHECK-NEXT:      (local.get $x)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (local.get $1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (br_if $loop
+  ;; CHECK-NEXT:    (local.get $1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; NONLC:      (func $loop-inside
+  ;; NONLC-NEXT:  (local $x i32)
+  ;; NONLC-NEXT:  (local $1 i32)
+  ;; NONLC-NEXT:  (loop $loop
+  ;; NONLC-NEXT:   (drop
+  ;; NONLC-NEXT:    (local.tee $1
+  ;; NONLC-NEXT:     (i32.add
+  ;; NONLC-NEXT:      (i32.const 10)
+  ;; NONLC-NEXT:      (local.get $x)
+  ;; NONLC-NEXT:     )
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (drop
+  ;; NONLC-NEXT:    (local.get $1)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (br_if $loop
+  ;; NONLC-NEXT:    (local.get $1)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
+  (func $loop-inside (local $x i32)
+    ;; Inside a loop we can CSE normally: the add can be saved to a local.
+    (loop $loop
+      (drop
+        (i32.add
+          (i32.const 10)
+          (local.get $x)
+        )
+      )
+      (drop
+        (i32.add
+          (i32.const 10)
+          (local.get $x)
+        )
+      )
+      (br_if $loop
+        (i32.add
+          (i32.const 10)
+          (local.get $x)
+        )
+      )
+    )
+  )
 )
 
 (module
