@@ -448,7 +448,6 @@ struct CSE
       i -= childrenSize;
     }
 
-
     if (!optimized) {
       return;
     }
@@ -471,10 +470,9 @@ struct CSE
     TypeUpdating::handleNonDefaultableLocals(func, *getModule());
   }
 
-private :
+private:
   // Only some values are relevant to be optimized.
-  bool
-  isRelevant(Expression* curr) {
+  bool isRelevant(Expression* curr) {
     // * Ignore anything that is not a concrete type, as we are looking for
     //   computed values to reuse, and so none and unreachable are irrelevant.
     // * Ignore local.get and set, as those are the things we optimize to.
