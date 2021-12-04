@@ -115,7 +115,7 @@ struct CSE
     // appears before.
     // TODO: This could be a set of copies, which would let us optimize a few
     //       more cases. Right now we just store the last copy seen here.
-    Index copyOf = ImpossibleIndex;
+    SmallVector<Expression*, 1> copyOf;
 
     // The complete size of the expression, that is, including nested children.
     // This in combination with copyOf lets us compute copies in parent
@@ -196,7 +196,7 @@ std::cout << "  seen, append\n";
         // previous copies.
         auto& previous = iter->second;
         assert(!previous.empty());
-        copyInfo.copyOf = originalIndexes[previous.back()];
+        copyInfo.copyOf = previous;
         previous.push_back(original);
       } else {
 std::cout << "  novel\n";
@@ -218,20 +218,27 @@ std::cout << "  child " << child << "\n";
         // copy of ourselves, and also for all of our children to appear in the
         // right positions as children of that previous appearance. Once
         // anything is not perfectly aligned, we have failed to find a copy.
-        if (copyInfo.copyOf != ImpossibleIndex) {
-std::cout << "    childCopy1, copyInfo.copyOf=" << copyInfo.copyOf << " , copyInfo.fullSize=" << copyInfo.fullSize << "\n";
+        // We basically convert copyInfo.copyOf from a list of shallow copy
+        // locations to a list of full copy locations, which is a subset of that
+        // (and maybe empty). FIXME refactor
+        SmallVector<Expression*, 1> filteredCopiesOf;
+        for (auto copy : copyInfo.copyOf) {
+std::cout << "    childCopy1, copyInfo.copyOf=" << copyInfo.copyOf.size() << " , copyInfo.fullSize=" << copyInfo.fullSize << "\n";
           // The child's location is our own plus a shift of the
           // size we've seen so far. That is, the first child is right before
           // us in the vector, and the one before it is at an additiona offset
           // of the size of the last child, and so forth.
           // Check if this child has a copy, and that copy is perfectly aligned
           // with the parent that we found ourselves to be a shallow copy of.
-          if (childInfo.copyOf == ImpossibleIndex ||
-              childInfo.copyOf != copyInfo.copyOf - copyInfo.fullSize) {
+          for (auto childCopy : childInfo.copyOf) {
+            if (childCopy == copy - copyInfo.fullSize) {
 std::cout << "    childCopy2\n";
-            copyInfo.copyOf = ImpossibleIndex;
+              filteredCopiesOf.push_back(copy);
+              break;
+            }
           }
         }
+        copyInfo.copyOf = std::move(filteredCopiesOf);
 
         // Regardless of copyOf status, keep accumulating the sizes of the
         // children. TODO: this is not really necessary since without a copy we
@@ -239,7 +246,7 @@ std::cout << "    childCopy2\n";
         copyInfo.fullSize += childInfo.fullSize;
       }
 
-      if (copyInfo.copyOf != ImpossibleIndex && isRelevant(original)) {
+      if (!copyInfo.copyOf.empty() && isRelevant(original)) {
         foundRelevantCopy = true;
       }
 
@@ -274,7 +281,7 @@ std::cout << "phase 2\n";
       auto& copyInfo = currInfo.copyInfo;
       auto* curr = currInfo.original;
 
-      if (copyInfo.copyOf == ImpossibleIndex) {
+      if (copyInfo.copyOf.empty()) {
         continue;
       }
 
@@ -315,7 +322,10 @@ std::cout << "phase 2\n";
         continue;
       }
 
-      auto* source = exprInfos[copyInfo.copyOf].original;
+      // Should we prefer the last perhaps?
+      // Perhaps with the first we can assert on not needing to reuse a new
+      // local added, as we'd always add the local at the very start of it all?
+      auto* source = copyInfo.copyOf[0];
 
       // There is a copy. See if the first dominates the second, as if not then
       // we can just skip.
@@ -379,7 +389,7 @@ std::cout << "phase 2\n";
       }
 
       // Everything looks good! We can optimize here.
-      auto& sourceInfo = exprInfos[copyInfo.copyOf];
+      auto& sourceInfo = exprInfos[originalIndexes[source]];
       if (!sourceInfo.addedTee) {
         // This is the first time we add a tee on the source in order to use its
         // value later (that is, we've not found another copy of |source|
