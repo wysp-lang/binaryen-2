@@ -292,10 +292,10 @@ struct CSE
     bool optimized = false;
 
     for (int i = int(exprInfos.size()) - 1; i >= 0; i--) {
-//std::cout << "phae 2 i " << i << '\n';
       auto& currInfo = exprInfos[i]; // rename to info or currInfo?
       auto& copyInfo = currInfo.copyInfo;
       auto* curr = currInfo.original;
+//std::cout << "phae 2 i " << i << " : " << getExpressionName(curr) << '\n';
 
       if (copyInfo.copyOf.empty()) {
 //std::cout << "  no copies\n";
@@ -318,11 +318,15 @@ struct CSE
       // Mark us as a copy of the last possible source. That is the closest to
       // us, and the most likely to not run into interference along the way that
       // would prevent optimization.
-      auto* source = copyInfo.copyOf.back();
-
-      // There is a copy. See if the first dominates the second, as if not then
-      // we can just skip.
-      if (!dominationChecker.dominates(source, curr)) {
+      Expression* source = nullptr;
+      for (int j = int(copyInfo.copyOf.size()) - 1; j >= 0; j--) {
+        auto* possibleSource = copyInfo.copyOf[j];
+        if (dominationChecker.dominates(possibleSource, curr)) {
+          source = possibleSource;
+          break;
+        }
+      }
+      if (!source) {
 //std::cout << "  no dom\n";
         continue;
       }
