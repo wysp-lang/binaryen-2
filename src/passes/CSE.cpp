@@ -311,35 +311,10 @@ struct CSE
       auto firstChild = i - int(copyInfo.fullSize) + 1;
       assert(firstChild >= 0 && firstChild <= i);
 
-      // When we optimize we replace all of this expression and its children
-      // with a local.get. We can't do that if we've added a tee anywhere among
-      // the children - we'd be removing the tee that is read later. That is, any
-      // already-performed modification to this must be handled carefully, and
-      // for now we just skip this case.
-      //
-      // We *can* easily handle the case of the entire expression, as opposed to
-      // one of the children: we can simply move the tee to the copy before us,
-      // which we handle later down. So we only exit here based on the children.
-      //
-      // TODO We can optimize this to an even earlier
-      // copy with some extra care, or perhaps we can just do another
-      // cycle.
-      bool modified = false;
-      for (int j = firstChild + 1; j <= i; j++) {
-        if (exprInfos[j].addedTee) {
-          modified = true;
-          break;
-        }
-      }
-
-      if (modified) {
-        continue;
-      }
-
-      // Should we prefer the last perhaps?
-      // Perhaps with the first we can assert on not needing to reuse a new
-      // local added, as we'd always add the local at the very start of it all?
-      auto* source = copyInfo.copyOf[0];
+      // Mark us as a copy of the last possible source. That is the closest to
+      // us, and the most likely to not run into interference along the way that
+      // would prevent optimization.
+      auto* source = copyInfo.copyOf.back();
 
       // There is a copy. See if the first dominates the second, as if not then
       // we can just skip.
@@ -403,7 +378,8 @@ struct CSE
       }
 
       // Everything looks good! We can optimize here.
-      auto& sourceInfo = exprInfos[originalIndexes[source]];
+      auto sourceIndex = originalIndexes[source];
+      auto& sourceInfo = exprInfos[sourceIndex];
       if (!sourceInfo.addedTee) {
         // This is the first time we add a tee on the source in order to use its
         // value later (that is, we've not found another copy of |source|
@@ -426,6 +402,36 @@ struct CSE
       }
       *currInfo.currp = builder.makeLocalGet(
         (*sourceInfo.currp)->cast<LocalSet>()->index, curr->type);
+
+      // We handled the case of the entire expression already having a tee on
+      // it, which was trivial. We must do something similar for our children:
+      // if we are replacing the entire expression with a local.get then any tee
+      // will be removed. But we found a previous copy of this entire
+      // expression, which means that the child also appears earlier, and so we
+      // can move the tee earlier.
+      for (int j = firstChild; j < i; j++) {
+        if (exprInfos[j].addedTee) {
+          // Remove the tee from this location and move it to the corresponding
+          // location in the source - that is, at the exact same offset from the
+          // source as we are from |i|.
+          auto* currp = exprInfos[j].currp;
+          auto* tee = (*currp)->cast<LocalSet>();
+          *currp = tee->value;
+          int offsetInExpression = j - i;
+          int k = sourceIndex - offsetInExpression;
+          assert(k >= 0);
+          auto& subSourceInfo = exprInfos[k];
+          // It should not be possible for another tee to already have been
+          // added to the new sub-source, as anything in higher indexes would
+          // have used the current location (j), and we haven't scanned lower
+          // indexes yet (when we do scan lower indexes, we may end up reusing
+          // this tee for more copies).
+          assert(!subSourceInfo.addedTee);
+          subSourceInfo.addedTee = true;
+          tee->value = subSourceInfo.original;
+          *subSourceInfo.currp = tee;
+        }
+      }
 
       // Skip over all of our children before the next loop iteration, since we
       // have optimized the entire expression, including them, into a single

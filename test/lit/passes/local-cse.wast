@@ -201,22 +201,22 @@
   ;; NONLC-NEXT:  (local $x i32)
   ;; NONLC-NEXT:  (local $y i32)
   ;; NONLC-NEXT:  (local $2 i32)
-  ;; NONLC-NEXT:  (local $3 i32)
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.tee $3
-  ;; NONLC-NEXT:    (i32.add
-  ;; NONLC-NEXT:     (i32.const 1)
-  ;; NONLC-NEXT:     (local.tee $2
-  ;; NONLC-NEXT:      (i32.add
-  ;; NONLC-NEXT:       (i32.const 2)
-  ;; NONLC-NEXT:       (i32.const 3)
-  ;; NONLC-NEXT:      )
+  ;; NONLC-NEXT:   (i32.add
+  ;; NONLC-NEXT:    (i32.const 1)
+  ;; NONLC-NEXT:    (local.tee $2
+  ;; NONLC-NEXT:     (i32.add
+  ;; NONLC-NEXT:      (i32.const 2)
+  ;; NONLC-NEXT:      (i32.const 3)
   ;; NONLC-NEXT:     )
   ;; NONLC-NEXT:    )
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $3)
+  ;; NONLC-NEXT:   (i32.add
+  ;; NONLC-NEXT:    (i32.const 1)
+  ;; NONLC-NEXT:    (local.get $2)
+  ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
   ;; NONLC-NEXT:   (local.get $2)
@@ -975,6 +975,144 @@
             (i32.const 60)
           )
         )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $unreachable-1
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.add
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.add
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; NONLC:      (func $unreachable-1
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (i32.add
+  ;; NONLC-NEXT:    (unreachable)
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (i32.add
+  ;; NONLC-NEXT:    (unreachable)
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
+  (func $unreachable-1
+    ;; We should not optimize unreachable code.
+    (drop
+      (i32.add
+        (unreachable)
+        (i32.const 10)
+      )
+    )
+    (drop
+      (i32.add
+        (unreachable)
+        (i32.const 10)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $unreachable-2
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.add
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.add
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; NONLC:      (func $unreachable-2
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (i32.add
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:    (unreachable)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (i32.add
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:    (unreachable)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
+  (func $unreachable-2
+    ;; As above, but with children flipped.
+    (drop
+      (i32.add
+        (i32.const 10)
+        (unreachable)
+      )
+    )
+    (drop
+      (i32.add
+        (i32.const 10)
+        (unreachable)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $unreachable-3
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (select
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (select
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; NONLC:      (func $unreachable-3
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (select
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:    (unreachable)
+  ;; NONLC-NEXT:    (i32.const 20)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (select
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:    (unreachable)
+  ;; NONLC-NEXT:    (i32.const 20)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
+  (func $unreachable-3
+    ;; As above, but with with a select.
+    (drop
+      (select
+        (i32.const 10)
+        (unreachable)
+        (i32.const 20)
+      )
+    )
+    (drop
+      (select
+        (i32.const 10)
+        (unreachable)
+        (i32.const 20)
       )
     )
   )
