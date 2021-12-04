@@ -86,7 +86,7 @@
   ;; NONLC-NEXT:  (local $2 i32)
   ;; NONLC-NEXT:  (local $3 i32)
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.tee $3
+  ;; NONLC-NEXT:   (local.tee $2
   ;; NONLC-NEXT:    (i32.add
   ;; NONLC-NEXT:     (i32.const 1)
   ;; NONLC-NEXT:     (i32.const 2)
@@ -94,17 +94,17 @@
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $3)
+  ;; NONLC-NEXT:   (local.get $2)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (if
   ;; NONLC-NEXT:   (i32.const 0)
   ;; NONLC-NEXT:   (nop)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $3)
+  ;; NONLC-NEXT:   (local.get $2)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.tee $2
+  ;; NONLC-NEXT:   (local.tee $3
   ;; NONLC-NEXT:    (i32.add
   ;; NONLC-NEXT:     (local.get $x)
   ;; NONLC-NEXT:     (local.get $y)
@@ -112,14 +112,14 @@
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $2)
+  ;; NONLC-NEXT:   (local.get $3)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $2)
+  ;; NONLC-NEXT:   (local.get $3)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (call $basics)
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $2)
+  ;; NONLC-NEXT:   (local.get $3)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (local.set $x
   ;; NONLC-NEXT:   (i32.const 100)
@@ -285,10 +285,10 @@
   ;; NONLC-NEXT:  (local $2 i32)
   ;; NONLC-NEXT:  (local $3 i32)
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.tee $2
+  ;; NONLC-NEXT:   (local.tee $3
   ;; NONLC-NEXT:    (i32.add
   ;; NONLC-NEXT:     (i32.const 1)
-  ;; NONLC-NEXT:     (local.tee $3
+  ;; NONLC-NEXT:     (local.tee $2
   ;; NONLC-NEXT:      (i32.add
   ;; NONLC-NEXT:       (i32.const 2)
   ;; NONLC-NEXT:       (i32.const 3)
@@ -298,10 +298,10 @@
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $3)
+  ;; NONLC-NEXT:   (local.get $2)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $2)
+  ;; NONLC-NEXT:   (local.get $3)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT: )
   (func $recursive2
