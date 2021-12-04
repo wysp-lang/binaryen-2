@@ -1323,6 +1323,95 @@
       )
     )
   )
+
+  ;; CHECK:      (func $loop-conditional-effect
+  ;; CHECK-NEXT:  (local $x i32)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.add
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (local.get $x)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (loop $loop
+  ;; CHECK-NEXT:   (if
+  ;; CHECK-NEXT:    (local.get $x)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (i32.add
+  ;; CHECK-NEXT:      (i32.const 10)
+  ;; CHECK-NEXT:      (local.get $x)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $x
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (br_if $loop
+  ;; CHECK-NEXT:    (i32.add
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:     (local.get $x)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; NONLC:      (func $loop-conditional-effect
+  ;; NONLC-NEXT:  (local $x i32)
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (i32.add
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:    (local.get $x)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (loop $loop
+  ;; NONLC-NEXT:   (if
+  ;; NONLC-NEXT:    (local.get $x)
+  ;; NONLC-NEXT:    (drop
+  ;; NONLC-NEXT:     (i32.add
+  ;; NONLC-NEXT:      (i32.const 10)
+  ;; NONLC-NEXT:      (local.get $x)
+  ;; NONLC-NEXT:     )
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (local.set $x
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (br_if $loop
+  ;; NONLC-NEXT:    (i32.add
+  ;; NONLC-NEXT:     (i32.const 10)
+  ;; NONLC-NEXT:     (local.get $x)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
+  (func $loop-conditional-effect (local $x i32)
+    ;; As above, but now one the middle of the loop has a write to $x. That
+    ;; prevents optimizing either of the adds.
+    (drop
+      (i32.add
+        (i32.const 10)
+        (local.get $x)
+      )
+    )
+    (loop $loop
+      (if
+        (local.get $x)
+        (drop
+          (i32.add
+            (i32.const 10)
+            (local.get $x)
+          )
+        )
+      )
+      (local.set $x
+        (i32.const 10)
+      )
+      (br_if $loop
+        (i32.add
+          (i32.const 10)
+          (local.get $x)
+        )
+      )
+    )
+  )
 )
 
 (module
