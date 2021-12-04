@@ -1247,6 +1247,82 @@
       )
     )
   )
+
+  ;; CHECK:      (func $loop-conditional
+  ;; CHECK-NEXT:  (local $x i32)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.add
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (local.get $x)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (loop $loop
+  ;; CHECK-NEXT:   (if
+  ;; CHECK-NEXT:    (local.get $x)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (i32.add
+  ;; CHECK-NEXT:      (i32.const 10)
+  ;; CHECK-NEXT:      (local.get $x)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (br_if $loop
+  ;; CHECK-NEXT:    (i32.add
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:     (local.get $x)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; NONLC:      (func $loop-conditional
+  ;; NONLC-NEXT:  (local $x i32)
+  ;; NONLC-NEXT:  (local $1 i32)
+  ;; NONLC-NEXT:  (drop
+  ;; NONLC-NEXT:   (local.tee $1
+  ;; NONLC-NEXT:    (i32.add
+  ;; NONLC-NEXT:     (i32.const 10)
+  ;; NONLC-NEXT:     (local.get $x)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT:  (loop $loop
+  ;; NONLC-NEXT:   (if
+  ;; NONLC-NEXT:    (local.get $x)
+  ;; NONLC-NEXT:    (drop
+  ;; NONLC-NEXT:     (local.get $1)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (br_if $loop
+  ;; NONLC-NEXT:    (local.get $1)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
+  (func $loop-conditional (local $x i32)
+    ;; As above, but now one add is conditional inside the loop.
+    (drop
+      (i32.add
+        (i32.const 10)
+        (local.get $x)
+      )
+    )
+    (loop $loop
+      (if
+        (local.get $x)
+        (drop
+          (i32.add
+            (i32.const 10)
+            (local.get $x)
+          )
+        )
+      )
+      (br_if $loop
+        (i32.add
+          (i32.const 10)
+          (local.get $x)
+        )
+      )
+    )
+  )
 )
 
 (module
