@@ -48,8 +48,17 @@ template<typename BasicBlock> struct DominationChecker {
       return true;
     }
 
-    const auto xLocation = blockLocations.locations[x];
-    const auto yLocation = blockLocations.locations[y];
+    auto xIter = blockLocations.locations.find(x);
+    if (xIter == blockLocations.locations.end()) {
+      return false;
+    }
+    const auto xLocation = xIter->second;
+
+    auto yIter = blockLocations.locations.find(y);
+    if (yIter == blockLocations.locations.end()) {
+      return false;
+    }
+    const auto yLocation = yIter->second;
 
     // Start seeking from the original location of y, go back through y's
     // dominators and look for x there. Iff x dominates a chain of blocks up to

@@ -163,7 +163,7 @@ struct CSE
   }
 
   void doWalkFunction(Function* func) {
-std::cout << "func " << func->name << '\n';
+//std::cout << "func " << func->name << '\n';
     // First scan the code to find all the expressions and basic blocks. This
     // fills in |blocks| and starts to fill in |exprInfos|.
     WalkerPass<
@@ -199,11 +199,11 @@ std::cout << "func " << func->name << '\n';
       auto& exprInfo = exprInfos[i];
       auto& copyInfo = exprInfo.copyInfo;
       auto* original = exprInfo.original;
-std::cout << "first loop " << i << '\n' << *original << '\n';
+//std::cout << "first loop " << i << '\n' << *original << '\n';
       originalIndexes[original] = i;
       auto iter = seen.find(original);
       if (iter != seen.end()) {
-std::cout << "  seen, append\n";
+//std::cout << "  seen, append\n";
         // We have seen this before. Note it is a copy of the last of the
         // previous copies.
         auto& previous = iter->second;
@@ -211,7 +211,7 @@ std::cout << "  seen, append\n";
         copyInfo.copyOf = previous;
         previous.push_back(original);
       } else {
-std::cout << "  novel\n";
+//std::cout << "  novel\n";
         // We've never seen this before. Add it.
         seen[original].push_back(original);
       }
@@ -223,7 +223,7 @@ std::cout << "  novel\n";
       for (Index child = 0; child < numChildren; child++) {
         assert(!stack.empty());
         auto childInfo = stack.back();
-std::cout << "  child " << child << " of full size " << childInfo.fullSize <<"\n";
+//std::cout << "  child " << child << " of full size " << childInfo.fullSize <<"\n";
         stack.pop_back();
 
         // For us to be a copy of something, we need to have found a shallow
@@ -235,7 +235,7 @@ std::cout << "  child " << child << " of full size " << childInfo.fullSize <<"\n
         // (and maybe empty). FIXME refactor
         SmallVector<Expression*, 1> filteredCopiesOf;
         for (auto copy : copyInfo.copyOf) {
-std::cout << "    childCopy1, copy=" << originalIndexes[copy] << " , copyInfo.copyOf=" << copyInfo.copyOf.size() << " , copyInfo.fullSize=" << copyInfo.fullSize << "\n";
+//std::cout << "    childCopy1, copy=" << originalIndexes[copy] << " , copyInfo.copyOf=" << copyInfo.copyOf.size() << " , copyInfo.fullSize=" << copyInfo.fullSize << "\n";
           // The child's location is our own plus a shift of the
           // size we've seen so far. That is, the first child is right before
           // us in the vector, and the one before it is at an additiona offset
@@ -243,9 +243,9 @@ std::cout << "    childCopy1, copy=" << originalIndexes[copy] << " , copyInfo.co
           // Check if this child has a copy, and that copy is perfectly aligned
           // with the parent that we found ourselves to be a shallow copy of.
           for (auto childCopy : childInfo.copyOf) {
-std::cout << "    childCopy2 " << originalIndexes[childCopy] << "  vs  " << (originalIndexes[copy] - copyInfo.fullSize) << "\n";
+//std::cout << "    childCopy2 " << originalIndexes[childCopy] << "  vs  " << (originalIndexes[copy] - copyInfo.fullSize) << "\n";
             if (originalIndexes[childCopy] == originalIndexes[copy] - copyInfo.fullSize) {
-std::cout << "    childCopy3\n";
+//std::cout << "    childCopy3\n";
               filteredCopiesOf.push_back(copy);
               break;
             }
@@ -258,7 +258,7 @@ std::cout << "    childCopy3\n";
         // never look at the size, but that is a little subtle
         copyInfo.fullSize += childInfo.fullSize;
       }
-std::cout << *original << " has fullSize " << copyInfo.fullSize << '\n';
+//std::cout << *original << " has fullSize " << copyInfo.fullSize << '\n';
       if (!copyInfo.copyOf.empty() && isRelevant(original)) {
         foundRelevantCopy = true;
       }
@@ -269,7 +269,7 @@ std::cout << *original << " has fullSize " << copyInfo.fullSize << '\n';
     if (!foundRelevantCopy) {
       return;
     }
-std::cout << "phase 2\n";
+//std::cout << "phase 2\n";
 
     // We have filled in |exprInfos| with copy information, and we've found at
     // least one relevant copy. We can now apply those copies. We start at the
@@ -290,7 +290,7 @@ std::cout << "phase 2\n";
     Builder builder(*module);
 
     for (int i = int(exprInfos.size()) - 1; i >= 0; i--) {
-std::cout << "phae 2 i " << i << '\n';
+//std::cout << "phae 2 i " << i << '\n';
       auto& currInfo = exprInfos[i]; // rename to info or currInfo?
       auto& copyInfo = currInfo.copyInfo;
       auto* curr = currInfo.original;
@@ -421,7 +421,7 @@ std::cout << "phae 2 i " << i << '\n';
           tempLocal = builder.addVar(getFunction(), curr->type);
         }
         *sourceInfo.currp = builder.makeLocalTee(tempLocal, sourceInfo.original, curr->type);
-std::cout << "TEE\n" << **sourceInfo.currp << '\n';
+//std::cout << "TEE\n" << **sourceInfo.currp << '\n';
         sourceInfo.addedTee = true;
       }
       *currInfo.currp = builder.makeLocalGet(
@@ -431,7 +431,7 @@ std::cout << "TEE\n" << **sourceInfo.currp << '\n';
       // have optimized the entire expression, including them, into a single
       // local.get.
       int childrenSize = copyInfo.fullSize - 1;
-std::cout << "chldrensize " << childrenSize << '\n';
+//std::cout << "chldrensize " << childrenSize << '\n';
       // < and not <= becauase not only the children exist, but also the copy
       // before us that we optimize to.
       assert(childrenSize < i);
