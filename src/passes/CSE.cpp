@@ -125,9 +125,9 @@ struct ExprInfo {
 
   CopyInfo copyInfo;
 
-  // Whether this is the first of a set of repeated expressions, and we have
-  // modified this one to store its value in a tee.
-  bool addedTee = false;
+  // Whether this is the first of a set of repeated expressions, and we should
+  // add a tee here with the corresponding index.
+  Index teeIndex = ImpossibleIndex;
 
   ExprInfo(Expression* original, Expression** currp)
     : original(original), currp(currp) {}
@@ -156,14 +156,14 @@ struct CSE
   Pass* create() override { return new CSE(); }
 
   void visitExpression(Expression* curr) {
-std::cout << "visit\n" << *curr << '\n';
+//std::cout << "visit\n" << *curr << '\n';
     if (currBasicBlock) {
       currBasicBlock->contents.list.push_back(curr);
     }
   }
 
   void doWalkFunction(Function* func) {
-std::cout << "func " << func->name << '\n';
+//std::cout << "func " << func->name << '\n';
     // First scan the code to find all the expressions and basic blocks. This
     // fills in |blocks| and starts to fill in |exprInfos|.
     WalkerPass<
@@ -199,11 +199,11 @@ std::cout << "func " << func->name << '\n';
       auto& exprInfo = exprInfos[i];
       auto& copyInfo = exprInfo.copyInfo;
       auto* original = exprInfo.original;
-std::cout << "first loop " << i << '\n' << *original << '\n';
+//std::cout << "first loop " << i << '\n' << *original << '\n';
       originalIndexes[original] = i;
       auto iter = seen.find(original);
       if (iter != seen.end()) {
-std::cout << "  seen, append\n";
+//std::cout << "  seen, append\n";
         // We have seen this before. Note it is a copy of the last of the
         // previous copies.
         auto& previous = iter->second;
@@ -211,7 +211,7 @@ std::cout << "  seen, append\n";
         copyInfo.copyOf = previous;
         previous.push_back(original);
       } else {
-std::cout << "  novel\n";
+//std::cout << "  novel\n";
         // We've never seen this before. Add it.
         seen[original].push_back(original);
       }
@@ -223,7 +223,7 @@ std::cout << "  novel\n";
       for (Index child = 0; child < numChildren; child++) {
         assert(!stack.empty());
         auto childInfo = stack.back();
-std::cout << "  child " << child << " of full size " << childInfo.fullSize <<"\n";
+//std::cout << "  child " << child << " of full size " << childInfo.fullSize <<"\n";
         stack.pop_back();
 
         // For us to be a copy of something, we need to have found a shallow
@@ -235,7 +235,7 @@ std::cout << "  child " << child << " of full size " << childInfo.fullSize <<"\n
         // (and maybe empty). FIXME refactor
         SmallVector<Expression*, 1> filteredCopiesOf;
         for (auto copy : copyInfo.copyOf) {
-std::cout << "    childCopy1, copy=" << originalIndexes[copy] << " , copyInfo.copyOf=" << copyInfo.copyOf.size() << " , copyInfo.fullSize=" << copyInfo.fullSize << "\n";
+//std::cout << "    childCopy1, copy=" << originalIndexes[copy] << " , copyInfo.copyOf=" << copyInfo.copyOf.size() << " , copyInfo.fullSize=" << copyInfo.fullSize << "\n";
           // The child's location is our own plus a shift of the
           // size we've seen so far. That is, the first child is right before
           // us in the vector, and the one before it is at an additiona offset
@@ -243,9 +243,9 @@ std::cout << "    childCopy1, copy=" << originalIndexes[copy] << " , copyInfo.co
           // Check if this child has a copy, and that copy is perfectly aligned
           // with the parent that we found ourselves to be a shallow copy of.
           for (auto childCopy : childInfo.copyOf) {
-std::cout << "    childCopy2 " << originalIndexes[childCopy] << "  vs  " << (originalIndexes[copy] - copyInfo.fullSize) << "\n";
+//std::cout << "    childCopy2 " << originalIndexes[childCopy] << "  vs  " << (originalIndexes[copy] - copyInfo.fullSize) << "\n";
             if (originalIndexes[childCopy] == originalIndexes[copy] - copyInfo.fullSize) {
-std::cout << "    childCopy3\n";
+//std::cout << "    childCopy3\n";
               filteredCopiesOf.push_back(copy);
               break;
             }
@@ -258,7 +258,7 @@ std::cout << "    childCopy3\n";
         // never look at the size, but that is a little subtle
         copyInfo.fullSize += childInfo.fullSize;
       }
-std::cout << *original << " has fullSize " << copyInfo.fullSize << '\n';
+//std::cout << *original << " has fullSize " << copyInfo.fullSize << '\n';
       if (!copyInfo.copyOf.empty() && isRelevant(original)) {
         foundRelevantCopy = true;
       }
@@ -269,7 +269,7 @@ std::cout << *original << " has fullSize " << copyInfo.fullSize << '\n';
     if (!foundRelevantCopy) {
       return;
     }
-std::cout << "phase 2\n";
+//std::cout << "phase 2\n";
 
     // We have filled in |exprInfos| with copy information, and we've found at
     // least one relevant copy. We can now apply those copies. We start at the
@@ -289,19 +289,21 @@ std::cout << "phase 2\n";
     auto& passOptions = getPassOptions();
     Builder builder(*module);
 
+    bool optimized = false;
+
     for (int i = int(exprInfos.size()) - 1; i >= 0; i--) {
-std::cout << "phae 2 i " << i << '\n';
+//std::cout << "phae 2 i " << i << '\n';
       auto& currInfo = exprInfos[i]; // rename to info or currInfo?
       auto& copyInfo = currInfo.copyInfo;
       auto* curr = currInfo.original;
 
       if (copyInfo.copyOf.empty()) {
-std::cout << "  no copies\n";
+//std::cout << "  no copies\n";
         continue;
       }
 
       if (!isRelevant(curr)) {
-std::cout << "  irrelevant\n";
+//std::cout << "  irrelevant\n";
         // This has a copy, but it is not relevant to optimize. (We mus still
         // track such things as copies as their parents may be relevant.)
         continue;
@@ -321,7 +323,7 @@ std::cout << "  irrelevant\n";
       // There is a copy. See if the first dominates the second, as if not then
       // we can just skip.
       if (!dominationChecker.dominates(source, curr)) {
-std::cout << "  no dom\n";
+//std::cout << "  no dom\n";
         continue;
       }
 
@@ -353,7 +355,7 @@ std::cout << "  no dom\n";
       // cannot optimize away repeats.
       if (effects.hasSideEffects() ||
           Properties::isGenerative(curr, module->features)) {
-std::cout << "  effectey\n";
+//std::cout << "  effectey\n";
         continue;
       }
 
@@ -378,15 +380,16 @@ std::cout << "  effectey\n";
                                                           ignoreEffectsOf,
                                                           *module,
                                                           passOptions)) {
-std::cout << "  pathey\n";
+//std::cout << "  pathey\n";
         continue;
       }
 
       // Everything looks good! We can optimize here.
+      optimized = true;
       auto sourceIndex = originalIndexes[source];
       auto& sourceInfo = exprInfos[sourceIndex];
-std::cout << "optimize!!! " << i << " to " << sourceIndex << "\n";
-      if (!sourceInfo.addedTee) {
+//std::cout << "optimize!!! " << i << " to " << sourceIndex << "\n";
+      if (sourceInfo.teeIndex == ImpossibleIndex) {
         // This is the first time we add a tee on the source in order to use its
         // value later (that is, we've not found another copy of |source|
         // earlier), so add a new local and add a tee.
@@ -395,19 +398,20 @@ std::cout << "optimize!!! " << i << " to " << sourceIndex << "\n";
         // the source for some appearance we've already optimized - then we've
         // already allocated a local, and can reuse that. Note that this is safe
         // to do as the previous copy is dominated by |curr|, and |curr| is
-        // dominated by |source|, so |source| dominates the previous copy.
-        Index tempLocal;
-        if (currInfo.addedTee) {
-          tempLocal = (*currInfo.currp)->cast<LocalSet>()->index;
+        // dominated by |source|, so |source| dominates the previous copy. When
+        // doing so we remove the tee from here, so that we basically are just
+        // moving the single tee backwards.
+        if (currInfo.teeIndex == ImpossibleIndex) {
+          sourceInfo.teeIndex = builder.addVar(getFunction(), curr->type);
         } else {
-          tempLocal = builder.addVar(getFunction(), curr->type);
+          sourceInfo.teeIndex = currInfo.teeIndex;
+          currInfo.teeIndex = ImpossibleIndex;
         }
-        *sourceInfo.currp = builder.makeLocalTee(tempLocal, sourceInfo.original, curr->type);
-std::cout << "TEE\n" << **sourceInfo.currp << '\n';
-        sourceInfo.addedTee = true;
+//std::cout << "TEE\n";
+        // We'll add the actual tee at the end. That avoids effect confusion,
+        // as tees add side effects.
       }
-      *currInfo.currp = builder.makeLocalGet(
-        (*sourceInfo.currp)->cast<LocalSet>()->index, curr->type);
+      *currInfo.currp = builder.makeLocalGet(sourceInfo.teeIndex, curr->type);
 
       // We handled the case of the entire expression already having a tee on
       // it, which was trivial. We must do something similar for our children:
@@ -416,27 +420,24 @@ std::cout << "TEE\n" << **sourceInfo.currp << '\n';
       // expression, which means that the child also appears earlier, and so we
       // can move the tee earlier.
       for (int j = firstChild; j < i; j++) {
-        if (exprInfos[j].addedTee) {
+        if (exprInfos[j].teeIndex != ImpossibleIndex) {
           // Remove the tee from this location and move it to the corresponding
           // location in the source - that is, at the exact same offset from the
           // source as we are from |i|.
-          auto* currp = exprInfos[j].currp;
-          auto* tee = (*currp)->cast<LocalSet>();
-          *currp = tee->value;
-          int offsetInExpression = j - i;
+          int offsetInExpression = i - j;
+          assert(offsetInExpression > 0);
           int k = sourceIndex - offsetInExpression;
           assert(k >= 0);
-std::cout << "move tee from " << j << " to " << k << '\n';
+//std::cout << "move tee from " << j << " to " << k << '\n';
           auto& subSourceInfo = exprInfos[k];
           // It should not be possible for another tee to already have been
           // added to the new sub-source, as anything in higher indexes would
           // have used the current location (j), and we haven't scanned lower
           // indexes yet (when we do scan lower indexes, we may end up reusing
           // this tee for more copies).
-          assert(!subSourceInfo.addedTee);
-          subSourceInfo.addedTee = true;
-          tee->value = subSourceInfo.original;
-          *subSourceInfo.currp = tee;
+          assert(subSourceInfo.teeIndex == ImpossibleIndex);
+          subSourceInfo.teeIndex = exprInfos[j].teeIndex;
+          exprInfos[j].teeIndex = ImpossibleIndex;
         }
       }
 
@@ -444,11 +445,24 @@ std::cout << "move tee from " << j << " to " << k << '\n';
       // have optimized the entire expression, including them, into a single
       // local.get.
       int childrenSize = copyInfo.fullSize - 1;
-std::cout << "chldrensize " << childrenSize << '\n';
+//std::cout << "chldrensize " << childrenSize << '\n';
       // < and not <= becauase not only the children exist, but also the copy
       // before us that we optimize to.
       assert(childrenSize < i);
       i -= childrenSize;
+    }
+
+    if (!optimized) {
+      return;
+    }
+
+Index z = 0;
+    for (auto& info : exprInfos) {
+      if (info.teeIndex != ImpossibleIndex) {
+//std::cout << "maek tee on " << z << '\n';
+        *info.currp = builder.makeLocalTee(info.teeIndex, info.original, info.original->type);
+      }
+z++;
     }
 
     // Fix up any nondefaultable locals that we've added.
