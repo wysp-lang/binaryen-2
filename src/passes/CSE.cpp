@@ -161,16 +161,18 @@ struct CSE
   }
 
   void doWalkFunction(Function* func) {
-    // std::cout << "func " << func->name << '\n';
+std::cout << "func " << func->name << '\n';
     // First scan the code to find all the expressions and basic blocks. This
     // fills in |blocks| and starts to fill in |exprInfos|.
     WalkerPass<
       CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSEBasicBlockInfo>>::
       doWalkFunction(func);
+std::cout << "  a\n";
 
     Linearize linearize;
     linearize.walk(func->body);
     auto exprInfos = std::move(linearize.exprInfos);
+std::cout << "  b\n";
 
     // Do another pass to find repeated expressions. We are looking for complete
     // expressions, including children, that recur, and so it is efficient to do
@@ -187,7 +189,7 @@ struct CSE
     // The indexes at which expressions reside. TODO this could be part of
     // the hashed expression perhaps, avoiding an extra map. That is, we could
     // store indexes while we hash.
-    std::unordered_map<Expression*, Index> originalIndexes;
+    std::unordered_map<Expression*, Index> originalIndexes; // is this teh slow?
 
     // If we never find any relevant copies to optimize then we will give up
     // early later.
@@ -275,6 +277,8 @@ struct CSE
     }
     // std::cout << "phase 2\n";
 
+std::cout << "  c\n";
+
     // We have filled in |exprInfos| with copy information, and we've found at
     // least one relevant copy. We can now apply those copies. We start at the
     // end and go back, so that we always apply the largest possible match,
@@ -288,6 +292,7 @@ struct CSE
     // To see which copies can actually be optimized, we need to see that the
     // first dominates the second.
     cfg::DominationChecker<BasicBlock> dominationChecker(basicBlocks);
+std::cout << "  d\n";
 
     auto* module = getModule();
     auto& passOptions = getPassOptions();
@@ -452,6 +457,8 @@ struct CSE
       return;
     }
 
+std::cout << "  e\n";
+
     Index z = 0;
     for (auto& info : exprInfos) {
       if (!info.teeReads.empty()) {
@@ -466,8 +473,11 @@ struct CSE
       z++;
     }
 
+std::cout << "  f\n";
+
     // Fix up any nondefaultable locals that we've added.
     TypeUpdating::handleNonDefaultableLocals(func, *getModule());
+std::cout << "  g\n";
   }
 
 private:
