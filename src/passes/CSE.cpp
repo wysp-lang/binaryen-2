@@ -389,8 +389,7 @@ std::cout << "  d\n";
       // away something that is intrinsically nondeterministic: even if it has
       // no side effects, if it may return a different result each time, then we
       // cannot optimize away repeats.
-      if (effects.hasSideEffects() || // TODO: nonremovable?
-          Properties::isGenerative(curr, module->features)) {
+      if (effects.hasSideEffects()) { // TODO: nonremovable?
         // std::cout << "  effectey\n";
         continue;
       }
