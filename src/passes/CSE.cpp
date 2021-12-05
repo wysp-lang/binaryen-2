@@ -161,18 +161,18 @@ struct CSE
   }
 
   void doWalkFunction(Function* func) {
-std::cout << "func " << func->name << '\n';
+//std::cout << "func " << func->name << '\n';
     // First scan the code to find all the expressions and basic blocks. This
     // fills in |blocks| and starts to fill in |exprInfos|.
     WalkerPass<
       CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSEBasicBlockInfo>>::
       doWalkFunction(func);
-std::cout << "  a\n";
+//std::cout << "  a\n";
 
     Linearize linearize;
     linearize.walk(func->body);
     auto exprInfos = std::move(linearize.exprInfos);
-std::cout << "  b\n";
+//std::cout << "  b\n";
 
     // Do another pass to find repeated expressions. We are looking for complete
     // expressions, including children, that recur, and so it is efficient to do
@@ -277,7 +277,7 @@ std::cout << "  b\n";
     }
     // std::cout << "phase 2\n";
 
-std::cout << "  c\n";
+//std::cout << "  c\n";
 
     // We have filled in |exprInfos| with copy information, and we've found at
     // least one relevant copy. We can now apply those copies. We start at the
@@ -292,7 +292,7 @@ std::cout << "  c\n";
     // To see which copies can actually be optimized, we need to see that the
     // first dominates the second.
     cfg::DominationChecker<BasicBlock> dominationChecker(basicBlocks);
-std::cout << "  d\n";
+//std::cout << "  d\n";
 
     auto* module = getModule();
     auto& passOptions = getPassOptions();
@@ -458,7 +458,7 @@ std::cout << "  d\n";
       return;
     }
 
-std::cout << "  e\n";
+//std::cout << "  e\n";
 
     Index z = 0;
     for (auto& info : exprInfos) {
@@ -474,11 +474,11 @@ std::cout << "  e\n";
       z++;
     }
 
-std::cout << "  f\n";
+//std::cout << "  f\n";
 
     // Fix up any nondefaultable locals that we've added.
     TypeUpdating::handleNonDefaultableLocals(func, *getModule());
-std::cout << "  g\n";
+//std::cout << "  g\n";
   }
 
 private:
