@@ -161,18 +161,18 @@ struct CSE
   }
 
   void doWalkFunction(Function* func) {
-//std::cout << "func " << func->name << '\n';
+std::cout << "func " << func->name << '\n';
     // First scan the code to find all the expressions and basic blocks. This
     // fills in |blocks| and starts to fill in |exprInfos|.
     WalkerPass<
       CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSEBasicBlockInfo>>::
       doWalkFunction(func);
-//std::cout << "  a\n";
+std::cout << "  a\n";
 
     Linearize linearize;
     linearize.walk(func->body);
     auto exprInfos = std::move(linearize.exprInfos);
-//std::cout << "  b\n";
+std::cout << "  b\n";
 
     // Do another pass to find repeated expressions. We are looking for complete
     // expressions, including children, that recur, and so it is efficient to do
@@ -195,6 +195,9 @@ struct CSE
     // early later.
     bool foundRelevantCopy = false;
 
+    auto* module = getModule();
+    auto& passOptions = getPassOptions();
+
     for (Index i = 0; i < exprInfos.size(); i++) {
       auto& exprInfo = exprInfos[i];
       auto& copyInfo = exprInfo.copyInfo;
@@ -202,6 +205,26 @@ struct CSE
       // std::cout << "first loop " << i << '\n' << *original << '\n';
       originalIndexes[original] = i;
       auto iter = seen.find(original);
+
+EffectAnalyzer effects(passOptions, *module);
+effects.visit(original);
+// We can ignore traps here, as we replace a repeating expression with a
+// single appearance of it, a store to a local, and gets in the other
+// locations, and so if the expression traps then the first appearance -
+// that we keep around - would trap, and the others are never reached
+// anyhow. (The other checks we perform here, including invalidation and
+// determinism, will ensure that either all of the appearances trap, or
+// none of them.)
+effects.trap = false;
+if (effects.hasSideEffects() || // TODO: nonremovable?
+    Properties::isGenerative(original, module->features)) {
+  // std::cout << "  effectey\n";
+  stack.push_back(copyInfo); // empty, no copies, which will cause fails
+  continue;
+}
+
+// TODO: copyInfo on |stack| could be just a reference? do not copy that array!
+
       if (iter != seen.end()) {
         // std::cout << "  seen, append\n";
         // We have seen this before. Note it is a copy of the last of the
@@ -209,7 +232,7 @@ struct CSE
         auto& previous = iter->second;
         assert(!previous.empty());
         copyInfo.copyOf = previous;
-        previous.push_back(i);
+        previous.push_back(i); // limit on total size? so a func with 1,000,000 local.gets doesn't crowd too much.
       } else {
         // std::cout << "  novel\n";
         // We've never seen this before. Add it.
@@ -220,7 +243,7 @@ struct CSE
       // includes them.
       auto numChildren = ChildIterator(exprInfo.original).getNumChildren();
       copyInfo.fullSize = 1;
-      for (Index child = 0; child < numChildren; child++) {
+      for (Index child = 0; child < numChildren; child++) { // limit on numChildren? be reasonable. also, can effects just make us give up early?
         assert(!stack.empty());
         auto childInfo = stack.back();
         // std::cout << "  child " << child << " of full size " <<
@@ -277,7 +300,7 @@ struct CSE
     }
     // std::cout << "phase 2\n";
 
-//std::cout << "  c\n";
+std::cout << "  c\n";
 
     // We have filled in |exprInfos| with copy information, and we've found at
     // least one relevant copy. We can now apply those copies. We start at the
@@ -292,10 +315,8 @@ struct CSE
     // To see which copies can actually be optimized, we need to see that the
     // first dominates the second.
     cfg::DominationChecker<BasicBlock> dominationChecker(basicBlocks);
-//std::cout << "  d\n";
+std::cout << "  d\n";
 
-    auto* module = getModule();
-    auto& passOptions = getPassOptions();
     Builder builder(*module);
 
     bool optimized = false;
@@ -368,7 +389,7 @@ struct CSE
       // away something that is intrinsically nondeterministic: even if it has
       // no side effects, if it may return a different result each time, then we
       // cannot optimize away repeats.
-      if (effects.hasSideEffects() ||
+      if (effects.hasSideEffects() || // TODO: nonremovable?
           Properties::isGenerative(curr, module->features)) {
         // std::cout << "  effectey\n";
         continue;
@@ -458,7 +479,7 @@ struct CSE
       return;
     }
 
-//std::cout << "  e\n";
+std::cout << "  e\n";
 
     Index z = 0;
     for (auto& info : exprInfos) {
@@ -474,11 +495,11 @@ struct CSE
       z++;
     }
 
-//std::cout << "  f\n";
+std::cout << "  f\n";
 
     // Fix up any nondefaultable locals that we've added.
     TypeUpdating::handleNonDefaultableLocals(func, *getModule());
-//std::cout << "  g\n";
+std::cout << "  g\n";
   }
 
 private:
