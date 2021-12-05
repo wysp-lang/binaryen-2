@@ -217,7 +217,7 @@ effects.visit(original);
 // none of them.)
 effects.trap = false;
 if (effects.hasSideEffects() || // TODO: nonremovable?
-    Properties::isGenerative(original, module->features)) {
+    Properties::isShallowlyGenerative(original, module->features)) {
   // std::cout << "  effectey\n";
   stack.push_back(copyInfo); // empty, no copies, which will cause fails
   continue;

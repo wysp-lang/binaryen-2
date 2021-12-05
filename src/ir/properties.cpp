@@ -19,6 +19,17 @@
 
 namespace wasm::Properties {
 
+namespace {
+
+struct GenerativeScanner : public PostWalker<GenerativeScanner> {
+  bool generative = false;
+  void visitStructNew(StructNew* curr) { generative = true; }
+  void visitArrayNew(ArrayNew* curr) { generative = true; }
+  void visitArrayInit(ArrayInit* curr) { generative = true; }
+};
+
+}
+
 bool isGenerative(Expression* curr, FeatureSet features) {
   // Practically no wasm instructions are generative. Exceptions occur only in
   // GC atm.
@@ -26,13 +37,18 @@ bool isGenerative(Expression* curr, FeatureSet features) {
     return false;
   }
 
-  struct Scanner : public PostWalker<Scanner> {
-    bool generative = false;
-    void visitStructNew(StructNew* curr) { generative = true; }
-    void visitArrayNew(ArrayNew* curr) { generative = true; }
-    void visitArrayInit(ArrayInit* curr) { generative = true; }
-  } scanner;
+  GenerativeScanner scanner;
   scanner.walk(curr);
+  return scanner.generative;
+}
+
+bool isShallowlyGenerative(Expression* curr, FeatureSet features) {
+  if (!features.hasGC()) {
+    return false;
+  }
+
+  GenerativeScanner scanner;
+  scanner.visit(curr);
   return scanner.generative;
 }
 

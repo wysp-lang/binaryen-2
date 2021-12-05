@@ -413,6 +413,7 @@ inline bool canEmitSelectWithArms(Expression* ifTrue, Expression* ifFalse) {
 //    EffectAnalyzer).
 //
 bool isGenerative(Expression* curr, FeatureSet features);
+bool isShallowlyGenerative(Expression* curr, FeatureSet features);
 
 } // namespace wasm::Properties
 
