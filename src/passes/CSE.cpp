@@ -87,7 +87,7 @@ struct HSEComparer {
 // is, all expressions that are equivalent (same hash, and also compare equal)
 // will be in a vector for the corresponding entry in this map.
 using HashedShallowExprs = std::unordered_map<HashedShallowExpression,
-                                              SmallVector<Expression*, 1>,
+                                              SmallVector<Index, 1>,
                                               HSEHasher,
                                               HSEComparer>;
 
@@ -105,7 +105,7 @@ struct CopyInfo {
   // appears before.
   // TODO: This could be a set of copies, which would let us optimize a few
   //       more cases. Right now we just store the last copy seen here.
-  SmallVector<Expression*, 1> copyOf;
+  SmallVector<Index, 1> copyOf;
 
   // The complete size of the expression, that is, including nested children.
   // This in combination with copyOf lets us compute copies in parent
@@ -209,11 +209,11 @@ std::cout << "  b\n";
         auto& previous = iter->second;
         assert(!previous.empty());
         copyInfo.copyOf = previous;
-        previous.push_back(original);
+        previous.push_back(i);
       } else {
         // std::cout << "  novel\n";
         // We've never seen this before. Add it.
-        seen[original].push_back(original);
+        seen[original].push_back(i);
       }
 
       // Pop any children and see if we are part of a copy that
@@ -234,7 +234,7 @@ std::cout << "  b\n";
         // We basically convert copyInfo.copyOf from a list of shallow copy
         // locations to a list of full copy locations, which is a subset of that
         // (and maybe empty). FIXME refactor
-        SmallVector<Expression*, 1> filteredCopiesOf;
+        SmallVector<Index, 1> filteredCopiesOf;
         for (auto copy : copyInfo.copyOf) {
           // std::cout << "    childCopy1, copy=" << originalIndexes[copy] << "
           // , copyInfo.copyOf=" << copyInfo.copyOf.size() << " ,
@@ -248,8 +248,8 @@ std::cout << "  b\n";
           for (auto childCopy : childInfo.copyOf) {
             // std::cout << "    childCopy2 " << originalIndexes[childCopy] << "
             // vs  " << (originalIndexes[copy] - copyInfo.fullSize) << "\n";
-            if (originalIndexes[childCopy] ==
-                originalIndexes[copy] - copyInfo.fullSize) {
+            if (childCopy ==
+                copy - copyInfo.fullSize) {
               // std::cout << "    childCopy3\n";
               filteredCopiesOf.push_back(copy);
               break;
@@ -330,7 +330,8 @@ std::cout << "  d\n";
       // would prevent optimization.
       Expression* source = nullptr;
       for (int j = int(copyInfo.copyOf.size()) - 1; j >= 0; j--) {
-        auto* possibleSource = copyInfo.copyOf[j];
+        auto possibleSourceIndex = copyInfo.copyOf[j];
+        auto* possibleSource = exprInfos[possibleSourceIndex].original;
         if (dominationChecker.dominates(possibleSource, curr)) {
           source = possibleSource;
           break;
