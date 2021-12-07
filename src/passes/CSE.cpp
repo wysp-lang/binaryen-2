@@ -105,7 +105,8 @@ struct CopyInfo {
   // appears before.
   // TODO: This could be a set of copies, which would let us optimize a few
   //       more cases. Right now we just store the last copy seen here.
-  SmallVector<Index, 1> copyOf;
+  SmallVector<Index, 1> copyOf; // this could be just the index of the last copy. then we have a chain. or, the last and also the first ever, so we can try the chain for
+                                // k items and then try the first too
 
   // The complete size of the expression, that is, including nested children.
   // This in combination with copyOf lets us compute copies in parent
@@ -161,18 +162,18 @@ struct CSE
   }
 
   void doWalkFunction(Function* func) {
-//std::cout << "func " << func->name << '\n';
+std::cout << "func " << func->name << '\n';
     // First scan the code to find all the expressions and basic blocks. This
     // fills in |blocks| and starts to fill in |exprInfos|.
     WalkerPass<
       CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSEBasicBlockInfo>>::
       doWalkFunction(func);
-//std::cout << "  a\n";
+std::cout << "  a\n";
 
     Linearize linearize;
     linearize.walk(func->body);
     auto exprInfos = std::move(linearize.exprInfos);
-//std::cout << "  b\n";
+std::cout << "  b\n";
 
     // Do another pass to find repeated expressions. We are looking for complete
     // expressions, including children, that recur, and so it is efficient to do
@@ -232,6 +233,7 @@ if (effects.hasSideEffects() || // TODO: nonremovable?
         auto& previous = iter->second;
         assert(!previous.empty());
         copyInfo.copyOf = previous;
+        if (previous.size() >= 10) previous.pop_back(); // keep it reasonable. past some limit, just replace the last (most recent) item
         previous.push_back(i); // limit on total size? so a func with 1,000,000 local.gets doesn't crowd too much.
       } else {
         // std::cout << "  novel\n";
@@ -300,7 +302,7 @@ if (effects.hasSideEffects() || // TODO: nonremovable?
     }
     // std::cout << "phase 2\n";
 
-//std::cout << "  c\n";
+std::cout << "  c\n";
 
     // We have filled in |exprInfos| with copy information, and we've found at
     // least one relevant copy. We can now apply those copies. We start at the
@@ -315,7 +317,7 @@ if (effects.hasSideEffects() || // TODO: nonremovable?
     // To see which copies can actually be optimized, we need to see that the
     // first dominates the second.
     cfg::DominationChecker<BasicBlock> dominationChecker(basicBlocks);
-//std::cout << "  d\n";
+std::cout << "  d\n";
 
     Builder builder(*module);
 
@@ -478,7 +480,7 @@ if (effects.hasSideEffects() || // TODO: nonremovable?
       return;
     }
 
-//std::cout << "  e\n";
+std::cout << "  e\n";
 
     Index z = 0;
     for (auto& info : exprInfos) {
@@ -494,11 +496,11 @@ if (effects.hasSideEffects() || // TODO: nonremovable?
       z++;
     }
 
-//std::cout << "  f\n";
+std::cout << "  f\n";
 
     // Fix up any nondefaultable locals that we've added.
     TypeUpdating::handleNonDefaultableLocals(func, *getModule());
-//std::cout << "  g\n";
+std::cout << "  g\n";
   }
 
 private:
