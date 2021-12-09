@@ -462,7 +462,7 @@ void PassRunner::addDefaultFunctionOptimizationPasses() {
     // new and redundant ones, which make things seem different if we do not
     // run some amount of simplify-locals first).
     addIfNoDWARFIssues("simplify-locals-notee-nostructure");
-    addIfNoDWARFIssues("cse");
+    addIfNoDWARFIssues("local-cse");
     // TODO: add rereloop etc. here
   }
   addIfNoDWARFIssues("dce");
@@ -511,7 +511,9 @@ void PassRunner::addDefaultFunctionOptimizationPasses() {
   }
   addIfNoDWARFIssues("coalesce-locals");
   if (options.optimizeLevel >= 3 || options.shrinkLevel >= 1) {
-    addIfNoDWARFIssues("cse");
+    addIfNoDWARFIssues("local-cse");
+    // Add cse, but need untee/merge-blocks/coalesce-locals frist? No, we just
+    // need a proper local.get analysis in there, see comment at top of passs
   }
   addIfNoDWARFIssues("simplify-locals");
   addIfNoDWARFIssues("vacuum");

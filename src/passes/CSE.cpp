@@ -25,6 +25,12 @@
 // TODO: use a LocalGraph to match gets with tees (gets with gets should already
 //       work as they compare equal + we track effects). part of value
 //       numbering?
+//       We really need something like this, at least to match gets with tees
+//       and through copies etc. - each local.get must be tracked to its single
+//       source, and comparable. That is, when we see local.get $x then we
+//       can get a link from it to the value of the single set/tee that is its
+//       source, if there is one, and that is equal to it - a copy. And also
+//       look through a tee, through fallthroughs, etc.
 //
 
 #include <algorithm>
@@ -273,6 +279,8 @@ if (effects.hasSideEffects() || // TODO: nonremovable?
           for (auto childCopy : childInfo.copyOf) {
             // std::cout << "    childCopy2 " << originalIndexes[childCopy] << "
             // vs  " << (originalIndexes[copy] - copyInfo.fullSize) << "\n";
+            // TODO: this loop will need to change for local.get opts, as the
+            // get is smaller in general than the thing it is a copy of.
             if (childCopy ==
                 copy - copyInfo.fullSize) {
               // std::cout << "    childCopy3\n";
