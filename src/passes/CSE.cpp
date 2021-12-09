@@ -32,6 +32,16 @@
 //       source, if there is one, and that is equal to it - a copy. And also
 //       look through a tee, through fallthroughs, etc.
 //       see cse-testcase.wat
+//       we dont need LocalGraph here. It is ok to say that a local.get $x
+//       compares equal to the last local.get $x, *and also* equal to the last
+//       local.set/tee $x - since we will check for effects in the middle later
+//       if necessary. the pass already does that for local.gets when it
+//       compares them structurally. we can just extend that to local.set, by
+//       making it and its value compare equal to local.gets. Say, making the
+//       shallow compared value of local.set's value equal to a local.get of
+//       that same local. Ignore tee, as that has side effects - we still need
+//       untee - but otherwise, turn local.set values into local.gets for
+//       purposes of comparison.
 //
 
 #include <algorithm>
