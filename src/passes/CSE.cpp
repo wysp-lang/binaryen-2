@@ -31,6 +31,7 @@
 //       can get a link from it to the value of the single set/tee that is its
 //       source, if there is one, and that is equal to it - a copy. And also
 //       look through a tee, through fallthroughs, etc.
+//       see cse-testcase.wat
 //
 
 #include <algorithm>
