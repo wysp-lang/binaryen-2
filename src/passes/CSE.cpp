@@ -56,6 +56,7 @@
 #include "ir/cost.h"
 #include "ir/effects.h"
 #include "ir/iteration.h"
+#include "ir/local-graph.h"
 #include "ir/properties.h"
 #include "ir/type-updating.h"
 #include "ir/utils.h"
@@ -106,7 +107,106 @@ struct HSEComparer {
 using HashedShallowExprs = std::unordered_map<HashedShallowExpression,
                                               SmallVector<Index, 1>,
                                               HSEHasher,
-                                              HSEComparer>;
+                                              HSEComparer>; // TODO needed?
+
+// Performs a GVN analysis of a function, computing a value number for each
+// expression and filling in data structures for use while optimizing with that
+// info.
+struct GVNAnalysis {
+  // Maps a value number to the list of expressions that have that value number.
+  std::vector<std::vector<Expression*>> exprsForValue;
+
+  struct ExprInfo {
+    Expression* expr;
+    Expression** currp;
+    Index number;
+  };
+
+  // Info for each expression in the function, in post-order ordering.
+  std::vector<ExprInfo> exprInfos;
+
+  std::unordered_map<Expression*, Index> exprNumbers;
+
+  GVNAnalysis(Function* func) : localGraph(func->body) {
+    // Compute the graph of local get/set operations so that we can use that
+    // SSA-like information in our analysis.
+
+    struct Computer : public PostWalker<Computer, UnifiedExpressionVisitor<Computer>> {
+      GVNAnalysis& parent;
+
+      LocalGraph localGraph;
+
+      std::vector<Index> numberStack;
+
+      ValueNumbering numbering;
+
+      // A vector of numbers of children. Optimized for the common case of 2 or
+      // fewer children.
+      using ChildNumbers = SmallVector<Index, 2>;
+
+      // Maps vectors of child numbers to a number.
+      using NumberVecMap = std::unordered_map<ChildNumbers, Index>;
+
+      // Maps a shallow expression to NumberVecMap. Together, this gives a data
+      // structure that lets us go from a shallow expression + the value numbers
+      // of its children to associate a number with that combination.
+      using ShallowExprNumberVecMap = std::unordered_map<HashedShallowExpression,
+                                                    NumberVecMap,
+                                                    HSEHasher,
+                                                    HSEComparer>;
+
+      ShallowExprNumberVecMap numbersMap;
+
+      Computer(GVNAnalysis& parent, Function* func) : parent(parent) : localGraph(func) {}
+
+      void visitExpression(Expression* curr) {
+        // Get the children's value numbers off the stack.
+        auto numChildren = ChildIterator(curr).getNumChildren();
+        ChildNumbers childNumbers;
+        childNumbers.resize(numChildren);
+        for (Index i = 0; i < numChildren; i++) {
+          childNumbers[i] = numberStack.pop_back();
+        }
+
+        // Compute the number of this expression.
+        Index number;
+        if (Properties::isShallowlyGenerative(curr)) { // TODO: calls too!
+          number = numbering.getUniqueValue();
+          assert(number > 0);
+        } else if (auto* get = curr->dynCast<LocalGet>()) {
+          // If this local.get only has a single local.set, then it must
+          // contain the same value as that one.
+          
+        } else {
+          // For anything else, compute a value number from the children's
+          // numbers plus the shallow contents of the expression.
+          auto& savedNumber = numbersMap[curr][childNumbers];
+          if (savedNumber == 0) {
+            // This is the first appearance.
+            savedNumber = numbering.getUniqueValue();
+            assert(savedNumber > 0);
+          }
+          number = savedNumber;
+        }
+
+        // Now that we have computed the number of this expression, add it to
+        // the data structures.
+        numbersStack.push_back(number);
+
+        if (parent.exprsForValue.size() <= number) {
+          parent.exprsForValue.resize(number + 1);
+        }
+        parent.exprsForValue[number].push_back(curr);
+
+        parent.exprInfos.push_back(ExprInfo{curr, getPointer(), number});
+
+        parent.exprNumbers[curr] = number; // TODO: needed beyond local.set?
+      }
+    } computer(*this, func);
+  }
+};
+
+
 
 // Additional information for each basic block.
 struct CSEBasicBlockInfo {
