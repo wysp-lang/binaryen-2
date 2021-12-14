@@ -56,7 +56,9 @@
 #include "ir/cost.h"
 #include "ir/effects.h"
 #include "ir/iteration.h"
+#include "ir/literal-utils.h"
 #include "ir/local-graph.h"
+#include "ir/numbering.h"
 #include "ir/properties.h"
 #include "ir/type-updating.h"
 #include "ir/utils.h"
@@ -127,7 +129,9 @@ struct GVNAnalysis {
 
   std::unordered_map<Expression*, Index> exprNumbers;
 
-  GVNAnalysis(Function* func) : localGraph(func->body) {
+  Module& wasm;
+
+  GVNAnalysis(Function* func, Module& wasm) : wasm(wasm) {
     struct Computer : public PostWalker<Computer, UnifiedExpressionVisitor<Computer>> {
       GVNAnalysis& parent;
 
@@ -170,14 +174,15 @@ struct GVNAnalysis {
         ChildNumbers childNumbers;
         childNumbers.resize(numChildren);
         for (Index i = 0; i < numChildren; i++) {
-          childNumbers[i] = numberStack.pop_back();
+          childNumbers[i] = numberStack.back();
+          numberStack.pop_back();
         }
 
         // Compute the number of this expression.
         Index number;
         if (!curr->type.isConcrete()) {
           number = getNewNumber();
-        } if (Properties::isShallowlyGenerative(curr) || Properties::isCall(curr) {
+        } if (Properties::isShallowlyGenerative(curr, parent.wasm.features) || Properties::isCall(curr)) {
           number = getNewNumber();
         } else if (auto* get = curr->dynCast<LocalGet>()) {
           number = getLocalGetNumber(get);
@@ -201,14 +206,14 @@ struct GVNAnalysis {
 
         // Now that we have computed the number of this expression, add it to
         // the data structures.
-        numbersStack.push_back(number);
+        numberStack.push_back(number);
 
         if (parent.exprsForValue.size() <= number) {
           parent.exprsForValue.resize(number + 1);
         }
         parent.exprsForValue[number].push_back(curr);
 
-        parent.exprInfos.push_back(ExprInfo{curr, getPointer(), number});
+        parent.exprInfos.push_back(ExprInfo{curr, getCurrentPointer(), number});
 
         parent.exprNumbers[curr] = number; // TODO: needed beyond local.set?
       }
@@ -226,13 +231,13 @@ struct GVNAnalysis {
           // TODO: we could do more here for merges
           number = getNewNumber();
         } else {
-          auto* set = sets.front();
+          auto* set = *sets.begin();
           if (!set) {
             // This is a param or a null initializer value.
             if (func->isParam(set->index)) {
               number = paramNumbers[set->index];
             } else {
-              number = numbering.getValue(Literals::makeZero(func->getLocalType(set->index)));
+              number = numbering.getValue(LiteralUtils::makeZero(func->getLocalType(set->index)));
             }
           } else {
             // We must have seen the value already in our traversal.
@@ -250,8 +255,7 @@ struct GVNAnalysis {
 
 } // anonymous namespace
 
-struct GVN
-  : public WalkerPass<GVN> {
+struct GVN : public WalkerPass<GVN> {
   bool isFunctionParallel() override { return true; }
 
   // FIXME DWARF updating does not handle local changes yet.
