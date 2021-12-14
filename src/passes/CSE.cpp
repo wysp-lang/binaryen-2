@@ -248,83 +248,20 @@ struct GVNAnalysis {
   }
 };
 
-
-
-
-
-
-
-// Additional information for each basic block.
-struct CSEBasicBlockInfo {
-  // A list of all expressions in the block.
-  std::vector<Expression*> list;
-};
-
-static const Index ImpossibleIndex = -1;
-
-// Information that helps us find copies.
-struct CopyInfo {
-  // If not -1 then this is the index of a copy of the expression that
-  // appears before.
-  // TODO: This could be a set of copies, which would let us optimize a few
-  //       more cases. Right now we just store the last copy seen here.
-  SmallVector<Index, 1> copyOf; // this could be just the index of the last copy. then we have a chain. or, the last and also the first ever, so we can try the chain for
-                                // k items and then try the first too
-
-  // The complete size of the expression, that is, including nested children.
-  // This in combination with copyOf lets us compute copies in parent
-  // expressions using info from their children, which avoids quadratic
-  // repeated work.
-  Index fullSize = ImpossibleIndex;
-};
-
-struct ExprInfo {
-  // The original expression at this location. It may be replaced later as we
-  // optimize.
-  Expression* original;
-
-  // The pointer to the expression, for use if we need to replace the expr.
-  Expression** currp;
-
-  CopyInfo copyInfo;
-
-  // If this has a tee, these are the indexes of locations that read from it.
-  std::vector<Index> teeReads;
-
-  ExprInfo(Expression* original, Expression** currp)
-    : original(original), currp(currp) {}
-};
-
-struct Linearize
-  : public PostWalker<Linearize, UnifiedExpressionVisitor<Linearize>> {
-  // Info for each (reachable) expression in the function, in post-order.
-  std::vector<ExprInfo> exprInfos;
-
-  void visitExpression(Expression* curr) {
-    exprInfos.push_back(ExprInfo(curr, getCurrentPointer()));
-  }
-};
-
 } // anonymous namespace
 
-struct CSE
-  : public WalkerPass<
-      CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSEBasicBlockInfo>> {
+struct GVN
+  : public WalkerPass<GVN> {
   bool isFunctionParallel() override { return true; }
 
   // FIXME DWARF updating does not handle local changes yet.
   bool invalidatesDWARF() override { return true; }
 
-  Pass* create() override { return new CSE(); }
-
-  void visitExpression(Expression* curr) {
-    // std::cout << "visit\n" << *curr << '\n';
-    if (currBasicBlock) {
-      currBasicBlock->contents.list.push_back(curr);
-    }
-  }
+  Pass* create() override { return new GVN(); }
 
   void doWalkFunction(Function* func) {
+
+#if 0
 std::cout << "func " << func->name << '\n';
     // First scan the code to find all the expressions and basic blocks. This
     // fills in |blocks| and starts to fill in |exprInfos|.
@@ -666,6 +603,7 @@ std::cout << "  f\n";
     // Fix up any nondefaultable locals that we've added.
     TypeUpdating::handleNonDefaultableLocals(func, *getModule());
 std::cout << "  g\n";
+#endif
   }
 
 private:
@@ -708,7 +646,7 @@ private:
   }
 };
 
-Pass* createCSEPass() { return new CSE(); }
+Pass* createCSEPass() { return new GVN(); }
 
 } // namespace wasm
 
