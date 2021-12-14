@@ -275,7 +275,7 @@ struct GVNAnalysis {
   }
 };
 
-struct GVNPass : public WalkerPass<GVNPass> {
+struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
   bool isFunctionParallel() override { return true; }
 
   // FIXME DWARF updating does not handle local changes yet.
