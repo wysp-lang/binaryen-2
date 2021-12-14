@@ -28,7 +28,7 @@ struct GenerativeScanner : public PostWalker<GenerativeScanner> {
   void visitArrayInit(ArrayInit* curr) { generative = true; }
 };
 
-}
+} // anonymous namespace
 
 bool isGenerative(Expression* curr, FeatureSet features) {
   // Practically no wasm instructions are generative. Exceptions occur only in

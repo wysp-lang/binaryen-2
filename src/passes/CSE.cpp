@@ -132,7 +132,8 @@ struct GVNAnalysis {
   Module& wasm;
 
   GVNAnalysis(Function* func, Module& wasm) : wasm(wasm) {
-    struct Computer : public PostWalker<Computer, UnifiedExpressionVisitor<Computer>> {
+    struct Computer
+      : public PostWalker<Computer, UnifiedExpressionVisitor<Computer>> {
       GVNAnalysis& parent;
 
       Function* func;
@@ -153,16 +154,18 @@ struct GVNAnalysis {
       // Maps a shallow expression to NumberVecMap. Together, this gives a data
       // structure that lets us go from a shallow expression + the value numbers
       // of its children to associate a number with that combination.
-      using ShallowExprNumberVecMap = std::unordered_map<HashedShallowExpression,
-                                                    NumberVecMap,
-                                                    HSEHasher,
-                                                    HSEComparer>;
+      using ShallowExprNumberVecMap =
+        std::unordered_map<HashedShallowExpression,
+                           NumberVecMap,
+                           HSEHasher,
+                           HSEComparer>;
 
       ShallowExprNumberVecMap numbersMap;
 
       std::vector<Index> paramNumbers;
 
-      Computer(GVNAnalysis& parent, Function* func) : parent(parent), func(func), localGraph(func) {
+      Computer(GVNAnalysis& parent, Function* func)
+        : parent(parent), func(func), localGraph(func) {
         for (Index i = 0; i < func->getNumParams(); i++) {
           paramNumbers.push_back(getNewNumber());
         }
@@ -182,7 +185,9 @@ struct GVNAnalysis {
         Index number;
         if (!curr->type.isConcrete()) {
           number = getNewNumber();
-        } if (Properties::isShallowlyGenerative(curr, parent.wasm.features) || Properties::isCall(curr)) {
+        }
+        if (Properties::isShallowlyGenerative(curr, parent.wasm.features) ||
+            Properties::isCall(curr)) {
           number = getNewNumber();
         } else if (auto* get = curr->dynCast<LocalGet>()) {
           number = getLocalGetNumber(get);
@@ -237,7 +242,8 @@ struct GVNAnalysis {
             if (func->isParam(set->index)) {
               number = paramNumbers[set->index];
             } else {
-              number = numbering.getValue(LiteralUtils::makeZero(func->getLocalType(set->index)));
+              number = numbering.getValue(
+                LiteralUtils::makeZero(func->getLocalType(set->index)));
             }
           } else {
             // We must have seen the value already in our traversal.
