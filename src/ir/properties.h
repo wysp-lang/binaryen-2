@@ -109,6 +109,10 @@ inline bool isBranch(const Expression* curr) {
   return curr->is<Break>() || curr->is<Switch>() || curr->is<BrOn>();
 }
 
+inline bool isCall(Expression* curr) {
+  return curr->is<Call>() || curr->is<CallIndirect>() || curr->is<CallRef>();
+}
+
 inline Literal getLiteral(const Expression* curr) {
   if (auto* c = curr->dynCast<Const>()) {
     return c->value;

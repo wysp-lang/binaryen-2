@@ -128,9 +128,6 @@ struct GVNAnalysis {
   std::unordered_map<Expression*, Index> exprNumbers;
 
   GVNAnalysis(Function* func) : localGraph(func->body) {
-    // Compute the graph of local get/set operations so that we can use that
-    // SSA-like information in our analysis.
-
     struct Computer : public PostWalker<Computer, UnifiedExpressionVisitor<Computer>> {
       GVNAnalysis& parent;
 
@@ -144,7 +141,7 @@ struct GVNAnalysis {
 
       // A vector of numbers of children. Optimized for the common case of 2 or
       // fewer children.
-      using ChildNumbers = SmallVector<Index, 2>;
+      using ChildNumbers = std::vector<Index>; // SmallVector<2>?
 
       // Maps vectors of child numbers to a number.
       using NumberVecMap = std::unordered_map<ChildNumbers, Index>;
@@ -159,7 +156,13 @@ struct GVNAnalysis {
 
       ShallowExprNumberVecMap numbersMap;
 
-      Computer(GVNAnalysis& parent, Function* func) : parent(parent), func(func), localGraph(func) {}
+      std::vector<Index> paramNumbers;
+
+      Computer(GVNAnalysis& parent, Function* func) : parent(parent), func(func), localGraph(func) {
+        for (Index i = 0; i < func->getNumParams(); i++) {
+          paramNumbers.push_back(getNewNumber());
+        }
+      }
 
       void visitExpression(Expression* curr) {
         // Get the children's value numbers off the stack.
@@ -172,12 +175,19 @@ struct GVNAnalysis {
 
         // Compute the number of this expression.
         Index number;
-        if (Properties::isShallowlyGenerative(curr)) { // TODO: calls too!
+        if (!curr->type.isConcrete()) {
+          number = getNewNumber();
+        } if (Properties::isShallowlyGenerative(curr) || Properties::isCall(curr) {
           number = getNewNumber();
         } else if (auto* get = curr->dynCast<LocalGet>()) {
           number = getLocalGetNumber(get);
         } else if (auto* set = curr->dynCast<LocalSet>()) {
-          number = getLocalSetNumber(set);
+          // We've handled non-concrete types before, leaving only tee to handle
+          // here.
+          assert(set->isTee());
+          assert(childNumbers.size() == 1);
+          // A tee's value is simply that of its child.
+          number = childNumbers[0];
         } else {
           // For anything else, compute a value number from the children's
           // numbers plus the shallow contents of the expression.
@@ -210,41 +220,37 @@ struct GVNAnalysis {
       }
 
       Index getLocalGetNumber(LocalGet* get) {
-        auto iter = parent.exprNumbers.find(get);
-        if (iter != parent.exprNumbers.end()) {
-          return iter->second;
-        }
-
         Index number;
         auto& sets = localGraph.getSetses[get];
-        if (sets.size() == 1) {
-          number = getLocalSetNumber(sets.front());
-        } else {
+        if (sets.size() != 1) {
           // TODO: we could do more here for merges
           number = getNewNumber();
+        } else {
+          auto* set = sets.front();
+          if (!set) {
+            // This is a param or a null initializer value.
+            if (func->isParam(set->index)) {
+              number = paramNumbers[set->index];
+            } else {
+              number = numbering.getValue(Literals::makeZero(func->getLocalType(set->index)));
+            }
+          } else {
+            // We must have seen the value already in our traversal.
+            auto* value = set->value;
+            assert(parent.exprNumbers.count(value));
+            number = parent.exprNumbers[value];
+          }
         }
         parent.exprNumbers[get] = number;
         return number;
       }
-
-      Index getLocalSetNumber(LocalSet* set) {
-        if (!set) {
-          // This is a param or a null initializer value.
-          if (func->isParam(set->index)) {
-            return getParamNumber(set->index;
-          } else {
-            return numbering.getValue(Literals::makeZero(func->getLocalType(set->index)));
-          }
-        }
-
-        // We must have seen the value already in our traversal.
-        auto* value = set->value;
-        assert(parent.exprNumbers.count(value));
-        return parent.exprNumbers[value];
-      }
     } computer(*this, func);
   }
 };
+
+
+
+
 
 
 
