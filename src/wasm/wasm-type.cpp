@@ -84,11 +84,11 @@ struct TypeInfo {
 
   bool isNullable() const { return kind == RefKind && ref.nullable; }
 
-  // If this TypeInfo represents a Type that can be represented more simply, set
-  // `out` to be that simpler Type and return true. For example, this handles
-  // canonicalizing the TypeInfo representing (ref null any) into the BasicType
-  // anyref. It also handles eliminating singleton tuple types.
-  bool getCanonical(Type& out) const;
+  // If this TypeInfo represents a Type that can be represented more simply,
+  // return that simpler Type. For example, this handles canonicalizing the
+  // TypeInfo representing (ref null any) into the BasicType anyref. It also
+  // handles eliminating singleton tuple types.
+  std::optional<Type> getCanonical() const;
 
   bool operator==(const TypeInfo& other) const;
   bool operator!=(const TypeInfo& other) const { return !(*this == other); }
@@ -135,9 +135,9 @@ struct HeapTypeInfo {
   constexpr bool isData() const { return isStruct() || isArray(); }
 
   // If this HeapTypeInfo represents a HeapType that can be represented more
-  // simply, set `out` to be that simpler HeapType and return true. This handles
-  // turning BasicKind HeapTypes into their corresponding BasicHeapTypes.
-  bool getCanonical(HeapType& out) const;
+  // simply, return that simpler HeapType. This handles turning BasicKind
+  // HeapTypes into their corresponding BasicHeapTypes.
+  std::optional<HeapType> getCanonical() const;
 
   HeapTypeInfo& operator=(const HeapTypeInfo& other);
   bool operator==(const HeapTypeInfo& other) const;
@@ -468,20 +468,26 @@ bool isTemp(HeapType type) {
 // representation, return the equivalent type that is definitely backed by the
 // simplest possible representation.
 Type asCanonical(Type type) {
-  if (!type.isBasic()) {
-    getTypeInfo(type)->getCanonical(type);
+  if (type.isBasic()) {
+    return type;
+  } else if (auto canon = getTypeInfo(type)->getCanonical()) {
+    return *canon;
+  } else {
+    return type;
   }
-  return type;
 }
 
 // Given a HeapType that may or may not be backed by the simplest possible
 // representation, return the equivalent type that is definitely backed by the
 // simplest possible representation.
 HeapType asCanonical(HeapType type) {
-  if (!type.isBasic()) {
-    getHeapTypeInfo(type)->getCanonical(type);
+  if (type.isBasic()) {
+    return type;
+  } else if (auto canon = getHeapTypeInfo(type)->getCanonical()) {
+    return *canon;
+  } else {
+    return type;
   }
-  return type;
 }
 
 TypeInfo::TypeInfo(const TypeInfo& other) {
@@ -515,15 +521,13 @@ TypeInfo::~TypeInfo() {
   WASM_UNREACHABLE("unexpected kind");
 }
 
-bool TypeInfo::getCanonical(Type& out) const {
+std::optional<Type> TypeInfo::getCanonical() const {
   if (isTuple()) {
     if (tuple.types.size() == 0) {
-      out = Type::none;
-      return true;
+      return Type::none;
     }
     if (tuple.types.size() == 1) {
-      out = tuple.types[0];
-      return true;
+      return tuple.types[0];
     }
   }
   if (isRef()) {
@@ -532,34 +536,28 @@ bool TypeInfo::getCanonical(Type& out) const {
       if (ref.nullable) {
         switch (basic.getBasic()) {
           case HeapType::func:
-            out = Type::funcref;
-            return true;
+            return Type::funcref;
           case HeapType::ext:
-            out = Type::externref;
-            return true;
+            return Type::externref;
           case HeapType::any:
-            out = Type::anyref;
-            return true;
+            return Type::anyref;
           case HeapType::eq:
-            out = Type::eqref;
-            return true;
+            return Type::eqref;
           case HeapType::i31:
           case HeapType::data:
             break;
         }
       } else {
         if (basic == HeapType::i31) {
-          out = Type::i31ref;
-          return true;
+          return Type::i31ref;
         }
         if (basic == HeapType::data) {
-          out = Type::dataref;
-          return true;
+          return Type::dataref;
         }
       }
     }
   }
-  return false;
+  return {};
 }
 
 bool TypeInfo::operator==(const TypeInfo& other) const {
@@ -616,12 +614,11 @@ HeapTypeInfo::~HeapTypeInfo() {
   WASM_UNREACHABLE("unexpected kind");
 }
 
-bool HeapTypeInfo::getCanonical(HeapType& out) const {
+std::optional<HeapType> HeapTypeInfo::getCanonical() const {
   if (isFinalized && kind == BasicKind) {
-    out = basic;
-    return true;
+    return basic;
   }
-  return false;
+  return {};
 }
 
 HeapTypeInfo& HeapTypeInfo::operator=(const HeapTypeInfo& other) {
@@ -674,19 +671,67 @@ template<typename Info> struct Store {
   bool isGlobalStore();
 #endif
 
-  typename Info::type_t insert(const Info& info);
-  typename Info::type_t insert(std::unique_ptr<Info>&& info);
+  typename Info::type_t insert(const Info& info) { return doInsert(info); }
+  typename Info::type_t insert(std::unique_ptr<Info>&& info) {
+    return doInsert(info);
+  }
   bool hasCanonical(const Info& info, typename Info::type_t& canonical);
 
 private:
-  TypeID doInsert(std::unique_ptr<Info>&& info);
+  template<typename Ref> typename Info::type_t doInsert(Ref& infoRef) {
+    const Info& info = [&]() {
+      if constexpr (std::is_same_v<Ref, const Info>) {
+        return infoRef;
+      } else if constexpr (std::is_same_v<Ref, std::unique_ptr<Info>>) {
+        infoRef->isTemp = false;
+        return *infoRef;
+      }
+    }();
+
+    auto getPtr = [&]() -> std::unique_ptr<Info> {
+      if constexpr (std::is_same_v<Ref, const Info>) {
+        return std::make_unique<Info>(infoRef);
+      } else if constexpr (std::is_same_v<Ref, std::unique_ptr<Info>>) {
+        return std::move(infoRef);
+      }
+    };
+
+    auto insertNew = [&]() {
+      assert((!isGlobalStore() || !info.isTemp) && "Leaking temporary type!");
+      auto ptr = getPtr();
+      TypeID id = uintptr_t(ptr.get());
+      assert(id > Info::type_t::_last_basic_type);
+      typeIDs.insert({*ptr, id});
+      constructedTypes.emplace_back(std::move(ptr));
+      return typename Info::type_t(id);
+    };
+
+    // Turn e.g. (ref null any) into anyref.
+    if (auto canonical = info.getCanonical()) {
+      return *canonical;
+    }
+    std::lock_guard<std::recursive_mutex> lock(mutex);
+    // Nominal HeapTypes are always unique, so don't bother deduplicating them.
+    if constexpr (std::is_same_v<Info, HeapTypeInfo>) {
+      if (info.isNominal || typeSystem == TypeSystem::Nominal) {
+        return insertNew();
+      }
+    }
+    // Check whether we already have a type for this structural Info.
+    auto indexIt = typeIDs.find(std::cref(info));
+    if (indexIt != typeIDs.end()) {
+      return typename Info::type_t(indexIt->second);
+    }
+    // We do not have a type for this Info already. Create one.
+    return insertNew();
+  }
 };
 
 using TypeStore = Store<TypeInfo>;
 using HeapTypeStore = Store<HeapTypeInfo>;
 
-TypeStore globalTypeStore;
-HeapTypeStore globalHeapTypeStore;
+static TypeStore globalTypeStore;
+static HeapTypeStore globalHeapTypeStore;
 
 // Specialized to simplify programming generically over Types and HeapTypes.
 template<typename T> struct MetaTypeInfo {};
@@ -711,64 +756,31 @@ template<typename Info> bool Store<Info>::isGlobalStore() {
 }
 #endif
 
-template<typename Info>
-typename Info::type_t Store<Info>::insert(const Info& info) {
-  typename Info::type_t canonical;
-  if (info.getCanonical(canonical)) {
-    return canonical;
-  }
-  std::lock_guard<std::recursive_mutex> lock(mutex);
-  // Only HeapTypes in Nominal mode should be unconditionally added. In all
-  // other cases, deduplicate with existing types.
-  if (std::is_same<Info, TypeInfo>::value ||
-      typeSystem == TypeSystem::Equirecursive) {
-    auto indexIt = typeIDs.find(std::cref(info));
-    if (indexIt != typeIDs.end()) {
-      return typename Info::type_t(indexIt->second);
+// Cache canonical nominal signature types. See comment in
+// `HeapType::HeapType(Signature)`.
+struct SignatureTypeCache {
+  std::unordered_map<Signature, HeapType> cache;
+  std::mutex mutex;
+
+  HeapType getType(Signature sig) {
+    std::lock_guard<std::mutex> lock(mutex);
+    // Try inserting a placeholder type, then replace it with a real type if we
+    // don't already have a canonical type for this signature.
+    auto [entry, inserted] = cache.insert({sig, {}});
+    auto& [_, type] = *entry;
+    if (inserted) {
+      type = globalHeapTypeStore.insert(sig);
     }
+    return type;
   }
-  return typename Info::type_t(doInsert(std::make_unique<Info>(info)));
-}
 
-template<typename Info>
-typename Info::type_t Store<Info>::insert(std::unique_ptr<Info>&& info) {
-  typename Info::type_t canonical;
-  if (info->getCanonical(canonical)) {
-    return canonical;
+  void insertType(HeapType type) {
+    std::lock_guard<std::mutex> lock(mutex);
+    cache.insert({type.getSignature(), type});
   }
-  std::lock_guard<std::recursive_mutex> lock(mutex);
-  // Only HeapTypes in Nominal mode should be unconditionally added. In all
-  // other cases, deduplicate with existing types.
-  if (std::is_same<Info, TypeInfo>::value ||
-      typeSystem == TypeSystem::Equirecursive) {
-    auto indexIt = typeIDs.find(std::cref(*info));
-    if (indexIt != typeIDs.end()) {
-      return typename Info::type_t(indexIt->second);
-    }
-  }
-  info->isTemp = false;
-  return typename Info::type_t(doInsert(std::move(info)));
-}
+};
 
-template<typename Info>
-bool Store<Info>::hasCanonical(const Info& info, typename Info::type_t& out) {
-  auto indexIt = typeIDs.find(std::cref(info));
-  if (indexIt != typeIDs.end()) {
-    out = typename Info::type_t(indexIt->second);
-    return true;
-  }
-  return false;
-}
-
-template<typename Info>
-TypeID Store<Info>::doInsert(std::unique_ptr<Info>&& info) {
-  assert((!isGlobalStore() || !info->isTemp) && "Leaking temporary type!");
-  TypeID id = uintptr_t(info.get());
-  assert(id > Info::type_t::_last_basic_type);
-  typeIDs.insert({*info, id});
-  constructedTypes.emplace_back(std::move(info));
-  return id;
-}
+static SignatureTypeCache nominalSignatureCache;
 
 } // anonymous namespace
 
@@ -1109,10 +1121,16 @@ const Type& Type::operator[](size_t index) const {
 HeapType::HeapType(Signature sig) {
   assert(!isTemp(sig.params) && "Leaking temporary type!");
   assert(!isTemp(sig.results) && "Leaking temporary type!");
-  HeapType canonical;
-  if (typeSystem == TypeSystem::Nominal &&
-      globalHeapTypeStore.hasCanonical(sig, canonical)) {
-    new (this) HeapType(canonical);
+  if (typeSystem == TypeSystem::Nominal) {
+    // Special case the creation of signature types in nominal mode to return a
+    // "canonical" type for the signature, which happens to be the first one
+    // created. We depend on being able to create new function signatures in
+    // many places, and historically they have always been structural, so
+    // creating a copy of an existing signature did not result in any code bloat
+    // or semantic changes. To avoid regressions or significant changes of
+    // behavior in nominal mode, we cache the canonical heap types for each
+    // signature to emulate structural behavior.
+    new (this) HeapType(nominalSignatureCache.getType(sig));
   } else {
     new (this) HeapType(globalHeapTypeStore.insert(sig));
   }
@@ -3245,15 +3263,24 @@ std::vector<HeapType> TypeBuilder::build() {
   }
 
   // Combine the basic types with the built types.
-  std::vector<HeapType> result(entryCount);
+  std::vector<HeapType> results(entryCount);
   for (size_t i = 0, builtIndex = 0; i < entryCount; ++i) {
     if (basicHeapTypes[i]) {
-      result[i] = *basicHeapTypes[i];
+      results[i] = *basicHeapTypes[i];
     } else {
-      result[i] = built[builtIndex++];
+      results[i] = built[builtIndex++];
     }
   }
-  return result;
+
+  // Note built signature types. See comment in `HeapType::HeapType(Signature)`.
+  for (auto type : results) {
+    if (type.isSignature() &&
+        (type.isNominal() || getTypeSystem() == TypeSystem::Nominal)) {
+      nominalSignatureCache.insertType(type);
+    }
+  }
+
+  return results;
 }
 
 } // namespace wasm
