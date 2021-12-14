@@ -67,6 +67,21 @@
 #include "wasm-traversal.h"
 #include "wasm.h"
 
+namespace std { // TODO: move to hash.h?
+
+// Hashing vectors can be useful
+template<typename T> struct hash<vector<T>> {
+  size_t operator()(const vector<T>& v) const {
+    auto digest = wasm::hash(v.size());
+    for (auto& x : v) {
+      wasm::rehash(digest, x);
+    }
+    return digest;
+  }
+};
+
+} // namespace std
+
 namespace wasm {
 
 namespace {
@@ -201,7 +216,8 @@ struct GVNAnalysis {
         } else {
           // For anything else, compute a value number from the children's
           // numbers plus the shallow contents of the expression.
-          auto& savedNumber = numbersMap[curr][childNumbers];
+          NumberVecMap& numbersMapEntry = numbersMap[curr];
+          Index& savedNumber = numbersMapEntry[childNumbers];
           if (savedNumber == 0) {
             // This is the first appearance.
             savedNumber = getNewNumber();
@@ -243,7 +259,7 @@ struct GVNAnalysis {
               number = paramNumbers[set->index];
             } else {
               number = numbering.getValue(
-                LiteralUtils::makeZero(func->getLocalType(set->index)));
+                LiteralUtils::makeZero(func->getLocalType(set->index), parent.wasm));
             }
           } else {
             // We must have seen the value already in our traversal.
@@ -259,17 +275,67 @@ struct GVNAnalysis {
   }
 };
 
-} // anonymous namespace
-
-struct GVN : public WalkerPass<GVN> {
+struct GVNPass : public WalkerPass<GVNPass> {
   bool isFunctionParallel() override { return true; }
 
   // FIXME DWARF updating does not handle local changes yet.
   bool invalidatesDWARF() override { return true; }
 
-  Pass* create() override { return new GVN(); }
+  Pass* create() override { return new GVNPass(); }
 
   void doWalkFunction(Function* func) {
+  }
+
+private:
+  // Only some values are relevant to be optimized.
+  bool isRelevant(Expression* curr) {
+    // * Ignore anything that is not a concrete type, as we are looking for
+    //   computed values to reuse, and so none and unreachable are irrelevant.
+    // * Ignore local.get and set, as those are the things we optimize to.
+    // * Ignore constants so that we don't undo the effects of constant
+    //   propagation.
+    // * Ignore things we cannot put in a local, as then we can't do this
+    //   optimization at all.
+    //
+    // More things matter here, like having side effects or not, but computing
+    // them is not cheap, so leave them for later, after we know if there
+    // actually are any requests for reuse of this value (which is rare).
+    if (!curr->type.isConcrete() || curr->is<LocalGet>() ||
+        curr->is<LocalSet>() || Properties::isConstantExpression(curr) ||
+        !TypeUpdating::canHandleAsLocal(curr->type)) {
+      return false;
+    }
+
+    auto& options = getPassOptions();
+
+    // If the size is at least 3, then if we have two of them we have 6,
+    // and so adding one set+one get and removing one of the items itself
+    // is not detrimental, and may be beneficial.
+    // TODO: investigate size 2
+    if (options.shrinkLevel > 0 && Measurer::measure(curr) >= 3) {
+      return true;
+    }
+
+    // If we focus on speed, any reduction in cost is beneficial, as the
+    // cost of a get is essentially free.
+    if (options.shrinkLevel == 0 && CostAnalyzer(curr).cost > 0) {
+      return true;
+    }
+
+    return false;
+  }
+};
+
+} // anonymous namespace
+
+Pass* createCSEPass() { return new GVNPass(); }
+
+} // namespace wasm
+
+#pragma GCC diagnostic pop
+
+
+/*
 
 #if 0
 std::cout << "func " << func->name << '\n';
@@ -614,50 +680,8 @@ std::cout << "  f\n";
     TypeUpdating::handleNonDefaultableLocals(func, *getModule());
 std::cout << "  g\n";
 #endif
-  }
 
-private:
-  // Only some values are relevant to be optimized.
-  bool isRelevant(Expression* curr) {
-    // * Ignore anything that is not a concrete type, as we are looking for
-    //   computed values to reuse, and so none and unreachable are irrelevant.
-    // * Ignore local.get and set, as those are the things we optimize to.
-    // * Ignore constants so that we don't undo the effects of constant
-    //   propagation.
-    // * Ignore things we cannot put in a local, as then we can't do this
-    //   optimization at all.
-    //
-    // More things matter here, like having side effects or not, but computing
-    // them is not cheap, so leave them for later, after we know if there
-    // actually are any requests for reuse of this value (which is rare).
-    if (!curr->type.isConcrete() || curr->is<LocalGet>() ||
-        curr->is<LocalSet>() || Properties::isConstantExpression(curr) ||
-        !TypeUpdating::canHandleAsLocal(curr->type)) {
-      return false;
-    }
 
-    auto& options = getPassOptions();
 
-    // If the size is at least 3, then if we have two of them we have 6,
-    // and so adding one set+one get and removing one of the items itself
-    // is not detrimental, and may be beneficial.
-    // TODO: investigate size 2
-    if (options.shrinkLevel > 0 && Measurer::measure(curr) >= 3) {
-      return true;
-    }
+*/
 
-    // If we focus on speed, any reduction in cost is beneficial, as the
-    // cost of a get is essentially free.
-    if (options.shrinkLevel == 0 && CostAnalyzer(curr).cost > 0) {
-      return true;
-    }
-
-    return false;
-  }
-};
-
-Pass* createCSEPass() { return new GVN(); }
-
-} // namespace wasm
-
-#pragma GCC diagnostic pop
