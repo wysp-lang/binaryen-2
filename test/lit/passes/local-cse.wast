@@ -883,9 +883,6 @@
   ;; NONLC:      (func $large-with-control-flow (param $x i32)
   ;; NONLC-NEXT:  (local $1 i32)
   ;; NONLC-NEXT:  (local $2 i32)
-  ;; NONLC-NEXT:  (local $3 i32)
-  ;; NONLC-NEXT:  (local $4 i32)
-  ;; NONLC-NEXT:  (local $5 i32)
   ;; NONLC-NEXT:  (drop
   ;; NONLC-NEXT:   (block $block (result i32)
   ;; NONLC-NEXT:    (drop
@@ -894,16 +891,10 @@
   ;; NONLC-NEXT:    (drop
   ;; NONLC-NEXT:     (local.tee $2
   ;; NONLC-NEXT:      (i32.eqz
-  ;; NONLC-NEXT:       (local.tee $3
+  ;; NONLC-NEXT:       (i32.eqz
   ;; NONLC-NEXT:        (i32.eqz
-  ;; NONLC-NEXT:         (local.tee $4
-  ;; NONLC-NEXT:          (i32.eqz
-  ;; NONLC-NEXT:           (local.tee $5
-  ;; NONLC-NEXT:            (i32.eqz
-  ;; NONLC-NEXT:             (i32.const 20)
-  ;; NONLC-NEXT:            )
-  ;; NONLC-NEXT:           )
-  ;; NONLC-NEXT:          )
+  ;; NONLC-NEXT:         (i32.eqz
+  ;; NONLC-NEXT:          (i32.const 20)
   ;; NONLC-NEXT:         )
   ;; NONLC-NEXT:        )
   ;; NONLC-NEXT:       )
@@ -945,6 +936,8 @@
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT: )
   (func $large-with-control-flow (param $x i32)
+    ;; This dropped block repeats twice. We do not CSE repeating blocks, but we
+    ;; will optimize their contents.
     (drop
       (block (result i32)
         (drop

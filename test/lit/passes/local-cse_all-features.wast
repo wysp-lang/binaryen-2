@@ -469,34 +469,22 @@
 
   ;; NONLC:      (func $div16_internal (param $0 i32) (param $1 i32) (result i32)
   ;; NONLC-NEXT:  (local $2 i32)
-  ;; NONLC-NEXT:  (local $3 i32)
-  ;; NONLC-NEXT:  (local $4 i32)
-  ;; NONLC-NEXT:  (local $5 i32)
-  ;; NONLC-NEXT:  (local $6 i32)
   ;; NONLC-NEXT:  (i32.add
   ;; NONLC-NEXT:   (local.tee $2
   ;; NONLC-NEXT:    (i32.xor
-  ;; NONLC-NEXT:     (local.tee $5
-  ;; NONLC-NEXT:      (i32.shr_s
-  ;; NONLC-NEXT:       (local.tee $6
-  ;; NONLC-NEXT:        (i32.shl
-  ;; NONLC-NEXT:         (local.get $0)
-  ;; NONLC-NEXT:         (i32.const 16)
-  ;; NONLC-NEXT:        )
-  ;; NONLC-NEXT:       )
+  ;; NONLC-NEXT:     (i32.shr_s
+  ;; NONLC-NEXT:      (i32.shl
+  ;; NONLC-NEXT:       (local.get $0)
   ;; NONLC-NEXT:       (i32.const 16)
   ;; NONLC-NEXT:      )
+  ;; NONLC-NEXT:      (i32.const 16)
   ;; NONLC-NEXT:     )
-  ;; NONLC-NEXT:     (local.tee $3
-  ;; NONLC-NEXT:      (i32.shr_s
-  ;; NONLC-NEXT:       (local.tee $4
-  ;; NONLC-NEXT:        (i32.shl
-  ;; NONLC-NEXT:         (local.get $1)
-  ;; NONLC-NEXT:         (i32.const 16)
-  ;; NONLC-NEXT:        )
-  ;; NONLC-NEXT:       )
+  ;; NONLC-NEXT:     (i32.shr_s
+  ;; NONLC-NEXT:      (i32.shl
+  ;; NONLC-NEXT:       (local.get $1)
   ;; NONLC-NEXT:       (i32.const 16)
   ;; NONLC-NEXT:      )
+  ;; NONLC-NEXT:      (i32.const 16)
   ;; NONLC-NEXT:     )
   ;; NONLC-NEXT:    )
   ;; NONLC-NEXT:   )

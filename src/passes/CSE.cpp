@@ -393,6 +393,12 @@ std::cout << "  continu1\n";
         continue;
       }
 
+      if (removed && !teeIndex) {
+        // There is no tee to add here, and we were removed, so there is nothing
+        // left to do.
+        continue;
+      }
+
       if (!isRelevant(expr)) {
         // If we continue without doing anything then we must not be in the case
         // of an item that has a tee planned for it but it was removed, as in
