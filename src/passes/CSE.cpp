@@ -184,9 +184,12 @@ struct GVNAnalysis {
         for (Index i = 0; i < func->getNumParams(); i++) {
           paramNumbers.push_back(getNewNumber());
         }
+
+        walk(func->body);
       }
 
       void visitExpression(Expression* curr) {
+//std::cout << "vE1\n";
         // Get the children's value numbers off the stack.
         auto numChildren = ChildIterator(curr).getNumChildren();
         ChildNumbers childNumbers;
@@ -195,18 +198,23 @@ struct GVNAnalysis {
           childNumbers[i] = numberStack.back();
           numberStack.pop_back();
         }
+//std::cout << "vE2\n";
 
         // Compute the number of this expression.
         Index number;
         if (!curr->type.isConcrete()) {
           number = getNewNumber();
         }
+//std::cout << "vE3\n";
         if (Properties::isShallowlyGenerative(curr, parent.wasm.features) ||
             Properties::isCall(curr)) {
+//std::cout << "vE3.1\n";
           number = getNewNumber();
         } else if (auto* get = curr->dynCast<LocalGet>()) {
+//std::cout << "vE3.2\n";
           number = getLocalGetNumber(get);
         } else if (auto* set = curr->dynCast<LocalSet>()) {
+//std::cout << "vE3.3\n";
           // We've handled non-concrete types before, leaving only tee to handle
           // here.
           assert(set->isTee());
@@ -214,6 +222,7 @@ struct GVNAnalysis {
           // A tee's value is simply that of its child.
           number = childNumbers[0];
         } else {
+//std::cout << "vE3.4\n";
           // For anything else, compute a value number from the children's
           // numbers plus the shallow contents of the expression.
           NumberVecMap& numbersMapEntry = numbersMap[curr];
@@ -224,19 +233,25 @@ struct GVNAnalysis {
           }
           number = savedNumber;
         }
+//std::cout << "vE4\n";
 
         // Now that we have computed the number of this expression, add it to
         // the data structures.
         numberStack.push_back(number);
 
+//std::cout << "vE5\n";
         if (parent.exprsForValue.size() <= number) {
           parent.exprsForValue.resize(number + 1);
         }
+//std::cout << "vE6\n";
         parent.exprsForValue[number].push_back(curr);
 
+//std::cout << "vE7\n";
         parent.exprInfos.push_back(ExprInfo{curr, getCurrentPointer(), number});
 
+//std::cout << "vE8\n";
         parent.exprNumbers[curr] = number; // TODO: needed beyond local.set?
+//std::cout << "vE9\n";
       }
 
       Index getNewNumber() {
@@ -246,20 +261,23 @@ struct GVNAnalysis {
       }
 
       Index getLocalGetNumber(LocalGet* get) {
+//std::cout << "gLGN1\n";
         Index number;
         auto& sets = localGraph.getSetses[get];
         if (sets.size() != 1) {
+//std::cout << "gLGN2\n";
           // TODO: we could do more here for merges
           number = getNewNumber();
         } else {
+//std::cout << "gLGN3\n";
           auto* set = *sets.begin();
           if (!set) {
             // This is a param or a null initializer value.
-            if (func->isParam(set->index)) {
-              number = paramNumbers[set->index];
+            if (func->isParam(get->index)) {
+              number = paramNumbers[get->index];
             } else {
               number = numbering.getValue(
-                LiteralUtils::makeZero(func->getLocalType(set->index), parent.wasm));
+                LiteralUtils::makeZero(func->getLocalType(get->index), parent.wasm));
             }
           } else {
             // We must have seen the value already in our traversal.
@@ -284,6 +302,7 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
   Pass* create() override { return new GVNPass(); }
 
   void doWalkFunction(Function* func) {
+    std::cout << "gvn!\n";
     GVNAnalysis gvn(func, *getModule());
     for (auto& info : gvn.exprInfos) {
       std::cout << "expr " << info.number << " for a " << getExpressionName(info.expr) << '\n';
@@ -342,18 +361,18 @@ Pass* createCSEPass() { return new GVNPass(); }
 /*
 
 #if 0
-std::cout << "func " << func->name << '\n';
+//std::cout << "func " << func->name << '\n';
     // First scan the code to find all the expressions and basic blocks. This
     // fills in |blocks| and starts to fill in |exprInfos|.
     WalkerPass<
       CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSEBasicBlockInfo>>::
       doWalkFunction(func);
-std::cout << "  a\n";
+//std::cout << "  a\n";
 
     Linearize linearize;
     linearize.walk(func->body);
     auto exprInfos = std::move(linearize.exprInfos);
-std::cout << "  b\n";
+//std::cout << "  b\n";
 
     // Do another pass to find repeated expressions. We are looking for complete
     // expressions, including children, that recur, and so it is efficient to do
@@ -484,7 +503,7 @@ if (effects.hasSideEffects() || // TODO: nonremovable?
     }
     // std::cout << "phase 2\n";
 
-std::cout << "  c\n";
+//std::cout << "  c\n";
 
     // We have filled in |exprInfos| with copy information, and we've found at
     // least one relevant copy. We can now apply those copies. We start at the
@@ -499,7 +518,7 @@ std::cout << "  c\n";
     // To see which copies can actually be optimized, we need to see that the
     // first dominates the second.
     cfg::DominationChecker<BasicBlock> dominationChecker(basicBlocks);
-std::cout << "  d\n";
+//std::cout << "  d\n";
 
     Builder builder(*module);
 
@@ -662,7 +681,7 @@ std::cout << "  d\n";
       return;
     }
 
-std::cout << "  e\n";
+//std::cout << "  e\n";
 
     Index z = 0;
     for (auto& info : exprInfos) {
@@ -678,11 +697,11 @@ std::cout << "  e\n";
       z++;
     }
 
-std::cout << "  f\n";
+//std::cout << "  f\n";
 
     // Fix up any nondefaultable locals that we've added.
     TypeUpdating::handleNonDefaultableLocals(func, *getModule());
-std::cout << "  g\n";
+//std::cout << "  g\n";
 #endif
 
 
