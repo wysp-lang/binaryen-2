@@ -421,7 +421,7 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       // Next, we need to find a previous expression that dominates us. Only
       // compute this information when it looks worthwhile.
       if (!dominationChecker) {
-        gvncfgWalker.walk(func->body);
+        gvncfgWalker.walkFunction(func);
         dominationChecker = std::make_unique<DominationChecker>(gvncfgWalker.basicBlocks);
       }
 
