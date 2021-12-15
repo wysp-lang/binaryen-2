@@ -1669,6 +1669,55 @@
       (br $loop)
     )
   )
+
+  (func $later-uses-not-dominating
+    ;; The value here appears twice lower down, and the later appearances do not
+    ;; dominate each other, so they will both get the value from the first
+    ;; appearance.    
+    (drop
+      (i32.add
+        (i32.const 0)
+        (i32.const 10)
+      )
+    )
+    (if
+      (i32.const 0)
+      (drop
+        (i32.add
+          (i32.const 0)
+          (i32.const 10)
+        )
+      )
+    )
+    (drop
+      (i32.add
+        (i32.const 0)
+        (i32.const 10)
+      )
+    )
+  )
+
+  (func $later-uses-dominating
+    ;; Dupe testcase of earlier?
+    (drop
+      (i32.add
+        (i32.const 0)
+        (i32.const 10)
+      )
+    )
+    (drop
+      (i32.add
+        (i32.const 0)
+        (i32.const 10)
+      )
+    )
+    (drop
+      (i32.add
+        (i32.const 0)
+        (i32.const 10)
+      )
+    )
+  )
 )
 
 (module
