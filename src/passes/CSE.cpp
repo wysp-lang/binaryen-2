@@ -332,12 +332,22 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
     auto numExprs = exprInfos.size();
 
     struct GVNCFGWalkerBasicBlockInfo {
+      std::vector<Expression*> list;
     };
-    struct GVNCFGWalker : public CFGWalker<GVNCFGWalker, GVNCFGWalkerBasicBlockInfo> {
-    } gvncfgWalker;
-    std::make_unique<GVNCFGWalker> dominationChecker;
 
-    Builder builder(*module);
+    struct GVNCFGWalker : public CFGWalker<GVNCFGWalker, UnifiedExpressionVisitor<GVNCFGWalker>, GVNCFGWalkerBasicBlockInfo> {
+      void visitExpression(Expression* curr) {
+        if (currBasicBlock) {
+          currBasicBlock->contents.list.push_back(curr);
+        }
+      }
+    } gvncfgWalker;
+
+    using DominationChecker = cfg::DominationChecker<GVNCFGWalker::BasicBlock>;
+
+    std::unique_ptr<DominationChecker> dominationChecker;
+
+    Builder builder(*getModule());
 
     // When we remove an expression, by replacing it with a local.get of the
     // source for it, we set |removed| to the number of children it has, so that
@@ -400,8 +410,8 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       //
       // TODO: handle side effects by emitting a sequence of a drop of the old
       //       expression and then a get?
-      EffectAnalyzer effects(passOptions, *module, expr);
-      if (effects.hasNonremovableEffects()) {
+      EffectAnalyzer effects(getPassOptions(), *getModule(), expr);
+      if (effects.hasUnremovableSideEffects()) {
         assert(!(removed && teeIndex)); // TODO: this one may fail, in the case that we have a nested tee already, say.
         continue;
       }
@@ -412,7 +422,7 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       // compute this information when it looks worthwhile.
       if (!dominationChecker) {
         gvncfgWalker.walk(func->body);
-        dominationChecker = std::make_unique<cfg::DominationChecker<GVNCFGWalkerBasicBlockInfo>>(gvncfgWalker.basicBlocks);
+        dominationChecker = std::make_unique<DominationChecker>(gvncfgWalker.basicBlocks);
       }
 
       // Mark us as a copy of the last possible source. That is the closest to
@@ -431,7 +441,7 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
           continue;
         }
 
-        if (!dominationChecker.dominates(possibleSource, expr)) {
+        if (!dominationChecker->dominates(possibleSource, expr)) {
           continue;
         }
 
@@ -448,8 +458,8 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
           // Also check for nesting here - we cannot use a source that is
           // nested inside us (let other opts handle that).
         }
-        if (!dominationChecker.dominatesWithoutInterference(
-              source, expr, effects, ignoreEffectsOf, *module, passOptions)) {
+        if (!dominationChecker->dominatesWithoutInterference(
+              source, expr, effects, ignoreEffectsOf, *getModule(), getPassOptions())) {
           // std::cout << "  pathey\n";
           continue;
         }
@@ -549,6 +559,8 @@ Pass* createCSEPass() { return new GVNPass(); }
 
 
 /*
+
+TODO TODO read old code and learn
 
 #if 0
 //std::cout << "func " << func->name << '\n';
