@@ -129,20 +129,19 @@
   ;; NONLC:      (type $ref?|$B|_ref|$A|_=>_none (func (param (ref null $B) (ref $A))))
 
   ;; NONLC:      (func $struct-gets-nullable (param $ref (ref null $A))
+  ;; NONLC-NEXT:  (local $1 i32)
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (struct.get $A 0
-  ;; NONLC-NEXT:    (local.get $ref)
+  ;; NONLC-NEXT:   (local.tee $1
+  ;; NONLC-NEXT:    (struct.get $A 0
+  ;; NONLC-NEXT:     (local.get $ref)
+  ;; NONLC-NEXT:    )
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (struct.get $A 0
-  ;; NONLC-NEXT:    (local.get $ref)
-  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (local.get $1)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (struct.get $A 0
-  ;; NONLC-NEXT:    (local.get $ref)
-  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (local.get $1)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT: )
   (func $struct-gets-nullable (param $ref (ref null $A))

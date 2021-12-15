@@ -412,15 +412,16 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   ;; NONLC:      (func $loads
+  ;; NONLC-NEXT:  (local $0 i32)
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (i32.load
-  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:   (local.tee $0
+  ;; NONLC-NEXT:    (i32.load
+  ;; NONLC-NEXT:     (i32.const 10)
+  ;; NONLC-NEXT:    )
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (i32.load
-  ;; NONLC-NEXT:    (i32.const 10)
-  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (local.get $0)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT: )
   (func $loads
@@ -594,17 +595,18 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   ;; NONLC:      (func $dominated (param $x i32)
+  ;; NONLC-NEXT:  (local $1 i32)
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (i32.load
-  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:   (local.tee $1
+  ;; NONLC-NEXT:    (i32.load
+  ;; NONLC-NEXT:     (i32.const 10)
+  ;; NONLC-NEXT:    )
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (if
   ;; NONLC-NEXT:   (local.get $x)
   ;; NONLC-NEXT:   (drop
-  ;; NONLC-NEXT:    (i32.load
-  ;; NONLC-NEXT:     (i32.const 10)
-  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:    (local.get $1)
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT: )
@@ -635,14 +637,15 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   ;; NONLC:      (func $dominated-if-condition
+  ;; NONLC-NEXT:  (local $0 i32)
   ;; NONLC-NEXT:  (if
-  ;; NONLC-NEXT:   (i32.load
-  ;; NONLC-NEXT:    (i32.const 10)
-  ;; NONLC-NEXT:   )
-  ;; NONLC-NEXT:   (drop
+  ;; NONLC-NEXT:   (local.tee $0
   ;; NONLC-NEXT:    (i32.load
   ;; NONLC-NEXT:     (i32.const 10)
   ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (drop
+  ;; NONLC-NEXT:    (local.get $0)
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT: )
@@ -750,16 +753,17 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   ;; NONLC:      (func $dominated-if-condition-later
+  ;; NONLC-NEXT:  (local $0 i32)
   ;; NONLC-NEXT:  (if
-  ;; NONLC-NEXT:   (i32.load
-  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:   (local.tee $0
+  ;; NONLC-NEXT:    (i32.load
+  ;; NONLC-NEXT:     (i32.const 10)
+  ;; NONLC-NEXT:    )
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:   (nop)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (i32.load
-  ;; NONLC-NEXT:    (i32.const 10)
-  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (local.get $0)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT: )
   (func $dominated-if-condition-later

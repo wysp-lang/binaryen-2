@@ -368,8 +368,6 @@ Index k = 0;
       auto* expr = exprInfo.expr;
       auto number = exprInfo.number;
 
-std::cout << "main gvn loop on " << expr << " index " << i << " with number " << number << " for a " << getExpressionName(expr) << ", removed: " << removed << '\n';
-
       std::optional<Index> teeIndex;
       auto teeIndexIter = teeIndexes.find(expr);
       if (teeIndexIter != teeIndexes.end()) {
@@ -384,13 +382,14 @@ std::cout << "main gvn loop on " << expr << " index " << i << " with number " <<
       // This expression should be at the end of the list of all expressions
       // with this number. We can remove it now as we move towards the front.
       auto& allExprsWithNumber = exprsForValue[number];
+std::cout << "main gvn loop on " << expr << " index " << i << " with number " << number << " for a " << getExpressionName(expr) << ", removed: " << removed << " and total with this num: " << allExprsWithNumber.size() << '\n';
       assert(!allExprsWithNumber.empty());
       assert(allExprsWithNumber.back() == expr);
       allExprsWithNumber.pop_back();
       if (allExprsWithNumber.empty()) {
         // Nothing else has this number.
         assert(!(removed && teeIndex));
-std::cout << "  continu2\n";
+std::cout << "  continu1\n";
         continue;
       }
 
@@ -405,7 +404,7 @@ std::cout << "  continu2\n";
         // down where we optimize, and then we'll just forward the tee to the
         // earlier source.
         assert(!(removed && teeIndex));
-std::cout << "  continu1\n";
+std::cout << "  continu2\n";
         continue;
       }
 
@@ -417,11 +416,6 @@ std::cout << "  continu1\n";
       // TODO: handle side effects by emitting a sequence of a drop of the old
       //       expression and then a get?
       EffectAnalyzer effects(getPassOptions(), *getModule(), expr);
-      if (effects.hasUnremovableSideEffects()) {
-        assert(!(removed && teeIndex)); // TODO: this one may fail, in the case that we have a nested tee already, say.
-std::cout << "  continu3\n";
-        continue;
-      }
 
       // We can ignore traps here, as we replace a repeating expression with a
       // single appearance of it, a store to a local, and gets in the other
@@ -431,6 +425,12 @@ std::cout << "  continu3\n";
       // determinism, will ensure that either all of the appearances trap, or
       // none of them.)
       effects.trap = false;
+
+      if (effects.hasUnremovableSideEffects()) {
+        assert(!(removed && teeIndex)); // TODO: this one may fail, in the case that we have a nested tee already, say.
+std::cout << "  continu3\n";
+        continue;
+      }
 
       // Next, we need to find a previous expression that dominates us. Only
       // compute this information when it looks worthwhile.
