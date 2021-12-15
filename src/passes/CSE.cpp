@@ -252,6 +252,7 @@ struct GVNAnalysis {
           parent.exprsForValue.resize(number + 1);
         }
 //std::cout << "vE6\n";
+std::cout << "push " << curr << " with number " << number << '\n';
         parent.exprsForValue[number].push_back(curr);
 
 //std::cout << "vE7\n";
@@ -312,11 +313,11 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
   Pass* create() override { return new GVNPass(); }
 
   void doWalkFunction(Function* func) {
-    std::cout << "gvn!\n";
+    std::cout << "\ngvn! " << func->name << "\n";
     GVNAnalysis gvn(func, *getModule());
 Index k = 0;
     for (auto& info : gvn.exprInfos) {
-      std::cout << "expr index " << k++ << " with number " << info.number << " for a " << getExpressionName(info.expr) << '\n';
+      std::cout << "expr " << info.expr << " index " << k++ << " with number " << info.number << " for a " << getExpressionName(info.expr) << '\n';
     }
 
     // Now that we have value numbers for all the expressions we can find things
@@ -367,7 +368,7 @@ Index k = 0;
       auto* expr = exprInfo.expr;
       auto number = exprInfo.number;
 
-std::cout << "main gvn loop on index " << i << " with number " << number << " for a " << getExpressionName(expr) << ", removed: " << removed << '\n';
+std::cout << "main gvn loop on " << expr << " index " << i << " with number " << number << " for a " << getExpressionName(expr) << ", removed: " << removed << '\n';
 
       std::optional<Index> teeIndex;
       auto teeIndexIter = teeIndexes.find(expr);
@@ -378,6 +379,19 @@ std::cout << "main gvn loop on index " << i << " with number " << number << " fo
         if (!removed) {
           *exprInfo.exprp = builder.makeLocalTee(*teeIndex, expr, expr->type);
         }
+      }
+
+      // This expression should be at the end of the list of all expressions
+      // with this number. We can remove it now as we move towards the front.
+      auto& allExprsWithNumber = exprsForValue[number];
+      assert(!allExprsWithNumber.empty());
+      assert(allExprsWithNumber.back() == expr);
+      allExprsWithNumber.pop_back();
+      if (allExprsWithNumber.empty()) {
+        // Nothing else has this number.
+        assert(!(removed && teeIndex));
+std::cout << "  continu2\n";
+        continue;
       }
 
       if (!isRelevant(expr)) {
@@ -392,19 +406,6 @@ std::cout << "main gvn loop on index " << i << " with number " << number << " fo
         // earlier source.
         assert(!(removed && teeIndex));
 std::cout << "  continu1\n";
-        continue;
-      }
-
-      // This expression should be at the end of the list of all expressions
-      // with this number. We can remove it now as we move towards the front.
-      auto& allExprsWithNumber = exprsForValue[number];
-      assert(!allExprsWithNumber.empty());
-      assert(allExprsWithNumber.back() == expr);
-      allExprsWithNumber.pop_back();
-      if (allExprsWithNumber.empty()) {
-        // Nothing else has this number.
-        assert(!(removed && teeIndex));
-std::cout << "  continu2\n";
         continue;
       }
 
