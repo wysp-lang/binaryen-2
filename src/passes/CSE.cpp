@@ -205,9 +205,16 @@ struct GVNAnalysis {
         Index number;
         if (!curr->type.isConcrete()) {
           number = getNewNumber();
+          // TODO: Use ImpossibleNumber, dont create a new one in cases like
+          //       this
+          // TODO: In the loop above, if one child has an ImpossibleNumber then
+          //       maybe that is enough to give up? impossible = "untrackable"
         }
+        // TODO: perhaps always ignore blocks here? That is, don't give them
+        //       useful numbers. yes, we do not want to hash blocks which can be
+        //       large and numerous
 //std::cout << "vE3\n";
-        if (Properties::isShallowlyGenerative(curr, parent.wasm.features) ||
+        else if (Properties::isShallowlyGenerative(curr, parent.wasm.features) ||
             Properties::isCall(curr)) {
 //std::cout << "vE3.1\n";
           number = getNewNumber();
@@ -332,19 +339,45 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
 
     Builder builder(*module);
 
+    // When we remove an expression, by replacing it with a local.get of the
+    // source for it, we set |removed| to the number of children it has, so that
+    // we skip them as we continue in the loop. Those children no longer exist
+    // and so there is no work to be done for them, at least not normally: the
+    // special case is where a child has a tee planned for it due to something
+    // we saw earlier. In that case we must handle things, see below.
+    Index removed = 0;
+
     for (auto i = int(numExprs) - 1; i >= 0; i--) {
+      if (removed) {
+        removed--;
+      }
+
       auto& exprInfo = exprInfos[i];
       auto* expr = exprInfo.expr;
       auto number = exprInfo.number;
 
+      std::optional<Index> teeIndex;
       auto teeIndexIter = teeIndexes.find(expr);
       if (teeIndexIter != teeIndexes.end()) {
+        teeIndex = teeIndexIter->second;
         // Something is using this as a source. Add a local.tee here of the
-        // proper index.
-        *exprInfo.exprp = builder.makeLocalTee(teeIndexIter->second, expr, expr->type);
+        // proper index, if we were not removed.
+        if (!removed) {
+          *exprInfo.exprp = builder.makeLocalTee(*teeIndex, expr, expr->type);
+        }
       }
 
       if (!isRelevant(expr)) {
+        // If we continue without doing anything then we must not be in the case
+        // of an item that has a tee planned for it but it was removed, as in
+        // that case we'd not be emitting a tee - which means the get of the tee
+        // would not get the value it expects. This case is logically impossible
+        // because if we were removed then we are nested in something that was
+        // found a previous value to optimize to, which means we also have a
+        // previous value to optimize to, and so we will get to the code lower
+        // down where we optimize, and then we'll just forward the tee to the
+        // earlier source.
+        assert(!(removed && teeIndex));
         continue;
       }
 
@@ -356,6 +389,7 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       allExprsWithNumber.pop_back();
       if (allExprsWithNumber.empty()) {
         // Nothing else has this number.
+        assert(!(removed && teeIndex));
         continue;
       }
 
@@ -363,8 +397,12 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       // to optimize. First, check if we have side effects we cannot remove, as
       // when we optimize we replace ourselves with a local.get which means
       // effects go away.
+      //
+      // TODO: handle side effects by emitting a sequence of a drop of the old
+      //       expression and then a get?
       EffectAnalyzer effects(passOptions, *module, expr);
       if (effects.hasNonremovableEffects()) {
+        assert(!(removed && teeIndex)); // TODO: this one may fail, in the case that we have a nested tee already, say.
         continue;
       }
 
@@ -420,43 +458,44 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
         break;
       }
       if (!source) {
-        // std::cout << "  no dom\n";
+        assert(!(removed && teeIndex));
         continue;
       }
 
       // Wonderful, we've found a source that dominates us and the path from it
       // to us is free from effects that could cause a problem. Optimize!
 
-      Index teeIndex;
-      if (teeIndexIter != teeIndexes.end()) {
-        // This was used by something as a source, which means we've put a tee
-        // on it. We can simply forward that tee to our source, which will then
-        // be a source both for us and our sub-source. That is valid as the
-        // single source dominates us, and we dominate the sub-source, and so
-        // forth.
-        teeIndex = teeIndexIter->second;
-      } else {
+      // IFFFFF update this texty This was used by something as a source, which means we've put a tee
+      // on it. We can simply forward that tee to our source, which will then
+      // be a source both for us and our sub-source. That is valid as the
+      // single source dominates us, and we dominate the sub-source, and so
+      // forth.
+      if (!teeIndex) {
         // Allocate a new tee index.
         teeIndex = builder.addVar(func, expr->type);
       }
 
-      *exprInfo.exprp = builder.makeLocalGet(teeIndex, expr->type);
+      // Mark the source as needing a tee
+      teeIndexes[source] = *teeIndex;
 
-      // Skip over our nested children.
-      Index numChildren = Measurer::measure(expr) - 1; // TODO: already computed befores
-      auto firstChildIndex = i - numChildren;
-      assert(firstChildIndex >= 0);
-      for (; i >= firstChildIndex; i--) {
-        auto teeIndexIter = teeIndexes.find(expr);
-        if (teeIndexIter != teeIndexes.end()) {
-          // We planned to put a tee on this child, but now it has been removed.
-          //  XXX move to main loop?
-        }
+      if (removed) {
+        // If we were removed then we have done all we need to do: we have
+        // forwarded the tee index from us to the new source, which is what the
+        // previous target needs. And since we were removed we do not exist and
+        // there is nothing to do for us.
+        continue;
       }
-      // We end the loop with i at the first thing before our children. That is
-      // where we want the loop to continue, so offset its i--.
-      assert(i == firstChildIndex - 1);
-      i++;
+
+      // Replace us with a get.
+      *exprInfo.exprp = builder.makeLocalGet(*teeIndex, expr->type);
+
+      // TODO: ensure testcase with if with heavy work in the armses.
+
+      // Note things so that we are aware that all our nested children have been
+      // removed. We set |removed| to one more than the number of children to
+      // skip as we immediately decrement |removed| at the top of the loop.
+      Index totalSize = Measurer::measure(expr); // TODO: already computed befores
+      removed = totalSize;
     }
   }
 
