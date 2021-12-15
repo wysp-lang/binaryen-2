@@ -113,12 +113,15 @@ template<typename BasicBlock> struct DominationChecker {
     const std::unordered_set<Expression*>& ignoreEffectsOf,
     Module& wasm,
     const PassOptions& passOptions) {
+std::cout << "     domwithoutInt1\n";
     if (x == y) {
       return true;
     }
-    if (!dominates(x, y)) {
+std::cout << "     domwithoutInt2\n";
+    if (!dominates(x, y)) { // TODO: change API to assume it dominates? Avoid dupe work
       return false;
     }
+std::cout << "     domwithoutInt3\n";
 
     // x dominates y, so what we have left to check is for effects along the
     // way.
@@ -161,16 +164,19 @@ template<typename BasicBlock> struct DominationChecker {
           hasInterference(blocks[yLocation.blockIndex]->contents.list,
                           0,
                           yLocation.positionIndex)) {
+std::cout << "     domwithoutInt4\n";
         return false;
       }
     } else {
       if (hasInterference(blocks[xLocation.blockIndex]->contents.list,
                           xLocation.positionIndex + 1,
                           yLocation.positionIndex)) {
+std::cout << "     domwithoutInt5\n";
         return false;
       }
       // We have no more blocks to scan, and have scanned the relevant parts
       // of the single block.
+std::cout << "     domwithoutInt6\n";
       return true;
     }
 
@@ -199,6 +205,7 @@ template<typename BasicBlock> struct DominationChecker {
       // it is correct to scan all of that block now, as it is inside a loop and
       // therefore all the block is on a path from x to y.)
       if (hasInterference(currBlock->contents.list, 0, Index(-1))) {
+std::cout << "     domwithoutInt7\n";
         return false;
       }
 
@@ -207,6 +214,7 @@ template<typename BasicBlock> struct DominationChecker {
       }
     }
 
+std::cout << "     domwithoutInt8\n";
     // We saw before that x dominates y, and we found no interference along the
     // way, so we succeeded in showing that x dominates y without interference.
     return true;

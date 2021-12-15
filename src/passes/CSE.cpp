@@ -314,8 +314,9 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
   void doWalkFunction(Function* func) {
     std::cout << "gvn!\n";
     GVNAnalysis gvn(func, *getModule());
+Index k = 0;
     for (auto& info : gvn.exprInfos) {
-      std::cout << "expr " << info.number << " for a " << getExpressionName(info.expr) << '\n';
+      std::cout << "expr index " << k++ << " with number " << info.number << " for a " << getExpressionName(info.expr) << '\n';
     }
 
     // Now that we have value numbers for all the expressions we can find things
@@ -366,6 +367,8 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       auto* expr = exprInfo.expr;
       auto number = exprInfo.number;
 
+std::cout << "main gvn loop on index " << i << " with number " << number << " for a " << getExpressionName(expr) << ", removed: " << removed << '\n';
+
       std::optional<Index> teeIndex;
       auto teeIndexIter = teeIndexes.find(expr);
       if (teeIndexIter != teeIndexes.end()) {
@@ -388,6 +391,7 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
         // down where we optimize, and then we'll just forward the tee to the
         // earlier source.
         assert(!(removed && teeIndex));
+std::cout << "  continu1\n";
         continue;
       }
 
@@ -400,6 +404,7 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       if (allExprsWithNumber.empty()) {
         // Nothing else has this number.
         assert(!(removed && teeIndex));
+std::cout << "  continu2\n";
         continue;
       }
 
@@ -413,6 +418,7 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       EffectAnalyzer effects(getPassOptions(), *getModule(), expr);
       if (effects.hasUnremovableSideEffects()) {
         assert(!(removed && teeIndex)); // TODO: this one may fail, in the case that we have a nested tee already, say.
+std::cout << "  continu3\n";
         continue;
       }
 
@@ -432,16 +438,20 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       // TODO: limit how much work we try here?
       for (int j = int(allExprsWithNumber.size()) - 1; j >= 0; j--) {
         auto* possibleSource = allExprsWithNumber[j];
+std::cout << "  consider source #" << j << " for target " << i << " which is " << getExpressionName(possibleSource) << "\n";
         if (possibleSource->type != expr->type) {
           // Perhaps it is a cast or such.
+std::cout << "    subcontinua\n";
           continue;
         }
 
         if (possibleSource->is<LocalGet>() || possibleSource->is<LocalSet>()) {
+std::cout << "    subcontinub\n";
           continue;
         }
 
         if (!dominationChecker->dominates(possibleSource, expr)) {
+std::cout << "    subcontinuc\n";
           continue;
         }
 
@@ -454,13 +464,14 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
         Index size = Measurer::measure(expr);
         std::unordered_set<Expression*> ignoreEffectsOf; // TODO do not recompute this
         for (Index j = 0; j < size; j++) {
-          ignoreEffectsOf.insert(exprInfos[j].expr);
+          ignoreEffectsOf.insert(exprInfos[i - j].expr);
           // Also check for nesting here - we cannot use a source that is
-          // nested inside us (let other opts handle that).
+          // nested inside us (let other opts handle that). FIXME TODO
         }
         if (!dominationChecker->dominatesWithoutInterference(
-              source, expr, effects, ignoreEffectsOf, *getModule(), getPassOptions())) {
+              possibleSource, expr, effects, ignoreEffectsOf, *getModule(), getPassOptions())) {
           // std::cout << "  pathey\n";
+std::cout << "    subcontinud\n";
           continue;
         }
 
@@ -469,6 +480,7 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       }
       if (!source) {
         assert(!(removed && teeIndex));
+std::cout << "  continu4\n";
         continue;
       }
 
@@ -493,6 +505,7 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
         // forwarded the tee index from us to the new source, which is what the
         // previous target needs. And since we were removed we do not exist and
         // there is nothing to do for us.
+std::cout << "  continu5, after forwarding of tee since we are removed\n";
         continue;
       }
 
@@ -506,6 +519,7 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       // skip as we immediately decrement |removed| at the top of the loop.
       Index totalSize = Measurer::measure(expr); // TODO: already computed befores
       removed = totalSize;
+std::cout << "  opted!\n";
     }
   }
 
