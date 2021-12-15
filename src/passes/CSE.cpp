@@ -332,7 +332,7 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
 
     Builder builder(*module);
 
-    for (auto i = int(numExprs) - 1; i >= 0; i++) {
+    for (auto i = int(numExprs) - 1; i >= 0; i--) {
       auto& exprInfo = exprInfos[i];
       auto* expr = exprInfo.expr;
       auto number = exprInfo.number;
@@ -404,7 +404,7 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
         // children, as dominationChecker is not aware of nesting (it just looks
         // shallowly).
         Index size = Measurer::measure(expr);
-        std::unordered_set<Expression*> ignoreEffectsOf;
+        std::unordered_set<Expression*> ignoreEffectsOf; // TODO do not recompute this
         for (Index j = 0; j < size; j++) {
           ignoreEffectsOf.insert(exprInfos[j].expr);
           // Also check for nesting here - we cannot use a source that is
@@ -442,12 +442,21 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
 
       *exprInfo.exprp = builder.makeLocalGet(teeIndex, expr->type);
 
-      // forward
-
-// XXX skip forward over the childrens. while doing so, more nesting fixes if they
-// were teed
-
-
+      // Skip over our nested children.
+      Index numChildren = Measurer::measure(expr) - 1; // TODO: already computed befores
+      auto firstChildIndex = i - numChildren;
+      assert(firstChildIndex >= 0);
+      for (; i >= firstChildIndex; i--) {
+        auto teeIndexIter = teeIndexes.find(expr);
+        if (teeIndexIter != teeIndexes.end()) {
+          // We planned to put a tee on this child, but now it has been removed.
+          //  XXX move to main loop?
+        }
+      }
+      // We end the loop with i at the first thing before our children. That is
+      // where we want the loop to continue, so offset its i--.
+      assert(i == firstChildIndex - 1);
+      i++;
     }
   }
 
