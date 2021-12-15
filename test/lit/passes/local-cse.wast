@@ -954,6 +954,9 @@
             )
           )
         )
+        ;; We could optimize ifs as well, but atm they do not show up in the
+        ;; contents of blocks in CFGWalker since they are control flow
+        ;; constructs.
         (if (result i32)
           (i32.add
             (i32.const 30)
