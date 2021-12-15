@@ -423,7 +423,14 @@ std::cout << "  continu3\n";
         continue;
       }
 
-      // TODO: drop a trap?
+      // We can ignore traps here, as we replace a repeating expression with a
+      // single appearance of it, a store to a local, and gets in the other
+      // locations, and so if the expression traps then the first appearance -
+      // that we keep around - would trap, and the others are never reached
+      // anyhow. (The other checks we perform here, including invalidation and
+      // determinism, will ensure that either all of the appearances trap, or
+      // none of them.)
+      effects.trap = false;
 
       // Next, we need to find a previous expression that dominates us. Only
       // compute this information when it looks worthwhile.

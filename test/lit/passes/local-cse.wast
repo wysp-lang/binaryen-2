@@ -86,7 +86,7 @@
   ;; NONLC-NEXT:  (local $2 i32)
   ;; NONLC-NEXT:  (local $3 i32)
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.tee $2
+  ;; NONLC-NEXT:   (local.tee $3
   ;; NONLC-NEXT:    (i32.add
   ;; NONLC-NEXT:     (i32.const 1)
   ;; NONLC-NEXT:     (i32.const 2)
@@ -94,17 +94,17 @@
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $2)
+  ;; NONLC-NEXT:   (local.get $3)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (if
   ;; NONLC-NEXT:   (i32.const 0)
   ;; NONLC-NEXT:   (nop)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $2)
+  ;; NONLC-NEXT:   (local.get $3)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.tee $3
+  ;; NONLC-NEXT:   (local.tee $2
   ;; NONLC-NEXT:    (i32.add
   ;; NONLC-NEXT:     (local.get $x)
   ;; NONLC-NEXT:     (local.get $y)
@@ -112,14 +112,14 @@
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $3)
+  ;; NONLC-NEXT:   (local.get $2)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $3)
+  ;; NONLC-NEXT:   (local.get $2)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (call $basics)
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $3)
+  ;; NONLC-NEXT:   (local.get $2)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (local.set $x
   ;; NONLC-NEXT:   (i32.const 100)
@@ -285,10 +285,10 @@
   ;; NONLC-NEXT:  (local $2 i32)
   ;; NONLC-NEXT:  (local $3 i32)
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.tee $3
+  ;; NONLC-NEXT:   (local.tee $2
   ;; NONLC-NEXT:    (i32.add
   ;; NONLC-NEXT:     (i32.const 1)
-  ;; NONLC-NEXT:     (local.tee $2
+  ;; NONLC-NEXT:     (local.tee $3
   ;; NONLC-NEXT:      (i32.add
   ;; NONLC-NEXT:       (i32.const 2)
   ;; NONLC-NEXT:       (i32.const 3)
@@ -298,10 +298,10 @@
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $2)
+  ;; NONLC-NEXT:   (local.get $3)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $3)
+  ;; NONLC-NEXT:   (local.get $2)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT: )
   (func $recursive2
@@ -412,16 +412,15 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   ;; NONLC:      (func $loads
-  ;; NONLC-NEXT:  (local $0 i32)
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.tee $0
-  ;; NONLC-NEXT:    (i32.load
-  ;; NONLC-NEXT:     (i32.const 10)
-  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   (i32.load
+  ;; NONLC-NEXT:    (i32.const 10)
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $0)
+  ;; NONLC-NEXT:   (i32.load
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT: )
   (func $loads
@@ -595,18 +594,17 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   ;; NONLC:      (func $dominated (param $x i32)
-  ;; NONLC-NEXT:  (local $1 i32)
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.tee $1
-  ;; NONLC-NEXT:    (i32.load
-  ;; NONLC-NEXT:     (i32.const 10)
-  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   (i32.load
+  ;; NONLC-NEXT:    (i32.const 10)
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (if
   ;; NONLC-NEXT:   (local.get $x)
   ;; NONLC-NEXT:   (drop
-  ;; NONLC-NEXT:    (local.get $1)
+  ;; NONLC-NEXT:    (i32.load
+  ;; NONLC-NEXT:     (i32.const 10)
+  ;; NONLC-NEXT:    )
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT: )
@@ -637,15 +635,14 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   ;; NONLC:      (func $dominated-if-condition
-  ;; NONLC-NEXT:  (local $0 i32)
   ;; NONLC-NEXT:  (if
-  ;; NONLC-NEXT:   (local.tee $0
+  ;; NONLC-NEXT:   (i32.load
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (drop
   ;; NONLC-NEXT:    (i32.load
   ;; NONLC-NEXT:     (i32.const 10)
   ;; NONLC-NEXT:    )
-  ;; NONLC-NEXT:   )
-  ;; NONLC-NEXT:   (drop
-  ;; NONLC-NEXT:    (local.get $0)
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT: )
@@ -753,17 +750,16 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   ;; NONLC:      (func $dominated-if-condition-later
-  ;; NONLC-NEXT:  (local $0 i32)
   ;; NONLC-NEXT:  (if
-  ;; NONLC-NEXT:   (local.tee $0
-  ;; NONLC-NEXT:    (i32.load
-  ;; NONLC-NEXT:     (i32.const 10)
-  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   (i32.load
+  ;; NONLC-NEXT:    (i32.const 10)
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:   (nop)
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $0)
+  ;; NONLC-NEXT:   (i32.load
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT: )
   (func $dominated-if-condition-later
@@ -882,39 +878,66 @@
   ;; CHECK-NEXT: )
   ;; NONLC:      (func $large-with-control-flow (param $x i32)
   ;; NONLC-NEXT:  (local $1 i32)
+  ;; NONLC-NEXT:  (local $2 i32)
+  ;; NONLC-NEXT:  (local $3 i32)
+  ;; NONLC-NEXT:  (local $4 i32)
+  ;; NONLC-NEXT:  (local $5 i32)
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.tee $1
-  ;; NONLC-NEXT:    (block $block (result i32)
-  ;; NONLC-NEXT:     (drop
-  ;; NONLC-NEXT:      (i32.const 10)
-  ;; NONLC-NEXT:     )
-  ;; NONLC-NEXT:     (drop
+  ;; NONLC-NEXT:   (block $block (result i32)
+  ;; NONLC-NEXT:    (drop
+  ;; NONLC-NEXT:     (i32.const 10)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:    (drop
+  ;; NONLC-NEXT:     (local.tee $2
   ;; NONLC-NEXT:      (i32.eqz
-  ;; NONLC-NEXT:       (i32.eqz
+  ;; NONLC-NEXT:       (local.tee $3
   ;; NONLC-NEXT:        (i32.eqz
-  ;; NONLC-NEXT:         (i32.eqz
-  ;; NONLC-NEXT:          (i32.const 20)
+  ;; NONLC-NEXT:         (local.tee $4
+  ;; NONLC-NEXT:          (i32.eqz
+  ;; NONLC-NEXT:           (local.tee $5
+  ;; NONLC-NEXT:            (i32.eqz
+  ;; NONLC-NEXT:             (i32.const 20)
+  ;; NONLC-NEXT:            )
+  ;; NONLC-NEXT:           )
+  ;; NONLC-NEXT:          )
   ;; NONLC-NEXT:         )
   ;; NONLC-NEXT:        )
   ;; NONLC-NEXT:       )
   ;; NONLC-NEXT:      )
   ;; NONLC-NEXT:     )
-  ;; NONLC-NEXT:     (if (result i32)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:    (if (result i32)
+  ;; NONLC-NEXT:     (local.tee $1
   ;; NONLC-NEXT:      (i32.add
   ;; NONLC-NEXT:       (i32.const 30)
   ;; NONLC-NEXT:       (i32.const 40)
   ;; NONLC-NEXT:      )
-  ;; NONLC-NEXT:      (i32.const 50)
-  ;; NONLC-NEXT:      (i32.sub
-  ;; NONLC-NEXT:       (local.get $x)
-  ;; NONLC-NEXT:       (i32.const 60)
-  ;; NONLC-NEXT:      )
+  ;; NONLC-NEXT:     )
+  ;; NONLC-NEXT:     (i32.const 50)
+  ;; NONLC-NEXT:     (i32.sub
+  ;; NONLC-NEXT:      (local.get $x)
+  ;; NONLC-NEXT:      (i32.const 60)
   ;; NONLC-NEXT:     )
   ;; NONLC-NEXT:    )
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $1)
+  ;; NONLC-NEXT:   (block $block0 (result i32)
+  ;; NONLC-NEXT:    (drop
+  ;; NONLC-NEXT:     (i32.const 10)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:    (drop
+  ;; NONLC-NEXT:     (local.get $2)
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:    (if (result i32)
+  ;; NONLC-NEXT:     (local.get $1)
+  ;; NONLC-NEXT:     (i32.const 50)
+  ;; NONLC-NEXT:     (i32.sub
+  ;; NONLC-NEXT:      (local.get $x)
+  ;; NONLC-NEXT:      (i32.const 60)
+  ;; NONLC-NEXT:     )
+  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT: )
   (func $large-with-control-flow (param $x i32)
@@ -1277,8 +1300,9 @@
   ;; NONLC:      (func $loop-conditional
   ;; NONLC-NEXT:  (local $x i32)
   ;; NONLC-NEXT:  (local $1 i32)
+  ;; NONLC-NEXT:  (local $2 i32)
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.tee $1
+  ;; NONLC-NEXT:   (local.tee $2
   ;; NONLC-NEXT:    (i32.add
   ;; NONLC-NEXT:     (i32.const 10)
   ;; NONLC-NEXT:     (local.get $x)
@@ -1289,7 +1313,7 @@
   ;; NONLC-NEXT:   (if
   ;; NONLC-NEXT:    (local.get $x)
   ;; NONLC-NEXT:    (drop
-  ;; NONLC-NEXT:     (local.get $1)
+  ;; NONLC-NEXT:     (local.get $2)
   ;; NONLC-NEXT:    )
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:   (br_if $loop
@@ -1360,6 +1384,7 @@
   ;; NONLC:      (func $loop-conditional-unreachable
   ;; NONLC-NEXT:  (local $x i32)
   ;; NONLC-NEXT:  (local $1 i32)
+  ;; NONLC-NEXT:  (local $2 i32)
   ;; NONLC-NEXT:  (drop
   ;; NONLC-NEXT:   (local.tee $1
   ;; NONLC-NEXT:    (i32.add
@@ -1375,7 +1400,7 @@
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:   (block $block
   ;; NONLC-NEXT:    (drop
-  ;; NONLC-NEXT:     (local.get $1)
+  ;; NONLC-NEXT:     (local.get $2)
   ;; NONLC-NEXT:    )
   ;; NONLC-NEXT:    (unreachable)
   ;; NONLC-NEXT:   )
@@ -1453,8 +1478,9 @@
   ;; NONLC:      (func $loop-conditional-unreachable-2
   ;; NONLC-NEXT:  (local $x i32)
   ;; NONLC-NEXT:  (local $1 i32)
+  ;; NONLC-NEXT:  (local $2 i32)
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.tee $1
+  ;; NONLC-NEXT:   (local.tee $2
   ;; NONLC-NEXT:    (i32.add
   ;; NONLC-NEXT:     (i32.const 10)
   ;; NONLC-NEXT:     (local.get $x)
@@ -1464,7 +1490,7 @@
   ;; NONLC-NEXT:  (if
   ;; NONLC-NEXT:   (i32.const 20)
   ;; NONLC-NEXT:   (drop
-  ;; NONLC-NEXT:    (local.get $1)
+  ;; NONLC-NEXT:    (local.get $2)
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:   (drop
   ;; NONLC-NEXT:    (local.get $1)
