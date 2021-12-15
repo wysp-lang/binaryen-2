@@ -1175,6 +1175,11 @@ opt_choices = [
 ]
 
 
+opt_choices = [
+    ["--cse"],
+]
+
+
 def randomize_opt_flags():
     flag_groups = []
     has_flatten = False
