@@ -252,7 +252,7 @@ struct GVNAnalysis {
           parent.exprsForValue.resize(number + 1);
         }
 //std::cout << "vE6\n";
-std::cout << "push " << curr << " with number " << number << '\n';
+//std::cout << "push " << curr << " with number " << number << '\n';
         parent.exprsForValue[number].push_back(curr);
 
 //std::cout << "vE7\n";
@@ -289,13 +289,19 @@ std::cout << "push " << curr << " with number " << number << '\n';
                 LiteralUtils::makeZero(func->getLocalType(get->index), parent.wasm));
             }
           } else {
-            // We must have seen the value already in our traversal.
             auto* value = set->value;
-            assert(parent.exprNumbers.count(value));
-            number = parent.exprNumbers[value];
+            if (!parent.exprNumbers.count(value)) {
+              // We have not seen the single set before the get. That can only
+              // happen in unreachable code, say if we are in a loop that is
+              // unreachable, and a get appears before a set of that local. Just
+              // return a new number here; do not try to optimize unreachable
+              // code.
+              number = getNewNumber();
+            } else {
+              number = parent.exprNumbers[value];
+            }
           }
         }
-        parent.exprNumbers[get] = number;
         return number;
       }
     } computer(*this, func);
@@ -313,12 +319,12 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
   Pass* create() override { return new GVNPass(); }
 
   void doWalkFunction(Function* func) {
-    std::cout << "\ngvn! " << func->name << "\n";
+//std::cout << "\ngvn! " << func->name << "\n";
     GVNAnalysis gvn(func, *getModule());
-Index k = 0;
-    for (auto& info : gvn.exprInfos) {
-      std::cout << "expr " << info.expr << " index " << k++ << " with number " << info.number << " for a " << getExpressionName(info.expr) << '\n';
-    }
+//Index k = 0;
+//    for (auto& info : gvn.exprInfos) {
+//std::cout << "expr " << info.expr << " index " << k++ << " with number " << info.number << " for a " << getExpressionName(info.expr) << '\n';
+//    }
 
     // Now that we have value numbers for all the expressions we can find things
     // to optimize. Traverse from the back
@@ -382,14 +388,14 @@ Index k = 0;
       // This expression should be at the end of the list of all expressions
       // with this number. We can remove it now as we move towards the front.
       auto& allExprsWithNumber = exprsForValue[number];
-std::cout << "main gvn loop on " << expr << " index " << i << " with number " << number << " for a " << getExpressionName(expr) << ", removed: " << removed << " and total with this num: " << allExprsWithNumber.size() << '\n';
+//std::cout << "main gvn loop on " << expr << " index " << i << " with number " << number << " for a " << getExpressionName(expr) << ", removed: " << removed << " and total with this num: " << allExprsWithNumber.size() << '\n';
       assert(!allExprsWithNumber.empty());
       assert(allExprsWithNumber.back() == expr);
       allExprsWithNumber.pop_back();
       if (allExprsWithNumber.empty()) {
         // Nothing else has this number.
         assert(!(removed && teeIndex));
-std::cout << "  continu1\n";
+//std::cout << "  continu1\n";
         continue;
       }
 
@@ -410,7 +416,7 @@ std::cout << "  continu1\n";
         // down where we optimize, and then we'll just forward the tee to the
         // earlier source.
         assert(!(removed && teeIndex));
-std::cout << "  continu2\n";
+//std::cout << "  continu2\n";
         continue;
       }
 
@@ -434,7 +440,7 @@ std::cout << "  continu2\n";
 
       if (effects.hasUnremovableSideEffects()) {
         assert(!(removed && teeIndex)); // TODO: this one may fail, in the case that we have a nested tee already, say.
-std::cout << "  continu3\n";
+//std::cout << "  continu3\n";
         continue;
       }
 
@@ -452,20 +458,20 @@ std::cout << "  continu3\n";
       // TODO: limit how much work we try here?
       for (int j = int(allExprsWithNumber.size()) - 1; j >= 0; j--) {
         auto* possibleSource = allExprsWithNumber[j];
-std::cout << "  consider source #" << j << " for target " << i << " which is " << getExpressionName(possibleSource) << "\n";
+//std::cout << "  consider source #" << j << " for target " << i << " which is " << getExpressionName(possibleSource) << "\n";
         if (possibleSource->type != expr->type) {
           // Perhaps it is a cast or such.
-std::cout << "    subcontinua\n";
+//std::cout << "    subcontinua\n";
           continue;
         }
 
         if (possibleSource->is<LocalGet>() || possibleSource->is<LocalSet>()) {
-std::cout << "    subcontinub\n";
+//std::cout << "    subcontinub\n";
           continue;
         }
 
         if (!dominationChecker->dominates(possibleSource, expr)) {
-std::cout << "    subcontinuc\n";
+//std::cout << "    subcontinuc\n";
           continue;
         }
 
@@ -485,7 +491,7 @@ std::cout << "    subcontinuc\n";
         if (!dominationChecker->dominatesWithoutInterference(
               possibleSource, expr, effects, ignoreEffectsOf, *getModule(), getPassOptions())) {
           // std::cout << "  pathey\n";
-std::cout << "    subcontinud\n";
+//std::cout << "    subcontinud\n";
           continue;
         }
 
@@ -494,7 +500,7 @@ std::cout << "    subcontinud\n";
       }
       if (!source) {
         assert(!(removed && teeIndex));
-std::cout << "  continu4\n";
+//std::cout << "  continu4\n";
         continue;
       }
 
@@ -519,7 +525,7 @@ std::cout << "  continu4\n";
         // forwarded the tee index from us to the new source, which is what the
         // previous target needs. And since we were removed we do not exist and
         // there is nothing to do for us.
-std::cout << "  continu5, after forwarding of tee since we are removed\n";
+//std::cout << "  continu5, after forwarding of tee since we are removed\n";
         continue;
       }
 
@@ -533,7 +539,7 @@ std::cout << "  continu5, after forwarding of tee since we are removed\n";
       // skip as we immediately decrement |removed| at the top of the loop.
       Index totalSize = Measurer::measure(expr); // TODO: already computed befores
       removed = totalSize;
-std::cout << "  opted!\n";
+//std::cout << "  opted!\n";
     }
 
     // Fix up any nondefaultable locals that we've added.

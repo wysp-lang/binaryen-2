@@ -1625,6 +1625,50 @@
       )
     )
   )
+
+  ;; CHECK:      (func $unreachable-single-set-for-get
+  ;; CHECK-NEXT:  (local $0 i32)
+  ;; CHECK-NEXT:  (unreachable)
+  ;; CHECK-NEXT:  (loop $loop
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (local.get $0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $0
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (br $loop)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; NONLC:      (func $unreachable-single-set-for-get
+  ;; NONLC-NEXT:  (local $0 i32)
+  ;; NONLC-NEXT:  (unreachable)
+  ;; NONLC-NEXT:  (loop $loop
+  ;; NONLC-NEXT:   (drop
+  ;; NONLC-NEXT:    (local.get $0)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (local.set $0
+  ;; NONLC-NEXT:    (i32.const 10)
+  ;; NONLC-NEXT:   )
+  ;; NONLC-NEXT:   (br $loop)
+  ;; NONLC-NEXT:  )
+  ;; NONLC-NEXT: )
+  (func $unreachable-single-set-for-get
+    (local $0 i32)
+    (unreachable)
+    (loop $loop
+      ;; This local.get is in unreachable code (due to the unreachable before
+      ;; us), and its single set appears after it. This is a case where there is
+      ;; a single set for a get but that set does not appear before the get in
+      ;; post-order walking, which we should not assume.
+      (drop
+        (local.get $0)
+      )
+      (local.set $0
+        (i32.const 10)
+      )
+      (br $loop)
+    )
+  )
 )
 
 (module
