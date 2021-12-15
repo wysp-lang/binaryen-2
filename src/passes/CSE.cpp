@@ -284,6 +284,10 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
   Pass* create() override { return new GVNPass(); }
 
   void doWalkFunction(Function* func) {
+    GVNAnalysis gvn(func, *getModule());
+    for (auto& info : gvn.exprInfos) {
+      std::cout << "expr " << info.number << " for a " << getExpressionName(info.expr) << '\n';
+    }
   }
 
 private:
