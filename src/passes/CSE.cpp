@@ -190,7 +190,7 @@ struct GVNAnalysis {
       }
 
       void visitExpression(Expression* curr) {
-//std::cout << "vE1\n";
+std::cout << "vE1\n";
         // Get the children's value numbers off the stack.
         auto numChildren = ChildIterator(curr).getNumChildren();
         ChildNumbers childNumbers;
@@ -199,7 +199,7 @@ struct GVNAnalysis {
           childNumbers[i] = numberStack.back();
           numberStack.pop_back();
         }
-//std::cout << "vE2\n";
+std::cout << "vE2\n";
 
         // Compute the number of this expression.
         Index number;
@@ -209,20 +209,20 @@ struct GVNAnalysis {
           //       this
           // TODO: In the loop above, if one child has an ImpossibleNumber then
           //       maybe that is enough to give up? impossible = "untrackable"
+std::cout << "vE3.0\n";
         }
         // TODO: perhaps always ignore blocks here? That is, don't give them
         //       useful numbers. yes, we do not want to hash blocks which can be
         //       large and numerous
-//std::cout << "vE3\n";
         else if (Properties::isShallowlyGenerative(curr, parent.wasm.features) ||
             Properties::isCall(curr)) {
-//std::cout << "vE3.1\n";
+std::cout << "vE3.1\n";
           number = getNewNumber();
         } else if (auto* get = curr->dynCast<LocalGet>()) {
-//std::cout << "vE3.2\n";
+std::cout << "vE3.2\n";
           number = getLocalGetNumber(get);
         } else if (auto* set = curr->dynCast<LocalSet>()) {
-//std::cout << "vE3.3\n";
+std::cout << "vE3.3\n";
           // We've handled non-concrete types before, leaving only tee to handle
           // here.
           assert(set->isTee());
@@ -230,7 +230,7 @@ struct GVNAnalysis {
           // A tee's value is simply that of its child.
           number = childNumbers[0];
         } else {
-//std::cout << "vE3.4\n";
+std::cout << "vE3.4\n";
           // For anything else, compute a value number from the children's
           // numbers plus the shallow contents of the expression.
           NumberVecMap& numbersMapEntry = numbersMap[curr];
@@ -241,26 +241,26 @@ struct GVNAnalysis {
           }
           number = savedNumber;
         }
-//std::cout << "vE4\n";
+std::cout << "vE4\n";
 
         // Now that we have computed the number of this expression, add it to
         // the data structures.
         numberStack.push_back(number);
 
-//std::cout << "vE5\n";
+std::cout << "vE5\n";
         if (parent.exprsForValue.size() <= number) {
           parent.exprsForValue.resize(number + 1);
         }
-//std::cout << "vE6\n";
-//std::cout << "push " << curr << " with number " << number << '\n';
+std::cout << "vE6\n";
+std::cout << "push " << curr << " with number " << number << '\n';
         parent.exprsForValue[number].push_back(curr);
 
-//std::cout << "vE7\n";
+std::cout << "vE7\n";
         parent.exprInfos.push_back(ExprInfo{curr, getCurrentPointer(), number});
 
-//std::cout << "vE8\n";
+std::cout << "vE8\n";
         parent.exprNumbers[curr] = number; // TODO: needed beyond local.set?
-//std::cout << "vE9\n";
+std::cout << "vE9\n";
       }
 
       Index getNewNumber() {
@@ -270,15 +270,15 @@ struct GVNAnalysis {
       }
 
       Index getLocalGetNumber(LocalGet* get) {
-//std::cout << "gLGN1\n";
+std::cout << "gLGN1\n";
         Index number;
         auto& sets = localGraph.getSetses[get];
         if (sets.size() != 1) {
-//std::cout << "gLGN2\n";
+std::cout << "gLGN2\n";
           // TODO: we could do more here for merges
           number = getNewNumber();
         } else {
-//std::cout << "gLGN3\n";
+std::cout << "gLGN3\n";
           auto* set = *sets.begin();
           if (!set) {
             // This is a param or a null initializer value.
@@ -319,12 +319,12 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
   Pass* create() override { return new GVNPass(); }
 
   void doWalkFunction(Function* func) {
-//std::cout << "\ngvn! " << func->name << "\n";
+std::cout << "\ngvn! " << func->name << "\n";
     GVNAnalysis gvn(func, *getModule());
-//Index k = 0;
-//    for (auto& info : gvn.exprInfos) {
-//std::cout << "expr " << info.expr << " index " << k++ << " with number " << info.number << " for a " << getExpressionName(info.expr) << '\n';
-//    }
+Index k = 0;
+    for (auto& info : gvn.exprInfos) {
+std::cout << "expr " << info.expr << " index " << k++ << " with number " << info.number << " for a " << getExpressionName(info.expr) << '\n';
+    }
 
     // Now that we have value numbers for all the expressions we can find things
     // to optimize. Traverse from the back
@@ -388,14 +388,14 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       // This expression should be at the end of the list of all expressions
       // with this number. We can remove it now as we move towards the front.
       auto& allExprsWithNumber = exprsForValue[number];
-//std::cout << "main gvn loop on " << expr << " index " << i << " with number " << number << " for a " << getExpressionName(expr) << ", removed: " << removed << " and total with this num: " << allExprsWithNumber.size() << '\n';
+std::cout << "main gvn loop on " << expr << " index " << i << " with number " << number << " for a " << getExpressionName(expr) << ", removed: " << removed << " and total with this num: " << allExprsWithNumber.size() << '\n';
       assert(!allExprsWithNumber.empty());
       assert(allExprsWithNumber.back() == expr);
       allExprsWithNumber.pop_back();
       if (allExprsWithNumber.empty()) {
         // Nothing else has this number.
         assert(!(removed && teeIndex));
-//std::cout << "  continu1\n";
+std::cout << "  continu1\n";
         continue;
       }
 
@@ -416,7 +416,7 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
         // down where we optimize, and then we'll just forward the tee to the
         // earlier source.
         assert(!(removed && teeIndex));
-//std::cout << "  continu2\n";
+std::cout << "  continu2\n";
         continue;
       }
 
@@ -440,7 +440,7 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
 
       if (effects.hasUnremovableSideEffects()) {
         assert(!(removed && teeIndex)); // TODO: this one may fail, in the case that we have a nested tee already, say.
-//std::cout << "  continu3\n";
+std::cout << "  continu3\n";
         continue;
       }
 
@@ -458,20 +458,20 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       // TODO: limit how much work we try here?
       for (int j = int(allExprsWithNumber.size()) - 1; j >= 0; j--) {
         auto* possibleSource = allExprsWithNumber[j];
-//std::cout << "  consider source #" << j << " for target " << i << " which is " << getExpressionName(possibleSource) << "\n";
+std::cout << "  consider source #" << j << " (" << possibleSource << ") for target " << i << " which is " << getExpressionName(possibleSource) << "\n";
         if (possibleSource->type != expr->type) {
           // Perhaps it is a cast or such.
-//std::cout << "    subcontinua\n";
+std::cout << "    subcontinua\n";
           continue;
         }
 
         if (possibleSource->is<LocalGet>() || possibleSource->is<LocalSet>()) {
-//std::cout << "    subcontinub\n";
+std::cout << "    subcontinub\n";
           continue;
         }
 
         if (!dominationChecker->dominates(possibleSource, expr)) {
-//std::cout << "    subcontinuc\n";
+std::cout << "    subcontinuc\n";
           continue;
         }
 
@@ -491,7 +491,7 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
         if (!dominationChecker->dominatesWithoutInterference(
               possibleSource, expr, effects, ignoreEffectsOf, *getModule(), getPassOptions())) {
           // std::cout << "  pathey\n";
-//std::cout << "    subcontinud\n";
+std::cout << "    subcontinud\n";
           continue;
         }
 
@@ -500,7 +500,7 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       }
       if (!source) {
         assert(!(removed && teeIndex));
-//std::cout << "  continu4\n";
+std::cout << "  continu4\n";
         continue;
       }
 
@@ -513,19 +513,29 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       // single source dominates us, and we dominate the sub-source, and so
       // forth.
       if (!teeIndex) {
-        // Allocate a new tee index.
-        teeIndex = builder.addVar(func, expr->type);
+        // The source may already have a tee planned for it, if another target
+        // using that source was already optimized.
+        auto iter = teeIndexes.find(source);
+        if (iter == teeIndexes.end()) {
+          // Allocate a new tee index.
+          teeIndex = builder.addVar(func, expr->type);
+          teeIndexes[source] = *teeIndex;
+std::cout << "new tee index " << *teeIndex << '\n';
+        }
+      } else {
+        // We have a tee index. If our source *also* has one, then we have a
+        // problem: we've got more than one tee index to apply, and gets using
+        // each of them. Otherwise just forward our tee to the source.
+        assert(!teeIndexes.count(source));
+        teeIndexes[source] = *teeIndex;
       }
-
-      // Mark the source as needing a tee
-      teeIndexes[source] = *teeIndex;
 
       if (removed) {
         // If we were removed then we have done all we need to do: we have
         // forwarded the tee index from us to the new source, which is what the
         // previous target needs. And since we were removed we do not exist and
         // there is nothing to do for us.
-//std::cout << "  continu5, after forwarding of tee since we are removed\n";
+std::cout << "  continu5, after forwarding of tee since we are removed\n";
         continue;
       }
 
@@ -539,7 +549,7 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       // skip as we immediately decrement |removed| at the top of the loop.
       Index totalSize = Measurer::measure(expr); // TODO: already computed befores
       removed = totalSize;
-//std::cout << "  opted!\n";
+std::cout << "  opted!\n";
     }
 
     // Fix up any nondefaultable locals that we've added.
@@ -601,18 +611,18 @@ Pass* createCSEPass() { return new GVNPass(); }
 TODO TODO read old code and learn
 
 #if 0
-//std::cout << "func " << func->name << '\n';
+std::cout << "func " << func->name << '\n';
     // First scan the code to find all the expressions and basic blocks. This
     // fills in |blocks| and starts to fill in |exprInfos|.
     WalkerPass<
       CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSEBasicBlockInfo>>::
       doWalkFunction(func);
-//std::cout << "  a\n";
+std::cout << "  a\n";
 
     Linearize linearize;
     linearize.walk(func->body);
     auto exprInfos = std::move(linearize.exprInfos);
-//std::cout << "  b\n";
+std::cout << "  b\n";
 
     // Do another pass to find repeated expressions. We are looking for complete
     // expressions, including children, that recur, and so it is efficient to do
@@ -743,7 +753,7 @@ if (effects.hasSideEffects() || // TODO: nonremovable?
     }
     // std::cout << "phase 2\n";
 
-//std::cout << "  c\n";
+std::cout << "  c\n";
 
     // We have filled in |exprInfos| with copy information, and we've found at
     // least one relevant copy. We can now apply those copies. We start at the
@@ -758,7 +768,7 @@ if (effects.hasSideEffects() || // TODO: nonremovable?
     // To see which copies can actually be optimized, we need to see that the
     // first dominates the second.
     cfg::DominationChecker<BasicBlock> dominationChecker(basicBlocks);
-//std::cout << "  d\n";
+std::cout << "  d\n";
 
     Builder builder(*module);
 
@@ -921,7 +931,7 @@ if (effects.hasSideEffects() || // TODO: nonremovable?
       return;
     }
 
-//std::cout << "  e\n";
+std::cout << "  e\n";
 
     Index z = 0;
     for (auto& info : exprInfos) {
@@ -937,11 +947,11 @@ if (effects.hasSideEffects() || // TODO: nonremovable?
       z++;
     }
 
-//std::cout << "  f\n";
+std::cout << "  f\n";
 
     // Fix up any nondefaultable locals that we've added.
     TypeUpdating::handleNonDefaultableLocals(func, *getModule());
-//std::cout << "  g\n";
+std::cout << "  g\n";
 #endif
 
 
