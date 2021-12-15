@@ -317,15 +317,12 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
     auto& exprInfos = gvn.exprInfos;
     auto& exprsForValue = gvn.exprsForValue;
 
-    struct ActionInfo {
-      Index teeIndex = NullIndex;
+    // Contains expressions whose value we are saving to be used in a local.get
+    // later. This maps each such expression to the index of the local we
+    // allocated for it.
+    std::unordered_map<Expression*, Index> teeIndexes;
 
-      // The gets of the tee.
-      std::vector<LocalGet*> gets;
-    };
-    std::vector<ActionInfo> actionInfos;
     auto numExprs = exprInfos.size();
-    actionInfos.resize(numExprs);
 
     struct GVNCFGWalkerBasicBlockInfo {
     };
@@ -333,10 +330,19 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
     } gvncfgWalker;
     std::make_unique<GVNCFGWalker> dominationChecker;
 
+    Builder builder(*module);
+
     for (auto i = int(numExprs) - 1; i >= 0; i++) {
       auto& exprInfo = exprInfos[i];
       auto* expr = exprInfo.expr;
       auto number = exprInfo.number;
+
+      auto teeIndexIter = teeIndexes.find(expr);
+      if (teeIndexIter != teeIndexes.end()) {
+        // Something is using this as a source. Add a local.tee here of the
+        // proper index.
+        *exprInfo.exprp = builder.makeLocalTee(teeIndexIter->second, expr, expr->type);
+      }
 
       if (!isRelevant(expr)) {
         continue;
@@ -421,10 +427,25 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       // Wonderful, we've found a source that dominates us and the path from it
       // to us is free from effects that could cause a problem. Optimize!
 
+      Index teeIndex;
+      if (teeIndexIter != teeIndexes.end()) {
+        // This was used by something as a source, which means we've put a tee
+        // on it. We can simply forward that tee to our source, which will then
+        // be a source both for us and our sub-source. That is valid as the
+        // single source dominates us, and we dominate the sub-source, and so
+        // forth.
+        teeIndex = teeIndexIter->second;
+      } else {
+        // Allocate a new tee index.
+        teeIndex = builder.addVar(func, expr->type);
+      }
+
+      *exprInfo.exprp = builder.makeLocalGet(teeIndex, expr->type);
+
       // forward
 
-
-
+// XXX skip forward over the childrens. while doing so, more nesting fixes if they
+// were teed
 
 
     }
