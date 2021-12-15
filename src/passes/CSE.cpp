@@ -135,7 +135,7 @@ struct GVNAnalysis {
 
   struct ExprInfo {
     Expression* expr;
-    Expression** currp;
+    Expression** exprp;
     Index number;
   };
 
@@ -293,6 +293,8 @@ struct GVNAnalysis {
   }
 };
 
+static const Index NullIndex = -1;
+
 struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
   bool isFunctionParallel() override { return true; }
 
@@ -306,6 +308,108 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
     GVNAnalysis gvn(func, *getModule());
     for (auto& info : gvn.exprInfos) {
       std::cout << "expr " << info.number << " for a " << getExpressionName(info.expr) << '\n';
+    }
+
+    // Now that we have value numbers for all the expressions we can find things
+    // to optimize. Traverse from the back
+
+    auto& exprInfos = gvn.exprInfos;
+    auto& exprsForValue = gvn.exprsForValue;
+
+    struct ActionInfo {
+      Index teeIndex = NullIndex;
+
+      // The gets of the tee.
+      std::vector<LocalGet*> gets;
+    };
+    std::vector<ActionInfo> actionInfos;
+    auto numExprs = exprInfos.size();
+    actionInfos.resize(numExprs);
+
+    struct GVNCFGWalkerBasicBlockInfo {
+    };
+    struct GVNCFGWalker : public CFGWalker<GVNCFGWalker, GVNCFGWalkerBasicBlockInfo> {
+    } gvncfgWalker;
+    std::make_unique<GVNCFGWalker> dominationChecker;
+
+    for (auto i = int(numExprs) - 1; i >= 0; i++) {
+      auto& exprInfo = exprInfos[i];
+      auto* expr = exprInfo.expr;
+      auto number = exprInfo.number;
+
+      // This expression should be at the end of the list of all expressions
+      // with this number. We can remove it now as we move towards the front.
+      auto& allExprsWithNumber = exprsForValue[number];
+      assert(!allExprsWithNumber.empty());
+      assert(allExprsWithNumber.back() == expr);
+      allExprsWithNumber.pop_back();
+      if (allExprsWithNumber.empty()) {
+        // Nothing else has this number.
+        continue;
+      }
+
+      // Perhaps one of the previous expressions with this number will allow us
+      // to optimize. First, check if we have side effects we cannot remove, as
+      // when we optimize we replace ourselves with a local.get which means
+      // effects go away.
+      EffectAnalyzer effects(passOptions, *module, expr);
+      if (effects.hasNonremovableEffects()) {
+        continue;
+      }
+
+      // TODO: drop a trap?
+
+      // Next, we need to find a previous expression that dominates us. Only
+      // compute this information when it looks worthwhile.
+      if (!dominationChecker) {
+        gvncfgWalker.walk(func->body);
+        dominationChecker = std::make_unique<cfg::DominationChecker<GVNCFGWalkerBasicBlockInfo>>(gvncfgWalker.basicBlocks);
+      }
+
+      // Mark us as a copy of the last possible source. That is the closest to
+      // us, and the most likely to not run into interference along the way that
+      // would prevent optimization.
+      Expression* source = nullptr;
+      // TODO: limit how much work we try here?
+      for (int j = int(allExprsWithNumber.size()) - 1; j >= 0; j--) {
+        auto* possibleSource = allExprsWithNumber[j];
+        if (!dominationChecker.dominates(possibleSource, expr)) {
+          continue;
+        }
+
+        // Aside from domination we must also not have any effects that
+        // invalidate us along the way.
+        //
+        // While checking for effects we must skip the pattern itself, including
+        // children, as dominationChecker is not aware of nesting (it just looks
+        // shallowly).
+        Index size = Measurer::measure(expr);
+        std::unordered_set<Expression*> ignoreEffectsOf;
+        for (Index j = 0; j < size; j++) {
+          ignoreEffectsOf.insert(exprInfos[j].expr);
+        }
+        if (!dominationChecker.dominatesWithoutInterference(
+              source, expr, effects, ignoreEffectsOf, *module, passOptions)) {
+          // std::cout << "  pathey\n";
+          continue;
+        }
+
+        source = possibleSource;
+        break;
+      }
+      if (!source) {
+        // std::cout << "  no dom\n";
+        continue;
+      }
+
+      // Wonderful, we've found a source that dominates us and the path from it
+      // to us is free from effects that could cause a problem. Optimize!
+
+
+
+
+
+
     }
   }
 
