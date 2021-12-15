@@ -131,6 +131,7 @@ using HashedShallowExprs = std::unordered_map<HashedShallowExpression,
 // info.
 struct GVNAnalysis {
   // Maps a value number to the list of expressions that have that value number.
+  // Each vector of expressions is in post-order.
   std::vector<std::vector<Expression*>> exprsForValue;
 
   struct ExprInfo {
@@ -337,6 +338,10 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       auto* expr = exprInfo.expr;
       auto number = exprInfo.number;
 
+      if (!isRelevant(expr)) {
+        continue;
+      }
+
       // This expression should be at the end of the list of all expressions
       // with this number. We can remove it now as we move towards the front.
       auto& allExprsWithNumber = exprsForValue[number];
@@ -373,6 +378,15 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       // TODO: limit how much work we try here?
       for (int j = int(allExprsWithNumber.size()) - 1; j >= 0; j--) {
         auto* possibleSource = allExprsWithNumber[j];
+        if (possibleSource->type != expr->type) {
+          // Perhaps it is a cast or such.
+          continue;
+        }
+
+        if (possibleSource->is<LocalGet>() || possibleSource->is<LocalSet>()) {
+          continue;
+        }
+
         if (!dominationChecker.dominates(possibleSource, expr)) {
           continue;
         }
@@ -387,6 +401,8 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
         std::unordered_set<Expression*> ignoreEffectsOf;
         for (Index j = 0; j < size; j++) {
           ignoreEffectsOf.insert(exprInfos[j].expr);
+          // Also check for nesting here - we cannot use a source that is
+          // nested inside us (let other opts handle that).
         }
         if (!dominationChecker.dominatesWithoutInterference(
               source, expr, effects, ignoreEffectsOf, *module, passOptions)) {
@@ -405,6 +421,7 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
       // Wonderful, we've found a source that dominates us and the path from it
       // to us is free from effects that could cause a problem. Optimize!
 
+      // forward
 
 
 
