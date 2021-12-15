@@ -521,6 +521,10 @@ std::cout << "  continu5, after forwarding of tee since we are removed\n";
       removed = totalSize;
 std::cout << "  opted!\n";
     }
+
+    // Fix up any nondefaultable locals that we've added.
+    // TODO: skip if unneeded
+    TypeUpdating::handleNonDefaultableLocals(func, *getModule());
   }
 
 private:

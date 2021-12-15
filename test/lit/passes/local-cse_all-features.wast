@@ -129,19 +129,20 @@
   ;; NONLC:      (type $ref?|$B|_ref|$A|_=>_none (func (param (ref null $B) (ref $A))))
 
   ;; NONLC:      (func $struct-gets-nullable (param $ref (ref null $A))
-  ;; NONLC-NEXT:  (local $1 i32)
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.tee $1
-  ;; NONLC-NEXT:    (struct.get $A 0
-  ;; NONLC-NEXT:     (local.get $ref)
-  ;; NONLC-NEXT:    )
+  ;; NONLC-NEXT:   (struct.get $A 0
+  ;; NONLC-NEXT:    (local.get $ref)
   ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $1)
+  ;; NONLC-NEXT:   (struct.get $A 0
+  ;; NONLC-NEXT:    (local.get $ref)
+  ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT:  (drop
-  ;; NONLC-NEXT:   (local.get $1)
+  ;; NONLC-NEXT:   (struct.get $A 0
+  ;; NONLC-NEXT:    (local.get $ref)
+  ;; NONLC-NEXT:   )
   ;; NONLC-NEXT:  )
   ;; NONLC-NEXT: )
   (func $struct-gets-nullable (param $ref (ref null $A))
@@ -469,22 +470,34 @@
 
   ;; NONLC:      (func $div16_internal (param $0 i32) (param $1 i32) (result i32)
   ;; NONLC-NEXT:  (local $2 i32)
+  ;; NONLC-NEXT:  (local $3 i32)
+  ;; NONLC-NEXT:  (local $4 i32)
+  ;; NONLC-NEXT:  (local $5 i32)
+  ;; NONLC-NEXT:  (local $6 i32)
   ;; NONLC-NEXT:  (i32.add
   ;; NONLC-NEXT:   (local.tee $2
   ;; NONLC-NEXT:    (i32.xor
-  ;; NONLC-NEXT:     (i32.shr_s
-  ;; NONLC-NEXT:      (i32.shl
-  ;; NONLC-NEXT:       (local.get $0)
+  ;; NONLC-NEXT:     (local.tee $5
+  ;; NONLC-NEXT:      (i32.shr_s
+  ;; NONLC-NEXT:       (local.tee $6
+  ;; NONLC-NEXT:        (i32.shl
+  ;; NONLC-NEXT:         (local.get $0)
+  ;; NONLC-NEXT:         (i32.const 16)
+  ;; NONLC-NEXT:        )
+  ;; NONLC-NEXT:       )
   ;; NONLC-NEXT:       (i32.const 16)
   ;; NONLC-NEXT:      )
-  ;; NONLC-NEXT:      (i32.const 16)
   ;; NONLC-NEXT:     )
-  ;; NONLC-NEXT:     (i32.shr_s
-  ;; NONLC-NEXT:      (i32.shl
-  ;; NONLC-NEXT:       (local.get $1)
+  ;; NONLC-NEXT:     (local.tee $3
+  ;; NONLC-NEXT:      (i32.shr_s
+  ;; NONLC-NEXT:       (local.tee $4
+  ;; NONLC-NEXT:        (i32.shl
+  ;; NONLC-NEXT:         (local.get $1)
+  ;; NONLC-NEXT:         (i32.const 16)
+  ;; NONLC-NEXT:        )
+  ;; NONLC-NEXT:       )
   ;; NONLC-NEXT:       (i32.const 16)
   ;; NONLC-NEXT:      )
-  ;; NONLC-NEXT:      (i32.const 16)
   ;; NONLC-NEXT:     )
   ;; NONLC-NEXT:    )
   ;; NONLC-NEXT:   )
