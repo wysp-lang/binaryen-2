@@ -190,7 +190,7 @@ struct GVNAnalysis {
       }
 
       void visitExpression(Expression* curr) {
-std::cout << "vE1\n";
+//std::cout << "vE1\n";
         // Get the children's value numbers off the stack.
         auto numChildren = ChildIterator(curr).getNumChildren();
         ChildNumbers childNumbers;
@@ -199,7 +199,7 @@ std::cout << "vE1\n";
           childNumbers[i] = numberStack.back();
           numberStack.pop_back();
         }
-std::cout << "vE2\n";
+//std::cout << "vE2\n";
 
         // Compute the number of this expression.
         Index number;
@@ -209,20 +209,20 @@ std::cout << "vE2\n";
           //       this
           // TODO: In the loop above, if one child has an ImpossibleNumber then
           //       maybe that is enough to give up? impossible = "untrackable"
-std::cout << "vE3.0\n";
+//std::cout << "vE3.0\n";
         }
         // TODO: perhaps always ignore blocks here? That is, don't give them
         //       useful numbers. yes, we do not want to hash blocks which can be
         //       large and numerous
         else if (Properties::isShallowlyGenerative(curr, parent.wasm.features) ||
             Properties::isCall(curr)) {
-std::cout << "vE3.1\n";
+//std::cout << "vE3.1\n";
           number = getNewNumber();
         } else if (auto* get = curr->dynCast<LocalGet>()) {
-std::cout << "vE3.2\n";
+//std::cout << "vE3.2\n";
           number = getLocalGetNumber(get);
         } else if (auto* set = curr->dynCast<LocalSet>()) {
-std::cout << "vE3.3\n";
+//std::cout << "vE3.3\n";
           // We've handled non-concrete types before, leaving only tee to handle
           // here.
           assert(set->isTee());
@@ -230,7 +230,7 @@ std::cout << "vE3.3\n";
           // A tee's value is simply that of its child.
           number = childNumbers[0];
         } else {
-std::cout << "vE3.4\n";
+//std::cout << "vE3.4\n";
           // For anything else, compute a value number from the children's
           // numbers plus the shallow contents of the expression.
           NumberVecMap& numbersMapEntry = numbersMap[curr];
@@ -241,26 +241,26 @@ std::cout << "vE3.4\n";
           }
           number = savedNumber;
         }
-std::cout << "vE4\n";
+//std::cout << "vE4\n";
 
         // Now that we have computed the number of this expression, add it to
         // the data structures.
         numberStack.push_back(number);
 
-std::cout << "vE5\n";
+//std::cout << "vE5\n";
         if (parent.exprsForValue.size() <= number) {
           parent.exprsForValue.resize(number + 1);
         }
-std::cout << "vE6\n";
-std::cout << "push " << curr << " with number " << number << '\n';
+//std::cout << "vE6\n";
+//std::cout << "push " << curr << " with number " << number << '\n';
         parent.exprsForValue[number].push_back(curr);
 
-std::cout << "vE7\n";
+//std::cout << "vE7\n";
         parent.exprInfos.push_back(ExprInfo{curr, getCurrentPointer(), number});
 
-std::cout << "vE8\n";
+//std::cout << "vE8\n";
         parent.exprNumbers[curr] = number; // TODO: needed beyond local.set?
-std::cout << "vE9\n";
+//std::cout << "vE9\n";
       }
 
       Index getNewNumber() {
@@ -270,15 +270,15 @@ std::cout << "vE9\n";
       }
 
       Index getLocalGetNumber(LocalGet* get) {
-std::cout << "gLGN1\n";
+//std::cout << "gLGN1\n";
         Index number;
         auto& sets = localGraph.getSetses[get];
         if (sets.size() != 1) {
-std::cout << "gLGN2\n";
+//std::cout << "gLGN2\n";
           // TODO: we could do more here for merges
           number = getNewNumber();
         } else {
-std::cout << "gLGN3\n";
+//std::cout << "gLGN3\n";
           auto* set = *sets.begin();
           if (!set) {
             // This is a param or a null initializer value.
@@ -319,12 +319,12 @@ struct GVNPass : public WalkerPass<PostWalker<GVNPass>> {
   Pass* create() override { return new GVNPass(); }
 
   void doWalkFunction(Function* func) {
-std::cout << "\ngvn! " << func->name << "\n";
+//std::cout << "\ngvn! " << func->name << "\n";
     GVNAnalysis gvn(func, *getModule());
-Index k = 0;
-    for (auto& info : gvn.exprInfos) {
-std::cout << "expr " << info.expr << " index " << k++ << " with number " << info.number << " for a " << getExpressionName(info.expr) << '\n';
-    }
+//Index k = 0;
+  //  for (auto& info : gvn.exprInfos) {
+//std::cout << "expr " << info.expr << " index " << k++ << " with number " << info.number << " for a " << getExpressionName(info.expr) << '\n';
+    //}
 
     // Now that we have value numbers for all the expressions we can find things
     // to optimize. Traverse from the back
@@ -390,14 +390,14 @@ std::cout << "expr " << info.expr << " index " << k++ << " with number " << info
       // This expression should be at the end of the list of all expressions
       // with this number. We can remove it now as we move towards the front.
       auto& allExprsWithNumber = exprsForValue[number];
-std::cout << "main gvn loop on " << expr << " index " << i << " with number " << number << " for a " << getExpressionName(expr) << ", removed: " << removed << " and total with this num: " << allExprsWithNumber.size() << '\n';
+//std::cout << "main gvn loop on " << expr << " index " << i << " with number " << number << " for a " << getExpressionName(expr) << ", removed: " << removed << " and total with this num: " << allExprsWithNumber.size() << '\n';
       assert(!allExprsWithNumber.empty());
       assert(allExprsWithNumber.back() == expr);
       allExprsWithNumber.pop_back();
       if (allExprsWithNumber.empty()) {
         // Nothing else has this number.
         assert(!(removed && hasTeeInfo));
-std::cout << "  continu1\n";
+//std::cout << "  continu1\n";
         continue;
       }
 
@@ -418,7 +418,7 @@ std::cout << "  continu1\n";
         // down where we optimize, and then we'll just forward the tee to the
         // earlier source.
         assert(!(removed && hasTeeInfo));
-std::cout << "  continu2\n";
+//std::cout << "  continu2\n";
         continue;
       }
 
@@ -442,7 +442,7 @@ std::cout << "  continu2\n";
 
       if (effects.hasUnremovableSideEffects()) {
         assert(!(removed && hasTeeInfo)); // TODO: this one may fail, in the case that we have a nested tee already, say.
-std::cout << "  continu3\n";
+//std::cout << "  continu3\n";
         continue;
       }
 
@@ -460,20 +460,20 @@ std::cout << "  continu3\n";
       // TODO: limit how much work we try here?
       for (int j = int(allExprsWithNumber.size()) - 1; j >= 0; j--) {
         auto* possibleSource = allExprsWithNumber[j];
-std::cout << "  consider source #" << j << " (" << possibleSource << ") for target " << i << " which is " << getExpressionName(possibleSource) << "\n";
+//std::cout << "  consider source #" << j << " (" << possibleSource << ") for target " << i << " which is " << getExpressionName(possibleSource) << "\n";
         if (possibleSource->type != expr->type) {
           // Perhaps it is a cast or such.
-std::cout << "    subcontinua\n";
+//std::cout << "    subcontinua\n";
           continue;
         }
 
         if (possibleSource->is<LocalGet>() || possibleSource->is<LocalSet>()) {
-std::cout << "    subcontinub\n";
+//std::cout << "    subcontinub\n";
           continue;
         }
 
         if (!dominationChecker->dominates(possibleSource, expr)) {
-std::cout << "    subcontinuc\n";
+//std::cout << "    subcontinuc\n";
           continue;
         }
 
@@ -492,8 +492,8 @@ std::cout << "    subcontinuc\n";
         }
         if (!dominationChecker->dominatesWithoutInterference(
               possibleSource, expr, effects, ignoreEffectsOf, *getModule(), getPassOptions())) {
-          // std::cout << "  pathey\n";
-std::cout << "    subcontinud\n";
+          // //std::cout << "  pathey\n";
+//std::cout << "    subcontinud\n";
           continue;
         }
 
@@ -502,7 +502,7 @@ std::cout << "    subcontinud\n";
       }
       if (!source) {
         assert(!(removed && hasTeeInfo));
-std::cout << "  continu4\n";
+//std::cout << "  continu4\n";
         continue;
       }
 
@@ -520,7 +520,7 @@ std::cout << "  continu4\n";
         if (!teeInfos.count(source)) {
           // Allocate a new tee info object and index for our source.
           teeInfos[source].index = builder.addVar(func, expr->type);
-std::cout << "new tee index " << teeInfos[source].index << '\n';
+//std::cout << "new tee index " << teeInfos[source].index << '\n';
         }
       } else {
         // We have a tee index ourselves as well as gets that use it. We want to
@@ -546,7 +546,7 @@ std::cout << "new tee index " << teeInfos[source].index << '\n';
         // forwarded the tee index from us to the new source, which is what the
         // previous target needs. And since we were removed we do not exist and
         // there is nothing to do for us.
-std::cout << "  continu5, after forwarding of tee since we are removed\n";
+//std::cout << "  continu5, after forwarding of tee since we are removed\n";
         continue;
       }
 
@@ -563,7 +563,7 @@ std::cout << "  continu5, after forwarding of tee since we are removed\n";
       // skip as we immediately decrement |removed| at the top of the loop.
       Index totalSize = Measurer::measure(expr); // TODO: already computed befores
       removed = totalSize;
-std::cout << "  opted!\n";
+//std::cout << "  opted!\n";
     }
 
     // Fix up any nondefaultable locals that we've added.
@@ -625,18 +625,18 @@ Pass* createCSEPass() { return new GVNPass(); }
 TODO TODO read old code and learn
 
 #if 0
-std::cout << "func " << func->name << '\n';
+//std::cout << "func " << func->name << '\n';
     // First scan the code to find all the expressions and basic blocks. This
     // fills in |blocks| and starts to fill in |exprInfos|.
     WalkerPass<
       CFGWalker<CSE, UnifiedExpressionVisitor<CSE>, CSEBasicBlockInfo>>::
       doWalkFunction(func);
-std::cout << "  a\n";
+//std::cout << "  a\n";
 
     Linearize linearize;
     linearize.walk(func->body);
     auto exprInfos = std::move(linearize.exprInfos);
-std::cout << "  b\n";
+//std::cout << "  b\n";
 
     // Do another pass to find repeated expressions. We are looking for complete
     // expressions, including children, that recur, and so it is efficient to do
@@ -666,7 +666,7 @@ std::cout << "  b\n";
       auto& exprInfo = exprInfos[i];
       auto& copyInfo = exprInfo.copyInfo;
       auto* original = exprInfo.original;
-      // std::cout << "first loop " << i << '\n' << *original << '\n';
+      // //std::cout << "first loop " << i << '\n' << *original << '\n';
       originalIndexes[original] = i;
       auto iter = seen.find(original);
 
@@ -682,7 +682,7 @@ effects.visit(original);
 effects.trap = false;
 if (effects.hasSideEffects() || // TODO: nonremovable?
     Properties::isShallowlyGenerative(original, module->features)) {
-  // std::cout << "  effectey\n";
+  // //std::cout << "  effectey\n";
   stack.push_back(copyInfo); // empty, no copies, which will cause fails
   continue;
 }
@@ -690,7 +690,7 @@ if (effects.hasSideEffects() || // TODO: nonremovable?
 // TODO: copyInfo on |stack| could be just a reference? do not copy that array!
 
       if (iter != seen.end()) {
-        // std::cout << "  seen, append\n";
+        // //std::cout << "  seen, append\n";
         // We have seen this before. Note it is a copy of the last of the
         // previous copies.
         auto& previous = iter->second;
@@ -699,7 +699,7 @@ if (effects.hasSideEffects() || // TODO: nonremovable?
         if (previous.size() >= 10) previous.pop_back(); // keep it reasonable. past some limit, just replace the last (most recent) item
         previous.push_back(i); // limit on total size? so a func with 1,000,000 local.gets doesn't crowd too much.
       } else {
-        // std::cout << "  novel\n";
+        // //std::cout << "  novel\n";
         // We've never seen this before. Add it.
         seen[original].push_back(i);
       }
@@ -711,7 +711,7 @@ if (effects.hasSideEffects() || // TODO: nonremovable?
       for (Index child = 0; child < numChildren; child++) { // limit on numChildren? be reasonable. also, can effects just make us give up early?
         assert(!stack.empty());
         auto childInfo = stack.back();
-        // std::cout << "  child " << child << " of full size " <<
+        // //std::cout << "  child " << child << " of full size " <<
         // childInfo.fullSize <<"\n";
         stack.pop_back();
 
@@ -724,7 +724,7 @@ if (effects.hasSideEffects() || // TODO: nonremovable?
         // (and maybe empty). FIXME refactor
         SmallVector<Index, 1> filteredCopiesOf;
         for (auto copy : copyInfo.copyOf) {
-          // std::cout << "    childCopy1, copy=" << originalIndexes[copy] << "
+          // //std::cout << "    childCopy1, copy=" << originalIndexes[copy] << "
           // , copyInfo.copyOf=" << copyInfo.copyOf.size() << " ,
           // copyInfo.fullSize=" << copyInfo.fullSize << "\n";
           // The child's location is our own plus a shift of the
@@ -734,13 +734,13 @@ if (effects.hasSideEffects() || // TODO: nonremovable?
           // Check if this child has a copy, and that copy is perfectly aligned
           // with the parent that we found ourselves to be a shallow copy of.
           for (auto childCopy : childInfo.copyOf) {
-            // std::cout << "    childCopy2 " << originalIndexes[childCopy] << "
+            // //std::cout << "    childCopy2 " << originalIndexes[childCopy] << "
             // vs  " << (originalIndexes[copy] - copyInfo.fullSize) << "\n";
             // TODO: this loop will need to change for local.get opts, as the
             // get is smaller in general than the thing it is a copy of.
             if (childCopy ==
                 copy - copyInfo.fullSize) {
-              // std::cout << "    childCopy3\n";
+              // //std::cout << "    childCopy3\n";
               filteredCopiesOf.push_back(copy);
               break;
             }
@@ -753,7 +753,7 @@ if (effects.hasSideEffects() || // TODO: nonremovable?
         // never look at the size, but that is a little subtle
         copyInfo.fullSize += childInfo.fullSize;
       }
-      // std::cout << *original << " has fullSize " << copyInfo.fullSize <<
+      // //std::cout << *original << " has fullSize " << copyInfo.fullSize <<
       // '\n';
       if (!copyInfo.copyOf.empty() && isRelevant(original)) {
         foundRelevantCopy = true;
@@ -765,9 +765,9 @@ if (effects.hasSideEffects() || // TODO: nonremovable?
     if (!foundRelevantCopy) {
       return;
     }
-    // std::cout << "phase 2\n";
+    // //std::cout << "phase 2\n";
 
-std::cout << "  c\n";
+//std::cout << "  c\n";
 
     // We have filled in |exprInfos| with copy information, and we've found at
     // least one relevant copy. We can now apply those copies. We start at the
@@ -782,7 +782,7 @@ std::cout << "  c\n";
     // To see which copies can actually be optimized, we need to see that the
     // first dominates the second.
     cfg::DominationChecker<BasicBlock> dominationChecker(basicBlocks);
-std::cout << "  d\n";
+//std::cout << "  d\n";
 
     Builder builder(*module);
 
@@ -792,16 +792,16 @@ std::cout << "  d\n";
       auto& currInfo = exprInfos[i]; // rename to info or currInfo?
       auto& copyInfo = currInfo.copyInfo;
       auto* curr = currInfo.original;
-      // std::cout << "phae 2 i " << i << " : " << getExpressionName(curr) <<
+      // //std::cout << "phae 2 i " << i << " : " << getExpressionName(curr) <<
       // '\n';
 
       if (copyInfo.copyOf.empty()) {
-        // std::cout << "  no copies\n";
+        // //std::cout << "  no copies\n";
         continue;
       }
 
       if (!isRelevant(curr)) {
-        // std::cout << "  irrelevant\n";
+        // //std::cout << "  irrelevant\n";
         // This has a copy, but it is not relevant to optimize. (We mus still
         // track such things as copies as their parents may be relevant.)
         continue;
@@ -826,7 +826,7 @@ std::cout << "  d\n";
         }
       }
       if (!source) {
-        // std::cout << "  no dom\n";
+        // //std::cout << "  no dom\n";
         continue;
       }
 
@@ -857,7 +857,7 @@ std::cout << "  d\n";
       // no side effects, if it may return a different result each time, then we
       // cannot optimize away repeats.
       if (effects.hasSideEffects()) { // TODO: nonremovable?
-        // std::cout << "  effectey\n";
+        // //std::cout << "  effectey\n";
         continue;
       }
 
@@ -878,7 +878,7 @@ std::cout << "  d\n";
       }
       if (!dominationChecker.dominatesWithoutInterference(
             source, curr, effects, ignoreEffectsOf, *module, passOptions)) {
-        // std::cout << "  pathey\n";
+        // //std::cout << "  pathey\n";
         continue;
       }
 
@@ -886,7 +886,7 @@ std::cout << "  d\n";
       optimized = true;
       auto sourceIndex = originalIndexes[source];
       auto& sourceInfo = exprInfos[sourceIndex];
-      // std::cout << "optimize!!! " << i << " to " << sourceIndex << "\n";
+      // //std::cout << "optimize!!! " << i << " to " << sourceIndex << "\n";
       // This is the first time we add a tee on the source in order to use its
       // value later (that is, we've not found another copy of |source|
       // earlier), so add a new local and add a tee.
@@ -905,7 +905,7 @@ std::cout << "  d\n";
         exprInfos[from].teeReads.clear();
       };
       moveTeeReads(i, sourceIndex);
-      // std::cout << "TEE\n";
+      // //std::cout << "TEE\n";
       // We'll add the actual tee at the end. That avoids effect confusion,
       // as tees add side effects.
       sourceInfo.teeReads.push_back(i);
@@ -925,7 +925,7 @@ std::cout << "  d\n";
           assert(offsetInExpression > 0);
           int k = sourceIndex - offsetInExpression;
           assert(k >= 0);
-          // std::cout << "move tee from " << j << " to " << k << '\n';
+          // //std::cout << "move tee from " << j << " to " << k << '\n';
           moveTeeReads(j, k);
         }
       }
@@ -934,7 +934,7 @@ std::cout << "  d\n";
       // have optimized the entire expression, including them, into a single
       // local.get.
       int childrenSize = copyInfo.fullSize - 1;
-      // std::cout << "chldrensize " << childrenSize << '\n';
+      // //std::cout << "chldrensize " << childrenSize << '\n';
       // < and not <= becauase not only the children exist, but also the copy
       // before us that we optimize to.
       assert(childrenSize < i);
@@ -945,7 +945,7 @@ std::cout << "  d\n";
       return;
     }
 
-std::cout << "  e\n";
+//std::cout << "  e\n";
 
     Index z = 0;
     for (auto& info : exprInfos) {
@@ -961,11 +961,11 @@ std::cout << "  e\n";
       z++;
     }
 
-std::cout << "  f\n";
+//std::cout << "  f\n";
 
     // Fix up any nondefaultable locals that we've added.
     TypeUpdating::handleNonDefaultableLocals(func, *getModule());
-std::cout << "  g\n";
+//std::cout << "  g\n";
 #endif
 
 
