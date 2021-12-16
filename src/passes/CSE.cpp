@@ -334,8 +334,12 @@ std::cout << "expr " << info.expr << " index " << k++ << " with number " << info
 
     // Contains expressions whose value we are saving to be used in a local.get
     // later. This maps each such expression to the index of the local we
-    // allocated for it.
-    std::unordered_map<Expression*, Index> teeIndexes;
+    // allocated for it, and the gets that that local will be read from.
+    struct TeeInfo {
+      Index index;
+      std::vector<LocalGet*> gets;
+    };
+    std::unordered_map<Expression*, TeeInfo> teeInfos;
 
     auto numExprs = exprInfos.size();
 
@@ -374,14 +378,12 @@ std::cout << "expr " << info.expr << " index " << k++ << " with number " << info
       auto* expr = exprInfo.expr;
       auto number = exprInfo.number;
 
-      std::optional<Index> teeIndex;
-      auto teeIndexIter = teeIndexes.find(expr);
-      if (teeIndexIter != teeIndexes.end()) {
-        teeIndex = teeIndexIter->second;
+      bool hasTeeInfo = teeInfos.count(expr);
+      if (hasTeeInfo) {
         // Something is using this as a source. Add a local.tee here of the
         // proper index, if we were not removed.
         if (!removed) {
-          *exprInfo.exprp = builder.makeLocalTee(*teeIndex, expr, expr->type);
+          *exprInfo.exprp = builder.makeLocalTee(teeInfos[expr].index, expr, expr->type);
         }
       }
 
@@ -394,12 +396,12 @@ std::cout << "main gvn loop on " << expr << " index " << i << " with number " <<
       allExprsWithNumber.pop_back();
       if (allExprsWithNumber.empty()) {
         // Nothing else has this number.
-        assert(!(removed && teeIndex));
+        assert(!(removed && hasTeeInfo));
 std::cout << "  continu1\n";
         continue;
       }
 
-      if (removed && !teeIndex) {
+      if (removed && !hasTeeInfo) {
         // There is no tee to add here, and we were removed, so there is nothing
         // left to do.
         continue;
@@ -415,7 +417,7 @@ std::cout << "  continu1\n";
         // previous value to optimize to, and so we will get to the code lower
         // down where we optimize, and then we'll just forward the tee to the
         // earlier source.
-        assert(!(removed && teeIndex));
+        assert(!(removed && hasTeeInfo));
 std::cout << "  continu2\n";
         continue;
       }
@@ -439,7 +441,7 @@ std::cout << "  continu2\n";
       effects.trap = false;
 
       if (effects.hasUnremovableSideEffects()) {
-        assert(!(removed && teeIndex)); // TODO: this one may fail, in the case that we have a nested tee already, say.
+        assert(!(removed && hasTeeInfo)); // TODO: this one may fail, in the case that we have a nested tee already, say.
 std::cout << "  continu3\n";
         continue;
       }
@@ -499,7 +501,7 @@ std::cout << "    subcontinud\n";
         break;
       }
       if (!source) {
-        assert(!(removed && teeIndex));
+        assert(!(removed && hasTeeInfo));
 std::cout << "  continu4\n";
         continue;
       }
@@ -512,22 +514,31 @@ std::cout << "  continu4\n";
       // be a source both for us and our sub-source. That is valid as the
       // single source dominates us, and we dominate the sub-source, and so
       // forth.
-      if (!teeIndex) {
+      if (!hasTeeInfo) {
         // The source may already have a tee planned for it, if another target
         // using that source was already optimized.
-        auto iter = teeIndexes.find(source);
-        if (iter == teeIndexes.end()) {
-          // Allocate a new tee index.
-          teeIndex = builder.addVar(func, expr->type);
-          teeIndexes[source] = *teeIndex;
-std::cout << "new tee index " << *teeIndex << '\n';
+        if (!teeInfos.count(source)) {
+          // Allocate a new tee info object and index for our source.
+          teeInfos[source].index = builder.addVar(func, expr->type);
+std::cout << "new tee index " << teeInfos[source].index << '\n';
         }
       } else {
-        // We have a tee index. If our source *also* has one, then we have a
-        // problem: we've got more than one tee index to apply, and gets using
-        // each of them. Otherwise just forward our tee to the source.
-        assert(!teeIndexes.count(source));
-        teeIndexes[source] = *teeIndex;
+        // We have a tee index ourselves as well as gets that use it. We want to
+        // "forward" that to our own source.
+        auto iter = teeInfos.find(source);
+        if (iter != teeInfos.end()) {
+          // The source does have a tee. We must "merge" our gets over, that is,
+          // make them use that tee index and add them to the source info.
+          auto& sourceTeeInfo = iter->second;
+          for (auto* get : teeInfos[expr].gets) {
+            get->index = sourceTeeInfo.index;
+            sourceTeeInfo.gets.push_back(get);
+          }
+        } else {
+          // The source has nothing, so just forward ourselves. We will keep
+          // using the same tee index, and the gets do not need to change.
+          teeInfos[source] = teeInfos[expr];
+        }
       }
 
       if (removed) {
@@ -539,8 +550,11 @@ std::cout << "  continu5, after forwarding of tee since we are removed\n";
         continue;
       }
 
-      // Replace us with a get.
-      *exprInfo.exprp = builder.makeLocalGet(*teeIndex, expr->type);
+      // Replace us with a get and note the get.
+      auto& sourceTeeInfo = teeInfos[source];
+      auto* get = builder.makeLocalGet(sourceTeeInfo.index, expr->type);
+      *exprInfo.exprp = get;
+      sourceTeeInfo.gets.push_back(get);
 
       // TODO: ensure testcase with if with heavy work in the armses.
 
