@@ -517,6 +517,9 @@ void PassRunner::addDefaultFunctionOptimizationPasses() {
   }
   addIfNoDWARFIssues("simplify-locals");
   addIfNoDWARFIssues("vacuum");
+  if (options.optimizeLevel >= 3 || options.shrinkLevel >= 1) {
+    //addIfNoDWARFIssues("cse"); // TODO: maybe this is too late? run early and check --rebaseline
+  }
   addIfNoDWARFIssues("reorder-locals");
   addIfNoDWARFIssues("coalesce-locals");
   addIfNoDWARFIssues("reorder-locals");

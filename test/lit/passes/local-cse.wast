@@ -1866,3 +1866,41 @@
     (drop (global.get $glob))
   )
 )
+
+;; FAILING, see comments
+(module
+ (type $i32_=>_i32 (func (param i32) (result i32)))
+ (type $f32_=>_f32 (func (param f32) (result f32)))
+ (type $f64_=>_f64 (func (param f64) (result f64)))
+ (global $global$0 (mut i32) (i32.const 65534))
+ (func $0 (param $0 i32)
+  (local $1 i32)
+  (if
+   (local.tee $1
+    (global.get $global$0)
+   )
+   (call $1) 
+  )
+  (drop
+   (i32.and
+    (local.get $1) ;; this has the same value as the earlier global.get, while
+                   ;; the actual global may have changed (in that call)
+    (i32.const 15)
+   )
+  )
+  (drop
+   (i32.and
+    (global.get $global$0) ;; this is not equal to the local.get! we need proper numbering of global.get, using GlobalGraph or such.
+                           ;; that is, this testcase shows that tentative numbers plus effects along paths is *not* enough:
+                           ;; we need effects on the previous path between the tee and the local.get $1... so GlobalGraph.
+    (i32.const 15)
+   )
+  )
+  (drop
+   (global.get $global$0)
+  )
+ )
+ (func $1
+ )
+)
+
