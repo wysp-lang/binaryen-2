@@ -29,7 +29,7 @@
 #include "ir/import-utils.h"
 #include "ir/literal-utils.h"
 #include "ir/memory-utils.h"
-#include "ir/module-utils.h"
+#include "ir/names.h"
 #include "pass.h"
 #include "support/colors.h"
 #include "support/file.h"
@@ -475,6 +475,9 @@ private:
   }
 };
 
+// Whether to remove exports that we manage to completely eval.
+static bool removeExports = true;
+
 void evalCtors(Module& wasm, std::vector<std::string> ctors) {
   std::map<Name, std::shared_ptr<EvallingModuleInstance>> linkedInstances;
 
@@ -520,12 +523,19 @@ void evalCtors(Module& wasm, std::vector<std::string> ctors) {
       // execution to the module.
       interface.applyToModule();
 
-      // we can nop the function (which may be used elsewhere)
-      // and remove the export
+      // Remove the export if we should.
       auto* exp = wasm.getExport(ctor);
       auto* func = wasm.getFunction(exp->value);
-      func->body = wasm.allocator.alloc<Nop>();
-      wasm.removeExport(exp->name);
+      if (removeExports) {
+        wasm.removeExport(exp->name);
+      } else {
+        // We are keeping around the export, which should now refer to an
+        // empty function since it doesn't do anything.
+        auto copyName = Names::getValidFunctionName(wasm, func->name);
+        auto* copyFunc = ModuleUtils::copyFunction(func, wasm, copyName);
+        copyFunc->body = Builder(wasm).makeNop();
+        wasm.getExport(exp->name)->value = copyName;
+      }
     }
   } catch (FailToEvalException& fail) {
     // that's it, we failed to even create the instance
@@ -579,6 +589,13 @@ int main(int argc, const char* argv[]) {
       WasmCtorEvalOption,
       Options::Arguments::One,
       [&](Options* o, const std::string& argument) { ctorsString = argument; })
+    .add(
+      "--remove-exports",
+      "-re",
+      "Whether to remove exports we manage to completely eval (default: 1)",
+      WasmCtorEvalOption,
+      Options::Arguments::One,
+      [&](Options* o, const std::string& argument) { removeExports = atoi(argument.c_str()); })
     .add("--ignore-external-input",
          "-ipi",
          "Assumes no env vars are to be read, stdin is empty, etc.",

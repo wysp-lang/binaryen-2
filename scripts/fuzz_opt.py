@@ -1031,7 +1031,10 @@ class CtorEval(TestCaseHandler):
         # eval the ctors
         ctors_wasm = wasm + '.ctors.wasm'
         out = run([in_bin('wasm-ctor-eval'), wasm, '-o', ctors_wasm, '-all',
-                   '--ctors', ','.join(exports)])
+                   '--ctors', ','.join(exports),
+                   # don't remove exports because we still want to call them in
+                   # order to compare the logs
+                   '--remove-exports', '0'])
         print(out)
 
         # compare to before
