@@ -1045,8 +1045,8 @@ class CtorEval(TestCaseHandler):
 
     def can_run_on_feature_opts(self, feature_opts):
         # TODO: SIMD requires ctor-eval to implement load128()
-        # TODO: multivalue requires makeConstantExpression to support tuples
-        return all_disallowed(['simd', 'multivalue'])
+        # TODO: multivalue, gc require makeConstantExpression to support
+        return all_disallowed(['simd', 'multivalue', 'gc'])
 
 
 # The global list of all test case handlers
