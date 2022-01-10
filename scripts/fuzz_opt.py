@@ -1039,7 +1039,9 @@ class CtorEval(TestCaseHandler):
 
         # compare to before
         after = run_bynterp(ctors_wasm, ['--fuzz-exec-before'])
-        compare(before, after, 'CtorEval before and after')
+        compare(fix_output(before),
+                fix_output(after),
+                'CtorEval before and after')
 
     def can_run_on_feature_opts(self, feature_opts):
         # TODO: SIMD requires ctor-eval to implement load128()
@@ -1048,11 +1050,11 @@ class CtorEval(TestCaseHandler):
 
 # The global list of all test case handlers
 testcase_handlers = [
-    FuzzExec(),
-    CompareVMs(),
-    CheckDeterminism(),
-    Wasm2JS(),
-    Asyncify(),
+    #FuzzExec(),
+    #CompareVMs(),
+    #CheckDeterminism(),
+    #Wasm2JS(),
+    #Asyncify(),
     CtorEval(),
     # FIXME: Re-enable after https://github.com/WebAssembly/binaryen/issues/3989
     # RoundtripText()
