@@ -480,7 +480,15 @@ Function* TranslateToFuzzReader::addFunction() {
   func->name = Names::getValidFunctionName(wasm, "func");
   FunctionCreationContext context(*this, func);
   assert(funcContext->typeLocals.empty());
-  Index numParams = upToSquared(MAX_PARAMS);
+
+  // With reasonable chances have no params (some types of fuzzing work better
+  // that way, like ctor-eval).
+  Index numParams;
+  if (oneIn(2)) {
+    numParams = 0;
+  } else {
+    numParams = upToSquared(MAX_PARAMS);
+  }
   std::vector<Type> params;
   params.reserve(numParams);
   for (Index i = 0; i < numParams; i++) {
@@ -489,7 +497,16 @@ Function* TranslateToFuzzReader::addFunction() {
     params.push_back(type);
   }
   auto paramType = Type(params);
-  func->type = Signature(paramType, getControlFlowType());
+
+  // With reasonable chances have no results (same as params).
+  Type resultType;
+  if (oneIn(2)) {
+    resultType = Type::none;
+  } else {
+    resultType = getControlFlowType();
+  }
+
+  func->type = Signature(paramType, resultType);
   Index numVars = upToSquared(MAX_VARS);
   for (Index i = 0; i < numVars; i++) {
     auto type = getConcreteType();

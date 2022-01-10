@@ -1017,6 +1017,10 @@ class CtorEval(TestCaseHandler):
         lines = before.splitlines()
         lines = [line for line in lines if line.startswith(FUZZ_EXEC_CALL_PREFIX)]
         exports = [line[len(FUZZ_EXEC_CALL_PREFIX) + 1:] for line in lines]
+
+        # ignore functions that are part of the fuzz harness itself
+        IGNORE = ['hashMemory']
+        exports = [line for line in exports if line not in IGNORE]
         if not exports:
             return
 
