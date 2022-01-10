@@ -167,15 +167,15 @@ void TranslateToFuzzReader::build() {
   if (wasm.features.hasExceptionHandling()) {
     setupTags();
   }
+  if (HANG_LIMIT > 0) {
+    addHangLimitSupport();
+  }
   modifyInitialFunctions();
   addImportLoggingSupport();
   // keep adding functions until we run out of input
   while (!random.finished()) {
     auto* func = addFunction();
     addInvocations(func);
-  }
-  if (HANG_LIMIT > 0) {
-    addHangLimitSupport();
   }
   if (allowMemory) {
     finalizeMemory();
@@ -407,25 +407,14 @@ void TranslateToFuzzReader::addHangLimitSupport() {
                                  Builder::Mutable);
   wasm.addGlobal(std::move(glob));
 
-  Name exportName = "hangLimitInitializer";
-  auto funcName = Names::getValidFunctionName(wasm, exportName);
+  auto funcName = Names::getValidFunctionName(wasm, "hangLimitInitializer");
   auto* func = new Function;
   func->name = funcName;
   func->type = Signature(Type::none, Type::none);
   func->body = builder.makeGlobalSet(HANG_LIMIT_GLOBAL,
                                      builder.makeConst(int32_t(HANG_LIMIT)));
   wasm.addFunction(func);
-
-  if (wasm.getExportOrNull(exportName)) {
-    // We must export our actual hang limit function - remove anything
-    // previously existing.
-    wasm.removeExport(exportName);
-  }
-  auto* export_ = new Export;
-  export_->name = exportName;
-  export_->value = func->name;
-  export_->kind = ExternalKind::Function;
-  wasm.addExport(export_);
+  HANG_LIMIT_FUNC = func->name;
 }
 
 void TranslateToFuzzReader::addImportLoggingSupport() {
@@ -556,6 +545,7 @@ Function* TranslateToFuzzReader::addFunction() {
     });
   if (defaultableParams && (numAddedFunctions == 0 || oneIn(2)) &&
       !wasm.getExportOrNull(func->name)) {
+    addHangLimitExport();
     auto* export_ = new Export;
     export_->name = func->name;
     export_->value = func->name;
@@ -588,6 +578,14 @@ void TranslateToFuzzReader::addHangLimitChecks(Function* func) {
   // recursion limit
   func->body =
     builder.makeSequence(makeHangLimitCheck(), func->body, func->getResults());
+}
+
+void TranslateToFuzzReader::addHangLimitExport() {
+  if (HANG_LIMIT == 0) {
+    return;
+  }
+  auto exportName = Names::getValidExportName(wasm, "HANG_LIMIT_FUNC");
+  wasm.addExport(builder.makeExport(exportName, HANG_LIMIT_FUNC, ExternalKind::Function));
 }
 
 void TranslateToFuzzReader::recombine(Function* func) {
@@ -861,6 +859,8 @@ void TranslateToFuzzReader::addInvocations(Function* func) {
   }
   body->list.set(invocations);
   wasm.addFunction(std::move(invoker));
+
+  addHangLimitExport();
   wasm.addExport(builder.makeExport(name, name, ExternalKind::Function));
 }
 

@@ -1027,17 +1027,6 @@ class CtorEval(TestCaseHandler):
         # pick a subset of them
         exports = exports[:random.randint(1, len(exports))]
 
-        # we cannot eval hangLimitInitializer, as it is called more than once,
-        # which is not the behavior of a ctor.
-        HANG_LIMIT_INITIALIZER = 'hangLimitInitializer'
-        if HANG_LIMIT_INITIALIZER in exports:
-            exports = exports[:exports.index(HANG_LIMIT_INITIALIZER)]
-        if not exports:
-            return
-
-        # Evne so the hang limit is a problem as the fuzz-exec mechanism calls
-        # it "by surprise"!
-
         # eval the ctors
         ctors_wasm = wasm + '.ctors.wasm'
         out = run([in_bin('wasm-ctor-eval'), wasm, '-o', ctors_wasm, '-all',

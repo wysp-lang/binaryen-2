@@ -95,6 +95,7 @@ private:
   // randomize this in each function.
   unsigned LOGGING_PERCENT = 0;
 
+  Name HANG_LIMIT_FUNC;
   Name HANG_LIMIT_GLOBAL;
 
   Name funcrefTableName;
@@ -176,6 +177,10 @@ private:
   // Function creation
   Function* addFunction();
   void addHangLimitChecks(Function* func);
+
+  // A hang limit export call is added before each export of a function, if hang
+  // limit support is present.
+  void addHangLimitExport();
 
   // Recombination and mutation
 
