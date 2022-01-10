@@ -1020,13 +1020,8 @@ class CtorEval(TestCaseHandler):
         if not exports:
             return
 
-        # pick an order in which to try to eval the exports/ctors
-        random.shuffle(exports)
-
         # pick a subset of them
         exports = exports[:random.randint(1, len(exports))]
-        if not exports:
-            return
 
         # eval the ctors
         ctors_wasm = wasm + '.ctors.wasm'
@@ -1046,7 +1041,8 @@ class CtorEval(TestCaseHandler):
     def can_run_on_feature_opts(self, feature_opts):
         # TODO: SIMD requires ctor-eval to implement load128()
         # TODO: multivalue, gc require makeConstantExpression to support
-        return all_disallowed(['simd', 'multivalue', 'gc'])
+        # TODO: reference-types requires serialization support for that
+        return all_disallowed(['simd', 'multivalue', 'gc', 'reference-types'])
 
 
 # The global list of all test case handlers
