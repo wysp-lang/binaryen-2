@@ -1006,6 +1006,43 @@ class RoundtripText(TestCaseHandler):
         run([in_bin('wasm-opt'), 'a.wast'] + FEATURE_OPTS)
 
 
+# Check that wasm-ctor-eval does not change observable behavior.
+class CtorEval(TestCaseHandler):
+    frequency = 1 # FIXME
+
+    def handle(self, wasm):
+        before = run_bynterp(wasm, ['--fuzz-exec-before'])
+
+        # get the list of exports from the output
+        lines = before.splitlines()
+        lines = [line for line in lines if line.startswith(FUZZ_EXEC_CALL_PREFIX)]
+        exports = [line[len(FUZZ_EXEC_CALL_PREFIX) + 1:] for line in lines]
+        if not exports:
+            return
+
+        # pick an order in which to try to eval the exports/ctors
+        random.shuffle(exports)
+
+        # pick a subset of them
+        exports = exports[:random.randint(1, len(exports))]
+        if not exports:
+            return
+
+        # eval the ctors
+        ctors_wasm = wasm + '.ctors.wasm'
+        out = run([in_bin('wasm-ctor-eval'), wasm, '-o', ctors_wasm, '-all',
+                   '--ctors', ','.join(exports)])
+        print(out)
+
+        # compare to before
+        after = run_bynterp(ctors_wasm, ['--fuzz-exec-before'])
+        compare(before, after, 'CtorEval before and after')
+
+    def can_run_on_feature_opts(self, feature_opts):
+        # TODO: SIMD requires ctor-eval to implement load128()
+        return all_disallowed(['simd'])
+
+
 # The global list of all test case handlers
 testcase_handlers = [
     FuzzExec(),
@@ -1013,6 +1050,7 @@ testcase_handlers = [
     CheckDeterminism(),
     Wasm2JS(),
     Asyncify(),
+    CtorEval(),
     # FIXME: Re-enable after https://github.com/WebAssembly/binaryen/issues/3989
     # RoundtripText()
 ]

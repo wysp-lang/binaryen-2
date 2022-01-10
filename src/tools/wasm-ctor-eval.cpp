@@ -489,7 +489,8 @@ void evalCtors(Module& wasm, std::vector<std::string> ctors) {
   try {
     // flatten memory, so we do not depend on the layout of data segments
     if (!MemoryUtils::flatten(wasm.memory)) {
-      Fatal() << "  ...stopping since could not flatten memory\n";
+      std::cout << "  ...stopping since could not flatten memory\n";
+      return;
     }
 
     // create an instance for evalling
