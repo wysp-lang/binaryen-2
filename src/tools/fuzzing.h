@@ -178,10 +178,6 @@ private:
   Function* addFunction();
   void addHangLimitChecks(Function* func);
 
-  // A hang limit export call is added before each export of a function, if hang
-  // limit support is present.
-  void addHangLimitExport();
-
   // Recombination and mutation
 
   // Recombination and mutation can replace a node with another node of the same

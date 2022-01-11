@@ -168,9 +168,6 @@ void TranslateToFuzzReader::build() {
     setupTags();
   }
   modifyInitialFunctions();
-  if (HANG_LIMIT > 0) {
-    addHangLimitSupport();
-  }
   addImportLoggingSupport();
   // keep adding functions until we run out of input
   while (!random.finished()) {
@@ -181,6 +178,9 @@ void TranslateToFuzzReader::build() {
     finalizeMemory();
   }
   finalizeTable();
+  if (HANG_LIMIT > 0) {
+    addHangLimitSupport();
+  }
 }
 
 void TranslateToFuzzReader::setupMemory() {
@@ -414,7 +414,19 @@ void TranslateToFuzzReader::addHangLimitSupport() {
   func->body = builder.makeGlobalSet(HANG_LIMIT_GLOBAL,
                                      builder.makeConst(int32_t(HANG_LIMIT)));
   wasm.addFunction(func);
-  HANG_LIMIT_FUNC = func->name;
+
+  // Add a call to the hang limit function right before each export.
+  auto oldExports = std::move(wasm.exports);
+  wasm.updateMaps();
+  for (auto& ex : oldExports) {
+    // Add the hang export call.
+    auto exportName = Names::getValidExportName(wasm, "HANG_LIMIT_FUNC");
+    wasm.addExport(
+      builder.makeExport(exportName, funcName, ExternalKind::Function));
+
+    // Re-add the existing export.
+    wasm.addExport(std::move(ex));
+  }
 }
 
 void TranslateToFuzzReader::addImportLoggingSupport() {
@@ -545,7 +557,6 @@ Function* TranslateToFuzzReader::addFunction() {
     });
   if (defaultableParams && (numAddedFunctions == 0 || oneIn(2)) &&
       !wasm.getExportOrNull(func->name)) {
-    addHangLimitExport();
     auto* export_ = new Export;
     export_->name = func->name;
     export_->value = func->name;
@@ -578,15 +589,6 @@ void TranslateToFuzzReader::addHangLimitChecks(Function* func) {
   // recursion limit
   func->body =
     builder.makeSequence(makeHangLimitCheck(), func->body, func->getResults());
-}
-
-void TranslateToFuzzReader::addHangLimitExport() {
-  if (HANG_LIMIT == 0) {
-    return;
-  }
-  auto exportName = Names::getValidExportName(wasm, "HANG_LIMIT_FUNC");
-  wasm.addExport(
-    builder.makeExport(exportName, HANG_LIMIT_FUNC, ExternalKind::Function));
 }
 
 void TranslateToFuzzReader::recombine(Function* func) {
@@ -861,7 +863,6 @@ void TranslateToFuzzReader::addInvocations(Function* func) {
   body->list.set(invocations);
   wasm.addFunction(std::move(invoker));
 
-  addHangLimitExport();
   wasm.addExport(builder.makeExport(name, name, ExternalKind::Function));
 }
 
