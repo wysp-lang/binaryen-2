@@ -1029,7 +1029,10 @@ class CtorEval(TestCaseHandler):
                    '--ctors', ','.join(exports),
                    # don't remove exports because we still want to call them in
                    # order to compare the logs
-                   '--kept-exports', ','.join(exports)])
+                   '--kept-exports', ','.join(exports),
+                   # we can ignore params because the fuzzer sets them to 0
+                   # which is what this flag makes ctor-eval do as well
+                   '--ignore-external-input'])
         print(out)
 
         # compare to before
