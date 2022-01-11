@@ -33,6 +33,7 @@
 #include "pass.h"
 #include "support/colors.h"
 #include "support/file.h"
+#include "support/string.h"
 #include "tool-options.h"
 #include "wasm-builder.h"
 #include "wasm-interpreter.h"
@@ -488,9 +489,6 @@ private:
   }
 };
 
-// Whether to remove exports that we manage to completely eval.
-static bool removeExports = true;
-
 struct EvalCtorOutcome {
   // Whether we completely evalled the function (that is, we did not fail, and
   // we did not only partially eval it).
@@ -669,7 +667,12 @@ EvalCtorOutcome evalCtor(EvallingModuleInstance& instance,
 }
 
 // Eval all ctors in a module.
-void evalCtors(Module& wasm, std::vector<std::string> ctors) {
+void evalCtors(Module& wasm,
+               std::vector<std::string>& ctors,
+               std::vector<std::string>& keptExports) {
+  std::unordered_set<std::string> keptExportsSet(keptExports.begin(),
+                                                 keptExports.end());
+
   std::map<Name, std::shared_ptr<EvallingModuleInstance>> linkedInstances;
 
   // build and link the env module
@@ -712,12 +715,12 @@ void evalCtors(Module& wasm, std::vector<std::string> ctors) {
 
       // Remove the export if we should.
       auto* exp = wasm.getExport(ctor);
-      auto* func = wasm.getFunction(exp->value);
-      if (removeExports) {
+      if (!keptExportsSet.count(ctor)) {
         wasm.removeExport(exp->name);
       } else {
         // We are keeping around the export, which should now refer to an
-        // empty function since it doesn't do anything.
+        // empty function since calling the export should do nothing.
+        auto* func = wasm.getFunction(exp->value);
         auto copyName = Names::getValidFunctionName(wasm, func->name);
         auto* copyFunc = ModuleUtils::copyFunction(func, wasm, copyName);
         if (func->getResults() == Type::none) {
@@ -748,7 +751,8 @@ int main(int argc, const char* argv[]) {
   std::vector<std::string> passes;
   bool emitBinary = true;
   bool debugInfo = false;
-  std::string ctorsString;
+  String::Split ctors;
+  String::Split keptExports;
 
   const std::string WasmCtorEvalOption = "wasm-ctor-eval options";
 
@@ -776,21 +780,24 @@ int main(int argc, const char* argv[]) {
          WasmCtorEvalOption,
          Options::Arguments::Zero,
          [&](Options* o, const std::string& arguments) { debugInfo = true; })
-    .add(
-      "--ctors",
-      "-c",
-      "Comma-separated list of global constructor functions to evaluate",
-      WasmCtorEvalOption,
-      Options::Arguments::One,
-      [&](Options* o, const std::string& argument) { ctorsString = argument; })
-    .add("--remove-exports",
-         "-re",
-         "Whether to remove exports we manage to completely eval (default: 1)",
+    .add("--ctors",
+         "-c",
+         "Comma-separated list of global constructor functions to evaluate",
          WasmCtorEvalOption,
          Options::Arguments::One,
          [&](Options* o, const std::string& argument) {
-           removeExports = atoi(argument.c_str());
+           ctors = String::Split(argument, ",");
          })
+    .add(
+      "--kept-exports",
+      "-ke",
+      "Comma-separated list of ctors whose exports we keep around even if we "
+      "eval those ctors",
+      WasmCtorEvalOption,
+      Options::Arguments::One,
+      [&](Options* o, const std::string& argument) {
+        keptExports = String::Split(argument, ",");
+      })
     .add("--ignore-external-input",
          "-ipi",
          "Assumes no env vars are to be read, stdin is empty, etc.",
@@ -829,14 +836,7 @@ int main(int argc, const char* argv[]) {
     Fatal() << "error in validating input";
   }
 
-  // get list of ctors, and eval them
-  std::vector<std::string> ctors;
-  std::istringstream stream(ctorsString);
-  std::string temp;
-  while (std::getline(stream, temp, ',')) {
-    ctors.push_back(temp);
-  }
-  evalCtors(wasm, ctors);
+  evalCtors(wasm, ctors, keptExports);
 
   // Do some useful optimizations after the evalling
   {
