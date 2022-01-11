@@ -377,8 +377,8 @@ struct CtorEvalExternalInterface : EvallingModuleInstance::ExternalInterface {
     // imported, fail.
     auto* func = wasm->getFunction(targetFunc);
     if (func->type != sig) {
-      throw FailToEvalException(
-        std::string("callTable signature mismatch: ") + targetFunc.str);
+      throw FailToEvalException(std::string("callTable signature mismatch: ") +
+                                targetFunc.str);
     }
     if (!func->imported()) {
       return instance.callFunctionInternal(targetFunc, arguments);
