@@ -735,6 +735,8 @@ void evalCtors(Module& wasm,
 }
 
 static bool canEval(Module& wasm) {
+  // Check if we can flatten memory. We need to do so currently because of how
+  // we assume memory is simple and flat. TODO
   if (!MemoryUtils::flatten(wasm)) {
     std::cout << "  ...stopping since could not flatten memory\n";
     return false;
@@ -838,8 +840,6 @@ int main(int argc, const char* argv[]) {
     Fatal() << "error in validating input";
   }
 
-  // Check if we can flatten memory. We need to do so currently because of how
-  // we assume memory is simple and flat. TODO
   if (canEval(wasm)) {
     evalCtors(wasm, ctors, keptExports);
 
