@@ -684,12 +684,6 @@ void evalCtors(Module& wasm,
 
   CtorEvalExternalInterface interface(linkedInstances);
   try {
-    // flatten memory, so we do not depend on the layout of data segments
-    if (!MemoryUtils::flatten(wasm.memory)) {
-      std::cout << "  ...stopping since could not flatten memory\n";
-      return;
-    }
-
     // create an instance for evalling
     EvallingModuleInstance instance(wasm, &interface, linkedInstances);
     // we should not add new globals from here on; as a result, using
@@ -738,6 +732,14 @@ void evalCtors(Module& wasm,
               << fail.why << "\n";
     return;
   }
+}
+
+static bool canEval(Module& wasm) {
+  if (!MemoryUtils::flatten(wasm)) {
+    std::cout << "  ...stopping since could not flatten memory\n";
+    return false;
+  }
+  return true;
 }
 
 } // anonymous namespace
@@ -836,19 +838,23 @@ int main(int argc, const char* argv[]) {
     Fatal() << "error in validating input";
   }
 
-  evalCtors(wasm, ctors, keptExports);
+  // Check if we can flatten memory. We need to do so currently because of how
+  // we assume memory is simple and flat. TODO
+  if (canEval(wasm)) {
+    evalCtors(wasm, ctors, keptExports);
 
-  // Do some useful optimizations after the evalling
-  {
-    PassRunner passRunner(&wasm);
-    passRunner.add("memory-packing"); // we flattened it, so re-optimize
-    // TODO: just do -Os for the one function
-    passRunner.add("remove-unused-names");
-    passRunner.add("dce");
-    passRunner.add("merge-blocks");
-    passRunner.add("vacuum");
-    passRunner.add("remove-unused-module-elements");
-    passRunner.run();
+    // Do some useful optimizations after the evalling
+    {
+      PassRunner passRunner(&wasm);
+      passRunner.add("memory-packing"); // we flattened it, so re-optimize
+      // TODO: just do -Os for the one function
+      passRunner.add("remove-unused-names");
+      passRunner.add("dce");
+      passRunner.add("merge-blocks");
+      passRunner.add("vacuum");
+      passRunner.add("remove-unused-module-elements");
+      passRunner.run();
+    }
   }
 
   if (options.extra.count("output") > 0) {
