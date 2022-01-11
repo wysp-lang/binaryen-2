@@ -5,18 +5,12 @@
  (global $global1 (mut i32) (i32.const 11))
  (global $global2 (mut i32) (i32.const 12))
  (global $global3 (mut i32) (i32.const 13))
-<<<<<<< HEAD
- (export "test1" (func $test1_0))
- (export "test3" (func $test3_0))
- (export "keepalive" (func $3))
-=======
  (global $global4 (mut i32) (i32.const 14))
  (global $global5 (mut i32) (i32.const 15))
  (export "test1" (func $test1_0))
  (export "test3" (func $test3_0))
  (export "test5" (func $test5_0))
  (export "keepalive" (func $5))
->>>>>>> ceresults
  (func $test1
   (global.set $global1
    (i32.const 11)
@@ -78,11 +72,8 @@
  (func $test3_0 (result i32)
   (i32.const 42)
  )
-<<<<<<< HEAD
-=======
  (func $test5_0 (result i32)
   (call $import)
   (i32.const 100)
  )
->>>>>>> ceresults
 )
