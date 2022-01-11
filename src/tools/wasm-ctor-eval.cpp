@@ -553,6 +553,12 @@ EvalCtorOutcome evalCtor(EvallingModuleInstance& instance,
     EvallingModuleInstance::RuntimeExpressionRunner expressionRunner(
       instance, scope, instance.maxDepth);
 
+    // After we successfully eval a line we will apply the changes here. This is
+    // the same idea as applyToModule() - we must only do it after an entire
+    // atomic "chunk" has been processed, we do not want partial updates from
+    // an item in the block that we only partially evalled.
+    EvallingModuleInstance::FunctionScope appliedScope(func, LiteralList());
+
     Literals results;
     Index successes = 0;
     for (auto* curr : block->list) {
@@ -573,6 +579,7 @@ EvalCtorOutcome evalCtor(EvallingModuleInstance& instance,
 
       // So far so good! Apply the results.
       interface.applyToModule();
+      appliedScope = scope;
       successes++;
 
       // Note the values here, if any. If we are exiting the function now then
@@ -618,7 +625,7 @@ EvalCtorOutcome evalCtor(EvallingModuleInstance& instance,
       // unnecessary operations.
       std::vector<Expression*> localSets;
       for (Index i = 0; i < copyFunc->getNumLocals(); i++) {
-        auto value = scope.locals[i];
+        auto value = appliedScope.locals[i];
         localSets.push_back(
           builder.makeLocalSet(i, builder.makeConstantExpression(value)));
       }
