@@ -167,10 +167,10 @@ void TranslateToFuzzReader::build() {
   if (wasm.features.hasExceptionHandling()) {
     setupTags();
   }
+  modifyInitialFunctions();
   if (HANG_LIMIT > 0) {
     addHangLimitSupport();
   }
-  modifyInitialFunctions();
   addImportLoggingSupport();
   // keep adding functions until we run out of input
   while (!random.finished()) {
