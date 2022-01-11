@@ -494,11 +494,9 @@ struct EvalCtorOutcome {
   // value is given here.
   Literals results;
 
-  static EvalCtorOutcome incomplete() {
-    return {false, Literals()};
-  }
+  static EvalCtorOutcome incomplete() { return {false, Literals()}; }
 
-  static EvalCtorOutcome complete(Literals results=Literals()) {
+  static EvalCtorOutcome complete(Literals results = Literals()) {
     return {true, results};
   }
 };
@@ -712,7 +710,8 @@ void evalCtors(Module& wasm, std::vector<std::string> ctors) {
         if (func->getResults() == Type::none) {
           copyFunc->body = Builder(wasm).makeNop();
         } else {
-          copyFunc->body = Builder(wasm).makeConstantExpression(outcome.results);
+          copyFunc->body =
+            Builder(wasm).makeConstantExpression(outcome.results);
         }
         wasm.getExport(exp->name)->value = copyName;
       }
@@ -771,13 +770,14 @@ int main(int argc, const char* argv[]) {
       WasmCtorEvalOption,
       Options::Arguments::One,
       [&](Options* o, const std::string& argument) { ctorsString = argument; })
-    .add(
-      "--remove-exports",
-      "-re",
-      "Whether to remove exports we manage to completely eval (default: 1)",
-      WasmCtorEvalOption,
-      Options::Arguments::One,
-      [&](Options* o, const std::string& argument) { removeExports = atoi(argument.c_str()); })
+    .add("--remove-exports",
+         "-re",
+         "Whether to remove exports we manage to completely eval (default: 1)",
+         WasmCtorEvalOption,
+         Options::Arguments::One,
+         [&](Options* o, const std::string& argument) {
+           removeExports = atoi(argument.c_str());
+         })
     .add("--ignore-external-input",
          "-ipi",
          "Assumes no env vars are to be read, stdin is empty, etc.",

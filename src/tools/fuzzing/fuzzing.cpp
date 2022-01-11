@@ -585,7 +585,8 @@ void TranslateToFuzzReader::addHangLimitExport() {
     return;
   }
   auto exportName = Names::getValidExportName(wasm, "HANG_LIMIT_FUNC");
-  wasm.addExport(builder.makeExport(exportName, HANG_LIMIT_FUNC, ExternalKind::Function));
+  wasm.addExport(
+    builder.makeExport(exportName, HANG_LIMIT_FUNC, ExternalKind::Function));
 }
 
 void TranslateToFuzzReader::recombine(Function* func) {
