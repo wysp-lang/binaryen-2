@@ -1029,7 +1029,7 @@ class CtorEval(TestCaseHandler):
                    '--ctors', ','.join(exports),
                    # don't remove exports because we still want to call them in
                    # order to compare the logs
-                   '--remove-exports', '0'])
+                   '--kept-exports', ','.join(exports)])
         print(out)
 
         # compare to before
