@@ -337,7 +337,7 @@ def pick_initial_contents():
         '--disable-multivalue',
         # DWARF is incompatible with multivalue atm; it's more important to
         # fuzz multivalue since we aren't actually fuzzing DWARF here
-        '--strip-dwarf',
+        # '--strip-dwarf',
     ]
 
     # the given wasm may not work with the chosen feature opts. for example, if
