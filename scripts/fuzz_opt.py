@@ -1025,14 +1025,14 @@ class CtorEval(TestCaseHandler):
 
         # eval the ctors
         ctors_wasm = wasm + '.ctors.wasm'
-        out = run([in_bin('wasm-ctor-eval'), wasm, '-o', ctors_wasm, '-all',
+        out = run([in_bin('wasm-ctor-eval'), wasm, '-o', ctors_wasm,
                    '--ctors', ','.join(exports),
                    # don't remove exports because we still want to call them in
                    # order to compare the logs
                    '--kept-exports', ','.join(exports),
                    # we can ignore params because the fuzzer sets them to 0
                    # which is what this flag makes ctor-eval do as well
-                   '--ignore-external-input'])
+                   '--ignore-external-input'] + FEATURE_OPTS)
         print(out)
 
         # compare to before
