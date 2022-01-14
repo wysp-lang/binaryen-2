@@ -44,9 +44,6 @@ using namespace wasm;
 
 // Literal utilities
 
-static_assert(sizeof(BinaryenLiteral) == sizeof(Literal),
-              "Binaryen C API literal must match wasm.h");
-
 BinaryenLiteral toBinaryenLiteral(Literal x) {
   BinaryenLiteral ret;
   ret.type = x.type.getID();

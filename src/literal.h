@@ -40,14 +40,17 @@ class Literal {
   union {
     int32_t i32;
     int64_t i64;
-    uint8_t v128[16];
+    // Store v128 out of band to avoid bloating the size of all literals.
+    std::unique_ptr<std::array<uint8_t, 16>> v128;
     // funcref function name. `isNull()` indicates a `null` value.
     Name func;
     // A reference to GC data, either a Struct or an Array. For both of those
     // we store the referred data as a Literals object (which is natural for an
     // Array, and for a Struct, is just the fields in order). The type is used
     // to indicate whether this is a Struct or an Array, and of what type.
-    std::shared_ptr<GCData> gcData;
+    // Wrap the shared reference in a unique ptr to avoid bloating the size of
+    // all literals.
+    std::unique_ptr<std::shared_ptr<GCData>> gcData;
     // RTT values are "structural" in that the MVP doc says that multiple
     // invocations of ref.canon return things that are observably identical, and
     // the same is true for ref.sub. That is, what matters is the types; there
@@ -305,11 +308,11 @@ public:
   }
   uint8_t* getv128Ptr() {
     assert(type == Type::v128);
-    return v128;
+    return &(*v128)[0];
   }
   const uint8_t* getv128Ptr() const {
     assert(type == Type::v128);
-    return v128;
+    return &(*v128)[0];
   }
 
   int32_t reinterpreti32() const {

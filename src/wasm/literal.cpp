@@ -41,7 +41,7 @@ Literal::Literal(Type type) : type(type) {
         i64 = 0;
         return;
       case Type::v128:
-        memset(&v128, 0, 16);
+        v128 = std::make_unique<std::array<uint8_t, 16>>();
         return;
       case Type::none:
         return;
@@ -61,18 +61,18 @@ Literal::Literal(Type type) : type(type) {
     new (&gcData) std::shared_ptr<GCData>();
   } else if (type.isRtt()) {
     new (this) Literal(Literal::makeCanonicalRtt(type.getHeapType()));
-  } else {
-    // For anything else, zero out all the union data.
-    memset(&v128, 0, 16);
+  } else if (type.isFunction()) {
+    func = Name();
   }
 }
 
 Literal::Literal(const uint8_t init[16]) : type(Type::v128) {
-  memcpy(&v128, init, 16);
+  memcpy(getv128Ptr(), init, 16);
 }
 
-Literal::Literal(std::shared_ptr<GCData> gcData, Type type)
-  : gcData(gcData), type(type) {
+Literal::Literal(std::shared_ptr<GCData> gcData_, Type type) : type(type) {
+  gcData = std::make_unique<std::shared_ptr<GCData>>(gcData_);
+
   // Null data is only allowed if nullable.
   assert(gcData || type.isNullable());
   // The type must be a proper type for GC data.
@@ -96,7 +96,7 @@ Literal::Literal(const Literal& other) : type(other.type) {
         i64 = other.i64;
         return;
       case Type::v128:
-        memcpy(&v128, other.v128, 16);
+        memcpy(getv128Ptr(), other.getv128Ptr(), 16);
         return;
       case Type::none:
         return;
@@ -111,7 +111,7 @@ Literal::Literal(const Literal& other) : type(other.type) {
     }
   }
   if (other.isData()) {
-    new (&gcData) std::shared_ptr<GCData>(other.gcData);
+    new (&gcData) auto(std::make_unique<std::shared_ptr<GCData>>(*other.gcData));
     return;
   }
   if (type.isFunction()) {
@@ -145,11 +145,14 @@ Literal::Literal(const Literal& other) : type(other.type) {
 Literal::~Literal() {
   // Early exit for the common case; basic types need no special handling.
   if (type.isBasic()) {
+    if (type == Type::v128) {
+      v128.~unique_ptr();
+    }
     return;
   }
 
   if (isData()) {
-    gcData.~shared_ptr();
+    gcData.~unique_ptr();
   } else if (type.isRtt()) {
     rttSupers.~unique_ptr();
   }
@@ -176,7 +179,7 @@ Literal Literal::makeCanonicalRtt(HeapType type) {
 }
 
 template<typename LaneT, int Lanes>
-static void extractBytes(uint8_t (&dest)[16], const LaneArray<Lanes>& lanes) {
+static void extractBytes(uint8_t* dest, const LaneArray<Lanes>& lanes) {
   std::array<uint8_t, 16> bytes;
   const size_t lane_width = 16 / Lanes;
   for (size_t lane_index = 0; lane_index < Lanes; ++lane_index) {
@@ -189,23 +192,23 @@ static void extractBytes(uint8_t (&dest)[16], const LaneArray<Lanes>& lanes) {
         uint8_t(lane >> (8 * offset));
     }
   }
-  memcpy(&dest, bytes.data(), sizeof(bytes));
+  memcpy(dest, bytes.data(), sizeof(bytes));
 }
 
 Literal::Literal(const LaneArray<16>& lanes) : type(Type::v128) {
-  extractBytes<uint8_t, 16>(v128, lanes);
+  extractBytes<uint8_t, 16>(getv128Ptr(), lanes);
 }
 
 Literal::Literal(const LaneArray<8>& lanes) : type(Type::v128) {
-  extractBytes<uint16_t, 8>(v128, lanes);
+  extractBytes<uint16_t, 8>(getv128Ptr(), lanes);
 }
 
 Literal::Literal(const LaneArray<4>& lanes) : type(Type::v128) {
-  extractBytes<uint32_t, 4>(v128, lanes);
+  extractBytes<uint32_t, 4>(getv128Ptr(), lanes);
 }
 
 Literal::Literal(const LaneArray<2>& lanes) : type(Type::v128) {
-  extractBytes<uint64_t, 2>(v128, lanes);
+  extractBytes<uint64_t, 2>(getv128Ptr(), lanes);
 }
 
 Literals Literal::makeZeros(Type type) {
@@ -263,13 +266,13 @@ Literal Literal::makeNegOne(Type type) {
 std::array<uint8_t, 16> Literal::getv128() const {
   assert(type == Type::v128);
   std::array<uint8_t, 16> ret;
-  memcpy(ret.data(), v128, sizeof(ret));
+  memcpy(ret.data(), getv128Ptr(), sizeof(ret));
   return ret;
 }
 
 std::shared_ptr<GCData> Literal::getGCData() const {
   assert(isData());
-  return gcData;
+  return *gcData;
 }
 
 const RttSupers& Literal::getRttSupers() const {
@@ -399,7 +402,7 @@ bool Literal::operator==(const Literal& other) const {
       case Type::f64:
         return i64 == other.i64;
       case Type::v128:
-        return memcmp(v128, other.v128, 16) == 0;
+        return memcmp(getv128Ptr(), other.getv128Ptr(), 16) == 0;
       case Type::funcref:
       case Type::externref:
       case Type::anyref:
@@ -1707,7 +1710,7 @@ Literal Literal::shuffleV8x16(const Literal& other,
   assert(type == Type::v128);
   uint8_t bytes[16];
   for (size_t i = 0; i < mask.size(); ++i) {
-    bytes[i] = (mask[i] < 16) ? v128[mask[i]] : other.v128[mask[i] - 16];
+    bytes[i] = (mask[i] < 16) ? getv128Ptr()[mask[i]] : other.getv128Ptr()[mask[i] - 16];
   }
   return Literal(bytes);
 }
