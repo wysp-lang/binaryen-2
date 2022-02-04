@@ -119,6 +119,12 @@ struct GlobalTypeOptimization : public Pass {
       Fatal() << "GlobalTypeOptimization requires nominal typing";
     }
 
+    // First, remove instructions where we can. If a struct is never created
+    // anywhere, then any gets or sets of it cannot be reached, or the reference
+    // there would be null and trap anyhow. Removing these first make the
+    // problem simpler for the rest of the pass.
+    optimizeNeverCreatedTypes(runner, *module);
+
     // Find and analyze struct operations inside each function.
     StructUtils::FunctionStructValuesMap<FieldInfo> functionNewInfos(*module),
       functionSetGetInfos(*module);
@@ -394,6 +400,104 @@ struct GlobalTypeOptimization : public Pass {
     FieldRemover remover(*this);
     remover.run(runner, &wasm);
     remover.runOnModuleCode(runner, &wasm);
+  }
+
+  void optimizeNeverCreatedTypes(PassRunner* runner, Module& wasm) {
+    // Find which types are created.
+    using HeapTypeSet = std::unordered_set<HeapType>;
+
+    struct Scanner : public WalkerPass<PostWalker<Scanner>> {
+      //bool isFunctionParallel() override { return true; } TODO set
+
+      HeapTypeSet& created;
+
+      Scanner(HeapTypeSet& created) : created(created) {}
+
+      Scanner* create() override { return new Scanner(created); }
+
+      void visitStructNew(StructNew* curr) {
+        if (curr->type != Type::unreachable) {
+          created.insert(curr->type.getHeapType());
+        }
+      }
+
+      void visitArrayNew(ArrayNew* curr) {
+        if (curr->type != Type::unreachable) {
+          created.insert(curr->type.getHeapType());
+        }
+      }
+    };
+
+    HeapTypeSet created;
+    Scanner scanner(created);
+    scanner.run(runner, &wasm);
+    scanner.runOnModuleCode(runner, &wasm);
+
+    // Propagate to supertypes, as if we create a type we can refer to it from
+    // locations with its supertype or higher up.
+    auto work = created;
+    while (!work.empty()) {
+      auto iter = work.begin();
+      auto type = *iter;
+      work.erase(iter);
+
+      if (auto super = type.getSuperType()) {
+        if (!created.count(*super)) {
+          created.insert(*super);
+          work.insert(*super);
+        }
+      }
+    }
+
+    struct Remover : public WalkerPass<PostWalker<Remover>> {
+      //bool isFunctionParallel() override { return true; } TODO set
+
+      HeapTypeSet& created;
+
+      Remover(HeapTypeSet& created) : created(created) {}
+
+      Remover* create() override { return new Remover(created); }
+
+      void visitStructSet(StructSet* curr) {
+        optimize(curr, curr->ref);
+      }
+
+      void visitStructGet(StructGet* curr) {
+        optimize(curr, curr->ref);
+      }
+
+      void visitArraySet(ArraySet* curr) {
+        optimize(curr, curr->ref);
+      }
+
+      void visitArrayGet(ArrayGet* curr) {
+        optimize(curr, curr->ref);
+      }
+
+      void optimize(Expression* curr, Expression* ref) {
+        if (ref->type == Type::unreachable) {
+          return;
+        }
+        auto type = ref->type.getHeapType();
+        if (created.count(type)) {
+          return;
+        }
+
+        Builder builder(*getModule());
+        auto* block = builder.makeBlock();
+        for (auto* child : ChildIterator(curr)) {
+          block->list.push_back(builder.makeDrop(child));
+        }
+        block->list.push_back(builder.makeUnreachable());
+        replaceCurrent(block);
+      }
+    };
+
+    Remover remover(created);
+    remover.run(runner, &wasm);
+    remover.runOnModuleCode(runner, &wasm);
+
+    ReFinalize().run(runner, &wasm);
   }
 };
 
