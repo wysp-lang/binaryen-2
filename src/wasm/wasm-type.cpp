@@ -28,6 +28,7 @@
 #include "support/hash.h"
 #include "support/insert_ordered.h"
 #include "wasm-features.h"
+#include "wasm-type-printing.h"
 #include "wasm-type.h"
 
 #define TRACE_CANONICALIZATION 0
@@ -196,42 +197,43 @@ private:
   std::optional<Rtt> lub(const Rtt& a, const Rtt& b);
 };
 
-// Helper for printing types without infinitely recursing on recursive types.
+// Helper for printing types.
 struct TypePrinter {
-  size_t currDepth = 0;
-  std::unordered_map<TypeID, size_t> depths;
+  // Whether to print explicit supertypes.
+  bool printSupertypes;
 
   // The stream we are printing to.
   std::ostream& os;
 
-  TypePrinter(std::ostream& os) : os(os) {}
+  // The default generator state if no other generator is provided.
+  std::optional<DefaultTypeNameGenerator> defaultGenerator;
+
+  // The function we call to get HeapType names.
+  HeapTypeNameGenerator generator;
+
+  TypePrinter(std::ostream& os, HeapTypeNameGenerator generator)
+    : printSupertypes(getTypeSystem() != TypeSystem::Equirecursive), os(os),
+      defaultGenerator(), generator(generator) {}
+  TypePrinter(std::ostream& os)
+    : TypePrinter(
+        os, [&](HeapType type) { return defaultGenerator->getNames(type); }) {
+    defaultGenerator = DefaultTypeNameGenerator{};
+  }
+
+  void printHeapTypeName(HeapType type);
+  void printSupertypeOr(std::optional<HeapType> super, std::string other);
 
   std::ostream& print(Type type);
-  std::ostream& print(HeapType heapType);
+  std::ostream& print(HeapType type);
   std::ostream& print(const Tuple& tuple);
   std::ostream& print(const Field& field);
-  std::ostream& print(const Signature& sig);
-  std::ostream& print(const Struct& struct_);
-  std::ostream& print(const Array& array);
+  std::ostream& print(const Signature& sig,
+                      std::optional<HeapType> super = std::nullopt);
+  std::ostream& print(const Struct& struct_,
+                      std::optional<HeapType> super = std::nullopt);
+  std::ostream& print(const Array& array,
+                      std::optional<HeapType> super = std::nullopt);
   std::ostream& print(const Rtt& rtt);
-
-private:
-  template<typename T, typename F> std::ostream& printChild(T curr, F printer);
-
-  // FIXME: This hard limit on how many times we call print() avoids extremely
-  //        large outputs, which can be inconveniently large in some cases, but
-  //        we should have a better mechanism for this.
-  static const size_t MaxPrints = 100;
-
-  size_t prints = 0;
-
-  bool exceededLimit() {
-    if (prints >= MaxPrints) {
-      return true;
-    }
-    prints++;
-    return false;
-  }
 };
 
 // Helper for hashing the shapes of TypeInfos and HeapTypeInfos. Keeps track of
@@ -1461,6 +1463,25 @@ size_t RecGroup::size() const {
   }
 }
 
+TypeNames DefaultTypeNameGenerator::getNames(HeapType type) {
+  auto [it, inserted] = nameCache.insert({type, {}});
+  if (inserted) {
+    // Generate a new name for this type we have not previously seen.
+    std::stringstream stream;
+    if (type.isSignature()) {
+      stream << "func." << funcCount++;
+    } else if (type.isStruct()) {
+      stream << "struct." << structCount++;
+    } else if (type.isArray()) {
+      stream << "array." << arrayCount++;
+    } else {
+      WASM_UNREACHABLE("unexpected kind");
+    }
+    it->second = {stream.str(), {}};
+  }
+  return it->second;
+}
+
 template<typename T> static std::string genericToString(const T& t) {
   std::ostringstream ss;
   ss << t;
@@ -1473,11 +1494,18 @@ std::string Signature::toString() const { return genericToString(*this); }
 std::string Struct::toString() const { return genericToString(*this); }
 std::string Array::toString() const { return genericToString(*this); }
 std::string Rtt::toString() const { return genericToString(*this); }
+
 std::ostream& operator<<(std::ostream& os, Type type) {
   return TypePrinter(os).print(type);
 }
-std::ostream& operator<<(std::ostream& os, HeapType heapType) {
-  return TypePrinter(os).print(heapType);
+std::ostream& operator<<(std::ostream& os, Type::Printed printed) {
+  return TypePrinter(os, printed.generateName).print(Type(printed.typeID));
+}
+std::ostream& operator<<(std::ostream& os, HeapType type) {
+  return TypePrinter(os).print(type);
+}
+std::ostream& operator<<(std::ostream& os, HeapType::Printed printed) {
+  return TypePrinter(os, printed.generateName).print(HeapType(printed.typeID));
 }
 std::ostream& operator<<(std::ostream& os, Tuple tuple) {
   return TypePrinter(os).print(tuple);
@@ -1763,7 +1791,8 @@ HeapType TypeBounder::lub(HeapType a, HeapType b) {
     return getBasicLUB();
   }
 
-  if (typeSystem == TypeSystem::Nominal) {
+  if (typeSystem == TypeSystem::Nominal ||
+      typeSystem == TypeSystem::Isorecursive) {
     // Walk up the subtype tree to find the LUB. Ascend the tree from both `a`
     // and `b` in lockstep. The first type we see for a second time must be the
     // LUB because there are no cycles and the only way to encounter a type
@@ -1943,22 +1972,21 @@ std::optional<Rtt> TypeBounder::lub(const Rtt& a, const Rtt& b) {
   return Rtt(depth, a.heapType);
 }
 
-template<typename T, typename F>
-std::ostream& TypePrinter::printChild(T curr, F printer) {
-  if (exceededLimit()) {
-    return os << "..!";
+void TypePrinter::printHeapTypeName(HeapType type) {
+  if (type.isBasic()) {
+    print(type);
+    return;
   }
-  auto it = depths.find(curr.getID());
-  if (it != depths.end()) {
-    assert(it->second <= currDepth);
-    size_t relativeDepth = currDepth - it->second;
-    return os << "..." << relativeDepth;
+  os << '$' << generator(type).name;
+}
+
+void TypePrinter::printSupertypeOr(std::optional<HeapType> super,
+                                   std::string other) {
+  if (super) {
+    printHeapTypeName(*super);
+  } else {
+    os << other;
   }
-  depths[curr.getID()] = ++currDepth;
-  printer();
-  depths.erase(curr.getID());
-  --currDepth;
-  return os;
 }
 
 std::ostream& TypePrinter::print(Type type) {
@@ -1993,33 +2021,32 @@ std::ostream& TypePrinter::print(Type type) {
     }
   }
 
-  return printChild(type, [&]() {
-    if (isTemp(type)) {
-      os << "[T]";
-    }
+  if (isTemp(type)) {
+    os << "(; temp ;) ";
+  }
 #if TRACE_CANONICALIZATION
-    os << "[" << ((type.getID() >> 4) % 1000) << "]";
+  os << "(;" << ((type.getID() >> 4) % 1000) << ";) ";
 #endif
-    if (type.isTuple()) {
-      print(type.getTuple());
-    } else if (type.isRef()) {
-      os << "(ref ";
-      if (type.isNullable()) {
-        os << "null ";
-      }
-      print(type.getHeapType());
-      os << ')';
-    } else if (type.isRtt()) {
-      print(type.getRtt());
-    } else {
-      WASM_UNREACHABLE("unexpected type");
+  if (type.isTuple()) {
+    print(type.getTuple());
+  } else if (type.isRef()) {
+    os << "(ref ";
+    if (type.isNullable()) {
+      os << "null ";
     }
-  });
+    printHeapTypeName(type.getHeapType());
+    os << ')';
+  } else if (type.isRtt()) {
+    print(type.getRtt());
+  } else {
+    WASM_UNREACHABLE("unexpected type");
+  }
+  return os;
 }
 
-std::ostream& TypePrinter::print(HeapType heapType) {
-  if (heapType.isBasic()) {
-    switch (heapType.getBasic()) {
+std::ostream& TypePrinter::print(HeapType type) {
+  if (type.isBasic()) {
+    switch (type.getBasic()) {
       case HeapType::func:
         return os << "func";
       case HeapType::ext:
@@ -2035,29 +2062,25 @@ std::ostream& TypePrinter::print(HeapType heapType) {
     }
   }
 
-  return printChild(heapType, [&]() {
-    if (isTemp(heapType)) {
-      os << "[T]";
-    }
+  if (isTemp(type)) {
+    os << "(; temp ;) ";
+  }
 #if TRACE_CANONICALIZATION
-    os << "[" << ((heapType.getID() >> 4) % 1000) << "]";
-    if (auto super = heapType.getSuperType()) {
-      os << "[super " << ((super->getID() >> 4) % 1000) << "]";
-    }
+  os << "(;" << ((type.getID() >> 4) % 1000) << ";)";
 #endif
-    if (getHeapTypeInfo(heapType)->kind == HeapTypeInfo::BasicKind) {
-      os << '*';
-      print(getHeapTypeInfo(heapType)->basic);
-    } else if (heapType.isSignature()) {
-      print(heapType.getSignature());
-    } else if (heapType.isStruct()) {
-      print(heapType.getStruct());
-    } else if (heapType.isArray()) {
-      print(heapType.getArray());
-    } else {
-      WASM_UNREACHABLE("unexpected type");
-    }
-  });
+  if (getHeapTypeInfo(type)->kind == HeapTypeInfo::BasicKind) {
+    os << "(; noncanonical ;) ";
+    print(getHeapTypeInfo(type)->basic);
+  } else if (type.isSignature()) {
+    print(type.getSignature(), type.getSuperType());
+  } else if (type.isStruct()) {
+    print(type.getStruct(), type.getSuperType());
+  } else if (type.isArray()) {
+    print(type.getArray(), type.getSuperType());
+  } else {
+    WASM_UNREACHABLE("unexpected type");
+  }
+  return os;
 }
 
 std::ostream& TypePrinter::print(const Tuple& tuple) {
@@ -2093,7 +2116,8 @@ std::ostream& TypePrinter::print(const Field& field) {
   return os;
 }
 
-std::ostream& TypePrinter::print(const Signature& sig) {
+std::ostream& TypePrinter::print(const Signature& sig,
+                                 std::optional<HeapType> super) {
   auto printPrefixed = [&](const char* prefix, Type type) {
     os << '(' << prefix;
     for (Type t : type) {
@@ -2104,6 +2128,9 @@ std::ostream& TypePrinter::print(const Signature& sig) {
   };
 
   os << "(func";
+  if (printSupertypes) {
+    os << "_subtype";
+  }
   if (sig.params.getID() != Type::none) {
     os << ' ';
     printPrefixed("param", sig.params);
@@ -2112,11 +2139,19 @@ std::ostream& TypePrinter::print(const Signature& sig) {
     os << ' ';
     printPrefixed("result", sig.results);
   }
+  if (printSupertypes) {
+    os << ' ';
+    printSupertypeOr(super, "func");
+  }
   return os << ')';
 }
 
-std::ostream& TypePrinter::print(const Struct& struct_) {
+std::ostream& TypePrinter::print(const Struct& struct_,
+                                 std::optional<HeapType> super) {
   os << "(struct";
+  if (printSupertypes) {
+    os << "_subtype";
+  }
   if (struct_.fields.size()) {
     os << " (field";
   }
@@ -2127,12 +2162,25 @@ std::ostream& TypePrinter::print(const Struct& struct_) {
   if (struct_.fields.size()) {
     os << ')';
   }
+  if (printSupertypes) {
+    os << ' ';
+    printSupertypeOr(super, "data");
+  }
   return os << ')';
 }
 
-std::ostream& TypePrinter::print(const Array& array) {
-  os << "(array ";
+std::ostream& TypePrinter::print(const Array& array,
+                                 std::optional<HeapType> super) {
+  os << "(array";
+  if (printSupertypes) {
+    os << "_subtype";
+  }
+  os << ' ';
   print(array.element);
+  if (printSupertypes) {
+    os << ' ';
+    printSupertypeOr(super, "data");
+  }
   return os << ')';
 }
 
@@ -2141,7 +2189,7 @@ std::ostream& TypePrinter::print(const Rtt& rtt) {
   if (rtt.hasDepth()) {
     os << rtt.depth << ' ';
   }
-  print(rtt.heapType);
+  printHeapTypeName(rtt.heapType);
   return os << ')';
 }
 
@@ -2443,7 +2491,10 @@ size_t RecGroupHasher::hash(const TypeInfo& info) const {
 
 size_t RecGroupHasher::hash(const HeapTypeInfo& info) const {
   assert(info.isFinalized);
-  size_t digest = wasm::hash(uintptr_t(info.supertype));
+  size_t digest = wasm::hash(bool(info.supertype));
+  if (info.supertype) {
+    hash_combine(digest, hash(HeapType(uintptr_t(info.supertype))));
+  }
   wasm::rehash(digest, info.kind);
   switch (info.kind) {
     case HeapTypeInfo::BasicKind:
@@ -2567,8 +2618,15 @@ bool RecGroupEquator::eq(const TypeInfo& a, const TypeInfo& b) const {
 }
 
 bool RecGroupEquator::eq(const HeapTypeInfo& a, const HeapTypeInfo& b) const {
-  if (a.supertype != b.supertype) {
+  if (bool(a.supertype) != bool(b.supertype)) {
     return false;
+  }
+  if (a.supertype) {
+    HeapType superA(uintptr_t(a.supertype));
+    HeapType superB(uintptr_t(b.supertype));
+    if (!eq(superA, superB)) {
+      return false;
+    }
   }
   if (a.kind != b.kind) {
     return false;
@@ -3549,7 +3607,11 @@ void canonicalizeEquirecursive(CanonicalizationState& state) {
 }
 
 std::optional<TypeBuilder::Error>
-validateStructuralSubtyping(const std::vector<HeapType>& types) {
+validateSubtyping(const std::vector<HeapType>& types) {
+  if (getTypeSystem() == TypeSystem::Equirecursive) {
+    // Subtyping is not explicitly declared, so nothing to check.
+    return {};
+  }
   for (size_t i = 0; i < types.size(); ++i) {
     HeapType type = types[i];
     if (type.isBasic()) {
@@ -3622,11 +3684,6 @@ canonicalizeNominal(CanonicalizationState& state) {
     checked.insert(path.begin(), path.end());
   }
 
-  // Check that the declared supertypes are valid.
-  if (auto error = validateStructuralSubtyping(state.results)) {
-    return {*error};
-  }
-
   return {};
 }
 
@@ -3675,6 +3732,9 @@ std::optional<TypeBuilder::Error> canonicalizeIsorecursive(
 
   for (size_t index = 0; index < state.results.size(); ++index) {
     HeapType type = state.results[index];
+    if (type.isBasic()) {
+      continue;
+    }
     // Validate the supertype. Supertypes must precede their subtypes.
     if (auto super = type.getSuperType()) {
       if (!indexOfType.count(*super)) {
@@ -3694,11 +3754,6 @@ std::optional<TypeBuilder::Error> canonicalizeIsorecursive(
   }
   if (auto error = finishGroup(state.results.size())) {
     return *error;
-  }
-
-  // Check that the declared supertypes are structurally valid.
-  if (auto error = validateStructuralSubtyping(state.results)) {
-    return {*error};
   }
 
   // Now that we know everything is valid, start canonicalizing recursion
@@ -3834,6 +3889,11 @@ TypeBuilder::BuildResult TypeBuilder::build() {
   std::cerr << "Global canonicalization took "
             << getMillis(afterStructureCanonicalization, end) << " ms\n";
 #endif
+
+  // Check that the declared supertypes are structurally valid.
+  if (auto error = validateSubtyping(state.results)) {
+    return {*error};
+  }
 
   // Note built signature types. See comment in `HeapType::HeapType(Signature)`.
   for (auto type : state.results) {
