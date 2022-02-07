@@ -124,6 +124,7 @@ struct GlobalTypeOptimization : public Pass {
     // there would be null and trap anyhow. Removing these first make the
     // problem simpler for the rest of the pass.
     optimizeNeverCreatedTypes(runner, *module);
+return;
 
     // Find and analyze struct operations inside each function.
     StructUtils::FunctionStructValuesMap<FieldInfo> functionNewInfos(*module),
@@ -489,6 +490,7 @@ struct GlobalTypeOptimization : public Pass {
           block->list.push_back(builder.makeDrop(child));
         }
         block->list.push_back(builder.makeUnreachable());
+        block->finalize(Type::unreachable);
         replaceCurrent(block);
       }
     };
