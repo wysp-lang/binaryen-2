@@ -704,10 +704,8 @@ private:
       if (curr->ref->type == Type::unreachable) {
         return;
       }
-      if (curr->ref->type.getHeapType()
-            .getArray()
-            .element
-            .mutable_ == Mutable) {
+      if (curr->ref->type.getHeapType().getArray().element.mutable_ ==
+          Mutable) {
         parent.readsMutableArray = true;
       }
       // traps when the arg is null or the index out of bounds
@@ -728,10 +726,8 @@ private:
       if (curr->srcRef->type == Type::unreachable) {
         return;
       }
-      if (curr->srcRef->type.getHeapType()
-            .getArray()
-            .element
-            .mutable_ == Mutable) {
+      if (curr->srcRef->type.getHeapType().getArray().element.mutable_ ==
+          Mutable) {
         parent.readsMutableArray = true;
       }
       parent.writesArray = true;
