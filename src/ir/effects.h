@@ -79,7 +79,7 @@ public:
   //       struct/array level.
   bool readsMutableStruct = false;
   bool writesStruct = false;
-  bool readsArray = false;
+  bool readsMutableArray = false;
   bool writesArray = false;
   // A trap, either from an unreachable instruction, or from an implicit trap
   // that we do not ignore (see below).
@@ -133,7 +133,9 @@ public:
   bool accessesMutableStruct() const {
     return calls || readsMutableStruct || writesStruct;
   }
-  bool accessesArray() const { return calls || readsArray || writesArray; }
+  bool accessesMutableArray() const {
+    return calls || readsMutableArray || writesArray;
+  }
   bool throws() const { return throws_ || !delegateTargets.empty(); }
   // Check whether this may transfer control flow to somewhere outside of this
   // expression (aside from just flowing out normally). That includes a break
@@ -153,7 +155,7 @@ public:
   }
   bool readsMutableGlobalState() const {
     return mutableGlobalsRead.size() || readsMemory || readsTable ||
-           readsMutableStruct || readsArray || isAtomic || calls;
+           readsMutableStruct || readsMutableArray || isAtomic || calls;
   }
 
   bool hasNonTrapSideEffects() const {
@@ -206,8 +208,8 @@ public:
         ((other.writesTable || other.calls) && accessesTable()) ||
         ((writesStruct || calls) && other.accessesMutableStruct()) ||
         ((other.writesStruct || other.calls) && accessesMutableStruct()) ||
-        ((writesArray || calls) && other.accessesArray()) ||
-        ((other.writesArray || other.calls) && accessesArray()) ||
+        ((writesArray || calls) && other.accessesMutableArray()) ||
+        ((other.writesArray || other.calls) && accessesMutableArray()) ||
         (danglingPop || other.danglingPop)) {
       return true;
     }
@@ -271,7 +273,7 @@ public:
     writesTable = writesTable || other.writesTable;
     readsMutableStruct = readsMutableStruct || other.readsMutableStruct;
     writesStruct = writesStruct || other.writesStruct;
-    readsArray = readsArray || other.readsArray;
+    readsMutableArray = readsMutableArray || other.readsMutableArray;
     writesArray = writesArray || other.writesArray;
     trap = trap || other.trap;
     implicitTrap = implicitTrap || other.implicitTrap;
@@ -699,7 +701,15 @@ private:
     void visitArrayNew(ArrayNew* curr) {}
     void visitArrayInit(ArrayInit* curr) {}
     void visitArrayGet(ArrayGet* curr) {
-      parent.readsArray = true;
+      if (curr->ref->type == Type::unreachable) {
+        return;
+      }
+      if (curr->ref->type.getHeapType()
+            .getArray()
+            .element
+            .mutable_ == Mutable) {
+        parent.readsMutableArray = true;
+      }
       // traps when the arg is null or the index out of bounds
       parent.implicitTrap = true;
     }
@@ -715,7 +725,15 @@ private:
       }
     }
     void visitArrayCopy(ArrayCopy* curr) {
-      parent.readsArray = true;
+      if (curr->srcRef->type == Type::unreachable) {
+        return;
+      }
+      if (curr->srcRef->type.getHeapType()
+            .getArray()
+            .element
+            .mutable_ == Mutable) {
+        parent.readsMutableArray = true;
+      }
       parent.writesArray = true;
       // traps when a ref is null, or when out of bounds.
       parent.implicitTrap = true;
