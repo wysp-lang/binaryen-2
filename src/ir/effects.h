@@ -79,6 +79,11 @@ public:
   //       struct/array level.
   bool readsMutableStruct = false;
   bool writesStruct = false;
+  // XXX in practice this is not that useful. array operations take the index
+  //     at runtime, which means they can always trap even if the input is non-
+  //     nullable. And if they trap, we are limited in how we optimize them even
+  //     if we add this feature to ignore the effects of reading immutable
+  //     arrays.
   bool readsMutableArray = false;
   bool writesArray = false;
   // A trap, either from an unreachable instruction, or from an implicit trap
