@@ -1,5 +1,6 @@
-#include <gtest/gtest.h>
-#include <wasm-type.h>
+#include "wasm-type-printing.h"
+#include "wasm-type.h"
+#include "gtest/gtest.h"
 
 using namespace wasm;
 
@@ -99,6 +100,48 @@ TEST_F(TypeTest, TypeIterator) {
   EXPECT_EQ(*reverse++, i64);
   EXPECT_EQ(*reverse++, i32);
   EXPECT_EQ(reverse, tuple.rend());
+}
+
+TEST_F(TypeTest, IndexedTypePrinter) {
+  TypeBuilder builder(4);
+
+  Type refStructA = builder.getTempRefType(builder[0], Nullable);
+  Type refStructB = builder.getTempRefType(builder[1], Nullable);
+  Type refArrayA = builder.getTempRefType(builder[2], Nullable);
+  Type refArrayB = builder.getTempRefType(builder[3], Nullable);
+  builder[0] = Struct({Field(refArrayB, Immutable)});
+  builder[1] = Struct({Field(refStructA, Immutable)});
+  builder[2] = Array(Field(refStructB, Immutable));
+  builder[3] = Array(Field(refArrayA, Immutable));
+
+  auto result = builder.build();
+  ASSERT_TRUE(result);
+  auto built = *result;
+
+  std::vector<HeapType> structs{built[0], built[1]};
+  std::vector<HeapType> arrays{built[2], built[3]};
+
+  // Check that IndexedTypePrinters configured with fallbacks work correctly.
+  using ArrayPrinter = IndexedTypeNameGenerator<DefaultTypeNameGenerator>;
+  ArrayPrinter printArrays(arrays, "array");
+  using StructPrinter = IndexedTypeNameGenerator<ArrayPrinter>;
+  StructPrinter print(structs, printArrays, "struct");
+
+  std::stringstream stream;
+  stream << print(built[0]);
+  EXPECT_EQ(stream.str(), "(struct (field (ref null $array1)))");
+
+  stream.str("");
+  stream << print(built[1]);
+  EXPECT_EQ(stream.str(), "(struct (field (ref null $struct0)))");
+
+  stream.str("");
+  stream << print(built[2]);
+  EXPECT_EQ(stream.str(), "(array (ref null $struct1))");
+
+  stream.str("");
+  stream << print(built[3]);
+  EXPECT_EQ(stream.str(), "(array (ref null $array0))");
 }
 
 TEST_F(EquirecursiveTest, Basics) {
@@ -456,4 +499,31 @@ TEST_F(IsorecursiveTest, CanonicalizeTypesBeforeSubtyping) {
 
   auto result = builder.build();
   EXPECT_TRUE(result);
+}
+
+static void testCanonicalizeBasicTypes() {
+  TypeBuilder builder(5);
+
+  Type externref = builder.getTempRefType(builder[0], Nullable);
+  Type externrefs = builder.getTempTupleType({externref, externref});
+
+  builder[0] = HeapType::ext;
+  builder[1] = Struct({Field(externref, Immutable)});
+  builder[2] = Struct({Field(Type::externref, Immutable)});
+  builder[3] = Signature(externrefs, Type::none);
+  builder[4] = Signature({Type::externref, Type::externref}, Type::none);
+
+  auto result = builder.build();
+  ASSERT_TRUE(result);
+  auto built = *result;
+
+  EXPECT_EQ(built[1], built[2]);
+  EXPECT_EQ(built[3], built[4]);
+}
+
+TEST_F(EquirecursiveTest, CanonicalizeBasicTypes) {
+  testCanonicalizeBasicTypes();
+}
+TEST_F(IsorecursiveTest, CanonicalizeBasicTypes) {
+  testCanonicalizeBasicTypes();
 }
