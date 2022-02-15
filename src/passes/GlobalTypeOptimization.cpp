@@ -408,7 +408,7 @@ struct GlobalTypeOptimization : public Pass {
     using HeapTypeSet = std::unordered_set<HeapType>;
 
     struct Scanner : public WalkerPass<PostWalker<Scanner>> {
-      //bool isFunctionParallel() override { return true; } TODO set
+      // bool isFunctionParallel() override { return true; } TODO set
 
       HeapTypeSet& created;
 
@@ -457,7 +457,7 @@ struct GlobalTypeOptimization : public Pass {
     }
 
     struct Remover : public WalkerPass<PostWalker<Remover>> {
-      //bool isFunctionParallel() override { return true; } TODO set
+      // bool isFunctionParallel() override { return true; } TODO set
 
       HeapTypeSet& created;
 
@@ -465,21 +465,13 @@ struct GlobalTypeOptimization : public Pass {
 
       Remover* create() override { return new Remover(created); }
 
-      void visitStructSet(StructSet* curr) {
-        optimize(curr, curr->ref);
-      }
+      void visitStructSet(StructSet* curr) { optimize(curr, curr->ref); }
 
-      void visitStructGet(StructGet* curr) {
-        optimize(curr, curr->ref);
-      }
+      void visitStructGet(StructGet* curr) { optimize(curr, curr->ref); }
 
-      void visitArraySet(ArraySet* curr) {
-        optimize(curr, curr->ref);
-      }
+      void visitArraySet(ArraySet* curr) { optimize(curr, curr->ref); }
 
-      void visitArrayGet(ArrayGet* curr) {
-        optimize(curr, curr->ref);
-      }
+      void visitArrayGet(ArrayGet* curr) { optimize(curr, curr->ref); }
 
       void optimize(Expression* curr, Expression* ref) {
         if (ref->type == Type::unreachable) {
