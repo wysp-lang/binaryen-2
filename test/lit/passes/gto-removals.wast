@@ -20,19 +20,27 @@
 )
 
 (module
-  ;; A write does not keep a field from being removed.
-
-  ;; CHECK:      (type $ref|$struct|_=>_none (func_subtype (param (ref $struct)) func))
+  ;; A write or a new does not keep a field from being removed.
 
   ;; CHECK:      (type $struct (struct_subtype  data))
   (type $struct (struct_subtype (field (mut funcref)) data))
 
+  ;; CHECK:      (type $ref|$struct|_=>_none (func_subtype (param (ref $struct)) func))
+
   ;; CHECK:      (func $func (type $ref|$struct|_=>_none) (param $x (ref $struct))
-  ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (local.get $x)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (ref.null func)
+  ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (ref.null func)
+  ;; CHECK-NEXT:   (struct.new_default $struct)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new_default $struct)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   (func $func (param $x (ref $struct))
@@ -42,50 +50,15 @@
       (local.get $x)
       (ref.null func)
     )
-  )
-)
-
-(module
-  ;; A new does not keep a field from being removed.
-
-  ;; CHECK:      (type $struct (struct_subtype  data))
-  (type $struct (struct_subtype (field (mut funcref)) data))
-
-  ;; CHECK:      (type $ref|$struct|_=>_none (func_subtype (param (ref $struct)) func))
-
-  ;; CHECK:      (func $func (type $ref|$struct|_=>_none) (param $x (ref $struct))
-  ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.new_default $struct)
-  ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT: )
-  (func $func (param $x (ref $struct))
     ;; The fields in this new will be removed.
     (drop
       (struct.new $struct
         (ref.null func)
       )
     )
-  )
-)
-
-(module
-  ;; A new_default does not keep a field from being removed.
-
-  ;; CHECK:      (type $struct (struct_subtype  data))
-  (type $struct (struct_subtype (field (mut funcref)) data))
-
-  ;; CHECK:      (type $ref|$struct|_=>_none (func_subtype (param (ref $struct)) func))
-
-  ;; CHECK:      (func $func (type $ref|$struct|_=>_none) (param $x (ref $struct))
-  ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.new_default $struct)
-  ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT: )
-  (func $func (param $x (ref $struct))
-    ;; The fields in this new will be removed.
+    ;; The same for new_default
     (drop
-      (struct.new_default $struct
-      )
+      (struct.new_default $struct)
     )
   )
 )
@@ -98,6 +71,8 @@
 
   ;; CHECK:      (type $ref|$struct|_=>_none (func_subtype (param (ref $struct)) func))
 
+  ;; CHECK:      (type $none_=>_none (func_subtype func))
+
   ;; CHECK:      (func $func (type $ref|$struct|_=>_none) (param $x (ref $struct))
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (struct.get $struct 0
@@ -109,6 +84,21 @@
     (drop
       (struct.get $struct 0
         (local.get $x)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $keepalive (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $struct
+  ;; CHECK-NEXT:    (ref.null func)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $keepalive
+    (drop
+      (struct.new $struct
+        (ref.null func)
       )
     )
   )
@@ -131,6 +121,8 @@
   ;; CHECK:      (type $ref|$mut-struct|_=>_none (func_subtype (param (ref $mut-struct)) func))
 
   ;; CHECK:      (type $ref|$imm-struct|_=>_none (func_subtype (param (ref $imm-struct)) func))
+
+  ;; CHECK:      (type $none_=>_none (func_subtype func))
 
   ;; CHECK:      (func $func-mut (type $ref|$mut-struct|_=>_none) (param $x (ref $mut-struct))
   ;; CHECK-NEXT:  (drop
@@ -258,6 +250,43 @@
     (drop
       (struct.get $imm-struct $rw-2
         (local.get $x)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $keepalive (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $mut-struct
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $imm-struct
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $keepalive
+    (drop
+      (struct.new $mut-struct
+        (i32.const 0)
+        (i32.const 0)
+        (i32.const 0)
+        (i32.const 0)
+        (i32.const 0)
+        (i32.const 0)
+      )
+    )
+    (drop
+      (struct.new $imm-struct
+        (i32.const 0)
+        (i32.const 0)
+        (i32.const 0)
+        (i32.const 0)
       )
     )
   )
