@@ -153,15 +153,15 @@
     )
   )
 
-  ;; CHECK:      (func $field-keepalive (type $none_=>_none)
+  ;; CHECK:      (func $keepalive (type $none_=>_none)
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (struct.get $struct 2
   ;; CHECK-NEXT:    (ref.null $struct)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  (func $field-keepalive
-    ;; --gto will remove fields that are not read from, so add reads to any
+  (func $keepalive
+     ;; --gto will remove fields that are not read from, so add reads to any
     ;; that don't already have them.
     (drop (struct.get $struct 2 (ref.null $struct)))
   )
@@ -201,7 +201,7 @@
     )
   )
 
-  ;; CHECK:      (func $field-keepalive (type $none_=>_none)
+  ;; CHECK:      (func $keepalive (type $none_=>_none)
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (struct.get $A 0
   ;; CHECK-NEXT:    (ref.null $A)
@@ -222,12 +222,20 @@
   ;; CHECK-NEXT:    (ref.null $B)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new_default $A)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new_default $B)
+  ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  (func $field-keepalive
+  (func $keepalive
     (drop (struct.get $A 0 (ref.null $A)))
     (drop (struct.get $A 1 (ref.null $A)))
     (drop (struct.get $B 0 (ref.null $B)))
     (drop (struct.get $B 1 (ref.null $B)))
+    (drop (struct.new $A))
+    (drop (struct.new $B))
   )
 )
 
@@ -265,7 +273,7 @@
     )
   )
 
-  ;; CHECK:      (func $field-keepalive (type $none_=>_none)
+  ;; CHECK:      (func $keepalive (type $none_=>_none)
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (struct.get $A 0
   ;; CHECK-NEXT:    (ref.null $A)
@@ -286,12 +294,20 @@
   ;; CHECK-NEXT:    (ref.null $B)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new_default $A)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new_default $B)
+  ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  (func $field-keepalive
+  (func $keepalive
     (drop (struct.get $A 0 (ref.null $A)))
     (drop (struct.get $A 1 (ref.null $A)))
     (drop (struct.get $B 0 (ref.null $B)))
     (drop (struct.get $B 1 (ref.null $B)))
+    (drop (struct.new $A))
+    (drop (struct.new $B))
   )
 )
 
@@ -329,7 +345,7 @@
     )
   )
 
-  ;; CHECK:      (func $field-keepalive (type $none_=>_none)
+  ;; CHECK:      (func $keepalive (type $none_=>_none)
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (struct.get $A 0
   ;; CHECK-NEXT:    (ref.null $A)
@@ -350,12 +366,20 @@
   ;; CHECK-NEXT:    (ref.null $B)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new_default $A)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new_default $B)
+  ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  (func $field-keepalive
+  (func $keepalive
     (drop (struct.get $A 0 (ref.null $A)))
     (drop (struct.get $A 1 (ref.null $A)))
     (drop (struct.get $B 0 (ref.null $B)))
     (drop (struct.get $B 1 (ref.null $B)))
+    (drop (struct.new $A))
+    (drop (struct.new $B))
   )
 )
 
@@ -384,7 +408,7 @@
     )
   )
 
-  ;; CHECK:      (func $field-keepalive (type $none_=>_none)
+  ;; CHECK:      (func $keepalive (type $none_=>_none)
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (struct.get $struct 0
   ;; CHECK-NEXT:    (ref.null $struct)
@@ -400,11 +424,19 @@
   ;; CHECK-NEXT:    (ref.null $struct)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $struct
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  (func $field-keepalive
+  (func $keepalive
     (drop (struct.get $struct 0 (ref.null $struct)))
     (drop (struct.get $struct 1 (ref.null $struct)))
     (drop (struct.get $struct 2 (ref.null $struct)))
+    (drop (struct.new $struct (i32.const 0) (i32.const 0) (i32.const 0)))
   )
 )
 
@@ -445,7 +477,7 @@
     )
   )
 
-  ;; CHECK:      (func $field-keepalive (type $none_=>_none)
+  ;; CHECK:      (func $keepalive (type $none_=>_none)
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (struct.get $super 0
   ;; CHECK-NEXT:    (ref.null $super)
@@ -457,7 +489,7 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  (func $field-keepalive
+  (func $keepalive
     (drop (struct.get $super 0 (ref.null $super)))
     (drop (struct.get $sub 0 (ref.null $sub)))
   )
@@ -509,7 +541,7 @@
     )
   )
 
-  ;; CHECK:      (func $field-keepalive (type $none_=>_none)
+  ;; CHECK:      (func $keepalive (type $none_=>_none)
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (struct.get $super 0
   ;; CHECK-NEXT:    (ref.null $super)
@@ -521,7 +553,7 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  (func $field-keepalive
+  (func $keepalive
     (drop (struct.get $super 0 (ref.null $super)))
     (drop (struct.get $sub 0 (ref.null $sub)))
   )
@@ -529,7 +561,6 @@
 
 (module
   ;; As above, but add a write in the sub, which prevents optimization.
-
 
   ;; CHECK:      (type $sub (struct_subtype (field (mut i32)) $super))
 
@@ -554,7 +585,7 @@
     )
   )
 
-  ;; CHECK:      (func $field-keepalive (type $none_=>_none)
+  ;; CHECK:      (func $keepalive (type $none_=>_none)
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (struct.get $super 0
   ;; CHECK-NEXT:    (ref.null $super)
@@ -565,9 +596,17 @@
   ;; CHECK-NEXT:    (ref.null $sub)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new_default $super)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new_default $sub)
+  ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  (func $field-keepalive
+  (func $keepalive
     (drop (struct.get $super 0 (ref.null $super)))
     (drop (struct.get $sub 0 (ref.null $sub)))
+    (drop (struct.new $super))
+    (drop (struct.new $sub))
   )
 )
