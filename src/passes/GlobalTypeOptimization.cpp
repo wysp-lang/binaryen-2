@@ -20,6 +20,7 @@
 //
 //  * Immutability: If a field has no struct.set, it can become immutable.
 //  * Fields that are never read from can be removed entirely.
+//  * Types that are never created cannot be read from or written to.
 //
 // TODO: Specialize field types.
 //
@@ -124,7 +125,6 @@ struct GlobalTypeOptimization : public Pass {
     // there would be null and trap anyhow. Removing these first make the
     // problem simpler for the rest of the pass.
     optimizeNeverCreatedTypes(runner, *module);
-return;
 
     // Find and analyze struct operations inside each function.
     StructUtils::FunctionStructValuesMap<FieldInfo> functionNewInfos(*module),
@@ -427,6 +427,12 @@ return;
           created.insert(curr->type.getHeapType());
         }
       }
+
+      void visitArrayInit(ArrayInit* curr) {
+        if (curr->type != Type::unreachable) {
+          created.insert(curr->type.getHeapType());
+        }
+      }
     };
 
     HeapTypeSet created;
@@ -479,11 +485,13 @@ return;
         if (ref->type == Type::unreachable) {
           return;
         }
+
         auto type = ref->type.getHeapType();
         if (created.count(type)) {
           return;
         }
 
+        // This type, nor any subtype, is ever created; remove this operation.
         Builder builder(*getModule());
         auto* block = builder.makeBlock();
         for (auto* child : ChildIterator(curr)) {
