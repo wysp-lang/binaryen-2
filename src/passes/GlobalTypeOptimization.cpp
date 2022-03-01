@@ -473,6 +473,8 @@ struct GlobalTypeOptimization : public Pass {
 
       void visitArrayGet(ArrayGet* curr) { optimize(curr, curr->ref); }
 
+      // TODO: ArrayCopy
+
       void optimize(Expression* curr, Expression* ref) {
         if (ref->type == Type::unreachable) {
           return;
@@ -492,6 +494,21 @@ struct GlobalTypeOptimization : public Pass {
         block->list.push_back(builder.makeUnreachable());
         block->finalize(Type::unreachable);
         replaceCurrent(block);
+      }
+
+      void visitRefCast(RefCast* curr) {
+        if (!curr->rtt && !created.count(curr->intendedType)) {
+          // This is a static cast, and it is to a type that is never created,
+          // so this can never succeed. Therefore this will either trap or
+          // return a null (if the input is a null).
+          Builder builder(*getModule());
+          replaceCurrent(builder.makeIf(
+            builder.makeRefIs(RefIsNull, curr->ref),
+            builder.makeRefNull(curr->intendedType),
+            builder.makeUnreachable()
+          ));
+          // TODO test
+        }
       }
     };
 

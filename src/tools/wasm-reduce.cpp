@@ -308,7 +308,7 @@ struct Reducer
               std::cerr << "|    command \"" << currCommand
                         << "\" succeeded, reduced size to " << newSize << '\n';
               copy_file(test, working);
-              more = true;
+              //more = true;
               oldSize = newSize;
             }
           }
