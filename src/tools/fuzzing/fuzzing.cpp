@@ -514,28 +514,18 @@ Expression* TranslateToFuzzReader::makeLogging() {
   // If the reference is null, log an indication of that (to avoid causing
   // a trap just because of logging code), and otherwise read the value
   // and log it.
-  auto* condition =     builder.makeRefIs(
-      RefIsNull,
-      builder.makeLocalGet(index, type)
-    );
+  auto* condition =
+    builder.makeRefIs(RefIsNull, builder.makeLocalGet(index, type));
 
   //
   // Log an "odd" number for null, just to avoid logging 0 that has a high
   // chance of overlapping with real values (as 0 is the default for i32).
-  auto* nullCase = 
-    makeLoggingCall(Type::i32, 0x2371c6a8);
+  auto* nullCase = makeLoggingCall(Type::i32, 0x2371c6a8);
 
-  auto* nonNullCase = builder.makeStructGet(
-    builder.makeLocalGet(index, type),
-    field,
-    fieldType
-  );
+  auto* nonNullCase =
+    builder.makeStructGet(builder.makeLocalGet(index, type), field, fieldType);
 
-  return builder.makeIf(
-    condition,
-    nullCase,
-    nonNullCase
-  );
+  return builder.makeIf(condition, nullCase, nonNullCase);
 }
 
 Expression* TranslateToFuzzReader::makeMemoryHashLogging() {
