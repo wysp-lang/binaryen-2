@@ -490,7 +490,7 @@ Expression* TranslateToFuzzReader::makeLogging() {
   auto index = upTo(func->getNumLocals());
   auto type = func->getLocalType(index);
   if (isLoggableType(type)) {
-    return makeLoggingCall(builder.makeLocalGet(index, type));
+    return makeLoggingCall(type, builder.makeLocalGet(index, type));
   }
 
   // If the local contains a reference, we can try to read a value from it
@@ -507,7 +507,7 @@ Expression* TranslateToFuzzReader::makeLogging() {
 
   auto field = pick(fields.size());
   auto fieldType = fields[field].type;
-  if (!isLoggable(fieldType)) {
+  if (!isLoggableType(fieldType)) {
     return generic();
   }
 
@@ -520,10 +520,10 @@ Expression* TranslateToFuzzReader::makeLogging() {
   //
   // Log an "odd" number for null, just to avoid logging 0 that has a high
   // chance of overlapping with real values (as 0 is the default for i32).
-  auto* nullCase = makeLoggingCall(Type::i32, 0x2371c6a8);
+  auto* nullCase = makeLoggingCall(Type::i32, builder.makeConst(int32_t(0x2371c6a8)));
 
   auto* nonNullCase =
-    builder.makeStructGet(builder.makeLocalGet(index, type), field, fieldType);
+    builder.makeStructGet(field, builder.makeLocalGet(index, type), fieldType);
 
   return builder.makeIf(condition, nullCase, nonNullCase);
 }
