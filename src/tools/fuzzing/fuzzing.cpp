@@ -487,11 +487,13 @@ Expression* TranslateToFuzzReader::makeLogging() {
   if (func->getNumLocals() == 0) {
     return generic();
   }
+
   auto index = upTo(func->getNumLocals());
   auto type = func->getLocalType(index);
   if (isLoggableType(type)) {
     return makeLoggingCall(type, builder.makeLocalGet(index, type));
   }
+std::cout << "waka3 " << type << "\n";
 
   // If the local contains a reference, we can try to read a value from it
   // and log that.
@@ -499,17 +501,22 @@ Expression* TranslateToFuzzReader::makeLogging() {
     return generic();
   }
   // TODO: arrays
+std::cout << "waka4\n";
+abort();
 
   auto& fields = type.getHeapType().getStruct().fields;
   if (fields.empty()) {
     return generic();
   }
+std::cout << "waka5\n";
 
   auto field = pick(fields.size());
   auto fieldType = fields[field].type;
   if (!isLoggableType(fieldType)) {
     return generic();
   }
+std::cout << "waka6\n";
+abort();
 
   // If the reference is null, log an indication of that (to avoid causing
   // a trap just because of logging code), and otherwise read the value
