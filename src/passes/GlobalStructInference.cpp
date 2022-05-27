@@ -47,6 +47,7 @@
 
 #include "ir/find_all.h"
 #include "ir/module-utils.h"
+#include "ir/possible-contents.h"
 #include "ir/subtypes.h"
 #include "pass.h"
 #include "wasm-builder.h"
@@ -61,10 +62,16 @@ struct GlobalStructInference : public Pass {
   // them. If a global is not present here, it cannot be optimized.
   std::unordered_map<HeapType, std::vector<Name>> typeGlobals;
 
+  std::unordered_map<HeapType, std::vector<Name>> exactTypeGlobals;
+
+  std::unique_ptr<ContentOracle> contentOracle;
+
   void run(PassRunner* runner, Module* module) override {
     if (getTypeSystem() != TypeSystem::Nominal) {
       Fatal() << "GlobalStructInference requires nominal typing";
     }
+
+    contentOracle = std::make_unique<ContentOracle>(*module); // XXX slow
 
     // First, find all the information we need. We need to know which struct
     // types are created in functions, because we will not be able to optimize
@@ -130,6 +137,8 @@ struct GlobalStructInference : public Pass {
       }
     }
 
+    exactTypeGlobals = typeGlobals; // before any propagation
+
     // A struct.get might also read from any of the subtypes. As a result, an
     // unoptimizable type makes all its supertypes unoptimizable as well.
     // TODO: this could be specific per field (and not all supers have all
@@ -176,28 +185,53 @@ struct GlobalStructInference : public Pass {
 
       FunctionOptimizer(GlobalStructInference& parent) : parent(parent) {}
 
-      void visitStructGet(StructGet* curr) {
-        auto type = curr->ref->type;
+      std::vector<Name> getGlobalsFromDeclaredType(Type type) {
         if (type == Type::unreachable) {
-          return;
+          return {};
         }
 
         auto iter = parent.typeGlobals.find(type.getHeapType());
         if (iter == parent.typeGlobals.end()) {
-          return;
+          return {};
         }
 
-        auto& globals = iter->second;
+        return iter->second;
+      }
 
-        // TODO: more sizes
-        if (globals.size() != 2) {
+      std::vector<Name> getGlobalsFromOracle(Expression* ref) {
+        // We didn't find what we want using the declared type on the
+        // StructGet, but perhaps the contentOracle can help us out.
+        auto contents = parent.contentOracle->getContents(ExpressionLocation{ref, 0});
+        if (!contents.isExactType()) {
+          // The oracle could not predict a useful exact type here.
+          return {};
+        }
+
+        auto type = contents.getType();
+        auto iter = parent.exactTypeGlobals.find(type.getHeapType());
+        if (iter == parent.exactTypeGlobals.end()) {
+          return {};
+        }
+        return iter->second;
+      }
+
+      void visitStructGet(StructGet* curr) {
+        auto globals1 = getGlobalsFromDeclaredType(curr->ref->type);
+        auto globals2 = getGlobalsFromOracle(curr->ref);
+
+        std::vector<Name> globals;
+        if (globals1.size() == 2) {
+          globals = globals1;
+        } else if (globals2.size() == 2) {
+          globals = globals2;
+        } else {
           return;
         }
 
         // Check if the relevant fields contain constants, and are immutable.
         auto& wasm = *getModule();
         auto fieldIndex = curr->index;
-        auto& field = type.getHeapType().getStruct().fields[fieldIndex];
+        auto& field = curr->ref->type.getHeapType().getStruct().fields[fieldIndex];
         if (field.mutable_ == Mutable) {
           return;
         }
