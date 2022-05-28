@@ -152,6 +152,7 @@ struct GlobalStructInference : public Pass {
         }
         type = *super;
       }
+      exactTypeGlobals.erase(type);
     }
 
     // Similarly, propagate global names: if one type has [global1], then a get
