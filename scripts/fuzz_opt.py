@@ -959,7 +959,11 @@ class Asyncify(TestCaseHandler):
         run([in_bin('wasm-opt'), after_wasm, '--legalize-js-interface', '-o', 'async.' + after_wasm] + FEATURE_OPTS)
         before_wasm = 'async.' + before_wasm
         after_wasm = 'async.' + after_wasm
-        before = fix_output(run_d8_wasm(before_wasm))
+        try:
+            before = fix_output(run_d8_wasm(before_wasm))
+        except Exception as e:
+            print('[Asyncify: exception before asyncifying; ignoring testcase]')
+            return
         after = fix_output(run_d8_wasm(after_wasm))
 
         try:
