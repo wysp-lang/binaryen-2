@@ -804,3 +804,53 @@
     )
   )
 )
+
+;; Immutable globals can be optimized too. We emit a global.get for them.
+(module
+  ;; CHECK:      (type $struct (struct_subtype (field anyref) data))
+  (type $struct (struct (ref null any)))
+
+  ;; CHECK:      (type $none_=>_none (func_subtype func))
+
+  ;; CHECK:      (import "a" "b" (global $immutable-1 anyref))
+  (import "a" "b" (global $immutable-1 (ref null any)))
+
+  ;; CHECK:      (import "a" "c" (global $immutable-2 anyref))
+  (import "a" "c" (global $immutable-2 (ref null any)))
+
+  ;; CHECK:      (global $global1 (ref $struct) (struct.new $struct
+  ;; CHECK-NEXT:  (global.get $immutable-1)
+  ;; CHECK-NEXT: ))
+  (global $global1 (ref $struct) (struct.new $struct
+    (global.get $immutable-1)
+  ))
+
+  ;; CHECK:      (global $global2 (ref $struct) (struct.new $struct
+  ;; CHECK-NEXT:  (global.get $immutable-2)
+  ;; CHECK-NEXT: ))
+  (global $global2 (ref $struct) (struct.new $struct
+    (global.get $immutable-2)
+  ))
+
+  ;; CHECK:      (func $test (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (select (result anyref)
+  ;; CHECK-NEXT:    (global.get $immutable-1)
+  ;; CHECK-NEXT:    (global.get $immutable-2)
+  ;; CHECK-NEXT:    (ref.eq
+  ;; CHECK-NEXT:     (ref.as_non_null
+  ;; CHECK-NEXT:      (ref.null $struct)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (global.get $global1)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $test
+    (drop
+      (struct.get $struct 0
+        (ref.null $struct)
+      )
+    )
+  )
+)

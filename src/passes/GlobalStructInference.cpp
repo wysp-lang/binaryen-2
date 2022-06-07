@@ -47,6 +47,7 @@
 
 #include "ir/find_all.h"
 #include "ir/module-utils.h"
+#include "ir/possible-constant.h"
 #include "ir/subtypes.h"
 #include "pass.h"
 #include "wasm-builder.h"
@@ -202,19 +203,21 @@ struct GlobalStructInference : public Pass {
           return;
         }
         auto fieldType = field.type;
-        std::vector<Literal> values;
+        std::vector<PossibleConstantValues> values;
         for (Index i = 0; i < globals.size(); i++) {
           auto* structNew = wasm.getGlobal(globals[i])->init->cast<StructNew>();
+          PossibleConstantValues value;
           if (structNew->isWithDefault()) {
-            values.push_back(Literal::makeZero(fieldType));
+            value.note(Literal::makeNull(fieldType.getHeapType()));
           } else {
             auto* init = structNew->operands[fieldIndex];
-            if (!Properties::isConstantExpression(init)) {
+            value.note(init, wasm);
+            if (!value.isConstant()) {
               // Non-constant; give up entirely.
               return;
             }
-            values.push_back(Properties::getLiteral(init));
           }
+          values.push_back(value);
         }
 
         // Excellent, we can optimize here! Emit a select.
@@ -225,8 +228,8 @@ struct GlobalStructInference : public Pass {
           builder.makeRefEq(builder.makeRefAs(RefAsNonNull, curr->ref),
                             builder.makeGlobalGet(
                               globals[0], wasm.getGlobal(globals[0])->type)),
-          builder.makeConstantExpression(values[0]),
-          builder.makeConstantExpression(values[1])));
+          values[0].makeExpression(wasm),
+          values[1].makeExpression(wasm)));
       }
 
     private:
