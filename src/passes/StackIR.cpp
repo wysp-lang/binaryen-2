@@ -417,7 +417,9 @@ private:
     // relevant for control flow structures, so it is almost always very sparse
     // (and maybe should be a map and not a vector?). The annotation is on the
     // index of the end of the control flow structure.
+std::cout << "a1\n";
     std::vector<Locals> annotationsMap(insts.size());
+std::cout << "a2\n";
 
     struct StructureInfo {
       Expression* origin;
@@ -450,14 +452,14 @@ private:
     size_t totalAnnotations = 0;
 
     for (Index i = 0; i < insts.size(); i++) {
-//std::cout << "waka " << i << '\n';
+std::cout << "waka " << i << '\n';
       auto* inst = insts[i];
       if (!inst) {
         continue;
       }
       auto* origin = inst->origin;
       if (auto* set = origin->dynCast<LocalSet>()) {
-//std::cout << "  waka a\n";
+std::cout << "  waka a\n";
         auto index = set->index;
         if (func->getLocalType(index).isNonNullable()) {
 //std::cout << "  waka b\n";
@@ -471,37 +473,46 @@ private:
         continue;
       }
       if (Properties::isBranch(origin)) {
+std::cout << "  waka z\n";
         // The current sets are sent to the target.
         assert(!structureInfoStack.empty());
         assert(!structureInfoStack.back().partLocals.empty());
-        auto& currLocals = structureInfoStack.back().partLocals.back();
+        const auto currLocals = structureInfoStack.back().partLocals.back();
+std::cout << "  waka z1\n";
         for (auto target : BranchUtils::getUniqueTargets(origin)) {
+std::cout << "  waka z2\n";
           for (auto& targetInfo : structureInfoStack) {
+std::cout << "  waka z3\n";
             // We don't need to send stuff to loops, as they go to the top of
             // the loop, and not out.
             if (auto* targetBlock = targetInfo.origin->dynCast<Block>()) {
+std::cout << "  waka z5\n";
               if (targetBlock->name == target) {
+std::cout << "  waka z6 " << currLocals.size();
+std::cout << " : " << targetInfo.partLocals.size() << "\n";
                 targetInfo.addPart(currLocals);
+std::cout << "  waka z7\n";
                 break;
               }
             }
           }
         }
+        continue;
       }
       if (isControlFlowBegin(inst)) {
-//std::cout << "  waka begin\n";
+std::cout << "  waka begin\n";
         structureInfoStack.emplace_back(origin);
         structureInfoStack.back().startNewPart();
         continue;
       }
       if (isControlFlowMiddle(inst)) {
-//std::cout << "  waka middle\n";
+std::cout << "  waka middle\n";
         assert(!structureInfoStack.empty());
         structureInfoStack.back().startNewPart();
         continue;
       }
       if (isControlFlowEnd(inst)) {
-//std::cout << "  waka end\n";
+std::cout << "  waka end\n";
         assert(!structureInfoStack.empty());
         auto& info = structureInfoStack.back();
         if (auto* iff = origin->dynCast<If>()) {
@@ -549,6 +560,10 @@ private:
     }
     assert(structureInfoStack.empty());
     std::cout << func->name << " : " << totalAnnotations << '\n';
+
+    static size_t staticTotalAnnotations = 0;
+    staticTotalAnnotations += totalAnnotations;
+    std::cout << "\n[[[staticTotalAnnotations]]] : " << staticTotalAnnotations << '\n';
   }
 };
 
