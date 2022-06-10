@@ -407,11 +407,6 @@ private:
     // * $A does not need to annotate $x since it is not used afterwards.
     // * $B and C do need to annotate.
     // * $D does not need to annotate $x since it was already defined before $D.
-    //
-    // To compute this, first we find the most pessimistic representation, where
-    // any local.set of a non-nullable local leads to annotation on the control
-    // flow structure it is in, and annotations are propagated outwards. We will
-    // later prune that.
 
     using Locals = std::unordered_set<Index>;
 
@@ -527,9 +522,9 @@ private:
             }
           }
         }
-        std::cout << "waka end with " << annotations.size() << " [ ";
-        for (auto x : annotations) std::cout << x << ' ';
-        std::cout << "], on " << *info.origin << "\n";
+        //std::cout << "waka end with " << annotations.size() << " [ ";
+        //for (auto x : annotations) std::cout << x << ' ';
+        //std::cout << "], on " << *info.origin << "\n";
         totalAnnotations += annotations.size();
         structureInfoStack.pop_back();
         // Propagate our annotations to the outside.
