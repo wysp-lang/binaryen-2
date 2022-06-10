@@ -103,6 +103,7 @@ public:
       removeUnneededBlocks();
     }
     dce();
+    countNNLocalAnnotations();
   }
 
 private:
@@ -315,6 +316,19 @@ private:
     }
   }
 
+  // A control flow "middle" (a separator inside a control flow structure).
+  bool isControlFlowMiddle(StackInst* inst) {
+    switch (inst->op) {
+      case StackInst::IfElse:
+      case StackInst::Catch:
+      case StackInst::CatchAll:
+      case StackInst::Delegate: {
+        return true;
+      }
+      default: { return false; }
+    }
+  }
+
   // A control flow ending.
   bool isControlFlowEnd(StackInst* inst) {
     switch (inst->op) {
@@ -362,6 +376,129 @@ private:
     }
     // Otherwise, for basic instructions, just count the expression children.
     return ChildIterator(inst->origin).children.size();
+  }
+
+  void countNNLocalAnnotations() {
+    // Estimate the cost of non-nullable local encoding of written locals
+    // annotations. A block/loop/if/try must be annotated with a local if that
+    // local is defined in them, it is used after them, and it was not already
+    // defined before them. For example:
+    //
+    //  (block $A
+    //    (block $B
+    //      (block $C
+    //        ..
+    //        local.set $x
+    //        (block $D
+    //          ..
+    //          local.set $x
+    //        )
+    //        local.get $x
+    //        ..
+    //      )
+    //    )
+    //    local.get $x
+    //    ..
+    //  )
+    //
+    // * $A does not need to annotate $x since it is not used afterwards.
+    // * $B and C do need to annotate.
+    // * $D does not need to annotate $x since it was already defined before $D.
+    //
+    // To compute this, first we find the most pessimistic representation, where
+    // any local.set of a non-nullable local leads to annotation on the control
+    // flow structure it is in, and annotations are propagated outwards. We will
+    // later prune that.
+
+    using Locals = std::unordered_set<Index>;
+
+    // Maps indexes in |insts| to the annotations present there. This is only
+    // relevant for control flow structures, so it is almost always very sparse
+    // (and maybe should be a map and not a vector?). The annotation is on the
+    // index of the end of the control flow structure.
+    std::vector<Locals> annotationsMap;
+
+    struct StructureInfo {
+      // The current "part" of the structure. For a block this is always 0, for
+      // an if it is 0 in the first arm and 1 in the second, etc.
+      Index currPart;
+      // For each part, the non-nullable locals set there.
+      std::vector<Locals> partLocals;
+
+      void addPart() {
+        if (partLocals.empty()) {
+          currPart = 0;
+        } else {
+          currPart++;
+        }
+        partLocals.resize(partLocals.size() + 1);
+        assert(currPart == partLocals.size() - 1);
+      }
+    };
+
+    // A stack of info on all structures at the current point in time.
+    std::vector<StructureInfo> structureInfoStack;
+
+    // The current part of the control flow structures on the stack. For a block
+    // this is always 0, for an if it will be 0 in the first arm and 1 in the
+    // second, etc.
+    std::vector<Index> structureParts;
+
+    size_t totalAnnotations = 0;
+
+    for (Index i = 0; i < insts.size(); i++) {
+      auto* inst = insts[i];
+      if (!inst) {
+        continue;
+      }
+      if (auto* set = inst->origin->is<LocalSet>()) {
+        auto index = set->index;
+        if (func->getLocalType(index).isNonNullable()) {
+          // Mark everything containing us as setting this local.
+          for (auto& info : structureInfoStack) {
+            info.partLocals[info.currPart].insert(index);
+          }
+        }
+        continue;
+      }
+      if (isControlFlowBegin(inst)) {
+        structureInfoStack.resize(structureInfoStack.size() + 1);
+        structureInfoStack.back().addPart();
+        continue;
+      }
+      if (isControlFlowMiddle(inst)) {
+        structureInfoStack.back().addPart();
+        continue;
+      }
+      if (isControlFlowEnd(inst)) {
+        auto& info = structureInfoStack.back();
+        auto& annotations = annotationsMap[i];
+        if (info.currPart == 0) {
+          annotations = info.partLocals[0];
+        } else {
+          // This has multiple parts. The final set of locals is their
+          // intersection.
+          //
+          // Compute that with a map of index to how many parts it appears in.
+          std::vector<Index> counts(func->getNumLocals());
+          auto numParts = info.partLocals.size();
+          for (auto& part : info.partLocals) {
+            for (auto index : part) {
+              counts[index]++;
+              assert(counts[index] <= numParts);
+              if (counts[index] == numParts) {
+                annotations.insert(index);
+                totalAnnotations++;
+              }
+            }
+          }
+        }
+        structureInfoStack.pop_back();
+        continue;
+      }
+    }
+    assert(structureInfoStack.empty());
+    std::cout << func->name << " : " << totalAnnotations << '\n';
   }
 };
 
