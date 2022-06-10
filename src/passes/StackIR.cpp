@@ -381,7 +381,7 @@ private:
   }
 
   void countNNLocalAnnotations() {
-    std::cout << func->name << "..\n";
+    std::cout << '\n' << func->name << "..\n";
     // Estimate the cost of non-nullable local encoding of written locals
     // annotations. A block/loop/if/try must be annotated with a local if that
     // local is defined in them, it is used after them, and it was not already
@@ -527,6 +527,9 @@ private:
             }
           }
         }
+        std::cout << "waka end with " << annotations.size() << " [ ";
+        for (auto x : annotations) std::cout << x << ' ';
+        std::cout << "], on " << *info.origin << "\n";
         totalAnnotations += annotations.size();
         structureInfoStack.pop_back();
         // Propagate our annotations to the outside.
