@@ -420,20 +420,22 @@ private:
     std::vector<Locals> annotationsMap(insts.size());
 
     struct StructureInfo {
+      Expression* origin;
       // The current "part" of the structure. For a block this is always 0, for
       // an if it is 0 in the first arm and 1 in the second, etc.
       Index currPart;
       // For each part, the non-nullable locals set there.
       std::vector<Locals> partLocals;
 
-      void addPart() {
-        if (partLocals.empty()) {
-          currPart = 0;
-        } else {
-          currPart++;
-        }
-        partLocals.resize(partLocals.size() + 1);
-        assert(currPart == partLocals.size() - 1);
+      StructureInfo(Expression* origin) : origin(origin) {}
+
+      void startNewPart() {
+        partLocals.emplace_back();
+        currPart = partLocals.size() - 1;
+      }
+
+      void addPart(Locals locals) {
+        partLocals.emplace_back(locals);
       }
     };
 
@@ -453,7 +455,8 @@ private:
       if (!inst) {
         continue;
       }
-      if (auto* set = inst->origin->dynCast<LocalSet>()) {
+      auto* origin = inst->origin;
+      if (auto* set = origin->dynCast<LocalSet>()) {
 //std::cout << "  waka a\n";
         auto index = set->index;
         if (func->getLocalType(index).isNonNullable()) {
@@ -467,31 +470,50 @@ private:
         }
         continue;
       }
+      if (Properties::isBranch(origin)) {
+        // The current sets are sent to the target.
+        assert(!structureInfoStack.empty());
+        assert(!structureInfoStack.back().partLocals.empty());
+        auto& currLocals = structureInfoStack.back().partLocals.back();
+        for (auto target : BranchUtils::getUniqueTargets(origin)) {
+          for (auto& targetInfo : structureInfoStack) {
+            // We don't need to send stuff to loops, as they go to the top of
+            // the loop, and not out.
+            if (auto* targetBlock = targetInfo.origin->dynCast<Block>()) {
+              if (targetBlock->name == target) {
+                targetInfo.addPart(currLocals);
+                break;
+              }
+            }
+          }
+        }
+      }
       if (isControlFlowBegin(inst)) {
 //std::cout << "  waka begin\n";
-        structureInfoStack.resize(structureInfoStack.size() + 1);
-        structureInfoStack.back().addPart();
+        structureInfoStack.emplace_back(origin);
+        structureInfoStack.back().startNewPart();
         continue;
       }
       if (isControlFlowMiddle(inst)) {
 //std::cout << "  waka middle\n";
         assert(!structureInfoStack.empty());
-        structureInfoStack.back().addPart();
+        structureInfoStack.back().startNewPart();
         continue;
       }
       if (isControlFlowEnd(inst)) {
 //std::cout << "  waka end\n";
         assert(!structureInfoStack.empty());
         auto& info = structureInfoStack.back();
-        if (auto* iff = inst->origin->dynCast<If>()) {
+        if (auto* iff = origin->dynCast<If>()) {
           if (!iff->ifFalse) {
             // An if without an else has an implicit empty arm.
-            info.addPart();
+            info.startNewPart();
           }
         }
         auto& annotations = annotationsMap[i];
         assert(annotations.empty());
-        if (info.currPart == 0) {
+        assert(!info.partLocals.empty());
+        if (info.partLocals.size() == 1) {
           annotations = info.partLocals[0];
         } else {
           // This has multiple parts. The final set of locals is their
