@@ -379,6 +379,7 @@ private:
   }
 
   void countNNLocalAnnotations() {
+    std::cout << func->name << "..\n";
     // Estimate the cost of non-nullable local encoding of written locals
     // annotations. A block/loop/if/try must be annotated with a local if that
     // local is defined in them, it is used after them, and it was not already
@@ -416,7 +417,7 @@ private:
     // relevant for control flow structures, so it is almost always very sparse
     // (and maybe should be a map and not a vector?). The annotation is on the
     // index of the end of the control flow structure.
-    std::vector<Locals> annotationsMap;
+    std::vector<Locals> annotationsMap(insts.size());
 
     struct StructureInfo {
       // The current "part" of the structure. For a block this is always 0, for
@@ -447,32 +448,49 @@ private:
     size_t totalAnnotations = 0;
 
     for (Index i = 0; i < insts.size(); i++) {
+//std::cout << "waka " << i << '\n';
       auto* inst = insts[i];
       if (!inst) {
         continue;
       }
-      if (auto* set = inst->origin->is<LocalSet>()) {
+      if (auto* set = inst->origin->dynCast<LocalSet>()) {
+//std::cout << "  waka a\n";
         auto index = set->index;
         if (func->getLocalType(index).isNonNullable()) {
-          // Mark everything containing us as setting this local.
-          for (auto& info : structureInfoStack) {
+//std::cout << "  waka b\n";
+          if (!structureInfoStack.empty()) {
+//std::cout << "  waka c\n";
+            auto& info = structureInfoStack.back();
+            assert(info.currPart < info.partLocals.size());
             info.partLocals[info.currPart].insert(index);
           }
         }
         continue;
       }
       if (isControlFlowBegin(inst)) {
+//std::cout << "  waka begin\n";
         structureInfoStack.resize(structureInfoStack.size() + 1);
         structureInfoStack.back().addPart();
         continue;
       }
       if (isControlFlowMiddle(inst)) {
+//std::cout << "  waka middle\n";
+        assert(!structureInfoStack.empty());
         structureInfoStack.back().addPart();
         continue;
       }
       if (isControlFlowEnd(inst)) {
+//std::cout << "  waka end\n";
+        assert(!structureInfoStack.empty());
         auto& info = structureInfoStack.back();
+        if (auto* iff = inst->origin->dynCast<If>()) {
+          if (!iff->ifFalse) {
+            // An if without an else has an implicit empty arm.
+            info.addPart();
+          }
+        }
         auto& annotations = annotationsMap[i];
+        assert(annotations.empty());
         if (info.currPart == 0) {
           annotations = info.partLocals[0];
         } else {
@@ -484,16 +502,26 @@ private:
           auto numParts = info.partLocals.size();
           for (auto& part : info.partLocals) {
             for (auto index : part) {
+              assert(index < counts.size());
               counts[index]++;
               assert(counts[index] <= numParts);
               if (counts[index] == numParts) {
                 annotations.insert(index);
-                totalAnnotations++;
               }
             }
           }
         }
+        totalAnnotations += annotations.size();
         structureInfoStack.pop_back();
+        // Propagate our annotations to the outside.
+        if (!structureInfoStack.empty()) {
+          auto& info = structureInfoStack.back();
+          assert(info.currPart < info.partLocals.size());
+          auto& partLocals = info.partLocals[info.currPart];
+          for (auto index : annotations) {
+            partLocals.insert(index);
+          }
+        }
         continue;
       }
     }
