@@ -325,7 +325,9 @@ private:
       case StackInst::Delegate: {
         return true;
       }
-      default: { return false; }
+      default: {
+        return false;
+      }
     }
   }
 
@@ -434,9 +436,7 @@ private:
         currPart = partLocals.size() - 1;
       }
 
-      void addPart(Locals locals) {
-        partLocals.emplace_back(locals);
-      }
+      void addPart(Locals locals) { partLocals.emplace_back(locals); }
     };
 
     // A stack of info on all structures at the current point in time.
@@ -546,7 +546,8 @@ private:
 
     static size_t staticTotalAnnotations = 0;
     staticTotalAnnotations += totalAnnotations;
-    std::cout << "\n[[[staticTotalAnnotations]]] : " << staticTotalAnnotations << '\n';
+    std::cout << "\n[[[staticTotalAnnotations]]] : " << staticTotalAnnotations
+              << '\n';
   }
 };
 
