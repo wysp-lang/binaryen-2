@@ -496,8 +496,7 @@ struct Applier
       // there.
       Index local = originalLocalMap[curr] =
         Builder::addVar(getFunction(), curr->type);
-      replaceCurrent(
-        Builder(*getModule()).makeLocalTee(local, curr));
+      replaceCurrent(Builder(*getModule()).makeLocalTee(local, curr));
     } else if (info.original) {
       auto& originalInfo = requestInfos.at(info.original);
       if (originalInfo.requests) {

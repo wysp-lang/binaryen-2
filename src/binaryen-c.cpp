@@ -917,8 +917,7 @@ BinaryenExpressionRef BinaryenLocalTee(BinaryenModuleRef module,
                                        BinaryenExpressionRef value,
                                        BinaryenType type) {
   return static_cast<Expression*>(
-    Builder(*(Module*)module)
-      .makeLocalTee(index, (Expression*)value));
+    Builder(*(Module*)module).makeLocalTee(index, (Expression*)value));
 }
 BinaryenExpressionRef BinaryenGlobalGet(BinaryenModuleRef module,
                                         const char* name,
