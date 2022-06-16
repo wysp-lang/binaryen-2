@@ -31,7 +31,8 @@ namespace wasm {
 static std::ostream& printExpression(Expression* expression,
                                      std::ostream& o,
                                      bool minify = false,
-                                     bool full = false);
+                                     bool full = false,
+                                     Module* wasm = nullptr);
 
 static std::ostream&
 printStackInst(StackInst* inst, std::ostream& o, Function* func = nullptr);
@@ -285,6 +286,12 @@ static std::ostream& printType(std::ostream& o, Type type, Module* wasm) {
   return o;
 }
 
+static std::ostream&
+printHeapType(std::ostream& o, HeapType type, Module* wasm) {
+  TypeNamePrinter(o, wasm).print(type);
+  return o;
+}
+
 static std::ostream& printPrefixedTypes(std::ostream& o,
                                         const char* prefix,
                                         Type type,
@@ -428,7 +435,9 @@ struct PrintExpressionContents
 
     o << '(';
     printMinor(o, "type ");
-    TypeNamePrinter(o, wasm).print(HeapType(curr->sig));
+
+    TypeNamePrinter(o, wasm).print(curr->heapType);
+
     o << ')';
   }
   void visitLocalGet(LocalGet* curr) {
@@ -638,7 +647,7 @@ struct PrintExpressionContents
   }
   void visitSIMDShuffle(SIMDShuffle* curr) {
     prepareColor(o);
-    o << "v8x16.shuffle";
+    o << "i8x16.shuffle";
     restoreNormalColor(o);
     for (uint8_t mask_index : curr->mask) {
       o << " " << std::to_string(mask_index);
@@ -650,29 +659,32 @@ struct PrintExpressionContents
       case Bitselect:
         o << "v128.bitselect";
         break;
-      case QFMAF32x4:
-        o << "f32x4.qfma";
+      case LaneselectI8x16:
+        o << "i8x16.laneselect";
         break;
-      case QFMSF32x4:
-        o << "f32x4.qfms";
+      case LaneselectI16x8:
+        o << "i16x8.laneselect";
         break;
-      case QFMAF64x2:
-        o << "f64x2.qfma";
+      case LaneselectI32x4:
+        o << "i32x4.laneselect";
         break;
-      case QFMSF64x2:
-        o << "f64x2.qfms";
+      case LaneselectI64x2:
+        o << "i64x2.laneselect";
         break;
-      case SignSelectVec8x16:
-        o << "v8x16.signselect";
+      case RelaxedFmaVecF32x4:
+        o << "f32x4.relaxed_fma";
         break;
-      case SignSelectVec16x8:
-        o << "v16x8.signselect";
+      case RelaxedFmsVecF32x4:
+        o << "f32x4.relaxed_fms";
         break;
-      case SignSelectVec32x4:
-        o << "v32x4.signselect";
+      case RelaxedFmaVecF64x2:
+        o << "f64x2.relaxed_fma";
         break;
-      case SignSelectVec64x2:
-        o << "v64x2.signselect";
+      case RelaxedFmsVecF64x2:
+        o << "f64x2.relaxed_fms";
+        break;
+      case DotI8x16I7x16AddSToVecI32x4:
+        o << "i32x4.dot_i8x16_i7x16_add_s";
         break;
     }
     restoreNormalColor(o);
@@ -722,40 +734,40 @@ struct PrintExpressionContents
   void visitSIMDLoad(SIMDLoad* curr) {
     prepareColor(o);
     switch (curr->op) {
-      case LoadSplatVec8x16:
-        o << "v8x16.load_splat";
+      case Load8SplatVec128:
+        o << "v128.load8_splat";
         break;
-      case LoadSplatVec16x8:
-        o << "v16x8.load_splat";
+      case Load16SplatVec128:
+        o << "v128.load16_splat";
         break;
-      case LoadSplatVec32x4:
-        o << "v32x4.load_splat";
+      case Load32SplatVec128:
+        o << "v128.load32_splat";
         break;
-      case LoadSplatVec64x2:
-        o << "v64x2.load_splat";
+      case Load64SplatVec128:
+        o << "v128.load64_splat";
         break;
-      case LoadExtSVec8x8ToVecI16x8:
-        o << "i16x8.load8x8_s";
+      case Load8x8SVec128:
+        o << "v128.load8x8_s";
         break;
-      case LoadExtUVec8x8ToVecI16x8:
-        o << "i16x8.load8x8_u";
+      case Load8x8UVec128:
+        o << "v128.load8x8_u";
         break;
-      case LoadExtSVec16x4ToVecI32x4:
-        o << "i32x4.load16x4_s";
+      case Load16x4SVec128:
+        o << "v128.load16x4_s";
         break;
-      case LoadExtUVec16x4ToVecI32x4:
-        o << "i32x4.load16x4_u";
+      case Load16x4UVec128:
+        o << "v128.load16x4_u";
         break;
-      case LoadExtSVec32x2ToVecI64x2:
-        o << "i64x2.load32x2_s";
+      case Load32x2SVec128:
+        o << "v128.load32x2_s";
         break;
-      case LoadExtUVec32x2ToVecI64x2:
-        o << "i64x2.load32x2_u";
+      case Load32x2UVec128:
+        o << "v128.load32x2_u";
         break;
-      case Load32Zero:
+      case Load32ZeroVec128:
         o << "v128.load32_zero";
         break;
-      case Load64Zero:
+      case Load64ZeroVec128:
         o << "v128.load64_zero";
         break;
     }
@@ -770,28 +782,28 @@ struct PrintExpressionContents
   void visitSIMDLoadStoreLane(SIMDLoadStoreLane* curr) {
     prepareColor(o);
     switch (curr->op) {
-      case LoadLaneVec8x16:
+      case Load8LaneVec128:
         o << "v128.load8_lane";
         break;
-      case LoadLaneVec16x8:
+      case Load16LaneVec128:
         o << "v128.load16_lane";
         break;
-      case LoadLaneVec32x4:
+      case Load32LaneVec128:
         o << "v128.load32_lane";
         break;
-      case LoadLaneVec64x2:
+      case Load64LaneVec128:
         o << "v128.load64_lane";
         break;
-      case StoreLaneVec8x16:
+      case Store8LaneVec128:
         o << "v128.store8_lane";
         break;
-      case StoreLaneVec16x8:
+      case Store16LaneVec128:
         o << "v128.store16_lane";
         break;
-      case StoreLaneVec32x4:
+      case Store32LaneVec128:
         o << "v128.store32_lane";
         break;
-      case StoreLaneVec64x2:
+      case Store64LaneVec128:
         o << "v128.store64_lane";
         break;
     }
@@ -803,37 +815,6 @@ struct PrintExpressionContents
       o << " align=" << curr->align;
     }
     o << " " << int(curr->index);
-  }
-  void visitSIMDWiden(SIMDWiden* curr) {
-    prepareColor(o);
-    switch (curr->op) {
-      case WidenSVecI8x16ToVecI32x4:
-        o << "i32x4.widen_i8x16_s ";
-        break;
-      case WidenUVecI8x16ToVecI32x4:
-        o << "i32x4.widen_i8x16_u ";
-        break;
-    }
-    restoreNormalColor(o);
-    o << int(curr->index);
-  }
-  void visitPrefetch(Prefetch* curr) {
-    prepareColor(o);
-    switch (curr->op) {
-      case PrefetchTemporal:
-        o << "prefetch.t";
-        break;
-      case PrefetchNontemporal:
-        o << "prefetch.nt";
-        break;
-    }
-    restoreNormalColor(o);
-    if (curr->offset) {
-      o << " offset=" << curr->offset;
-    }
-    if (curr->align != 1) {
-      o << " align=" << curr->align;
-    }
   }
   void visitMemoryInit(MemoryInit* curr) {
     prepareColor(o);
@@ -1064,14 +1045,14 @@ struct PrintExpressionContents
       case NotVec128:
         o << "v128.not";
         break;
+      case AnyTrueVec128:
+        o << "v128.any_true";
+        break;
       case AbsVecI8x16:
         o << "i8x16.abs";
         break;
       case NegVecI8x16:
         o << "i8x16.neg";
-        break;
-      case AnyTrueVecI8x16:
-        o << "i8x16.any_true";
         break;
       case AllTrueVecI8x16:
         o << "i8x16.all_true";
@@ -1088,9 +1069,6 @@ struct PrintExpressionContents
       case NegVecI16x8:
         o << "i16x8.neg";
         break;
-      case AnyTrueVecI16x8:
-        o << "i16x8.any_true";
-        break;
       case AllTrueVecI16x8:
         o << "i16x8.all_true";
         break;
@@ -1103,17 +1081,20 @@ struct PrintExpressionContents
       case NegVecI32x4:
         o << "i32x4.neg";
         break;
-      case AnyTrueVecI32x4:
-        o << "i32x4.any_true";
-        break;
       case AllTrueVecI32x4:
         o << "i32x4.all_true";
         break;
       case BitmaskVecI32x4:
         o << "i32x4.bitmask";
         break;
+      case AbsVecI64x2:
+        o << "i64x2.abs";
+        break;
       case NegVecI64x2:
         o << "i64x2.neg";
+        break;
+      case AllTrueVecI64x2:
+        o << "i64x2.all_true";
         break;
       case BitmaskVecI64x2:
         o << "i64x2.bitmask";
@@ -1178,59 +1159,47 @@ struct PrintExpressionContents
       case TruncSatUVecF32x4ToVecI32x4:
         o << "i32x4.trunc_sat_f32x4_u";
         break;
-      case TruncSatSVecF64x2ToVecI64x2:
-        o << "i64x2.trunc_sat_f64x2_s";
-        break;
-      case TruncSatUVecF64x2ToVecI64x2:
-        o << "i64x2.trunc_sat_f64x2_u";
-        break;
       case ConvertSVecI32x4ToVecF32x4:
         o << "f32x4.convert_i32x4_s";
         break;
       case ConvertUVecI32x4ToVecF32x4:
         o << "f32x4.convert_i32x4_u";
         break;
-      case ConvertSVecI64x2ToVecF64x2:
-        o << "f64x2.convert_i64x2_s";
+      case ExtendLowSVecI8x16ToVecI16x8:
+        o << "i16x8.extend_low_i8x16_s";
         break;
-      case ConvertUVecI64x2ToVecF64x2:
-        o << "f64x2.convert_i64x2_u";
+      case ExtendHighSVecI8x16ToVecI16x8:
+        o << "i16x8.extend_high_i8x16_s";
         break;
-      case WidenLowSVecI8x16ToVecI16x8:
-        o << "i16x8.widen_low_i8x16_s";
+      case ExtendLowUVecI8x16ToVecI16x8:
+        o << "i16x8.extend_low_i8x16_u";
         break;
-      case WidenHighSVecI8x16ToVecI16x8:
-        o << "i16x8.widen_high_i8x16_s";
+      case ExtendHighUVecI8x16ToVecI16x8:
+        o << "i16x8.extend_high_i8x16_u";
         break;
-      case WidenLowUVecI8x16ToVecI16x8:
-        o << "i16x8.widen_low_i8x16_u";
+      case ExtendLowSVecI16x8ToVecI32x4:
+        o << "i32x4.extend_low_i16x8_s";
         break;
-      case WidenHighUVecI8x16ToVecI16x8:
-        o << "i16x8.widen_high_i8x16_u";
+      case ExtendHighSVecI16x8ToVecI32x4:
+        o << "i32x4.extend_high_i16x8_s";
         break;
-      case WidenLowSVecI16x8ToVecI32x4:
-        o << "i32x4.widen_low_i16x8_s";
+      case ExtendLowUVecI16x8ToVecI32x4:
+        o << "i32x4.extend_low_i16x8_u";
         break;
-      case WidenHighSVecI16x8ToVecI32x4:
-        o << "i32x4.widen_high_i16x8_s";
+      case ExtendHighUVecI16x8ToVecI32x4:
+        o << "i32x4.extend_high_i16x8_u";
         break;
-      case WidenLowUVecI16x8ToVecI32x4:
-        o << "i32x4.widen_low_i16x8_u";
+      case ExtendLowSVecI32x4ToVecI64x2:
+        o << "i64x2.extend_low_i32x4_s";
         break;
-      case WidenHighUVecI16x8ToVecI32x4:
-        o << "i32x4.widen_high_i16x8_u";
+      case ExtendHighSVecI32x4ToVecI64x2:
+        o << "i64x2.extend_high_i32x4_s";
         break;
-      case WidenLowSVecI32x4ToVecI64x2:
-        o << "i64x2.widen_low_i32x4_s";
+      case ExtendLowUVecI32x4ToVecI64x2:
+        o << "i64x2.extend_low_i32x4_u";
         break;
-      case WidenHighSVecI32x4ToVecI64x2:
-        o << "i64x2.widen_high_i32x4_s";
-        break;
-      case WidenLowUVecI32x4ToVecI64x2:
-        o << "i64x2.widen_low_i32x4_u";
-        break;
-      case WidenHighUVecI32x4ToVecI64x2:
-        o << "i64x2.widen_high_i32x4_u";
+      case ExtendHighUVecI32x4ToVecI64x2:
+        o << "i64x2.extend_high_i32x4_u";
         break;
       case ConvertLowSVecI32x4ToVecF64x2:
         o << "f64x2.convert_low_i32x4_s";
@@ -1239,16 +1208,28 @@ struct PrintExpressionContents
         o << "f64x2.convert_low_i32x4_u";
         break;
       case TruncSatZeroSVecF64x2ToVecI32x4:
-        o << "i32x4.trunc_sat_f64x2_zero_s";
+        o << "i32x4.trunc_sat_f64x2_s_zero";
         break;
       case TruncSatZeroUVecF64x2ToVecI32x4:
-        o << "i32x4.trunc_sat_f64x2_zero_u";
+        o << "i32x4.trunc_sat_f64x2_u_zero";
         break;
       case DemoteZeroVecF64x2ToVecF32x4:
         o << "f32x4.demote_f64x2_zero";
         break;
       case PromoteLowVecF32x4ToVecF64x2:
         o << "f64x2.promote_low_f32x4";
+        break;
+      case RelaxedTruncSVecF32x4ToVecI32x4:
+        o << "i32x4.relaxed_trunc_f32x4_s";
+        break;
+      case RelaxedTruncUVecF32x4ToVecI32x4:
+        o << "i32x4.relaxed_trunc_f32x4_u";
+        break;
+      case RelaxedTruncZeroSVecF64x2ToVecI32x4:
+        o << "i32x4.relaxed_trunc_f64x2_s_zero";
+        break;
+      case RelaxedTruncZeroUVecF64x2ToVecI32x4:
+        o << "i32x4.relaxed_trunc_f64x2_u_zero";
         break;
       case InvalidUnary:
         WASM_UNREACHABLE("unvalid unary operator");
@@ -1583,6 +1564,21 @@ struct PrintExpressionContents
       case EqVecI64x2:
         o << "i64x2.eq";
         break;
+      case NeVecI64x2:
+        o << "i64x2.ne";
+        break;
+      case LtSVecI64x2:
+        o << "i64x2.lt_s";
+        break;
+      case GtSVecI64x2:
+        o << "i64x2.gt_s";
+        break;
+      case LeSVecI64x2:
+        o << "i64x2.le_s";
+        break;
+      case GeSVecI64x2:
+        o << "i64x2.ge_s";
+        break;
       case EqVecF32x4:
         o << "f32x4.eq";
         break;
@@ -1637,22 +1633,19 @@ struct PrintExpressionContents
         o << "i8x16.add";
         break;
       case AddSatSVecI8x16:
-        o << "i8x16.add_saturate_s";
+        o << "i8x16.add_sat_s";
         break;
       case AddSatUVecI8x16:
-        o << "i8x16.add_saturate_u";
+        o << "i8x16.add_sat_u";
         break;
       case SubVecI8x16:
         o << "i8x16.sub";
         break;
       case SubSatSVecI8x16:
-        o << "i8x16.sub_saturate_s";
+        o << "i8x16.sub_sat_s";
         break;
       case SubSatUVecI8x16:
-        o << "i8x16.sub_saturate_u";
-        break;
-      case MulVecI8x16:
-        o << "i8x16.mul";
+        o << "i8x16.sub_sat_u";
         break;
       case MinSVecI8x16:
         o << "i8x16.min_s";
@@ -1673,19 +1666,19 @@ struct PrintExpressionContents
         o << "i16x8.add";
         break;
       case AddSatSVecI16x8:
-        o << "i16x8.add_saturate_s";
+        o << "i16x8.add_sat_s";
         break;
       case AddSatUVecI16x8:
-        o << "i16x8.add_saturate_u";
+        o << "i16x8.add_sat_u";
         break;
       case SubVecI16x8:
         o << "i16x8.sub";
         break;
       case SubSatSVecI16x8:
-        o << "i16x8.sub_saturate_s";
+        o << "i16x8.sub_sat_s";
         break;
       case SubSatUVecI16x8:
-        o << "i16x8.sub_saturate_u";
+        o << "i16x8.sub_sat_u";
         break;
       case MulVecI16x8:
         o << "i16x8.mul";
@@ -1842,8 +1835,30 @@ struct PrintExpressionContents
         o << "i16x8.narrow_i32x4_u";
         break;
 
-      case SwizzleVec8x16:
-        o << "v8x16.swizzle";
+      case SwizzleVecI8x16:
+        o << "i8x16.swizzle";
+        break;
+
+      case RelaxedMinVecF32x4:
+        o << "f32x4.relaxed_min";
+        break;
+      case RelaxedMaxVecF32x4:
+        o << "f32x4.relaxed_max";
+        break;
+      case RelaxedMinVecF64x2:
+        o << "f64x2.relaxed_min";
+        break;
+      case RelaxedMaxVecF64x2:
+        o << "f64x2.relaxed_max";
+        break;
+      case RelaxedSwizzleVecI8x16:
+        o << "i8x16.relaxed_swizzle";
+        break;
+      case RelaxedQ15MulrSVecI16x8:
+        o << "i16x8.relaxed_q15mulr_s";
+        break;
+      case DotI8x16I7x16SToVecI16x8:
+        o << "i16x8.dot_i8x16_i7x16_s";
         break;
 
       case InvalidBinary:
@@ -1865,7 +1880,7 @@ struct PrintExpressionContents
   void visitMemoryGrow(MemoryGrow* curr) { printMedium(o, "memory.grow"); }
   void visitRefNull(RefNull* curr) {
     printMedium(o, "ref.null ");
-    TypeNamePrinter(o, wasm).print(curr->type.getHeapType());
+    printHeapType(o, curr->type.getHeapType(), wasm);
   }
   void visitRefIs(RefIs* curr) {
     switch (curr->op) {
@@ -1890,6 +1905,22 @@ struct PrintExpressionContents
     printName(curr->func, o);
   }
   void visitRefEq(RefEq* curr) { printMedium(o, "ref.eq"); }
+  void visitTableGet(TableGet* curr) {
+    printMedium(o, "table.get ");
+    printName(curr->table, o);
+  }
+  void visitTableSet(TableSet* curr) {
+    printMedium(o, "table.set ");
+    printName(curr->table, o);
+  }
+  void visitTableSize(TableSize* curr) {
+    printMedium(o, "table.size ");
+    printName(curr->table, o);
+  }
+  void visitTableGrow(TableGrow* curr) {
+    printMedium(o, "table.grow ");
+    printName(curr->table, o);
+  }
   void visitTry(Try* curr) {
     printMedium(o, "try");
     if (curr->name.is()) {
@@ -1903,7 +1934,7 @@ struct PrintExpressionContents
   }
   void visitThrow(Throw* curr) {
     printMedium(o, "throw ");
-    printName(curr->event, o);
+    printName(curr->tag, o);
   }
   void visitRethrow(Rethrow* curr) {
     printMedium(o, "rethrow ");
@@ -1914,8 +1945,8 @@ struct PrintExpressionContents
   void visitPop(Pop* curr) {
     prepareColor(o) << "pop";
     for (auto type : curr->type) {
-      assert(type.isBasic() && "TODO: print and parse compound types");
-      o << " " << type;
+      o << ' ';
+      printType(o, type, wasm);
     }
     restoreNormalColor(o);
   }
@@ -1935,24 +1966,73 @@ struct PrintExpressionContents
       printMedium(o, "call_ref");
     }
   }
-  void visitRefTest(RefTest* curr) { printMedium(o, "ref.test"); }
-  void visitRefCast(RefCast* curr) { printMedium(o, "ref.cast"); }
+  void visitRefTest(RefTest* curr) {
+    if (curr->rtt) {
+      printMedium(o, "ref.test");
+    } else {
+      printMedium(o, "ref.test_static ");
+      printHeapType(o, curr->intendedType, wasm);
+    }
+  }
+  void visitRefCast(RefCast* curr) {
+    if (curr->rtt) {
+      printMedium(o, "ref.cast");
+    } else {
+      if (curr->safety == RefCast::Unsafe) {
+        printMedium(o, "ref.cast_nop_static ");
+      } else {
+        printMedium(o, "ref.cast_static ");
+      }
+      printHeapType(o, curr->intendedType, wasm);
+    }
+  }
   void visitBrOn(BrOn* curr) {
     switch (curr->op) {
       case BrOnNull:
         printMedium(o, "br_on_null ");
         break;
+      case BrOnNonNull:
+        printMedium(o, "br_on_non_null ");
+        break;
       case BrOnCast:
-        printMedium(o, "br_on_cast ");
+        if (curr->rtt) {
+          printMedium(o, "br_on_cast ");
+        } else {
+          printMedium(o, "br_on_cast_static ");
+          printName(curr->name, o);
+          o << ' ';
+          printHeapType(o, curr->intendedType, wasm);
+          return;
+        }
+        break;
+      case BrOnCastFail:
+        if (curr->rtt) {
+          printMedium(o, "br_on_cast_fail ");
+        } else {
+          printMedium(o, "br_on_cast_static_fail ");
+          printName(curr->name, o);
+          o << ' ';
+          printHeapType(o, curr->intendedType, wasm);
+          return;
+        }
         break;
       case BrOnFunc:
         printMedium(o, "br_on_func ");
         break;
+      case BrOnNonFunc:
+        printMedium(o, "br_on_non_func ");
+        break;
       case BrOnData:
         printMedium(o, "br_on_data ");
         break;
+      case BrOnNonData:
+        printMedium(o, "br_on_non_data ");
+        break;
       case BrOnI31:
         printMedium(o, "br_on_i31 ");
+        break;
+      case BrOnNonI31:
+        printMedium(o, "br_on_non_i31 ");
         break;
       default:
         WASM_UNREACHABLE("invalid ref.is_*");
@@ -1964,24 +2044,44 @@ struct PrintExpressionContents
     TypeNamePrinter(o, wasm).print(curr->type.getRtt().heapType);
   }
   void visitRttSub(RttSub* curr) {
-    printMedium(o, "rtt.sub ");
+    if (curr->fresh) {
+      printMedium(o, "rtt.fresh_sub ");
+    } else {
+      printMedium(o, "rtt.sub ");
+    }
     TypeNamePrinter(o, wasm).print(curr->type.getRtt().heapType);
   }
-  void visitStructNew(StructNew* curr) {
-    printMedium(o, "struct.new_");
-    if (curr->isWithDefault()) {
-      o << "default_";
+
+  // If we cannot print a valid unreachable instruction (say, a struct.get,
+  // where if the ref is unreachable, we don't know what heap type to print),
+  // then print the children in a block, which is good enough as this
+  // instruction is never reached anyhow.
+  //
+  // This function checks if the input is in fact unreachable, and if so, begins
+  // to emit a replacement for it and returns true.
+  bool printUnreachableReplacement(Expression* curr) {
+    if (curr->type == Type::unreachable) {
+      printMedium(o, "block");
+      return true;
     }
-    o << "with_rtt ";
-    TypeNamePrinter(o, wasm).print(curr->rtt->type.getHeapType());
+    return false;
   }
-  void printUnreachableReplacement() {
-    // If we cannot print a valid unreachable instruction (say, a struct.get,
-    // where if the ref is unreachable, we don't know what heap type to print),
-    // then print the children in a block, which is good enough as this
-    // instruction is never reached anyhow.
-    printMedium(o, "block ");
+
+  void visitStructNew(StructNew* curr) {
+    if (printUnreachableReplacement(curr)) {
+      return;
+    }
+    printMedium(o, "struct.new");
+    if (curr->isWithDefault()) {
+      printMedium(o, "_default");
+    }
+    if (curr->rtt) {
+      printMedium(o, "_with_rtt");
+    }
+    o << ' ';
+    TypeNamePrinter(o, wasm).print(curr->type.getHeapType());
   }
+
   void printFieldName(HeapType type, Index index) {
     processFieldName(wasm, type, index, [&](Name name) {
       if (name.is()) {
@@ -1992,8 +2092,7 @@ struct PrintExpressionContents
     });
   }
   void visitStructGet(StructGet* curr) {
-    if (curr->ref->type == Type::unreachable) {
-      printUnreachableReplacement();
+    if (printUnreachableReplacement(curr->ref)) {
       return;
     }
     auto heapType = curr->ref->type.getHeapType();
@@ -2012,8 +2111,7 @@ struct PrintExpressionContents
     printFieldName(heapType, curr->index);
   }
   void visitStructSet(StructSet* curr) {
-    if (curr->ref->type == Type::unreachable) {
-      printUnreachableReplacement();
+    if (printUnreachableReplacement(curr->ref)) {
       return;
     }
     printMedium(o, "struct.set ");
@@ -2023,14 +2121,34 @@ struct PrintExpressionContents
     printFieldName(heapType, curr->index);
   }
   void visitArrayNew(ArrayNew* curr) {
-    printMedium(o, "array.new_");
-    if (curr->isWithDefault()) {
-      o << "default_";
+    if (printUnreachableReplacement(curr)) {
+      return;
     }
-    o << "with_rtt ";
-    TypeNamePrinter(o, wasm).print(curr->rtt->type.getHeapType());
+    printMedium(o, "array.new");
+    if (curr->isWithDefault()) {
+      printMedium(o, "_default");
+    }
+    if (curr->rtt) {
+      printMedium(o, "_with_rtt");
+    }
+    o << ' ';
+    TypeNamePrinter(o, wasm).print(curr->type.getHeapType());
+  }
+  void visitArrayInit(ArrayInit* curr) {
+    if (printUnreachableReplacement(curr)) {
+      return;
+    }
+    printMedium(o, "array.init");
+    if (!curr->rtt) {
+      printMedium(o, "_static");
+    }
+    o << ' ';
+    TypeNamePrinter(o, wasm).print(curr->type.getHeapType());
   }
   void visitArrayGet(ArrayGet* curr) {
+    if (printUnreachableReplacement(curr->ref)) {
+      return;
+    }
     const auto& element = curr->ref->type.getHeapType().getArray().element;
     if (element.type == Type::i32 && element.packedType != Field::not_packed) {
       if (curr->signed_) {
@@ -2044,12 +2162,28 @@ struct PrintExpressionContents
     TypeNamePrinter(o, wasm).print(curr->ref->type.getHeapType());
   }
   void visitArraySet(ArraySet* curr) {
+    if (printUnreachableReplacement(curr->ref)) {
+      return;
+    }
     printMedium(o, "array.set ");
     TypeNamePrinter(o, wasm).print(curr->ref->type.getHeapType());
   }
   void visitArrayLen(ArrayLen* curr) {
+    if (printUnreachableReplacement(curr->ref)) {
+      return;
+    }
     printMedium(o, "array.len ");
     TypeNamePrinter(o, wasm).print(curr->ref->type.getHeapType());
+  }
+  void visitArrayCopy(ArrayCopy* curr) {
+    if (printUnreachableReplacement(curr->srcRef) ||
+        printUnreachableReplacement(curr->destRef)) {
+      return;
+    }
+    printMedium(o, "array.copy ");
+    TypeNamePrinter(o, wasm).print(curr->destRef->type.getHeapType());
+    o << ' ';
+    TypeNamePrinter(o, wasm).print(curr->srcRef->type.getHeapType());
   }
   void visitRefAs(RefAs* curr) {
     switch (curr->op) {
@@ -2361,12 +2495,12 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
     maybePrintImplicitBlock(curr->body, true);
     decIndent();
     o << "\n";
-    for (size_t i = 0; i < curr->catchEvents.size(); i++) {
+    for (size_t i = 0; i < curr->catchTags.size(); i++) {
       doIndent(o, indent);
       printDebugDelimiterLocation(curr, i);
       o << '(';
       printMedium(o, "catch ");
-      printName(curr->catchEvents[i], o);
+      printName(curr->catchTags[i], o);
       incIndent();
       maybePrintImplicitBlock(curr->catchBodies[i], true);
       decIndent();
@@ -2374,7 +2508,7 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
     }
     if (curr->hasCatchAll()) {
       doIndent(o, indent);
-      printDebugDelimiterLocation(curr, curr->catchEvents.size());
+      printDebugDelimiterLocation(curr, curr->catchTags.size());
       o << '(';
       printMedium(o, "catch_all");
       incIndent();
@@ -2400,33 +2534,103 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
       o << " ;; end try";
     }
   }
+  void maybePrintUnreachableReplacement(Expression* curr, Type type) {
+    // See the parallel function
+    // PrintExpressionContents::printUnreachableReplacement for background. That
+    // one handles the header, and this one the body. For convenience, this one
+    // also gets a parameter of the type to check for unreachability, to avoid
+    // boilerplate in the callers; if the type is not unreachable, it does the
+    // normal behavior.
+    //
+    // Note that the list of instructions using that function must match those
+    // using this one, so we print the header and body properly together.
+
+    if (type != Type::unreachable) {
+      visitExpression(curr);
+      return;
+    }
+
+    // Emit a block with drops of the children.
+    o << "(block";
+    if (!minify) {
+      o << " ;; (replaces something unreachable we can't emit)";
+    }
+    incIndent();
+    for (auto* child : ChildIterator(curr)) {
+      Drop drop;
+      drop.value = child;
+      printFullLine(&drop);
+    }
+    decIndent();
+  }
+  void visitStructNew(StructNew* curr) {
+    maybePrintUnreachableReplacement(curr, curr->type);
+  }
+  void visitStructSet(StructSet* curr) {
+    maybePrintUnreachableReplacement(curr, curr->ref->type);
+  }
+  void visitStructGet(StructGet* curr) {
+    maybePrintUnreachableReplacement(curr, curr->ref->type);
+  }
+  void visitArrayNew(ArrayNew* curr) {
+    maybePrintUnreachableReplacement(curr, curr->type);
+  }
+  void visitArrayInit(ArrayInit* curr) {
+    maybePrintUnreachableReplacement(curr, curr->type);
+  }
+  void visitArraySet(ArraySet* curr) {
+    maybePrintUnreachableReplacement(curr, curr->ref->type);
+  }
+  void visitArrayGet(ArrayGet* curr) {
+    maybePrintUnreachableReplacement(curr, curr->ref->type);
+  }
   // Module-level visitors
-  void handleSignature(Signature curr, Name name = Name()) {
-    o << "(func";
+  void printSupertypeOr(HeapType curr, std::string noSuper) {
+    if (auto super = curr.getSuperType()) {
+      TypeNamePrinter(o, currModule).print(*super);
+    } else {
+      o << noSuper;
+    }
+  }
+
+  void handleSignature(HeapType curr, Name name = Name()) {
+    Signature sig = curr.getSignature();
+    bool hasSupertype =
+      !name.is() && (getTypeSystem() == TypeSystem::Nominal ||
+                     getTypeSystem() == TypeSystem::Isorecursive);
+    if (hasSupertype) {
+      o << "(func_subtype";
+    } else {
+      o << "(func";
+    }
     if (name.is()) {
       o << " $" << name;
     }
-    if (curr.params.size() > 0) {
+    if (sig.params.size() > 0) {
       o << maybeSpace;
       o << "(param ";
       auto sep = "";
-      for (auto type : curr.params) {
+      for (auto type : sig.params) {
         o << sep;
         printType(o, type, currModule);
         sep = " ";
       }
       o << ')';
     }
-    if (curr.results.size() > 0) {
+    if (sig.results.size() > 0) {
       o << maybeSpace;
       o << "(result ";
       auto sep = "";
-      for (auto type : curr.results) {
+      for (auto type : sig.results) {
         o << sep;
         printType(o, type, currModule);
         sep = " ";
       }
       o << ')';
+    }
+    if (hasSupertype) {
+      o << ' ';
+      printSupertypeOr(curr, "func");
     }
     o << ")";
   }
@@ -2449,19 +2653,34 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
       o << ')';
     }
   }
-  void handleArray(const Array& curr) {
-    o << "(array ";
-    handleFieldBody(curr.element);
+  void handleArray(HeapType curr) {
+    bool hasSupertype = getTypeSystem() == TypeSystem::Nominal ||
+                        getTypeSystem() == TypeSystem::Isorecursive;
+    if (hasSupertype) {
+      o << "(array_subtype ";
+    } else {
+      o << "(array ";
+    }
+    handleFieldBody(curr.getArray().element);
+    if (hasSupertype) {
+      o << ' ';
+      printSupertypeOr(curr, "data");
+    }
     o << ')';
   }
-  void handleStruct(const Struct& curr) {
-    auto type = HeapType(curr);
-    const auto& fields = curr.fields;
-    o << "(struct ";
+  void handleStruct(HeapType curr) {
+    bool hasSupertype = getTypeSystem() == TypeSystem::Nominal ||
+                        getTypeSystem() == TypeSystem::Isorecursive;
+    const auto& fields = curr.getStruct().fields;
+    if (hasSupertype) {
+      o << "(struct_subtype ";
+    } else {
+      o << "(struct ";
+    }
     auto sep = "";
     for (Index i = 0; i < fields.size(); i++) {
       o << sep << "(field ";
-      processFieldName(currModule, type, i, [&](Name name) {
+      processFieldName(currModule, curr, i, [&](Name name) {
         if (name.is()) {
           o << '$' << name << ' ';
         }
@@ -2470,15 +2689,19 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
       o << ')';
       sep = " ";
     }
+    if (hasSupertype) {
+      o << ' ';
+      printSupertypeOr(curr, "data");
+    }
     o << ')';
   }
   void handleHeapType(HeapType type) {
     if (type.isSignature()) {
-      handleSignature(type.getSignature());
+      handleSignature(type);
     } else if (type.isArray()) {
-      handleArray(type.getArray());
+      handleArray(type);
     } else if (type.isStruct()) {
-      handleStruct(type.getStruct());
+      handleStruct(type);
     } else {
       o << type;
     }
@@ -2500,8 +2723,8 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
       case ExternalKind::Global:
         o << "global";
         break;
-      case ExternalKind::Event:
-        o << "event";
+      case ExternalKind::Tag:
+        o << "tag";
         break;
       case ExternalKind::Invalid:
         WASM_UNREACHABLE("invalid ExternalKind");
@@ -2562,7 +2785,7 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
     lastPrintedLocation = {0, 0, 0};
     o << '(';
     emitImportHeader(curr);
-    handleSignature(curr->sig, curr->name);
+    handleSignature(curr->getSig(), curr->name);
     o << ')';
     o << maybeNewLine;
   }
@@ -2576,12 +2799,17 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
     o << '(';
     printMajor(o, "func ");
     printName(curr->name, o);
+    if (getTypeSystem() == TypeSystem::Nominal ||
+        getTypeSystem() == TypeSystem::Isorecursive) {
+      o << " (type ";
+      printHeapType(o, curr->type, currModule) << ')';
+    }
     if (!stackIR && curr->stackIR && !minify) {
       o << " (; has Stack IR ;)";
     }
-    if (curr->sig.params.size() > 0) {
+    if (curr->getParams().size() > 0) {
       Index i = 0;
-      for (const auto& param : curr->sig.params) {
+      for (const auto& param : curr->getParams()) {
         o << maybeSpace;
         o << '(';
         printMinor(o, "param ");
@@ -2591,9 +2819,9 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
         ++i;
       }
     }
-    if (curr->sig.results != Type::none) {
+    if (curr->getResults() != Type::none) {
       o << maybeSpace;
-      printResultType(o, curr->sig.results, currModule);
+      printResultType(o, curr->getResults(), currModule);
     }
     incIndent();
     for (size_t i = curr->getVarIndexBase(); i < curr->getNumLocals(); i++) {
@@ -2638,30 +2866,30 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
     }
     o << maybeNewLine;
   }
-  void visitEvent(Event* curr) {
+  void visitTag(Tag* curr) {
     if (curr->imported()) {
-      visitImportedEvent(curr);
+      visitImportedTag(curr);
     } else {
-      visitDefinedEvent(curr);
+      visitDefinedTag(curr);
     }
   }
-  void visitImportedEvent(Event* curr) {
+  void visitImportedTag(Tag* curr) {
     doIndent(o, indent);
     o << '(';
     emitImportHeader(curr);
-    o << "(event ";
+    o << "(tag ";
     printName(curr->name, o);
-    o << maybeSpace << "(attr " << curr->attribute << ')' << maybeSpace;
+    o << maybeSpace;
     printParamType(o, curr->sig.params, currModule);
     o << "))";
     o << maybeNewLine;
   }
-  void visitDefinedEvent(Event* curr) {
+  void visitDefinedTag(Tag* curr) {
     doIndent(o, indent);
     o << '(';
-    printMedium(o, "event ");
+    printMedium(o, "tag ");
     printName(curr->name, o);
-    o << maybeSpace << "(attr " << curr->attribute << ')' << maybeSpace;
+    o << maybeSpace;
     printParamType(o, curr->sig.params, currModule);
     o << ")" << maybeNewLine;
   }
@@ -2673,7 +2901,8 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
     if (curr->hasMax()) {
       o << ' ' << curr->max;
     }
-    o << " funcref)";
+    o << ' ';
+    printType(o, curr->type, currModule) << ')';
   }
   void visitTable(Table* curr) {
     if (curr->imported()) {
@@ -2687,34 +2916,29 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
       printTableHeader(curr);
       o << maybeNewLine;
     }
-
-    ModuleUtils::iterTableSegments(
-      *currModule, curr->name, [&](ElementSegment* segment) {
-        printElementSegment(segment);
-      });
   }
   void visitElementSegment(ElementSegment* curr) {
-    if (curr->table.is()) {
-      return;
-    }
-    printElementSegment(curr);
-  }
-  void printElementSegment(ElementSegment* curr) {
-    // Don't print empty segments
-    if (curr->data.empty()) {
-      return;
-    }
+    bool usesExpressions = TableUtils::usesExpressions(curr, currModule);
+    auto printElemType = [&]() {
+      if (!usesExpressions) {
+        o << "func";
+      } else {
+        printType(o, curr->type, currModule);
+      }
+    };
+
     doIndent(o, indent);
     o << '(';
     printMedium(o, "elem");
-    if (curr->hasExplicitName) {
+    // If there is no explicit name, and there are multiple segments, use our
+    // internal names to differentiate them.
+    if (curr->hasExplicitName || currModule->elementSegments.size() > 1) {
       o << ' ';
       printName(curr->name, o);
     }
 
     if (curr->table.is()) {
-      // TODO(reference-types): check for old-style based on the complete spec
-      if (currModule->tables.size() > 1) {
+      if (usesExpressions || currModule->tables.size() > 1) {
         // tableuse
         o << " (table ";
         printName(curr->table, o);
@@ -2724,18 +2948,26 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
       o << ' ';
       visit(curr->offset);
 
-      if (currModule->tables.size() > 1) {
+      if (usesExpressions || currModule->tables.size() > 1) {
         o << ' ';
-        TypeNamePrinter(o, currModule).print(HeapType::func);
+        printElemType();
       }
     } else {
       o << ' ';
-      TypeNamePrinter(o, currModule).print(HeapType::func);
+      printElemType();
     }
 
-    for (auto name : curr->data) {
-      o << ' ';
-      printName(name, o);
+    if (!usesExpressions) {
+      for (auto* entry : curr->data) {
+        auto* refFunc = entry->cast<RefFunc>();
+        o << ' ';
+        printName(refFunc->func, o);
+      }
+    } else {
+      for (auto* entry : curr->data) {
+        o << ' ';
+        printExpression(entry, o);
+      }
     }
     o << ')' << maybeNewLine;
   }
@@ -2782,12 +3014,11 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
         printName(segment.name, o);
         o << ' ';
       }
-      if (segment.isPassive) {
-        printMedium(o, "passive");
-      } else {
+      if (!segment.isPassive) {
         visit(segment.offset);
+        o << ' ';
       }
-      o << " \"";
+      o << "\"";
       for (size_t i = 0; i < segment.data.size(); i++) {
         unsigned char c = segment.data[i];
         switch (c) {
@@ -2840,6 +3071,10 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
     for (auto& neededDynlib : dylinkSection->neededDynlibs) {
       doIndent(o, indent) << ";;   needed dynlib: " << neededDynlib << '\n';
     }
+    if (dylinkSection->tail.size()) {
+      doIndent(o, indent) << ";;   extra dylink data, size "
+                          << dylinkSection->tail.size() << "\n";
+    }
   }
   void visitModule(Module* curr) {
     currModule = curr;
@@ -2850,10 +3085,32 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
       printName(curr->name, o);
     }
     incIndent();
-    std::vector<HeapType> types;
-    std::unordered_map<HeapType, Index> indices;
-    ModuleUtils::collectHeapTypes(*curr, types, indices);
-    for (auto type : types) {
+
+    // Use the same type order as the binary output would even though there is
+    // no code size benefit in the text format.
+    auto indexedTypes = ModuleUtils::getOptimizedIndexedHeapTypes(*curr);
+    std::optional<RecGroup> currGroup;
+    bool nontrivialGroup = false;
+    auto finishGroup = [&]() {
+      if (nontrivialGroup) {
+        decIndent();
+        o << maybeNewLine;
+      }
+    };
+    for (auto type : indexedTypes.types) {
+      RecGroup newGroup = type.getRecGroup();
+      if (!currGroup || *currGroup != newGroup) {
+        if (currGroup) {
+          finishGroup();
+        }
+        currGroup = newGroup;
+        nontrivialGroup = currGroup->size() > 1;
+        if (nontrivialGroup) {
+          doIndent(o, indent);
+          o << "(rec ";
+          incIndent();
+        }
+      }
       doIndent(o, indent);
       o << '(';
       printMedium(o, "type") << ' ';
@@ -2862,6 +3119,8 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
       handleHeapType(type);
       o << ")" << maybeNewLine;
     }
+    finishGroup();
+
     ModuleUtils::iterImportedMemories(
       *curr, [&](Memory* memory) { visitMemory(memory); });
     ModuleUtils::iterImportedTables(*curr,
@@ -2870,8 +3129,9 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
       *curr, [&](Global* global) { visitGlobal(global); });
     ModuleUtils::iterImportedFunctions(
       *curr, [&](Function* func) { visitFunction(func); });
-    ModuleUtils::iterImportedEvents(*curr,
-                                    [&](Event* event) { visitEvent(event); });
+    ModuleUtils::iterImportedTags(*curr, [&](Tag* tag) { visitTag(tag); });
+    ModuleUtils::iterDefinedGlobals(
+      *curr, [&](Global* global) { visitGlobal(global); });
     ModuleUtils::iterDefinedMemories(
       *curr, [&](Memory* memory) { visitMemory(memory); });
     ModuleUtils::iterDefinedTables(*curr,
@@ -2889,10 +3149,7 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
       }
       o << ')' << maybeNewLine;
     }
-    ModuleUtils::iterDefinedGlobals(
-      *curr, [&](Global* global) { visitGlobal(global); });
-    ModuleUtils::iterDefinedEvents(*curr,
-                                   [&](Event* event) { visitEvent(event); });
+    ModuleUtils::iterDefinedTags(*curr, [&](Tag* tag) { visitTag(tag); });
     for (auto& child : curr->exports) {
       doIndent(o, indent);
       visitExport(child.get());
@@ -3019,13 +3276,15 @@ Pass* createPrintStackIRPass() { return new PrintStackIR(); }
 static std::ostream& printExpression(Expression* expression,
                                      std::ostream& o,
                                      bool minify,
-                                     bool full) {
+                                     bool full,
+                                     Module* wasm) {
   if (!expression) {
     o << "(null expression)";
     return o;
   }
   PrintSExpression print(o);
   print.setMinify(minify);
+  print.currModule = wasm;
   if (full || isFullForced()) {
     print.setFull(true);
     o << "[" << expression->type << "] ";
@@ -3060,7 +3319,7 @@ printStackInst(StackInst* inst, std::ostream& o, Function* func) {
     }
     case StackInst::Catch: {
       // Because StackInst does not have info on which catch within a try this
-      // is, we can't print the event name.
+      // is, we can't print the tag name.
       printMedium(o, "catch");
       break;
     }
@@ -3144,7 +3403,7 @@ printStackIR(StackIR* ir, std::ostream& o, Function* func) {
         doIndent();
         printMedium(o, "catch ");
         Try* curr = inst->origin->cast<Try>();
-        printName(curr->catchEvents[catchIndexStack.back()++], o);
+        printName(curr->catchTags[catchIndexStack.back()++], o);
         indent++;
         break;
       }
@@ -3177,6 +3436,14 @@ printStackIR(StackIR* ir, std::ostream& o, Function* func) {
   return o;
 }
 
+std::ostream& printStackIR(std::ostream& o, Module* module) {
+  wasm::PassRunner runner(module);
+  runner.add("generate-stack-ir");
+  runner.add(std::make_unique<PrintStackIR>(&o));
+  runner.run();
+  return o;
+}
+
 } // namespace wasm
 
 namespace std {
@@ -3193,6 +3460,10 @@ std::ostream& operator<<(std::ostream& o, wasm::Expression& expression) {
 
 std::ostream& operator<<(std::ostream& o, wasm::Expression* expression) {
   return wasm::printExpression(expression, o);
+}
+
+std::ostream& operator<<(std::ostream& o, wasm::ModuleExpression pair) {
+  return wasm::printExpression(pair.second, o, false, false, &pair.first);
 }
 
 std::ostream& operator<<(std::ostream& o, wasm::StackInst& inst) {

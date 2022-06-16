@@ -28,15 +28,27 @@
 #include "support/debug.h"
 #include "wasm-binary.h"
 #include "wasm-s-parser.h"
+#include "wat-parser.h"
+
 
 namespace wasm {
+
+bool useNewWATParser = false;
 
 #define DEBUG_TYPE "writer"
 
 static void readTextData(std::string& input, Module& wasm, IRProfile profile) {
-  SExpressionParser parser(const_cast<char*>(input.c_str()));
-  Element& root = *parser.root;
-  SExpressionWasmBuilder builder(wasm, *root[0], profile);
+  if (useNewWATParser) {
+    std::string_view in(input.c_str());
+    if (auto parsed = WATParser::parseModule(wasm, in);
+        auto err = parsed.getErr()) {
+      Fatal() << err->msg;
+    }
+  } else {
+    SExpressionParser parser(const_cast<char*>(input.c_str()));
+    Element& root = *parser.root;
+    SExpressionWasmBuilder builder(wasm, *root[0], profile);
+  }
 }
 
 void ModuleReader::readText(std::string filename, Module& wasm) {
@@ -49,7 +61,10 @@ void ModuleReader::readBinaryData(std::vector<char>& input,
                                   Module& wasm,
                                   std::string sourceMapFilename) {
   std::unique_ptr<std::ifstream> sourceMapStream;
-  WasmBinaryBuilder parser(wasm, input);
+  // Assume that the wasm has had its initial features applied, and use those
+  // while parsing.
+  WasmBinaryBuilder parser(wasm, wasm.features, input);
+  parser.setDebugInfo(debugInfo);
   parser.setDWARF(DWARF);
   parser.setSkipFunctionBodies(skipFunctionBodies);
   if (sourceMapFilename.size()) {
@@ -85,8 +100,8 @@ bool ModuleReader::isBinaryFile(std::string filename) {
 void ModuleReader::read(std::string filename,
                         Module& wasm,
                         std::string sourceMapFilename) {
-  // empty filename means read from stdin
-  if (!filename.size()) {
+  // empty filename or "-" means read from stdin
+  if (!filename.size() || filename == "-") {
     readStdin(wasm, sourceMapFilename);
     return;
   }
@@ -136,6 +151,9 @@ void ModuleWriter::writeBinary(Module& wasm, Output& output) {
   WasmBinaryWriter writer(&wasm, buffer);
   // if debug info is used, then we want to emit the names section
   writer.setNamesSection(debugInfo);
+  if (emitModuleName) {
+    writer.setEmitModuleName(true);
+  }
   std::unique_ptr<std::ofstream> sourceMapStream;
   if (sourceMapFilename.size()) {
     sourceMapStream = make_unique<std::ofstream>();

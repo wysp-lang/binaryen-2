@@ -17,14 +17,13 @@
 #ifndef wasm_ir_table_h
 #define wasm_ir_table_h
 
+#include "ir/element-utils.h"
 #include "ir/literal-utils.h"
 #include "ir/module-utils.h"
 #include "wasm-traversal.h"
 #include "wasm.h"
 
-namespace wasm {
-
-namespace TableUtils {
+namespace wasm::TableUtils {
 
 struct FlatTable {
   std::vector<Name> names;
@@ -35,7 +34,7 @@ struct FlatTable {
     ModuleUtils::iterTableSegments(
       wasm, table.name, [&](ElementSegment* segment) {
         auto offset = segment->offset;
-        if (!offset->is<Const>()) {
+        if (!offset->is<Const>() || !segment->type.isFunction()) {
           // TODO: handle some non-constant segments
           valid = false;
           return;
@@ -45,9 +44,8 @@ struct FlatTable {
         if (end > names.size()) {
           names.resize(end);
         }
-        for (Index i = 0; i < segment->data.size(); i++) {
-          names[start + i] = segment->data[i];
-        }
+        ElementUtils::iterElementSegmentFunctionNames(
+          segment, [&](Name entry, Index i) { names[start + i] = entry; });
       });
   }
 };
@@ -84,8 +82,11 @@ inline Index append(Table& table, Name name, Module& wasm) {
     }
     wasm.dylinkSection->tableSize++;
   }
-  segment->data.push_back(name);
-  table.initial = table.initial + 1;
+
+  auto* func = wasm.getFunctionOrNull(name);
+  assert(func != nullptr && "Cannot append non-existing function to a table.");
+  segment->data.push_back(Builder(wasm).makeRefFunc(name, func->type));
+  table.initial++;
   return tableIndex;
 }
 
@@ -94,8 +95,10 @@ inline Index append(Table& table, Name name, Module& wasm) {
 inline Index getOrAppend(Table& table, Name name, Module& wasm) {
   auto segment = getSingletonSegment(table, wasm);
   for (Index i = 0; i < segment->data.size(); i++) {
-    if (segment->data[i] == name) {
-      return i;
+    if (auto* get = segment->data[i]->dynCast<RefFunc>()) {
+      if (get->func == name) {
+        return i;
+      }
     }
   }
   return append(table, name, wasm);
@@ -105,8 +108,11 @@ inline Index getOrAppend(Table& table, Name name, Module& wasm) {
 // "elem declare" mention in the text and binary formats.
 std::set<Name> getFunctionsNeedingElemDeclare(Module& wasm);
 
-} // namespace TableUtils
+// Returns whether a segment uses arbitrary wasm expressions, as opposed to the
+// original tables from the MVP that use function indices. (Some post-MVP tables
+// do so, and some do not, depending on their type and use.)
+bool usesExpressions(ElementSegment* curr, Module* module);
 
-} // namespace wasm
+} // namespace wasm::TableUtils
 
 #endif // wasm_ir_table_h

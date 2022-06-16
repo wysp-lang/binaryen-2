@@ -31,6 +31,7 @@ namespace UserSections {
 const char* Name = "name";
 const char* SourceMapUrl = "sourceMappingURL";
 const char* Dylink = "dylink";
+const char* Dylink0 = "dylink.0";
 const char* Linking = "linking";
 const char* Producers = "producers";
 const char* TargetFeatures = "target_features";
@@ -47,10 +48,11 @@ const char* MultivalueFeature = "multivalue";
 const char* GCFeature = "gc";
 const char* Memory64Feature = "memory64";
 const char* TypedFunctionReferencesFeature = "typed-function-references";
+const char* RelaxedSIMDFeature = "relaxed-simd";
+const char* ExtendedConstFeature = "extended-const";
 } // namespace UserSections
 } // namespace BinaryConsts
 
-Name WASM_CALL_CTORS("__wasm_call_ctors");
 Name MEMORY_BASE("__memory_base");
 Name TABLE_BASE("__table_base");
 Name STACK_POINTER("__stack_pointer");
@@ -90,15 +92,14 @@ Name NEG_NAN("-nan");
 Name CASE("case");
 Name BR("br");
 Name FUNCREF("funcref");
-Name FAKE_RETURN("fake_return_waka123");
-Name DELEGATE_CALLER_TARGET("delegate_caller_target_waka123");
+Name FAKE_RETURN("__binaryen_fake_return");
+Name DELEGATE_CALLER_TARGET("__binaryen_delegate_caller_target");
 Name MUT("mut");
 Name SPECTEST("spectest");
 Name PRINT("print");
 Name EXIT("exit");
 Name SHARED("shared");
-Name EVENT("event");
-Name ATTR("attr");
+Name TAG("tag");
 
 // Expressions
 
@@ -111,7 +112,7 @@ const char* getExpressionName(Expression* curr) {
   case Expression::Id::CLASS_TO_VISIT##Id:                                     \
     return #CLASS_TO_VISIT;
 
-#include "wasm-delegations.h"
+#include "wasm-delegations.def"
 
     default:
       WASM_UNREACHABLE("invalid id");
@@ -180,9 +181,9 @@ void Block::finalize() {
     type = Type::none;
     return;
   }
-  type = list.back()->type;
   // The default type is what is at the end. Next we need to see if breaks and/
   // or unreachabitily change that.
+  type = list.back()->type;
   if (!name.is()) {
     // Nothing branches here, so this is easy.
     handleUnreachable(this, NoBreak);
@@ -199,7 +200,7 @@ void Block::finalize() {
     // is already correct. TODO: calculate proper LUBs to compute a new correct
     // type in this situation.
     seeker.types.insert(type);
-    Type::ensureSuperType(seeker.types, type);
+    type = Type::getLeastUpperBound(seeker.types);
   } else {
     // There are no branches, so this block may be unreachable.
     handleUnreachable(this, NoBreak);
@@ -230,13 +231,8 @@ void If::finalize(Type type_) {
 }
 
 void If::finalize() {
-  if (ifFalse) {
-    // TODO: Calculate a proper LUB.
-    Type::ensureSuperType(std::array<Type, 2>{{ifTrue->type, ifFalse->type}},
-                          type);
-  } else {
-    type = Type::none;
-  }
+  type = ifFalse ? Type::getLeastUpperBound(ifTrue->type, ifFalse->type)
+                 : Type::none;
   // if the arms return a value, leave it even if the condition
   // is unreachable, we still mark ourselves as having that type, e.g.
   // (if (result i32)
@@ -245,9 +241,7 @@ void If::finalize() {
   //  (i32.const 20)
   // )
   // otherwise, if the condition is unreachable, so is the if
-  if ((type == Type::none && condition->type == Type::unreachable) ||
-      (ifTrue->type == Type::unreachable && ifFalse &&
-       ifFalse->type == Type::unreachable)) {
+  if (type == Type::none && condition->type == Type::unreachable) {
     type = Type::unreachable;
   }
 }
@@ -297,7 +291,7 @@ void Call::finalize() {
 }
 
 void CallIndirect::finalize() {
-  type = sig.results;
+  type = heapType.getSignature().results;
   handleUnreachableOperands(this);
   if (isReturn) {
     type = Type::unreachable;
@@ -480,21 +474,21 @@ void SIMDLoad::finalize() {
 
 Index SIMDLoad::getMemBytes() {
   switch (op) {
-    case LoadSplatVec8x16:
+    case Load8SplatVec128:
       return 1;
-    case LoadSplatVec16x8:
+    case Load16SplatVec128:
       return 2;
-    case LoadSplatVec32x4:
-    case Load32Zero:
+    case Load32SplatVec128:
+    case Load32ZeroVec128:
       return 4;
-    case LoadSplatVec64x2:
-    case LoadExtSVec8x8ToVecI16x8:
-    case LoadExtUVec8x8ToVecI16x8:
-    case LoadExtSVec16x4ToVecI32x4:
-    case LoadExtUVec16x4ToVecI32x4:
-    case LoadExtSVec32x2ToVecI64x2:
-    case LoadExtUVec32x2ToVecI64x2:
-    case Load64Zero:
+    case Load64SplatVec128:
+    case Load8x8SVec128:
+    case Load8x8UVec128:
+    case Load16x4SVec128:
+    case Load16x4UVec128:
+    case Load32x2SVec128:
+    case Load32x2UVec128:
+    case Load64ZeroVec128:
       return 8;
   }
   WASM_UNREACHABLE("unexpected op");
@@ -508,24 +502,19 @@ void SIMDLoadStoreLane::finalize() {
   }
 }
 
-void SIMDWiden::finalize() {
-  assert(vec);
-  type = vec->type == Type::unreachable ? Type::unreachable : Type::v128;
-}
-
 Index SIMDLoadStoreLane::getMemBytes() {
   switch (op) {
-    case LoadLaneVec8x16:
-    case StoreLaneVec8x16:
+    case Load8LaneVec128:
+    case Store8LaneVec128:
       return 1;
-    case LoadLaneVec16x8:
-    case StoreLaneVec16x8:
+    case Load16LaneVec128:
+    case Store16LaneVec128:
       return 2;
-    case LoadLaneVec32x4:
-    case StoreLaneVec32x4:
+    case Load32LaneVec128:
+    case Store32LaneVec128:
       return 4;
-    case LoadLaneVec64x2:
-    case StoreLaneVec64x2:
+    case Load64LaneVec128:
+    case Store64LaneVec128:
       return 8;
   }
   WASM_UNREACHABLE("unexpected op");
@@ -533,22 +522,18 @@ Index SIMDLoadStoreLane::getMemBytes() {
 
 bool SIMDLoadStoreLane::isStore() {
   switch (op) {
-    case StoreLaneVec8x16:
-    case StoreLaneVec16x8:
-    case StoreLaneVec32x4:
-    case StoreLaneVec64x2:
+    case Store8LaneVec128:
+    case Store16LaneVec128:
+    case Store32LaneVec128:
+    case Store64LaneVec128:
       return true;
-    case LoadLaneVec16x8:
-    case LoadLaneVec32x4:
-    case LoadLaneVec64x2:
-    case LoadLaneVec8x16:
+    case Load16LaneVec128:
+    case Load32LaneVec128:
+    case Load64LaneVec128:
+    case Load8LaneVec128:
       return false;
   }
   WASM_UNREACHABLE("unexpected op");
-}
-
-void Prefetch::finalize() {
-  type = ptr->type == Type::unreachable ? Type::unreachable : Type::none;
 }
 
 Const* Const::set(Literal value_) {
@@ -659,6 +644,7 @@ void Unary::finalize() {
     case AbsVecI8x16:
     case AbsVecI16x8:
     case AbsVecI32x4:
+    case AbsVecI64x2:
     case PopcntVecI8x16:
     case NegVecI8x16:
     case NegVecI16x8:
@@ -684,38 +670,37 @@ void Unary::finalize() {
     case ExtAddPairwiseUVecI16x8ToI32x4:
     case TruncSatSVecF32x4ToVecI32x4:
     case TruncSatUVecF32x4ToVecI32x4:
-    case TruncSatSVecF64x2ToVecI64x2:
-    case TruncSatUVecF64x2ToVecI64x2:
     case ConvertSVecI32x4ToVecF32x4:
     case ConvertUVecI32x4ToVecF32x4:
-    case ConvertSVecI64x2ToVecF64x2:
-    case ConvertUVecI64x2ToVecF64x2:
-    case WidenLowSVecI8x16ToVecI16x8:
-    case WidenHighSVecI8x16ToVecI16x8:
-    case WidenLowUVecI8x16ToVecI16x8:
-    case WidenHighUVecI8x16ToVecI16x8:
-    case WidenLowSVecI16x8ToVecI32x4:
-    case WidenHighSVecI16x8ToVecI32x4:
-    case WidenLowUVecI16x8ToVecI32x4:
-    case WidenHighUVecI16x8ToVecI32x4:
-    case WidenLowSVecI32x4ToVecI64x2:
-    case WidenHighSVecI32x4ToVecI64x2:
-    case WidenLowUVecI32x4ToVecI64x2:
-    case WidenHighUVecI32x4ToVecI64x2:
+    case ExtendLowSVecI8x16ToVecI16x8:
+    case ExtendHighSVecI8x16ToVecI16x8:
+    case ExtendLowUVecI8x16ToVecI16x8:
+    case ExtendHighUVecI8x16ToVecI16x8:
+    case ExtendLowSVecI16x8ToVecI32x4:
+    case ExtendHighSVecI16x8ToVecI32x4:
+    case ExtendLowUVecI16x8ToVecI32x4:
+    case ExtendHighUVecI16x8ToVecI32x4:
+    case ExtendLowSVecI32x4ToVecI64x2:
+    case ExtendHighSVecI32x4ToVecI64x2:
+    case ExtendLowUVecI32x4ToVecI64x2:
+    case ExtendHighUVecI32x4ToVecI64x2:
     case ConvertLowSVecI32x4ToVecF64x2:
     case ConvertLowUVecI32x4ToVecF64x2:
     case TruncSatZeroSVecF64x2ToVecI32x4:
     case TruncSatZeroUVecF64x2ToVecI32x4:
     case DemoteZeroVecF64x2ToVecF32x4:
     case PromoteLowVecF32x4ToVecF64x2:
+    case RelaxedTruncSVecF32x4ToVecI32x4:
+    case RelaxedTruncUVecF32x4ToVecI32x4:
+    case RelaxedTruncZeroSVecF64x2ToVecI32x4:
+    case RelaxedTruncZeroUVecF64x2ToVecI32x4:
       type = Type::v128;
       break;
-    case AnyTrueVecI8x16:
-    case AnyTrueVecI16x8:
-    case AnyTrueVecI32x4:
+    case AnyTrueVec128:
     case AllTrueVecI8x16:
     case AllTrueVecI16x8:
     case AllTrueVecI32x4:
+    case AllTrueVecI64x2:
     case BitmaskVecI8x16:
     case BitmaskVecI16x8:
     case BitmaskVecI32x4:
@@ -787,9 +772,7 @@ void Select::finalize() {
       condition->type == Type::unreachable) {
     type = Type::unreachable;
   } else {
-    // TODO: Calculate a proper LUB.
-    Type::ensureSuperType(std::array<Type, 2>{{ifTrue->type, ifFalse->type}},
-                          type);
+    type = Type::getLeastUpperBound(ifTrue->type, ifFalse->type);
   }
 }
 
@@ -822,9 +805,9 @@ void RefNull::finalize() {}
 void RefIs::finalize() {
   if (value->type == Type::unreachable) {
     type = Type::unreachable;
-    return;
+  } else {
+    type = Type::i32;
   }
-  type = Type::i32;
 }
 
 void RefFunc::finalize() {
@@ -842,18 +825,42 @@ void RefEq::finalize() {
   }
 }
 
+void TableGet::finalize() {
+  if (index->type == Type::unreachable) {
+    type = Type::unreachable;
+  }
+  // Otherwise, the type should have been set already.
+}
+
+void TableSet::finalize() {
+  if (index->type == Type::unreachable || value->type == Type::unreachable) {
+    type = Type::unreachable;
+  } else {
+    type = Type::none;
+  }
+}
+
+void TableSize::finalize() {
+  // Nothing to do - the type must have been set already during construction.
+}
+
+void TableGrow::finalize() {
+  if (delta->type == Type::unreachable || value->type == Type::unreachable) {
+    type = Type::unreachable;
+  } else {
+    type = Type::i32;
+  }
+}
+
 void Try::finalize() {
   // If none of the component bodies' type is a supertype of the others, assume
   // the current type is already correct. TODO: Calculate a proper LUB.
   std::unordered_set<Type> types{body->type};
+  types.reserve(catchBodies.size());
   for (auto catchBody : catchBodies) {
     types.insert(catchBody->type);
   }
-  if (types.size() == 1 && *types.begin() == Type::unreachable) {
-    type = Type::unreachable;
-  } else {
-    Type::ensureSuperType(types, type);
-  }
+  type = Type::getLeastUpperBound(types);
 }
 
 void Try::finalize(Type type_) {
@@ -873,6 +880,7 @@ void Rethrow::finalize() { type = Type::unreachable; }
 
 void TupleMake::finalize() {
   std::vector<Type> types;
+  types.reserve(operands.size());
   for (auto* op : operands) {
     if (op->type == Type::unreachable) {
       type = Type::unreachable;
@@ -887,6 +895,7 @@ void TupleExtract::finalize() {
   if (tuple->type == Type::unreachable) {
     type = Type::unreachable;
   } else {
+    assert(index < tuple->type.size());
     type = tuple->type[index];
   }
 }
@@ -923,67 +932,109 @@ void CallRef::finalize(Type type_) {
 }
 
 void RefTest::finalize() {
-  if (ref->type == Type::unreachable || rtt->type == Type::unreachable) {
+  if (ref->type == Type::unreachable ||
+      (rtt && rtt->type == Type::unreachable)) {
     type = Type::unreachable;
   } else {
     type = Type::i32;
   }
 }
 
-// Helper to get the cast type for a cast instruction. They all look at the rtt
-// operand's type.
-template<typename T> static Type doGetCastType(T* curr) {
-  if (curr->rtt->type == Type::unreachable) {
-    // We don't have the RTT type, so just return unreachable. The type in this
-    // case should not matter in practice, but it may be seen while debugging.
-    return Type::unreachable;
-  }
-  // TODO: make non-nullable when we support that
-  return Type(curr->rtt->type.getHeapType(), Nullable);
+HeapType RefTest::getIntendedType() {
+  return rtt ? rtt->type.getHeapType() : intendedType;
 }
-
-Type RefTest::getCastType() { return doGetCastType(this); }
 
 void RefCast::finalize() {
-  if (ref->type == Type::unreachable || rtt->type == Type::unreachable) {
+  if (ref->type == Type::unreachable ||
+      (rtt && rtt->type == Type::unreachable)) {
     type = Type::unreachable;
   } else {
-    type = getCastType();
+    // The output of ref.cast may be null if the input is null (in that case the
+    // null is passed through).
+    type = Type(getIntendedType(), ref->type.getNullability());
   }
 }
 
-Type RefCast::getCastType() { return doGetCastType(this); }
+HeapType RefCast::getIntendedType() {
+  return rtt ? rtt->type.getHeapType() : intendedType;
+}
 
 void BrOn::finalize() {
   if (ref->type == Type::unreachable ||
       (rtt && rtt->type == Type::unreachable)) {
     type = Type::unreachable;
-  } else {
-    if (op == BrOnNull) {
-      // If BrOnNull does not branch, it flows out the existing value as
-      // non-null.
-      // FIXME: When we support non-nullable types, this should be non-nullable.
-      type = Type(ref->type.getHeapType(), Nullable);
-    } else {
+    return;
+  }
+  switch (op) {
+    case BrOnNull:
+      // If we do not branch, we flow out the existing value as non-null.
+      type = Type(ref->type.getHeapType(), NonNullable);
+      break;
+    case BrOnNonNull:
+      // If we do not branch, we flow out nothing (the spec could also have had
+      // us flow out the null, but it does not).
+      type = Type::none;
+      break;
+    case BrOnCast:
+    case BrOnFunc:
+    case BrOnData:
+    case BrOnI31:
+      // If we do not branch, we return the input in this case.
       type = ref->type;
-    }
+      break;
+    case BrOnCastFail:
+      // If we do not branch, the cast worked, and we have something of the cast
+      // type.
+      type = Type(getIntendedType(), NonNullable);
+      break;
+    case BrOnNonFunc:
+      type = Type(HeapType::func, NonNullable);
+      break;
+    case BrOnNonData:
+      type = Type(HeapType::data, NonNullable);
+      break;
+    case BrOnNonI31:
+      type = Type(HeapType::i31, NonNullable);
+      break;
+    default:
+      WASM_UNREACHABLE("invalid br_on_*");
   }
 }
 
-Type BrOn::getCastType() {
+HeapType BrOn::getIntendedType() {
+  assert(op == BrOnCast || op == BrOnCastFail);
+  return rtt ? rtt->type.getHeapType() : intendedType;
+}
+
+Type BrOn::getSentType() {
   switch (op) {
     case BrOnNull:
       // BrOnNull does not send a value on the branch.
       return Type::none;
+    case BrOnNonNull:
+      // If the input is unreachable, the branch is not taken, and there is no
+      // valid type we can report as being sent. Report it as unreachable.
+      if (ref->type == Type::unreachable) {
+        return Type::unreachable;
+      }
+      // BrOnNonNull sends the non-nullable type on the branch.
+      return Type(ref->type.getHeapType(), NonNullable);
     case BrOnCast:
-      // FIXME: When we support non-nullable types, this should be non-nullable.
-      return Type(rtt->type.getHeapType(), Nullable);
+      if (ref->type == Type::unreachable) {
+        return Type::unreachable;
+      }
+      return Type(getIntendedType(), NonNullable);
     case BrOnFunc:
       return Type::funcref;
     case BrOnData:
       return Type::dataref;
     case BrOnI31:
       return Type::i31ref;
+    case BrOnCastFail:
+    case BrOnNonFunc:
+    case BrOnNonData:
+    case BrOnNonI31:
+      return ref->type;
     default:
       WASM_UNREACHABLE("invalid br_on_*");
   }
@@ -1002,15 +1053,18 @@ void RttSub::finalize() {
 }
 
 void StructNew::finalize() {
-  if (rtt->type == Type::unreachable) {
+  if (rtt && rtt->type == Type::unreachable) {
     type = Type::unreachable;
     return;
   }
   if (handleUnreachableOperands(this)) {
     return;
   }
-  // TODO: make non-nullable when we support that
-  type = Type(rtt->type.getHeapType(), Nullable);
+  // A dynamic StructNew infers the type from the rtt. A static one has the type
+  // already in the type field.
+  if (rtt) {
+    type = Type(rtt->type.getHeapType(), NonNullable);
+  }
 }
 
 void StructGet::finalize() {
@@ -1022,7 +1076,7 @@ void StructGet::finalize() {
 }
 
 void StructSet::finalize() {
-  if (ref->type == Type::unreachable) {
+  if (ref->type == Type::unreachable || value->type == Type::unreachable) {
     type = Type::unreachable;
   } else {
     type = Type::none;
@@ -1030,13 +1084,35 @@ void StructSet::finalize() {
 }
 
 void ArrayNew::finalize() {
-  if (rtt->type == Type::unreachable || size->type == Type::unreachable ||
+  if ((rtt && rtt->type == Type::unreachable) ||
+      size->type == Type::unreachable ||
       (init && init->type == Type::unreachable)) {
     type = Type::unreachable;
     return;
   }
-  // TODO: make non-nullable when we support that
-  type = Type(rtt->type.getHeapType(), Nullable);
+  // A dynamic ArrayNew infers the type from the rtt. A static one has the type
+  // already in the type field.
+  if (rtt) {
+    type = Type(rtt->type.getHeapType(), NonNullable);
+  }
+}
+
+void ArrayInit::finalize() {
+  if (rtt && rtt->type == Type::unreachable) {
+    type = Type::unreachable;
+    return;
+  }
+  for (auto* value : values) {
+    if (value->type == Type::unreachable) {
+      type = Type::unreachable;
+      return;
+    }
+  }
+  // A dynamic ArrayInit infers the type from the rtt. A static one has the type
+  // already in the type field.
+  if (rtt) {
+    type = Type(rtt->type.getHeapType(), NonNullable);
+  }
 }
 
 void ArrayGet::finalize() {
@@ -1064,6 +1140,18 @@ void ArrayLen::finalize() {
   }
 }
 
+void ArrayCopy::finalize() {
+  if (srcRef->type == Type::unreachable ||
+      srcIndex->type == Type::unreachable ||
+      destRef->type == Type::unreachable ||
+      destIndex->type == Type::unreachable ||
+      length->type == Type::unreachable) {
+    type = Type::unreachable;
+  } else {
+    type = Type::none;
+  }
+}
+
 void RefAs::finalize() {
   if (value->type == Type::unreachable) {
     type = Type::unreachable;
@@ -1071,11 +1159,10 @@ void RefAs::finalize() {
   }
   switch (op) {
     case RefAsNonNull:
-      // FIXME: when we support non-nullable types, switch to NonNullable
-      type = Type(value->type.getHeapType(), Nullable);
+      type = Type(value->type.getHeapType(), NonNullable);
       break;
     case RefAsFunc:
-      type = Type::funcref;
+      type = Type(HeapType::func, NonNullable);
       break;
     case RefAsData:
       type = Type::dataref;
@@ -1088,14 +1175,14 @@ void RefAs::finalize() {
   }
 }
 
-size_t Function::getNumParams() { return sig.params.size(); }
+size_t Function::getNumParams() { return getParams().size(); }
 
 size_t Function::getNumVars() { return vars.size(); }
 
-size_t Function::getNumLocals() { return sig.params.size() + vars.size(); }
+size_t Function::getNumLocals() { return getParams().size() + vars.size(); }
 
 bool Function::isParam(Index index) {
-  size_t size = sig.params.size();
+  size_t size = getParams().size();
   assert(index < size + vars.size());
   return index < size;
 }
@@ -1142,12 +1229,12 @@ Index Function::getLocalIndex(Name name) {
   return iter->second;
 }
 
-Index Function::getVarIndexBase() { return sig.params.size(); }
+Index Function::getVarIndexBase() { return getParams().size(); }
 
 Type Function::getLocalType(Index index) {
-  auto numParams = sig.params.size();
+  auto numParams = getParams().size();
   if (index < numParams) {
-    return sig.params[index];
+    return getParams()[index];
   } else if (isVar(index)) {
     return vars[index - numParams];
   } else {
@@ -1194,8 +1281,8 @@ Global* Module::getGlobal(Name name) {
   return getModuleElement(globalsMap, name, "getGlobal");
 }
 
-Event* Module::getEvent(Name name) {
-  return getModuleElement(eventsMap, name, "getEvent");
+Tag* Module::getTag(Name name) {
+  return getModuleElement(tagsMap, name, "getTag");
 }
 
 template<typename Map>
@@ -1227,8 +1314,8 @@ Global* Module::getGlobalOrNull(Name name) {
   return getModuleElementOrNull(globalsMap, name);
 }
 
-Event* Module::getEventOrNull(Name name) {
-  return getModuleElementOrNull(eventsMap, name);
+Tag* Module::getTagOrNull(Name name) {
+  return getModuleElementOrNull(tagsMap, name);
 }
 
 // TODO(@warchant): refactor all usages to use variant with unique_ptr
@@ -1275,8 +1362,8 @@ Global* Module::addGlobal(Global* curr) {
   return addModuleElement(globals, globalsMap, curr, "addGlobal");
 }
 
-Event* Module::addEvent(Event* curr) {
-  return addModuleElement(events, eventsMap, curr, "addEvent");
+Tag* Module::addTag(Tag* curr) {
+  return addModuleElement(tags, tagsMap, curr, "addTag");
 }
 
 Export* Module::addExport(std::unique_ptr<Export>&& curr) {
@@ -1302,8 +1389,8 @@ Global* Module::addGlobal(std::unique_ptr<Global>&& curr) {
   return addModuleElement(globals, globalsMap, std::move(curr), "addGlobal");
 }
 
-Event* Module::addEvent(std::unique_ptr<Event>&& curr) {
-  return addModuleElement(events, eventsMap, std::move(curr), "addEvent");
+Tag* Module::addTag(std::unique_ptr<Tag>&& curr) {
+  return addModuleElement(tags, tagsMap, std::move(curr), "addTag");
 }
 
 void Module::addStart(const Name& s) { start = s; }
@@ -1334,9 +1421,7 @@ void Module::removeElementSegment(Name name) {
 void Module::removeGlobal(Name name) {
   removeModuleElement(globals, globalsMap, name);
 }
-void Module::removeEvent(Name name) {
-  removeModuleElement(events, eventsMap, name);
-}
+void Module::removeTag(Name name) { removeModuleElement(tags, tagsMap, name); }
 
 template<typename Vector, typename Map, typename Elem>
 void removeModuleElements(Vector& v,
@@ -1369,8 +1454,8 @@ void Module::removeElementSegments(std::function<bool(ElementSegment*)> pred) {
 void Module::removeGlobals(std::function<bool(Global*)> pred) {
   removeModuleElements(globals, globalsMap, pred);
 }
-void Module::removeEvents(std::function<bool(Event*)> pred) {
-  removeModuleElements(events, eventsMap, pred);
+void Module::removeTags(std::function<bool(Tag*)> pred) {
+  removeModuleElements(tags, tagsMap, pred);
 }
 
 void Module::updateMaps() {
@@ -1394,9 +1479,9 @@ void Module::updateMaps() {
   for (auto& curr : globals) {
     globalsMap[curr->name] = curr.get();
   }
-  eventsMap.clear();
-  for (auto& curr : events) {
-    eventsMap[curr->name] = curr.get();
+  tagsMap.clear();
+  for (auto& curr : tags) {
+    tagsMap[curr->name] = curr.get();
   }
 }
 

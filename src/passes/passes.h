@@ -21,7 +21,7 @@ namespace wasm {
 
 class Pass;
 
-// All passes:
+// Normal passes:
 Pass* createAlignmentLoweringPass();
 Pass* createAsyncifyPass();
 Pass* createAvoidReinterpretsPass();
@@ -30,6 +30,7 @@ Pass* createCoalesceLocalsWithLearningPass();
 Pass* createCodeFoldingPass();
 Pass* createCodePushingPass();
 Pass* createConstHoistingPass();
+Pass* createConstantFieldPropagationPass();
 Pass* createDAEPass();
 Pass* createDAEOptimizingPass();
 Pass* createDataFlowOptsPass();
@@ -42,6 +43,7 @@ Pass* createDuplicateImportEliminationPass();
 Pass* createDuplicateFunctionEliminationPass();
 Pass* createEmitTargetFeaturesPass();
 Pass* createExtractFunctionPass();
+Pass* createExtractFunctionIndexPass();
 Pass* createFlattenPass();
 Pass* createFuncCastEmulationPass();
 Pass* createFullPrinterPass();
@@ -49,6 +51,10 @@ Pass* createFunctionMetricsPass();
 Pass* createGenerateDynCallsPass();
 Pass* createGenerateI64DynCallsPass();
 Pass* createGenerateStackIRPass();
+Pass* createGlobalRefiningPass();
+Pass* createGlobalStructInferencePass();
+Pass* createGlobalTypeOptimizationPass();
+Pass* createHeap2LocalPass();
 Pass* createI64ToI32LoweringPass();
 Pass* createInlineMainPass();
 Pass* createInliningPass();
@@ -57,13 +63,16 @@ Pass* createLegalizeJSInterfacePass();
 Pass* createLegalizeJSInterfaceMinimallyPass();
 Pass* createLimitSegmentsPass();
 Pass* createLocalCSEPass();
+Pass* createLocalSubtypingPass();
 Pass* createLogExecutionPass();
+Pass* createIntrinsicLoweringPass();
 Pass* createInstrumentLocalsPass();
 Pass* createInstrumentMemoryPass();
 Pass* createLoopInvariantCodeMotionPass();
 Pass* createMemory64LoweringPass();
 Pass* createMemoryPackingPass();
 Pass* createMergeBlocksPass();
+Pass* createMergeSimilarFunctionsPass();
 Pass* createMergeLocalsPass();
 Pass* createMinifiedPrinterPass();
 Pass* createMinifyImportsPass();
@@ -71,10 +80,12 @@ Pass* createMinifyImportsAndExportsPass();
 Pass* createMinifyImportsAndExportsAndModulesPass();
 Pass* createMetricsPass();
 Pass* createNameListPass();
-Pass* createNoExitRuntimePass();
+Pass* createNameTypesPass();
+Pass* createOnceReductionPass();
 Pass* createOptimizeAddedConstantsPass();
 Pass* createOptimizeAddedConstantsPropagatePass();
 Pass* createOptimizeInstructionsPass();
+Pass* createOptimizeForJSPass();
 Pass* createOptimizeStackIRPass();
 Pass* createPickLoadSignsPass();
 Pass* createModAsyncifyAlwaysOnlyUnwindPass();
@@ -101,6 +112,9 @@ Pass* createReReloopPass();
 Pass* createRedundantSetEliminationPass();
 Pass* createRoundTripPass();
 Pass* createSafeHeapPass();
+Pass* createSetGlobalsPass();
+Pass* createSignaturePruningPass();
+Pass* createSignatureRefiningPass();
 Pass* createSimplifyLocalsPass();
 Pass* createSimplifyGlobalsPass();
 Pass* createSimplifyGlobalsOptimizingPass();
@@ -115,13 +129,18 @@ Pass* createStripProducersPass();
 Pass* createStripTargetFeaturesPass();
 Pass* createSouperifyPass();
 Pass* createSouperifySingleUsePass();
+Pass* createSpillPointersPass();
 Pass* createStubUnsupportedJSOpsPass();
 Pass* createSSAifyPass();
 Pass* createSSAifyNoMergePass();
 Pass* createTrapModeClamp();
 Pass* createTrapModeJS();
+Pass* createTypeRefiningPass();
 Pass* createUnteePass();
 Pass* createVacuumPass();
+
+// Test passes:
+Pass* createCatchPopFixupPass();
 
 } // namespace wasm
 

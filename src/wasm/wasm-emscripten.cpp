@@ -33,10 +33,7 @@
 
 namespace wasm {
 
-cashew::IString EM_ASM_PREFIX("emscripten_asm_const");
 cashew::IString EM_JS_PREFIX("__em_js__");
-
-static Name STACK_INIT("stack$init");
 
 void addExportedFunction(Module& wasm, Function* function) {
   wasm.addFunction(function);
@@ -58,15 +55,16 @@ bool isExported(Module& wasm, Name name) {
 
 Global* getStackPointerGlobal(Module& wasm) {
   // Assumption: The stack pointer is either imported as __stack_pointer or
-  // its the first non-imported and non-exported global.
+  // we just assume it's the first non-imported global.
   // TODO(sbc): Find a better way to discover the stack pointer.  Perhaps the
   // linker could export it by name?
   for (auto& g : wasm.globals) {
-    if (g->imported()) {
-      if (g->base == STACK_POINTER) {
-        return g.get();
-      }
-    } else if (!isExported(wasm, g->name)) {
+    if (g->imported() && g->base == STACK_POINTER) {
+      return g.get();
+    }
+  }
+  for (auto& g : wasm.globals) {
+    if (!g->imported()) {
       return g.get();
     }
   }
@@ -80,6 +78,11 @@ std::string escape(std::string code) {
   size_t curr = 0;
   while ((curr = code.find("\\n", curr)) != std::string::npos) {
     code = code.replace(curr, 2, "\\\\n");
+    curr += 3; // skip this one
+  }
+  curr = 0;
+  while ((curr = code.find("\\t", curr)) != std::string::npos) {
+    code = code.replace(curr, 2, "\\\\t");
     curr += 3; // skip this one
   }
   // replace double quotes with escaped single quotes
@@ -151,7 +154,7 @@ private:
             Fatal() << "Cannot get offset of passive segment initialized "
                        "multiple times";
           }
-          offsets[curr->segment] = dest->value.geti32();
+          offsets[curr->segment] = dest->value.getInteger();
         }
       } searcher(passiveOffsets);
       searcher.walkModule(&wasm);
@@ -390,19 +393,11 @@ std::string EmscriptenGlueGenerator::generateEmscriptenMetadata() {
   if (!emJsWalker.codeByName.empty()) {
     meta << "  \"emJsFuncs\": {";
     commaFirst = true;
-    for (auto& pair : emJsWalker.codeByName) {
-      auto& name = pair.first;
-      auto& code = pair.second;
+    for (auto& [name, code] : emJsWalker.codeByName) {
       meta << nextElement();
       meta << '"' << name << "\": \"" << escape(code) << '"';
     }
     meta << "\n  },\n";
-  }
-
-  if (!wasm.tables.empty()) {
-    meta << "  \"tableSize\": " << wasm.tables[0]->initial.addr << ",\n";
-  } else {
-    meta << "  \"tableSize\": 0,\n";
   }
 
   // Avoid adding duplicate imports to `declares' or `invokeFuncs`.  Even
@@ -426,12 +421,10 @@ std::string EmscriptenGlueGenerator::generateEmscriptenMetadata() {
   });
   meta << "\n  ],\n";
 
-  meta << "  \"externs\": [";
+  meta << "  \"globalImports\": [";
   commaFirst = true;
   ModuleUtils::iterImportedGlobals(wasm, [&](Global* import) {
-    if (!(import->module == ENV && import->name == STACK_INIT)) {
-      meta << nextElement() << "\"_" << import->base.str << '"';
-    }
+    meta << nextElement() << '"' << import->base.str << '"';
   });
   meta << "\n  ],\n";
 
@@ -439,7 +432,7 @@ std::string EmscriptenGlueGenerator::generateEmscriptenMetadata() {
     meta << "  \"exports\": [";
     commaFirst = true;
     for (const auto& ex : wasm.exports) {
-      if (ex->kind == ExternalKind::Function) {
+      if (ex->kind == ExternalKind::Function || ex->kind == ExternalKind::Tag) {
         meta << nextElement() << '"' << ex->name.str << '"';
       }
     }
@@ -450,9 +443,9 @@ std::string EmscriptenGlueGenerator::generateEmscriptenMetadata() {
     for (const auto& ex : wasm.exports) {
       if (ex->kind == ExternalKind::Global) {
         const Global* g = wasm.getGlobal(ex->value);
-        assert(g->type == Type::i32);
+        assert(g->type == Type::i32 || g->type == Type::i64);
         Const* init = g->init->cast<Const>();
-        uint32_t addr = init->value.geti32();
+        uint64_t addr = init->value.getInteger();
         meta << nextElement() << '"' << ex->name.str << "\" : \"" << addr
              << '"';
       }
@@ -484,12 +477,16 @@ std::string EmscriptenGlueGenerator::generateEmscriptenMetadata() {
     if (exp) {
       if (exp->kind == ExternalKind::Function) {
         auto* main = wasm.getFunction(exp->value);
-        mainReadsParams = true;
-        // If main does not read its parameters, it will just be a stub that
-        // calls __original_main (which has no parameters).
-        if (auto* call = main->body->dynCast<Call>()) {
-          if (call->operands.empty()) {
-            mainReadsParams = false;
+        mainReadsParams = main->getNumParams() > 0;
+        if (mainReadsParams) {
+          // Main could also be stub that just calls __original_main with
+          // no parameters.
+          // TODO(sbc): Remove this once https://reviews.llvm.org/D75277
+          // lands.
+          if (auto* call = main->body->dynCast<Call>()) {
+            if (call->operands.empty()) {
+              mainReadsParams = false;
+            }
           }
         }
       }
@@ -519,7 +516,7 @@ void EmscriptenGlueGenerator::separateDataSegments(Output* outfile,
     if (!seg.offset->is<Const>()) {
       Fatal() << "separating relocatable segments not implemented";
     }
-    size_t offset = seg.offset->cast<Const>()->value.geti32();
+    size_t offset = seg.offset->cast<Const>()->value.getInteger();
     offset -= base;
     size_t fill = offset - lastEnd;
     if (fill > 0) {
@@ -530,18 +527,6 @@ void EmscriptenGlueGenerator::separateDataSegments(Output* outfile,
     lastEnd = offset + seg.data.size();
   }
   wasm.memory.segments.clear();
-}
-
-void EmscriptenGlueGenerator::renameMainArgcArgv() {
-  // If an export call ed __main_argc_argv exists rename it to main
-  Export* ex = wasm.getExportOrNull("__main_argc_argv");
-  if (!ex) {
-    BYN_TRACE("renameMain: __main_argc_argv not found\n");
-    return;
-  }
-  ex->name = "main";
-  wasm.updateMaps();
-  ModuleUtils::renameFunction(wasm, "__main_argc_argv", "main");
 }
 
 } // namespace wasm

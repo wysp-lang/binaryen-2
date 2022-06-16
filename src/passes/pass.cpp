@@ -47,6 +47,13 @@ void PassRegistry::registerPass(const char* name,
   passInfos[name] = PassInfo(description, create);
 }
 
+void PassRegistry::registerTestPass(const char* name,
+                                    const char* description,
+                                    Creator create) {
+  assert(passInfos.find(name) == passInfos.end());
+  passInfos[name] = PassInfo(description, create, true);
+}
+
 std::unique_ptr<Pass> PassRegistry::createPass(std::string name) {
   if (passInfos.find(name) == passInfos.end()) {
     Fatal() << "Could not find pass: " << name << "\n";
@@ -59,8 +66,8 @@ std::unique_ptr<Pass> PassRegistry::createPass(std::string name) {
 
 std::vector<std::string> PassRegistry::getRegisteredNames() {
   std::vector<std::string> ret;
-  for (auto pair : passInfos) {
-    ret.push_back(pair.first);
+  for (auto& [name, _] : passInfos) {
+    ret.push_back(name);
   }
   return ret;
 }
@@ -68,6 +75,11 @@ std::vector<std::string> PassRegistry::getRegisteredNames() {
 std::string PassRegistry::getPassDescription(std::string name) {
   assert(passInfos.find(name) != passInfos.end());
   return passInfos[name].description;
+}
+
+bool PassRegistry::isPassHidden(std::string name) {
+  assert(passInfos.find(name) != passInfos.end());
+  return passInfos[name].hidden;
 }
 
 // PassRunner
@@ -102,6 +114,9 @@ void PassRegistry::registerPasses() {
   registerPass("const-hoisting",
                "hoist repeated constants to a local",
                createConstHoistingPass);
+  registerPass("cfp",
+               "propagate constant struct field values",
+               createConstantFieldPropagationPass);
   registerPass(
     "dce", "removes unreachable code", createDeadCodeEliminationPass);
   registerPass("dealign",
@@ -129,6 +144,9 @@ void PassRegistry::registerPasses() {
   registerPass("extract-function",
                "leaves just one function (useful for debugging)",
                createExtractFunctionPass);
+  registerPass("extract-function-index",
+               "leaves just one function selected by index",
+               createExtractFunctionIndexPass);
   registerPass(
     "flatten", "flattens out code, removing nesting", createFlattenPass);
   registerPass("fpcast-emu",
@@ -149,6 +167,17 @@ void PassRegistry::registerPasses() {
   registerPass(
     "generate-stack-ir", "generate Stack IR", createGenerateStackIRPass);
   registerPass(
+    "global-refining", "refine the types of globals", createGlobalRefiningPass);
+  registerPass(
+    "gto", "globally optimize GC types", createGlobalTypeOptimizationPass);
+  registerPass(
+    "gsi", "globally optimize struct values", createGlobalStructInferencePass);
+  registerPass("type-refining",
+               "apply more specific subtypes to type fields where possible",
+               createTypeRefiningPass);
+  registerPass(
+    "heap2local", "replace GC allocations with locals", createHeap2LocalPass);
+  registerPass(
     "inline-main", "inline __original_main into main", createInlineMainPass);
   registerPass("inlining",
                "inline functions (you probably want inlining-optimizing)",
@@ -156,6 +185,9 @@ void PassRegistry::registerPasses() {
   registerPass("inlining-optimizing",
                "inline functions and optimizes where we inlined",
                createInliningOptimizingPass);
+  registerPass("intrinsic-lowering",
+               "lower away binaryen intrinsics",
+               createIntrinsicLoweringPass);
   registerPass("legalize-js-interface",
                "legalizes i64 types on the import/export boundary",
                createLegalizeJSInterfacePass);
@@ -166,6 +198,9 @@ void PassRegistry::registerPasses() {
   registerPass("local-cse",
                "common subexpression elimination inside basic blocks",
                createLocalCSEPass);
+  registerPass("local-subtyping",
+               "apply more specific subtypes to locals where possible",
+               createLocalSubtypingPass);
   registerPass("log-execution",
                "instrument the build with logging of where execution goes",
                createLogExecutionPass);
@@ -194,6 +229,9 @@ void PassRegistry::registerPasses() {
                createMemoryPackingPass);
   registerPass(
     "merge-blocks", "merges blocks to their parents", createMergeBlocksPass);
+  registerPass("merge-similar-functions",
+               "merges similar functions when benefical",
+               createMergeSimilarFunctionsPass);
   registerPass(
     "merge-locals", "merges locals when beneficial", createMergeLocalsPass);
   registerPass("metrics", "reports metrics", createMetricsPass);
@@ -217,10 +255,10 @@ void PassRegistry::registerPasses() {
                "apply the assumption that asyncify never unwinds",
                createModAsyncifyNeverUnwindPass);
   registerPass("nm", "name list", createNameListPass);
-  registerPass("no-exit-runtime",
-               "removes calls to atexit(), which is valid if the C runtime "
-               "will never be exited",
-               createNoExitRuntimePass);
+  registerPass("name-types", "(re)name all heap types", createNameTypesPass);
+  registerPass("once-reduction",
+               "reduces calls to code that only runs once",
+               createOnceReductionPass);
   registerPass("optimize-added-constants",
                "optimizes added constants into load/store offsets",
                createOptimizeAddedConstantsPass);
@@ -241,6 +279,9 @@ void PassRegistry::registerPasses() {
   registerPass("post-emscripten",
                "miscellaneous optimizations for Emscripten-generated code",
                createPostEmscriptenPass);
+  registerPass("optimize-for-js",
+               "early optimize of the instruction combinations for js",
+               createOptimizeForJSPass);
   registerPass("precompute",
                "computes compile-time evaluatable expressions",
                createPrecomputePass);
@@ -259,9 +300,18 @@ void PassRegistry::registerPasses() {
     "print-full", "print in full s-expression format", createFullPrinterPass);
   registerPass(
     "print-call-graph", "print call graph", createPrintCallGraphPass);
+
+  // Register PrintFunctionMap using its normal name.
   registerPass("print-function-map",
                "print a map of function indexes to names",
                createPrintFunctionMapPass);
+  // Also register it as "symbolmap" so that  wasm-opt --symbolmap=foo  is the
+  // same as  wasm-as --symbolmap=foo  even though the latter is not a pass
+  // (wasm-as cannot run arbitrary passes).
+  // TODO: switch emscripten to this name, then remove the old one
+  registerPass(
+    "symbolmap", "(alias for print-function-map)", createPrintFunctionMapPass);
+
   registerPass("print-stack-ir",
                "print out Stack IR (useful for internal debugging)",
                createPrintStackIRPass);
@@ -302,6 +352,15 @@ void PassRegistry::registerPasses() {
   registerPass("safe-heap",
                "instrument loads and stores to check for invalid behavior",
                createSafeHeapPass);
+  registerPass("set-globals",
+               "sets specified globals to specified values",
+               createSetGlobalsPass);
+  registerPass("signature-pruning",
+               "remove params from function signature types where possible",
+               createSignaturePruningPass);
+  registerPass("signature-refining",
+               "apply more specific subtypes to signature types where possible",
+               createSignatureRefiningPass);
   registerPass("simplify-globals",
                "miscellaneous globals-related optimizations",
                createSimplifyGlobalsPass);
@@ -330,6 +389,9 @@ void PassRegistry::registerPasses() {
   registerPass("souperify-single-use",
                "emit Souper IR in text form (single-use nodes only)",
                createSouperifySingleUsePass);
+  registerPass("spill-pointers",
+               "spill pointers to the C stack (useful for Boehm-style GC)",
+               createSpillPointersPass);
   registerPass("stub-unsupported-js",
                "stub out unsupported JS operations",
                createStubUnsupportedJSOpsPass);
@@ -367,12 +429,16 @@ void PassRegistry::registerPasses() {
   registerPass("vacuum", "removes obviously unneeded code", createVacuumPass);
   // registerPass(
   //   "lower-i64", "lowers i64 into pairs of i32s", createLowerInt64Pass);
+
+  // Register passes used for internal testing. These don't show up in --help.
+  registerTestPass("catch-pop-fixup",
+                   "fixup nested pops within catches",
+                   createCatchPopFixupPass);
 }
 
 void PassRunner::addIfNoDWARFIssues(std::string passName) {
   auto pass = PassRegistry::get()->createPass(passName);
-  if (!pass->invalidatesDWARF() ||
-      !Debug::shouldPreserveDWARF(options, *wasm)) {
+  if (!pass->invalidatesDWARF() || !shouldPreserveDWARF()) {
     doAdd(std::move(pass));
   }
 }
@@ -397,7 +463,13 @@ void PassRunner::addDefaultFunctionOptimizationPasses() {
   // that depend on flat IR
   if (options.optimizeLevel >= 4) {
     addIfNoDWARFIssues("flatten");
+    // LocalCSE is particularly useful after flatten (see comment in the pass
+    // itself), but we must simplify locals a little first (as flatten adds many
+    // new and redundant ones, which make things seem different if we do not
+    // run some amount of simplify-locals first).
+    addIfNoDWARFIssues("simplify-locals-notee-nostructure");
     addIfNoDWARFIssues("local-cse");
+    // TODO: add rereloop etc. here
   }
   addIfNoDWARFIssues("dce");
   addIfNoDWARFIssues("remove-unused-names");
@@ -430,11 +502,23 @@ void PassRunner::addDefaultFunctionOptimizationPasses() {
   addIfNoDWARFIssues("reorder-locals");
   // simplify-locals opens opportunities for optimizations
   addIfNoDWARFIssues("remove-unused-brs");
+  if (options.optimizeLevel > 1 && wasm->features.hasGC()) {
+    addIfNoDWARFIssues("heap2local");
+  }
   // if we are willing to work hard, also optimize copies before coalescing
   if (options.optimizeLevel >= 3 || options.shrinkLevel >= 2) {
     addIfNoDWARFIssues("merge-locals"); // very slow on e.g. sqlite
   }
+  if (options.optimizeLevel > 1 && wasm->features.hasGC()) {
+    // Coalescing may prevent subtyping (as a coalesced local must have the
+    // supertype of all those combined into it), so subtype first.
+    // TODO: when optimizing for size, maybe the order should reverse?
+    addIfNoDWARFIssues("local-subtyping");
+  }
   addIfNoDWARFIssues("coalesce-locals");
+  if (options.optimizeLevel >= 3 || options.shrinkLevel >= 1) {
+    addIfNoDWARFIssues("local-cse");
+  }
   addIfNoDWARFIssues("simplify-locals");
   addIfNoDWARFIssues("vacuum");
   addIfNoDWARFIssues("reorder-locals");
@@ -467,6 +551,23 @@ void PassRunner::addDefaultFunctionOptimizationPasses() {
 void PassRunner::addDefaultGlobalOptimizationPrePasses() {
   addIfNoDWARFIssues("duplicate-function-elimination");
   addIfNoDWARFIssues("memory-packing");
+  if (options.optimizeLevel >= 2) {
+    addIfNoDWARFIssues("once-reduction");
+  }
+  if (wasm->features.hasGC() && getTypeSystem() == TypeSystem::Nominal &&
+      options.optimizeLevel >= 2) {
+    addIfNoDWARFIssues("type-refining");
+    addIfNoDWARFIssues("signature-pruning");
+    addIfNoDWARFIssues("signature-refining");
+    addIfNoDWARFIssues("global-refining");
+    // Global type optimization can remove fields that are not needed, which can
+    // remove ref.funcs that were once assigned to vtables but are no longer
+    // needed, which can allow more code to be removed globally. After those,
+    // constant field propagation can be more effective.
+    addIfNoDWARFIssues("gto");
+    addIfNoDWARFIssues("remove-unused-module-elements");
+    addIfNoDWARFIssues("cfp");
+  }
 }
 
 void PassRunner::addDefaultGlobalOptimizationPostPasses() {
@@ -476,9 +577,16 @@ void PassRunner::addDefaultGlobalOptimizationPostPasses() {
   if (options.optimizeLevel >= 2 || options.shrinkLevel >= 2) {
     addIfNoDWARFIssues("inlining-optimizing");
   }
+
   // Optimizations show more functions as duplicate, so run this here in Post.
   addIfNoDWARFIssues("duplicate-function-elimination");
   addIfNoDWARFIssues("duplicate-import-elimination");
+
+  // perform after the number of functions is reduced by inlining-optimizing
+  if (options.shrinkLevel >= 2) {
+    addIfNoDWARFIssues("merge-similar-functions");
+  }
+
   if (options.optimizeLevel >= 2 || options.shrinkLevel >= 2) {
     addIfNoDWARFIssues("simplify-globals-optimizing");
   } else {
@@ -515,6 +623,9 @@ static void dumpWast(Name name, Module* wasm) {
 }
 
 void PassRunner::run() {
+  assert(!ran);
+  ran = true;
+
   static const int passDebug = getPassDebug();
   // Emit logging information when asked for. At passDebug level 1+ we log
   // the main passes, while in 2 we also log nested ones. Note that for
@@ -652,9 +763,12 @@ void PassRunner::runOnFunction(Function* func) {
 }
 
 void PassRunner::doAdd(std::unique_ptr<Pass> pass) {
-  if (Debug::shouldPreserveDWARF(options, *wasm) && pass->invalidatesDWARF()) {
+  if (pass->invalidatesDWARF() && shouldPreserveDWARF()) {
     std::cerr << "warning: running pass '" << pass->name
               << "' which is not fully compatible with DWARF\n";
+  }
+  if (passRemovesDebugInfo(pass->name)) {
+    addedPassesRemovedDWARF = true;
   }
   passes.emplace_back(std::move(pass));
 }
@@ -800,6 +914,25 @@ int PassRunner::getPassDebug() {
   static const int passDebug =
     getenv("BINARYEN_PASS_DEBUG") ? atoi(getenv("BINARYEN_PASS_DEBUG")) : 0;
   return passDebug;
+}
+
+bool PassRunner::passRemovesDebugInfo(const std::string& name) {
+  return name == "strip" || name == "strip-debug" || name == "strip-dwarf";
+}
+
+bool PassRunner::shouldPreserveDWARF() {
+  // Check if the debugging subsystem wants to preserve DWARF.
+  if (!Debug::shouldPreserveDWARF(options, *wasm)) {
+    return false;
+  }
+
+  // We may need DWARF. Check if one of our previous passes would remove it
+  // anyhow, in which case, there is nothing to preserve.
+  if (addedPassesRemovedDWARF) {
+    return false;
+  }
+
+  return true;
 }
 
 } // namespace wasm

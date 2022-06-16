@@ -35,8 +35,10 @@
 #include "support/colors.h"
 #include "support/command-line.h"
 #include "support/file.h"
+#include "support/hash.h"
 #include "support/path.h"
 #include "support/timing.h"
+#include "tool-options.h"
 #include "wasm-builder.h"
 #include "wasm-io.h"
 #include "wasm-validator.h"
@@ -256,13 +258,17 @@ struct Reducer
       "-O4",
       "--flatten -Os",
       "--flatten -O3",
-      "--flatten --local-cse -Os",
+      "--flatten --simplify-locals-notee-nostructure --local-cse -Os",
       "--coalesce-locals --vacuum",
+      "--dae",
+      "--dae-optimizing",
       "--dce",
       "--duplicate-function-elimination",
+      "--gto",
       "--inlining",
       "--inlining-optimizing",
       "--optimize-level=3 --inlining-optimizing",
+      "--local-cse",
       "--memory-packing",
       "--remove-unused-names --merge-blocks --vacuum",
       "--optimize-instructions",
@@ -274,6 +280,8 @@ struct Reducer
       "--remove-unused-nonfunction-module-elements",
       "--reorder-functions",
       "--reorder-locals",
+      // TODO: signature* passes
+      "--simplify-globals",
       "--simplify-locals --vacuum",
       "--strip",
       "--vacuum"};
@@ -287,9 +295,6 @@ struct Reducer
       for (auto pass : passes) {
         std::string currCommand = Path::getBinaryenBinaryTool("wasm-opt") + " ";
         currCommand += working + " -o " + test + " " + pass + " " + extraFlags;
-        if (debugInfo) {
-          currCommand += " -g ";
-        }
         if (!binary) {
           currCommand += " -S ";
         }
@@ -303,8 +308,7 @@ struct Reducer
             // see if it is still has the property we are preserving
             if (ProgramResult(command) == expected) {
               std::cerr << "|    command \"" << currCommand
-                        << "\" succeeded, reduced size to " << newSize
-                        << ", and preserved the property\n";
+                        << "\" succeeded, reduced size to " << newSize << '\n';
               copy_file(test, working);
               more = true;
               oldSize = newSize;
@@ -331,8 +335,8 @@ struct Reducer
     loadWorking();
     reduced = 0;
     funcsSeen = 0;
-    // before we do any changes, it should be valid to write out the module:
-    // size should be as expected, and output should be as expected
+    // Before we do any changes, it should be valid to write out the module:
+    // size should be as expected, and output should be as expected.
     ProgramResult result;
     if (!writeAndTestReduction(result)) {
       std::cerr << "\n|! WARNING: writing before destructive reduction fails, "
@@ -347,7 +351,13 @@ struct Reducer
   void loadWorking() {
     module = make_unique<Module>();
     ModuleReader reader;
-    reader.read(working, *module);
+    try {
+      reader.read(working, *module);
+    } catch (ParseException& p) {
+      p.dump(std::cerr);
+      std::cerr << '\n';
+      Fatal() << "error in parsing working wasm binary";
+    }
     // If there is no features section, assume we may need them all (without
     // this, a module with no features section but that uses e.g. atomics and
     // bulk memory would not work).
@@ -388,10 +398,21 @@ struct Reducer
     return out == expected;
   }
 
+  size_t decisionCounter = 0;
+
   bool shouldTryToReduce(size_t bonus = 1) {
-    static size_t counter = 0;
-    counter += bonus;
-    return (counter % factor) <= bonus;
+    assert(bonus > 0);
+    // Increment to avoid returning the same result each time.
+    decisionCounter += bonus;
+    return (decisionCounter % factor) <= bonus;
+  }
+
+  // Returns a random number in the range [0, max). This is deterministic given
+  // all the previous work done in the reducer.
+  size_t deterministicRandom(size_t max) {
+    assert(max > 0);
+    hash_combine(decisionCounter, max);
+    return decisionCounter % max;
   }
 
   bool isOkReplacement(Expression* with) {
@@ -470,25 +491,6 @@ struct Reducer
   // since we don't need to duplicate work that they do
 
   void visitExpression(Expression* curr) {
-    if (getFunction() && curr == getFunction()->body) {
-      // At the top level, we can try to reduce anything to an unreachable, and
-      // it is useful to do so when possible.
-      if (!curr->is<Unreachable>() && !curr->is<Nop>() &&
-          shouldTryToReduce(1000)) {
-        auto* save = curr;
-        Unreachable un;
-        replaceCurrent(&un);
-        if (writeAndTestReduction()) {
-          replaceCurrent(builder->makeUnreachable());
-          std::cerr << "|        body unreachified (" << getFunction()->name
-                    << ")\n";
-          noteReduction();
-          return;
-        } else {
-          replaceCurrent(save);
-        }
-      }
-    }
     // type-based reductions
     if (curr->type == Type::none) {
       if (tryToReduceCurrentToNop()) {
@@ -626,7 +628,6 @@ struct Reducer
                 break;
               case Type::v128:
               case Type::funcref:
-              case Type::externref:
               case Type::anyref:
               case Type::eqref:
               case Type::i31ref:
@@ -654,7 +655,6 @@ struct Reducer
                 break;
               case Type::v128:
               case Type::funcref:
-              case Type::externref:
               case Type::anyref:
               case Type::eqref:
               case Type::i31ref:
@@ -682,7 +682,6 @@ struct Reducer
                 break;
               case Type::v128:
               case Type::funcref:
-              case Type::externref:
               case Type::anyref:
               case Type::eqref:
               case Type::i31ref:
@@ -710,7 +709,6 @@ struct Reducer
                 WASM_UNREACHABLE("unexpected type");
               case Type::v128:
               case Type::funcref:
-              case Type::externref:
               case Type::anyref:
               case Type::eqref:
               case Type::i31ref:
@@ -724,7 +722,6 @@ struct Reducer
           }
           case Type::v128:
           case Type::funcref:
-          case Type::externref:
           case Type::anyref:
           case Type::eqref:
           case Type::i31ref:
@@ -766,53 +763,16 @@ struct Reducer
     }
     // the "opposite" of shrinking: copy a 'zero' element
     for (auto& segment : curr->segments) {
-      reduceByZeroing(&segment, 0, 2, shrank);
+      reduceByZeroing(
+        &segment, 0, [](char item) { return item == 0; }, 2, shrank);
     }
   }
 
-  template<typename T> bool shrinkByReduction(T* segment, size_t bonus) {
-    // try to reduce to first function. first, shrink segment elements.
-    // while we are shrinking successfully, keep going exponentially.
-    bool justShrank = false;
-    bool shrank = false;
-
-    auto& data = segment->data;
-    // when we succeed, try to shrink by more and more, similar to bisection
-    size_t skip = 1;
-    for (size_t i = 0; i < data.size() && !data.empty(); i++) {
-      if (justShrank || shouldTryToReduce(bonus)) {
-        auto save = data;
-        for (size_t j = 0; j < skip; j++) {
-          if (!data.empty()) {
-            data.pop_back();
-          }
-        }
-        justShrank = writeAndTestReduction();
-        if (justShrank) {
-          std::cerr << "|      shrank segment (skip: " << skip << ")\n";
-          shrank = true;
-          noteReduction();
-          skip = std::min(size_t(factor), 2 * skip);
-        } else {
-          data = save;
-          break;
-        }
-      }
-    }
-
-    return shrank;
-  }
-
-  template<typename T, typename U>
-  void reduceByZeroing(T* segment, U zero, size_t bonus, bool shrank) {
-    if (segment->data.empty()) {
-      return;
-    }
+  template<typename T, typename U, typename C>
+  void
+  reduceByZeroing(T* segment, U zero, C isZero, size_t bonus, bool shrank) {
     for (auto& item : segment->data) {
-      if (!shouldTryToReduce(bonus)) {
-        continue;
-      }
-      if (item == zero) {
+      if (!shouldTryToReduce(bonus) || isZero(item)) {
         continue;
       }
       auto save = item;
@@ -831,49 +791,117 @@ struct Reducer
     }
   }
 
-  void shrinkElementSegments(Module* module) {
+  template<typename T> bool shrinkByReduction(T* segment, size_t bonus) {
+    // try to reduce to first function. first, shrink segment elements.
+    // while we are shrinking successfully, keep going exponentially.
+    bool justShrank = false;
+
+    auto& data = segment->data;
+    // when we succeed, try to shrink by more and more, similar to bisection
+    size_t skip = 1;
+    for (size_t i = 0; i < data.size() && !data.empty(); i++) {
+      if (justShrank || shouldTryToReduce(bonus)) {
+        auto save = data;
+        for (size_t j = 0; j < skip; j++) {
+          if (data.empty()) {
+            break;
+          } else {
+            data.pop_back();
+          }
+        }
+        justShrank = writeAndTestReduction();
+        if (justShrank) {
+          std::cerr << "|      shrank segment from " << save.size() << " => "
+                    << data.size() << " (skip: " << skip << ")\n";
+          noteReduction();
+          skip = std::min(size_t(factor), 2 * skip);
+        } else {
+          data = std::move(save);
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+
+  void shrinkElementSegments() {
     std::cerr << "|    try to simplify elem segments\n";
-    Name first;
+
+    // First, shrink segment elements.
+    bool shrank = false;
+    for (auto& segment : module->elementSegments) {
+      // Try to shrink all the segments (code in shrinkByReduction will decide
+      // which to actually try to shrink, based on the current factor), and note
+      // if we shrank anything at all (which we'll use later down).
+      shrank = shrinkByReduction(segment.get(), 1) || shrank;
+    }
+
+    // Second, try to replace elements with a "zero".
     auto it =
       std::find_if_not(module->elementSegments.begin(),
                        module->elementSegments.end(),
                        [&](auto& segment) { return segment->data.empty(); });
 
+    Expression* first = nullptr;
     if (it != module->elementSegments.end()) {
       first = it->get()->data[0];
     }
-
-    // try to reduce to first function. first, shrink segment elements.
-    // while we are shrinking successfully, keep going exponentially.
-    bool shrank = false;
-    for (auto& segment : module->elementSegments) {
-      shrank = shrinkByReduction(segment.get(), 100);
+    if (first == nullptr) {
+      // The elements are all empty, nothing left to do.
+      return;
     }
+
     // the "opposite" of shrinking: copy a 'zero' element
     for (auto& segment : module->elementSegments) {
-      reduceByZeroing(segment.get(), first, 100, shrank);
+      reduceByZeroing(
+        segment.get(),
+        first,
+        [&](Expression* entry) {
+          if (entry->is<RefNull>()) {
+            // we don't need to replace a ref.null
+            return true;
+          } else if (first->is<RefNull>()) {
+            return false;
+          } else {
+            // Both are ref.func
+            auto* f = first->cast<RefFunc>();
+            auto* e = entry->cast<RefFunc>();
+            return f->func == e->func;
+          }
+        },
+        1,
+        shrank);
     }
   }
 
-  void visitModule(Module* curr) {
-    assert(curr == module.get());
-
-    shrinkElementSegments(curr);
-
+  // Reduces entire functions at a time. Returns whether we did a significant
+  // amount of reduction that justifies doing even more.
+  bool reduceFunctions() {
     // try to remove functions
-    std::cerr << "|    try to remove functions\n";
     std::vector<Name> functionNames;
     for (auto& func : module->functions) {
       functionNames.push_back(func->name);
     }
+    auto numFuncs = functionNames.size();
+    if (numFuncs == 0) {
+      return false;
+    }
     size_t skip = 1;
+    size_t maxSkip = 1;
     // If we just removed some functions in the previous iteration, keep trying
     // to remove more as this is one of the most efficient ways to reduce.
-    bool justRemoved = false;
-    for (size_t i = 0; i < functionNames.size(); i++) {
-      if (!justRemoved &&
+    bool justReduced = true;
+    // Start from a new place each time.
+    size_t base = deterministicRandom(numFuncs);
+    std::cerr << "|    try to remove functions (base: " << base
+              << ", decisionCounter: " << decisionCounter << ", numFuncs "
+              << numFuncs << ")\n";
+    for (size_t x = 0; x < functionNames.size(); x++) {
+      size_t i = (base + x) % numFuncs;
+      if (!justReduced &&
           functionsWeTriedToRemove.count(functionNames[i]) == 1 &&
-          !shouldTryToReduce(std::max((factor / 100) + 1, 1000))) {
+          !shouldTryToReduce(std::max((factor / 5) + 1, 20000))) {
         continue;
       }
       std::vector<Name> names;
@@ -888,24 +916,53 @@ struct Reducer
       if (names.size() == 0) {
         continue;
       }
-      std::cout << "|    try to remove " << names.size()
-                << " functions (skip: " << skip << ")\n";
-      justRemoved = tryToRemoveFunctions(names);
-      if (justRemoved) {
+      std::cerr << "|     trying at i=" << i << " of size " << names.size()
+                << "\n";
+      // Try to remove functions and/or empty them. Note that
+      // tryToRemoveFunctions() will reload the module if it fails, which means
+      // function names may change - for that reason, run it second.
+      justReduced = tryToEmptyFunctions(names) || tryToRemoveFunctions(names);
+      if (justReduced) {
         noteReduction(names.size());
-        i += skip;
+        // Subtract 1 since the loop increments us anyhow by one: we want to
+        // skip over the skipped functions, and not any more.
+        x += skip - 1;
         skip = std::min(size_t(factor), 2 * skip);
+        maxSkip = std::max(skip, maxSkip);
       } else {
         skip = std::max(skip / 2, size_t(1)); // or 1?
+        x += factor / 100;
       }
     }
+    // If maxSkip is 1 then we never reduced at all. If it is 2 then we did
+    // manage to reduce individual functions, but all our attempts at
+    // exponential growth failed. Only suggest doing a new iteration of this
+    // function if we did in fact manage to grow, which indicated there are lots
+    // of opportunities here, and it is worth focusing on this.
+    return maxSkip > 2;
+  }
+
+  void visitModule(Module* curr) {
+    // The initial module given to us is our global object. As we continue to
+    // process things here, we may replace the module, so we should never again
+    // refer to curr.
+    assert(curr == module.get());
+    curr = nullptr;
+
+    // Reduction of entire functions at a time is very effective, and we do it
+    // with exponential growth and backoff, so keep doing it while it works.
+    while (reduceFunctions()) {
+    }
+
+    shrinkElementSegments();
+
     // try to remove exports
     std::cerr << "|    try to remove exports (with factor " << factor << ")\n";
     std::vector<Export> exports;
     for (auto& exp : module->exports) {
       exports.push_back(*exp);
     }
-    skip = 1;
+    size_t skip = 1;
     for (size_t i = 0; i < exports.size(); i++) {
       if (!shouldTryToReduce(std::max((factor / 100) + 1, 1000))) {
         continue;
@@ -944,7 +1001,7 @@ struct Reducer
       auto* func = module->functions[0].get();
       // We can't remove something that might have breaks to it.
       if (!func->imported() && !Properties::isNamedControlFlow(func->body)) {
-        auto funcSig = func->sig;
+        auto funcType = func->type;
         auto* funcBody = func->body;
         for (auto* child : ChildIterator(func->body)) {
           if (!(child->type.isConcrete() || child->type == Type::none)) {
@@ -952,7 +1009,7 @@ struct Reducer
           }
           // Try to replace the body with the child, fixing up the function
           // to accept it.
-          func->sig.results = child->type;
+          func->type = Signature(funcType.getSignature().params, child->type);
           func->body = child;
           if (writeAndTestReduction()) {
             // great, we succeeded!
@@ -961,13 +1018,50 @@ struct Reducer
             break;
           }
           // Undo.
-          func->sig = funcSig;
+          func->type = funcType;
           func->body = funcBody;
         }
       }
     }
   }
 
+  // Try to empty out the bodies of some functions.
+  bool tryToEmptyFunctions(std::vector<Name> names) {
+    std::vector<Expression*> oldBodies;
+    size_t actuallyEmptied = 0;
+    for (auto name : names) {
+      auto* func = module->getFunction(name);
+      auto* oldBody = func->body;
+      oldBodies.push_back(oldBody);
+      // Nothing to do for imported functions (body is nullptr) or for bodies
+      // that have already been as reduced as we can make them.
+      if (func->imported() || oldBody->is<Unreachable>() ||
+          oldBody->is<Nop>()) {
+        continue;
+      }
+      actuallyEmptied++;
+      bool useUnreachable = func->getResults() != Type::none;
+      if (useUnreachable) {
+        func->body = builder->makeUnreachable();
+      } else {
+        func->body = builder->makeNop();
+      }
+    }
+    if (actuallyEmptied > 0 && writeAndTestReduction()) {
+      std::cerr << "|        emptied " << actuallyEmptied << " / "
+                << names.size() << " functions\n";
+      return true;
+    } else {
+      // Restore the bodies.
+      for (size_t i = 0; i < names.size(); i++) {
+        module->getFunction(names[i])->body = oldBodies[i];
+      }
+      return false;
+    }
+  }
+
+  // Try to actually remove functions. If they are somehow referred to, we will
+  // get a validation error and undo it.
   bool tryToRemoveFunctions(std::vector<Name> names) {
     for (auto name : names) {
       module->removeFunction(name);
@@ -1012,7 +1106,7 @@ struct Reducer
     if (WasmValidator().validate(
           *module, WasmValidator::Globally | WasmValidator::Quiet) &&
         writeAndTestReduction()) {
-      std::cerr << "|      removed " << names.size() << " functions\n";
+      std::cerr << "|        removed " << names.size() << " functions\n";
       return true;
     } else {
       loadWorking(); // restore it from orbit
@@ -1062,7 +1156,7 @@ struct Reducer
       RefNull* n = builder->makeRefNull(curr->type);
       return tryToReplaceCurrent(n);
     }
-    if (curr->type.isTuple()) {
+    if (curr->type.isTuple() && curr->type.isDefaultable()) {
       Expression* n =
         builder->makeConstantExpression(Literal::makeZeros(curr->type));
       return tryToReplaceCurrent(n);
@@ -1107,9 +1201,12 @@ int main(int argc, const char* argv[]) {
   std::string binDir = Path::getDirName(argv[0]);
   bool binary = true, deNan = false, verbose = false, debugInfo = false,
        force = false;
-  Options options("wasm-reduce",
-                  "Reduce a wasm file to a smaller one that has the same "
-                  "behavior on a given command");
+
+  const std::string WasmReduceOption = "wasm-reduce options";
+
+  ToolOptions options("wasm-reduce",
+                      "Reduce a wasm file to a smaller one that has the same "
+                      "behavior on a given command");
   options
     .add("--command",
          "-cmd",
@@ -1117,12 +1214,14 @@ int main(int argc, const char* argv[]) {
          "the command's output identical. "
          "We look at the command's return code and stdout here (TODO: stderr), "
          "and we reduce while keeping those unchanged.",
+         WasmReduceOption,
          Options::Arguments::One,
          [&](Options* o, const std::string& argument) { command = argument; })
     .add("--test",
          "-t",
          "Test file (this will be written to to test, the given command should "
          "read it when we call it)",
+         WasmReduceOption,
          Options::Arguments::One,
          [&](Options* o, const std::string& argument) { test = argument; })
     .add("--working",
@@ -1130,11 +1229,13 @@ int main(int argc, const char* argv[]) {
          "Working file (this will contain the current good state while doing "
          "temporary computations, "
          "and will contain the final best result at the end)",
+         WasmReduceOption,
          Options::Arguments::One,
          [&](Options* o, const std::string& argument) { working = argument; })
     .add("--binaries",
          "-b",
          "binaryen binaries location (bin/ directory)",
+         WasmReduceOption,
          Options::Arguments::One,
          [&](Options* o, const std::string& argument) {
            // Add separator just in case
@@ -1144,33 +1245,39 @@ int main(int argc, const char* argv[]) {
          "-S",
          "Emit intermediate files as text, instead of binary (also make sure "
          "the test and working files have a .wat or .wast suffix)",
+         WasmReduceOption,
          Options::Arguments::Zero,
          [&](Options* o, const std::string& argument) { binary = false; })
     .add("--denan",
          "",
          "Avoid nans when reducing",
+         WasmReduceOption,
          Options::Arguments::Zero,
          [&](Options* o, const std::string& argument) { deNan = true; })
     .add("--verbose",
          "-v",
          "Verbose output mode",
+         WasmReduceOption,
          Options::Arguments::Zero,
          [&](Options* o, const std::string& argument) { verbose = true; })
     .add("--debugInfo",
          "-g",
          "Keep debug info in binaries",
+         WasmReduceOption,
          Options::Arguments::Zero,
          [&](Options* o, const std::string& argument) { debugInfo = true; })
     .add("--force",
          "-f",
          "Force the reduction attempt, ignoring problems that imply it is "
          "unlikely to succeed",
+         WasmReduceOption,
          Options::Arguments::Zero,
          [&](Options* o, const std::string& argument) { force = true; })
     .add("--timeout",
          "-to",
          "A timeout to apply to each execution of the command, in seconds "
          "(default: 2)",
+         WasmReduceOption,
          Options::Arguments::One,
          [&](Options* o, const std::string& argument) {
            timeout = atoi(argument.c_str());
@@ -1180,6 +1287,7 @@ int main(int argc, const char* argv[]) {
          "-ef",
          "Extra commandline flags to pass to wasm-opt while reducing. "
          "(default: --enable-all)",
+         WasmReduceOption,
          Options::Arguments::One,
          [&](Options* o, const std::string& argument) {
            extraFlags = argument;
@@ -1190,6 +1298,16 @@ int main(int argc, const char* argv[]) {
       Options::Arguments::One,
       [&](Options* o, const std::string& argument) { input = argument; });
   options.parse(argc, argv);
+
+  if (debugInfo) {
+    extraFlags += " -g ";
+  }
+  if (getTypeSystem() == TypeSystem::Nominal) {
+    extraFlags += " --nominal";
+  }
+  if (getTypeSystem() == TypeSystem::Isorecursive) {
+    extraFlags += " --hybrid";
+  }
 
   if (test.size() == 0) {
     Fatal() << "test file not provided\n";
@@ -1209,6 +1327,7 @@ int main(int argc, const char* argv[]) {
   std::cerr << "|test: " << test << '\n';
   std::cerr << "|working: " << working << '\n';
   std::cerr << "|bin dir: " << binDir << '\n';
+  std::cerr << "|extra flags: " << extraFlags << '\n';
 
   // get the expected output
   copy_file(input, test);
@@ -1320,19 +1439,25 @@ int main(int argc, const char* argv[]) {
         // stop
         stopping = true;
       } else {
-        // just try to remove all we can and finish up
-        factor = 1;
+        // decrease the factor quickly
+        factor = (factor + 1) / 2; // stable on 1
       }
     }
     lastPostPassesSize = newSize;
 
-    // if destructive reductions lead to useful proportionate pass reductions,
-    // keep going at the same factor, as pass reductions are far faster
+    // If destructive reductions lead to useful proportionate pass reductions,
+    // keep going at the same factor, as pass reductions are far faster.
     std::cerr << "|  pass progress: " << passProgress
               << ", last destructive: " << lastDestructiveReductions << '\n';
     if (passProgress >= 4 * lastDestructiveReductions) {
-      // don't change
       std::cerr << "|  progress is good, do not quickly decrease factor\n";
+      // While the amount of pass reductions is proportionately high, we do
+      // still want to reduce the factor by some amount. If we do not then there
+      // is a risk that both pass and destructive reductions are very low, and
+      // we get "stuck" cycling through them. In that case we simply need to do
+      // more destructive reductions to make real progress. For that reason,
+      // decrease the factor by some small percentage.
+      factor = std::max(1, (factor * 9) / 10);
     } else {
       if (factor > 10) {
         factor = (factor / 3) + 1;
