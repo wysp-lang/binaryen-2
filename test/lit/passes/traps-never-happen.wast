@@ -20,4 +20,56 @@
       )
     )
   )
+
+  (func $result-non-nullable (result (ref any))
+    (ref.as_non_null
+      (ref.null any)
+    )
+  )
+
+  (func $result-nullable (result (ref null any))
+    (ref.as_non_null
+      (ref.null any)
+    )
+  )
+
+  (func $return-non-nullable (result (ref any))
+    (return
+      (ref.as_non_null
+        (ref.null any)
+      )
+    )
+  )
+
+  (func $return-nullable (result (ref null any))
+    (return
+      (ref.as_non_null
+        (ref.null any)
+      )
+    )
+  )
+
+  (func $block-non-nullable
+    (drop
+      (block $block (result (ref any))
+        (br $block
+          (ref.as_non_null
+            (ref.null any)
+          )
+        )
+      )
+    )
+  )
+
+  (func $block-nullable
+    (drop
+      (block $block (result (ref null any))
+        (br $block
+          (ref.as_non_null ;; why not remove..?
+            (ref.null any)
+          )
+        )
+      )
+    )
+  )
 )

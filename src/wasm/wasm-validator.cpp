@@ -57,9 +57,9 @@ printModuleComponent(Expression* curr, std::ostream& stream, Module& wasm) {
 struct ValidationInfo {
   Module& wasm;
 
-  bool validateWeb;
-  bool validateGlobally;
-  bool quiet;
+  bool validateWeb = true;
+  bool validateGlobally = true;
+  bool quiet = false;
 
   std::atomic<bool> valid;
 
@@ -3341,6 +3341,7 @@ bool WasmValidator::validate(Expression* curr, Function* func, Module& wasm) {
   FunctionValidator validator(wasm, &info);
   validator.setFunction(func);
   validator.visit(curr);
+  std::cout << "waka " << info.getStream(nullptr).str();
   return info.valid.load();
 }
 

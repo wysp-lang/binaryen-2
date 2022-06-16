@@ -40,7 +40,8 @@ struct TrapsNeverHappen : public WalkerPass<ExpressionStackWalker<TrapsNeverHapp
       // It did not validate; restore the old state.
       replaceCurrent(curr);
       // TODO returned value, and value flowing out, must match the function
-      //      results
+      //      results. block results too...
+std::cout << "fail " << getFunction()->name << '\n';
     }
   }
 
