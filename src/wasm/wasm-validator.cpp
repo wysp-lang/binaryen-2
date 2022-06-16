@@ -544,7 +544,11 @@ void FunctionValidator::visitBlock(Block* curr) {
   if (curr->name.is()) {
     noteLabelName(curr->name);
     auto iter = breakTypes.find(curr->name);
-    assert(iter != breakTypes.end()); // we set it ourselves
+    if (!shouldBeTrue(iter != breakTypes.end(),
+                      curr,
+                      "missing break type for block")) {
+      return;
+    }
     for (Type breakType : iter->second) {
       // none or unreachable means a poison value that we should ignore - if
       // consumed, it will error
@@ -3329,6 +3333,14 @@ bool WasmValidator::validate(Module& module, Flags flags) {
     }
     std::cerr << info.getStream(nullptr).str();
   }
+  return info.valid.load();
+}
+
+bool WasmValidator::validate(Expression* curr, Function* func, Module& wasm) {
+  ValidationInfo info(wasm);
+  FunctionValidator validator(wasm, &info);
+  validator.setFunction(func);
+  validator.visit(curr);
   return info.valid.load();
 }
 

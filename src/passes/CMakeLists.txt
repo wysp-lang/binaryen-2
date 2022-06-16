@@ -99,6 +99,7 @@ set(passes_SOURCES
   SpillPointers.cpp
   StackCheck.cpp
   SSAify.cpp
+  TrapsNeverHappen.cpp
   Untee.cpp
   Vacuum.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/WasmIntrinsics.cpp
