@@ -3507,6 +3507,7 @@ public:
     return ret;
   }
   Flow visitStringNew(StringNew* curr) {
+    // TODO: unicode. This handles ascii for now.
     NOTE_ENTER("StringNew");
     Flow ptr = self()->visit(curr->ptr);
     if (ptr.breaking()) {
@@ -3521,14 +3522,14 @@ public:
       }
       Address ptrVal(ptr.getSingleValue().getUnsigned());
       Address lengthVal(length.getSingleValue().getUnsigned());
+      auto* inst = getMemoryInstance();
       if (ptrVal + lengthVal > inst->memorySize * Memory::kPageSize) {
         trap("out of bounds segment access in memory.copy");
       }
-      auto* inst = getMemoryInstance();
       for (size_t i = 0; i < lengthVal; i++) {
         data.push_back(
           inst->externalInterface->load8u(
-            inst->getFinalAddressWithoutOffset(Literal(ptrVal + i), 1));
+            inst->getFinalAddressWithoutOffset(Literal(ptrVal + i), 1)));
       }
     } else {
       // This is the GC variation, and ptr is an array.
@@ -3536,9 +3537,9 @@ public:
       if (array.isNull()) {
         trap("null ref");
       }
-      auto field = curr->ref->type.getHeapType().getArray().element;
-      for (size_t i = 0; i < array->values.size(); i++) {
-        data.push_back(data->values[i]);
+      const auto& arrayData = array.getGCData()->values;
+      for (size_t i = 0; i < arrayData.size(); i++) {
+        data.push_back(arrayData[i].getInteger());
       }
     }
     return Literal(std::make_shared<StringData>(data), curr->type);
