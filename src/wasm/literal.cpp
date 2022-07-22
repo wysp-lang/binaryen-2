@@ -569,13 +569,13 @@ std::ostream& operator<<(std::ostream& o, Literal literal) {
       auto data = literal.getStringViewData();
       if (data) {
         o << "[stringview";
-        auto stringData = data.stringData;
+        auto stringData = data->stringData;
         // A non-null view must refer to a string.
         assert(stringData);
         for (auto c : *stringData) {
           o << ' ' << int(c);
         }
-        o << " pos:" << data.pos << ']';
+        o << " pos:" << data->pos << ']';
       } else {
         o << "[ref null " << literal.type << ']';
       }

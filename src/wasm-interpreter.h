@@ -3544,6 +3544,83 @@ public:
     }
     return Literal(std::make_shared<StringData>(data), curr->type);
   }
+  Flow visitStringConst(StringConst* curr) {
+    // TODO: unicode. This handles ascii for now.
+    std::vector<uint8_t> data;
+    for (auto c : std::string(curr->string.str)) {
+      data.push_back(c);
+    }
+    return Literal(std::make_shared<StringData>(data), curr->type);
+  }
+  Flow visitStringMeasure(StringMeasure* curr) {
+    // TODO: unicode. This handles ascii for now.
+    Flow ref = self()->visit(curr->ref);
+    if (ref.breaking()) {
+      return ref;
+    }
+    auto refVal = ref.getSingleValue();
+    if (revVal.isNull()) {
+      trap("null ref");
+    }
+    switch (curr->op) {
+      case StringMeasureUTF8:
+      case StringMeasureWTF8:
+      case StringMeasureWTF16: {
+        auto& data = refVal.getStringData();
+        return Literal(data.size());
+      }
+      case StringMeasureIsUSV: {
+        return Literal(int32_t(1));
+      }
+      case StringMeasureWTF16View: {
+        auto& data = refVal.getStringViewData().stringData;
+        return Literal(data.size());
+      }
+      default: {
+        WASM_UNREACHABLE("bad op");
+      }
+    }
+  }
+  Flow visitStringEncode(StringEncode* curr) {
+    // TODO: unicode. This handles ascii for now.
+    WASM_UNREACHABLE("unimplemented string.encode");
+  }
+  Flow visitStringConcat(StringConcat* curr) {
+    // TODO: unicode. This handles ascii for now.
+    WASM_UNREACHABLE("unimplemented string.concat");
+  }
+  Flow visitStringEq(StringEq* curr) {
+    // TODO: unicode. This handles ascii for now.
+    WASM_UNREACHABLE("unimplemented string.eq");
+  }
+  Flow visitStringAs(StringAs* curr) {
+    // TODO: unicode. This handles ascii for now.
+    WASM_UNREACHABLE("unimplemented string.as");
+  }
+  Flow visitStringWTF8Advance(StringWTF8Advance* curr) {
+    // TODO: unicode. This handles ascii for now.
+    WASM_UNREACHABLE("unimplemented stringview_adjust*");
+  }
+  Flow visitStringWTF16Get(StringWTF16Get* curr) {
+    // TODO: unicode. This handles ascii for now.
+    WASM_UNREACHABLE("unimplemented stringview_adjust*");
+  }
+  Flow visitStringIterNext(StringIterNext* curr) {
+    // TODO: unicode. This handles ascii for now.
+    WASM_UNREACHABLE("unimplemented stringview_adjust*");
+  }
+  Flow visitStringIterMove(StringIterMove* curr) {
+    // TODO: unicode. This handles ascii for now.
+    WASM_UNREACHABLE("unimplemented stringview_adjust*");
+  }
+  Flow visitStringSliceWTF(StringSliceWTF* curr) {
+    // TODO: unicode. This handles ascii for now.
+    WASM_UNREACHABLE("unimplemented stringview_adjust*");
+  }
+  Flow visitStringSliceIter(StringSliceIter* curr) {
+    // TODO: unicode. This handles ascii for now.
+    WASM_UNREACHABLE("unimplemented stringview_adjust*");
+  }
 
   void trap(const char* why) override { externalInterface->trap(why); }
 
