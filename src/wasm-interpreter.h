@@ -3652,7 +3652,36 @@ public:
   }
   Flow visitStringEq(StringEq* curr) {
     // TODO: unicode. This handles ascii for now.
-    WASM_UNREACHABLE("unimplemented string.eq");
+    Flow left = self()->visit(curr->left);
+    if (left.breaking()) {
+      return left;
+    }
+    Flow right = self()->visit(curr->right);
+    if (right.breaking()) {
+      return right;
+    }
+    auto leftVal = left.getSingleValue();
+    if (leftVal.isNull()) {
+      trap("null left");
+    }
+    auto& leftData = *leftVal.getStringData();
+    auto rightVal = right.getSingleValue();
+    if (rightVal.isNull()) {
+      trap("null right");
+    }
+    auto& rightData = *rightVal.getStringData();
+    uint32_t result = 1;
+    if (leftData.size() != rightData.size()) {
+      result = 0;
+    } else {
+      for (size_t i = 0; i < leftData.size(); i++) {
+        if (leftData[i] != rightData[i]) {
+          result = 0;
+          break;
+        }
+      }
+    }
+    return Literal(result);
   }
   Flow visitStringAs(StringAs* curr) {
     // TODO: unicode. This handles ascii for now.
