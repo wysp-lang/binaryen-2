@@ -55,6 +55,12 @@ Literal::Literal(Type type) : type(type) {
     new (&gcData) std::shared_ptr<GCData>();
   } else if (type.isRtt()) {
     new (this) Literal(Literal::makeCanonicalRtt(type.getHeapType()));
+  } else if (isString()) {
+    assert(!type.isNonNullable());
+    new (&stringData) std::shared_ptr<StringData>();
+  } else if (isStringView()) {
+    assert(!type.isNonNullable());
+    new (&stringViewData) std::shared_ptr<StringViewData>();
   } else {
     // For anything else, zero out all the union data.
     memset(&v128, 0, 16);
@@ -69,13 +75,29 @@ Literal::Literal(std::shared_ptr<GCData> gcData, Type type)
   : gcData(gcData), type(type) {
   // Null data is only allowed if nullable.
   assert(gcData || type.isNullable());
-  // The type must be a proper type for GC data.
+  // The type must be a proper type.
   assert(isData());
 }
 
 Literal::Literal(std::unique_ptr<RttSupers>&& rttSupers, Type type)
   : rttSupers(std::move(rttSupers)), type(type) {
   assert(type.isRtt());
+}
+
+Literal::Literal(std::shared_ptr<StringData> stringData, Type type)
+  : stringData(stringData), type(type) {
+  // Null data is only allowed if nullable.
+  assert(stringData || type.isNullable());
+  // The type must be a proper type.
+  assert(isString());
+}
+
+Literal::Literal(std::shared_ptr<StringViewData> stringViewData, Type type)
+  : stringViewData(stringViewData), type(type) {
+  // Null data is only allowed if nullable.
+  assert(stringViewData || type.isNullable());
+  // The type must be a proper type.
+  assert(isStringView());
 }
 
 Literal::Literal(const Literal& other) : type(other.type) {
@@ -100,6 +122,14 @@ Literal::Literal(const Literal& other) : type(other.type) {
   }
   if (other.isData()) {
     new (&gcData) std::shared_ptr<GCData>(other.gcData);
+    return;
+  }
+  if (other.isString()) {
+    new (&stringData) std::shared_ptr<StringData>(other.stringData);
+    return;
+  }
+  if (other.isStringView()) {
+    new (&stringViewData) std::shared_ptr<StringViewData>(other.stringViewData);
     return;
   }
   if (type.isFunction()) {
@@ -143,6 +173,10 @@ Literal::~Literal() {
     gcData.~shared_ptr();
   } else if (type.isRtt()) {
     rttSupers.~unique_ptr();
+  } else if (isString()) {
+    stringData.~shared_ptr();
+  } else if (isStringView()) {
+    stringViewData.~shared_ptr();
   }
 }
 
@@ -268,6 +302,16 @@ const RttSupers& Literal::getRttSupers() const {
   return *rttSupers;
 }
 
+std::shared_ptr<StringData> Literal::getStringData() const {
+  assert(isString());
+  return stringData;
+}
+
+std::shared_ptr<StringViewData> Literal::getStringViewData() const {
+  assert(isStringView());
+  return stringViewData;
+}
+
 Literal Literal::castToF32() {
   assert(type == Type::i32);
   Literal ret(Type::f32);
@@ -382,6 +426,12 @@ bool Literal::operator==(const Literal& other) const {
     }
     if (type.isData()) {
       return gcData == other.gcData;
+    }
+    if (type.isString()) {
+      return stringData == other.stringData;
+    }
+    if (type.isStringView()) {
+      return stringViewData == other.stringViewData;
     }
     if (type.getHeapType() == HeapType::i31) {
       return i32 == other.i32;
@@ -501,6 +551,31 @@ std::ostream& operator<<(std::ostream& o, Literal literal) {
       auto data = literal.getGCData();
       if (data) {
         o << "[ref " << data->rtt << ' ' << data->values << ']';
+      } else {
+        o << "[ref null " << literal.type << ']';
+      }
+    } else if (literal.isString()) {
+      auto data = literal.getStringData();
+      if (data) {
+        o << "[string";
+        for (auto c : *data) {
+          o << ' ' << int(c);
+        }
+        o << ']';
+      } else {
+        o << "[ref null " << literal.type << ']';
+      }
+    } else if (literal.isStringView()) {
+      auto data = literal.getStringViewData();
+      if (data) {
+        o << "[stringview";
+        auto stringData = data.stringData;
+        // A non-null view must refer to a string.
+        assert(stringData);
+        for (auto c : *stringData) {
+          o << ' ' << int(c);
+        }
+        o << " pos:" << data.pos << ']';
       } else {
         o << "[ref null " << literal.type << ']';
       }
