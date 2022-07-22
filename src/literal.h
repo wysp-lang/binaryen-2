@@ -34,7 +34,7 @@ class Literals;
 struct GCData;
 struct RttSupers;
 
-using StringData = std::vector<uint8>;
+using StringData = std::vector<uint8_t>;
 struct StringViewData;
 
 class Literal {
