@@ -1435,12 +1435,11 @@ bool HeapType::isArray() const {
   }
 }
 
-bool HeapType::isString() const {
-  return isBasic() && id == string;
-}
+bool HeapType::isString() const { return isBasic() && id == string; }
 
 bool HeapType::isStringView() const {
-  return isBasic() && (id == stringview_wtf8 || id == stringview_wtf16 || id == stringview_iter);
+  return isBasic() && (id == stringview_wtf8 || id == stringview_wtf16 ||
+                       id == stringview_iter);
 }
 
 Signature HeapType::getSignature() const {
