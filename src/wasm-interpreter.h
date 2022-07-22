@@ -3583,7 +3583,43 @@ public:
   }
   Flow visitStringEncode(StringEncode* curr) {
     // TODO: unicode. This handles ascii for now.
-    WASM_UNREACHABLE("unimplemented string.encode");
+    Flow ref = self()->visit(curr->ref);
+    if (ref.breaking()) {
+      return ref;
+    }
+    Flow ptr = self()->visit(curr->ptr);
+    if (ptr.breaking()) {
+      return ptr;
+    }
+    auto refVal = ref.getSingleValue();
+    if (refVal.isNull()) {
+      trap("null ref");
+    }
+    auto& data = *refVal.getStringData();
+    if (!curr->start) {
+      // Linear memory.
+      auto ptrVal = ptr.getSingleValue().getUnsigned();
+      auto* inst = getMemoryInstance();
+      for (size_t i = 0; i < data.size(); i++) {
+        inst->externalInterface->store8(ptrVal + i, data[i]);
+      }
+    } else {
+      // GC.
+      Flow start = self()->visit(curr->start);
+      if (start.breaking()) {
+        return start;
+      }
+      auto startVal = start.getSingleValue().geti32();
+      auto ptrVal = ptr.getSingleValue();
+      if (ptrVal.isNull()) {
+        trap("null ptr");
+      }
+      auto& arrayData = ptrVal.getGCData()->values;
+      for (size_t i = 0; i < arrayData.size(); i++) {
+        arrayData[startVal + i] = Literal(uint32_t(data[i]));
+      }
+    }
+    return Literal(data.size());
   }
   Flow visitStringConcat(StringConcat* curr) {
     // TODO: unicode. This handles ascii for now.
