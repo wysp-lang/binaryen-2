@@ -3559,22 +3559,22 @@ public:
       return ref;
     }
     auto refVal = ref.getSingleValue();
-    if (revVal.isNull()) {
+    if (refVal.isNull()) {
       trap("null ref");
     }
     switch (curr->op) {
       case StringMeasureUTF8:
       case StringMeasureWTF8:
       case StringMeasureWTF16: {
-        auto& data = refVal.getStringData();
-        return Literal(data.size());
+        auto data = refVal.getStringData();
+        return Literal(data->size());
       }
       case StringMeasureIsUSV: {
         return Literal(int32_t(1));
       }
       case StringMeasureWTF16View: {
-        auto& data = refVal.getStringViewData().stringData;
-        return Literal(data.size());
+        auto data = refVal.getStringViewData()->stringData;
+        return Literal(data->size());
       }
       default: {
         WASM_UNREACHABLE("bad op");
