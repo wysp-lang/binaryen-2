@@ -3623,7 +3623,32 @@ public:
   }
   Flow visitStringConcat(StringConcat* curr) {
     // TODO: unicode. This handles ascii for now.
-    WASM_UNREACHABLE("unimplemented string.concat");
+    Flow left = self()->visit(curr->left);
+    if (left.breaking()) {
+      return left;
+    }
+    Flow right = self()->visit(curr->right);
+    if (right.breaking()) {
+      return right;
+    }
+    auto leftVal = left.getSingleValue();
+    if (leftVal.isNull()) {
+      trap("null left");
+    }
+    auto& leftData = *leftVal.getStringData();
+    auto rightVal = right.getSingleValue();
+    if (rightVal.isNull()) {
+      trap("null right");
+    }
+    auto& rightData = *rightVal.getStringData();
+    std::vector<uint8_t> data;
+    for (size_t i = 0; i < leftData.size(); i++) {
+      data.push_back(leftData[i]);
+    }
+    for (size_t i = 0; i < rightData.size(); i++) {
+      data.push_back(rightData[i]);
+    }
+    return Literal(std::make_shared<StringData>(data), curr->type);
   }
   Flow visitStringEq(StringEq* curr) {
     // TODO: unicode. This handles ascii for now.
