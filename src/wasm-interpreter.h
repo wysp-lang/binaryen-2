@@ -1956,41 +1956,7 @@ public:
     return value;
   }
   Flow visitStringNew(StringNew* curr) {
-    NOTE_ENTER("StringNew");
-    Flow ptr = self()->visit(curr->ptr);
-    if (ptr.breaking()) {
-      return ptr;
-    }
-    std::vector<uint8_t> data;
-    if (curr->length) {
-      // This is the linear memory variation, and this is the length to read.
-      Flow length = self()->visit(curr->length);
-      if (length.breaking()) {
-        return length;
-      }
-      Address ptrVal(ptr.getSingleValue().getUnsigned());
-      Address lengthVal(length.getSingleValue().getUnsigned());
-      if (ptrVal + lengthVal > inst->memorySize * Memory::kPageSize) {
-        trap("out of bounds segment access in memory.copy");
-      }
-      auto* inst = getMemoryInstance();
-      for (size_t i = 0; i < lengthVal; i++) {
-        data.push_back(
-          inst->externalInterface->load8u(
-            inst->getFinalAddressWithoutOffset(Literal(ptrVal + i), 1));
-      }
-    } else {
-      // This is the GC variation, and ptr is an array.
-      const auto& array = ptr.getSingleValue();
-      if (array.isNull()) {
-        trap("null ref");
-      }
-      auto field = curr->ref->type.getHeapType().getArray().element;
-      for (size_t i = 0; i < array->values.size(); i++) {
-        data.push_back(data->values[i]);
-      }
-    }
-    return Literal(std::make_shared<StringData>(data), curr->type);
+    WASM_UNREACHABLE("implemented string.new");
   }
   Flow visitStringConst(StringConst* curr) {
     WASM_UNREACHABLE("unimplemented string.const");
@@ -3539,6 +3505,43 @@ public:
     assert(curr->type == ret.getType());
     multiValues.pop_back();
     return ret;
+  }
+  Flow visitStringNew(StringNew* curr) {
+    NOTE_ENTER("StringNew");
+    Flow ptr = self()->visit(curr->ptr);
+    if (ptr.breaking()) {
+      return ptr;
+    }
+    std::vector<uint8_t> data;
+    if (curr->length) {
+      // This is the linear memory variation, and this is the length to read.
+      Flow length = self()->visit(curr->length);
+      if (length.breaking()) {
+        return length;
+      }
+      Address ptrVal(ptr.getSingleValue().getUnsigned());
+      Address lengthVal(length.getSingleValue().getUnsigned());
+      if (ptrVal + lengthVal > inst->memorySize * Memory::kPageSize) {
+        trap("out of bounds segment access in memory.copy");
+      }
+      auto* inst = getMemoryInstance();
+      for (size_t i = 0; i < lengthVal; i++) {
+        data.push_back(
+          inst->externalInterface->load8u(
+            inst->getFinalAddressWithoutOffset(Literal(ptrVal + i), 1));
+      }
+    } else {
+      // This is the GC variation, and ptr is an array.
+      const auto& array = ptr.getSingleValue();
+      if (array.isNull()) {
+        trap("null ref");
+      }
+      auto field = curr->ref->type.getHeapType().getArray().element;
+      for (size_t i = 0; i < array->values.size(); i++) {
+        data.push_back(data->values[i]);
+      }
+    }
+    return Literal(std::make_shared<StringData>(data), curr->type);
   }
 
   void trap(const char* why) override { externalInterface->trap(why); }
