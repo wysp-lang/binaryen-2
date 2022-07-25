@@ -3685,7 +3685,31 @@ public:
   }
   Flow visitStringAs(StringAs* curr) {
     // TODO: unicode. This handles ascii for now.
-    WASM_UNREACHABLE("unimplemented string.as");
+  Flow visitStringEncode(StringEncode* curr) {
+    // TODO: unicode. This handles ascii for now.
+    Flow ref = self()->visit(curr->ref);
+    if (ref.breaking()) {
+      return ref;
+    }
+    auto refVal = ref.getSingleValue();
+    if (refVal.isNull()) {
+      trap("null ref");
+    }
+    HeapType type;
+    switch (curr->op) {
+      case StringAsWTF8:
+        type = HeapType::stringview_wtf8;
+        break;
+      case StringAsWTF16:
+        type = HeapType::stringview_wtf16;
+        break;
+      case StringAsIter:
+        type = HeapType::stringview_iter;
+        break;
+      default: WASM_UNREACHABLE("bad op");
+    }
+    auto& data = *refVal.getStringData();
+    return Literal(std::make_shared<StringViewData>{data, 0}, curr->type);
   }
   Flow visitStringWTF8Advance(StringWTF8Advance* curr) {
     // TODO: unicode. This handles ascii for now.
