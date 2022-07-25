@@ -3527,9 +3527,8 @@ public:
         trap("out of bounds segment access in memory.copy");
       }
       for (size_t i = 0; i < lengthVal; i++) {
-        data.push_back(
-          inst->externalInterface->load8u(
-            inst->getFinalAddressWithoutOffset(Literal(ptrVal + i), 1)));
+        data.push_back(inst->externalInterface->load8u(
+          inst->getFinalAddressWithoutOffset(Literal(ptrVal + i), 1)));
       }
     } else {
       // This is the GC variation, and ptr is an array.
@@ -3704,7 +3703,8 @@ public:
       case StringAsIter:
         type = HeapType::stringview_iter;
         break;
-      default: WASM_UNREACHABLE("bad op");
+      default:
+        WASM_UNREACHABLE("bad op");
     }
     auto& data = *refVal.getStringData();
     return Literal(std::make_shared<StringViewData>(data), curr->type);

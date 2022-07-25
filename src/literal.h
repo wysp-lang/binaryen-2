@@ -776,7 +776,8 @@ struct StringViewData {
   // The position in the data.
   size_t pos = 0;
 
-  StringViewData(std::shared_ptr<StringData> stringData) : stringData(stringData) {}
+  StringViewData(std::shared_ptr<StringData> stringData)
+    : stringData(stringData) {}
 };
 
 } // namespace wasm
