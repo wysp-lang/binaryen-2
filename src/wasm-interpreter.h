@@ -3685,8 +3685,6 @@ public:
   }
   Flow visitStringAs(StringAs* curr) {
     // TODO: unicode. This handles ascii for now.
-  Flow visitStringEncode(StringEncode* curr) {
-    // TODO: unicode. This handles ascii for now.
     Flow ref = self()->visit(curr->ref);
     if (ref.breaking()) {
       return ref;
@@ -3709,7 +3707,7 @@ public:
       default: WASM_UNREACHABLE("bad op");
     }
     auto& data = *refVal.getStringData();
-    return Literal(std::make_shared<StringViewData>{data, 0}, curr->type);
+    return Literal(std::make_shared<StringViewData>(data), curr->type);
   }
   Flow visitStringWTF8Advance(StringWTF8Advance* curr) {
     // TODO: unicode. This handles ascii for now.
