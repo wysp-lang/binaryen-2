@@ -3706,7 +3706,7 @@ public:
       default:
         WASM_UNREACHABLE("bad op");
     }
-    auto& data = *refVal.getStringData();
+    auto data = refVal.getStringData();
     return Literal(std::make_shared<StringViewData>(data), curr->type);
   }
   Flow visitStringWTF8Advance(StringWTF8Advance* curr) {
