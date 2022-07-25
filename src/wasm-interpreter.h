@@ -3711,7 +3711,26 @@ public:
   }
   Flow visitStringWTF8Advance(StringWTF8Advance* curr) {
     // TODO: unicode. This handles ascii for now.
-    WASM_UNREACHABLE("unimplemented stringview_adjust*");
+    Flow ref = self()->visit(curr->ref);
+    if (ref.breaking()) {
+      return ref;
+    }
+    auto refVal = ref.getSingleValue();
+    if (refVal.isNull()) {
+      trap("null ref");
+    }
+    Flow pos = self()->visit(curr->pos);
+    if (pos.breaking()) {
+      return pos;
+    }
+    Flow bytes = self()->visit(curr->bytes);
+    if (bytes.breaking()) {
+      return bytes;
+    }
+    auto data = refVal.getStringData();
+    auto posVal = pos.getSingleValue().geti32();
+    auto bytesVal = bytes.getSingleValue().geti32();
+    return Literal(std::min<int32_t>(posVal + bytesVal, data->size()));
   }
   Flow visitStringWTF16Get(StringWTF16Get* curr) {
     // TODO: unicode. This handles ascii for now.
