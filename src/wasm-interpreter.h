@@ -3846,11 +3846,11 @@ public:
     auto& oldData = *refVal.getStringViewData();
     auto start = oldData.pos;
     auto end = start + numVal;
-    auto& oldData = *refVal.getStringViewData()->stringData;
+    auto& oldStringData = *oldData.stringData;
     std::vector<uint8_t> newData;
     for (size_t i = start; i < end; i++) {
-      if (i < oldData.size()) {
-        newData.push_back(oldData[i]);
+      if (i < oldStringData.size()) {
+        newData.push_back(oldStringData[i]);
       }
     }
     return Literal(std::make_shared<StringData>(newData), curr->type);
