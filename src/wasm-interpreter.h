@@ -3819,7 +3819,7 @@ public:
     }
     auto startVal = start.getSingleValue().getUnsigned();
     auto endVal = end.getSingleValue().getUnsigned();
-    auto& oldData = *refVal.getStringData();
+    auto& oldData = *refVal.getStringViewData()->stringData;
     std::vector<uint8_t> newData;
     for (size_t i = startVal; i < endVal; i++) {
       if (i < oldData.size()) {
@@ -3830,7 +3830,30 @@ public:
   }
   Flow visitStringSliceIter(StringSliceIter* curr) {
     // TODO: unicode. This handles ascii for now.
-    WASM_UNREACHABLE("unimplemented stringview_adjust*");
+    Flow ref = self()->visit(curr->ref);
+    if (ref.breaking()) {
+      return ref;
+    }
+    Flow num = self()->visit(curr->num);
+    if (num.breaking()) {
+      return num;
+    }
+    auto refVal = ref.getSingleValue();
+    if (refVal.isNull()) {
+      trap("null ref");
+    }
+    auto numVal = num.getSingleValue().getUnsigned();
+    auto& oldData = *refVal.getStringViewData();
+    auto start = oldData.pos;
+    auto end = start + numVal;
+    auto& oldData = *refVal.getStringViewData()->stringData;
+    std::vector<uint8_t> newData;
+    for (size_t i = start; i < end; i++) {
+      if (i < oldData.size()) {
+        newData.push_back(oldData[i]);
+      }
+    }
+    return Literal(std::make_shared<StringData>(newData), curr->type);
   }
 
   void trap(const char* why) override { externalInterface->trap(why); }
