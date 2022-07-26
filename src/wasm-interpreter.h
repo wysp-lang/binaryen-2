@@ -3746,13 +3746,31 @@ public:
     if (pos.breaking()) {
       return pos;
     }
-    auto& data = *refVal.getStringData();
-    auto posVal = pos.getSingleValue().geti32();
+    auto& data = *refVal.getStringViewData()->stringData;
+    auto posVal = pos.getSingleValue().getUnsigned();
+    if (posVal >= data.size()) {
+      trap("oob");
+    }
     return Literal(int32_t(data[posVal * 2]));
   }
   Flow visitStringIterNext(StringIterNext* curr) {
     // TODO: unicode. This handles ascii for now.
-    WASM_UNREACHABLE("unimplemented stringview_adjust*");
+    Flow ref = self()->visit(curr->ref);
+    if (ref.breaking()) {
+      return ref;
+    }
+    auto refVal = ref.getSingleValue();
+    if (refVal.isNull()) {
+      trap("null ref");
+    }
+    auto& data = *refVal.getStringViewData();
+    auto& stringData = *data.stringData;
+    uint32_t result = -1;
+    if (data.pos < stringData.size()) {
+      result = stringData[data.pos];
+      data.pos++;
+    }
+    return Literal(result);
   }
   Flow visitStringIterMove(StringIterMove* curr) {
     // TODO: unicode. This handles ascii for now.
