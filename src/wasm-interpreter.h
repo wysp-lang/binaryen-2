@@ -3774,7 +3774,30 @@ public:
   }
   Flow visitStringIterMove(StringIterMove* curr) {
     // TODO: unicode. This handles ascii for now.
-    WASM_UNREACHABLE("unimplemented stringview_adjust*");
+    Flow ref = self()->visit(curr->ref);
+    if (ref.breaking()) {
+      return ref;
+    }
+    Flow num = self()->visit(curr->num);
+    if (num.breaking()) {
+      return num;
+    }
+    auto refVal = ref.getSingleValue();
+    if (refVal.isNull()) {
+      trap("null ref");
+    }
+    auto numVal = num.getSingleValue().geti32();
+    if (curr->op == StringIterMoveRewind) {
+      numVal = -numVal;
+    }
+    auto& data = *refVal.getStringViewData();
+    auto stringSize = data.stringData->size();
+    auto pos = data.pos;
+    auto newPos = int64_t(pos) + numVal;
+    newPos = std::max(int64_t(0), newPos);
+    newPos = std::min(newPos, int64_t(stringSize ? stringSize - 1 : 0));
+    data.pos = newPos;
+    return Literal(int32_t(newPos - pos));
   }
   Flow visitStringSliceWTF(StringSliceWTF* curr) {
     // TODO: unicode. This handles ascii for now.
