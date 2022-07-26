@@ -3801,7 +3801,32 @@ public:
   }
   Flow visitStringSliceWTF(StringSliceWTF* curr) {
     // TODO: unicode. This handles ascii for now.
-    WASM_UNREACHABLE("unimplemented stringview_adjust*");
+    Flow ref = self()->visit(curr->ref);
+    if (ref.breaking()) {
+      return ref;
+    }
+    Flow start = self()->visit(curr->start);
+    if (start.breaking()) {
+      return start;
+    }
+    Flow end = self()->visit(curr->end);
+    if (end.breaking()) {
+      return end;
+    }
+    auto refVal = ref.getSingleValue();
+    if (refVal.isNull()) {
+      trap("null ref");
+    }
+    auto startVal = start.getSingleValue().getUnsigned();
+    auto endVal = end.getSingleValue().getUnsigned();
+    auto& oldData = *refVal.getStringData();
+    std::vector<uint8_t> newData;
+    for (size_t i = startVal; i < endVal; i++) {
+      if (i < oldData.size()) {
+        newData.push_back(oldData[i]);
+      }
+    }
+    return Literal(std::make_shared<StringData>(newData), curr->type);
   }
   Flow visitStringSliceIter(StringSliceIter* curr) {
     // TODO: unicode. This handles ascii for now.
