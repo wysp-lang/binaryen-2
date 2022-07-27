@@ -117,6 +117,15 @@ There are a few differences between Binaryen IR and the WebAssembly language:
     `(elem declare func $..)`. Binaryen will emit that data when necessary, but
     it does not represent it in IR. That is, IR can be worked on without needing
     to think about declaring function references.
+  * Binaryen IR allows non-nullable locals without limit, and not just in the
+    form that the wasm spec allows (called "1a", in which a `local.set` must
+    dominate a `local.get` structurally for the latter to validate). The
+    optimization pipeline will fix that up in an optimal position, and also the
+    binary writer will do so if anything remains to be done, so that we always
+    emit valid binary files. A noticeable difference is that Binaryen can load
+    binaries that would not validate per the spec, and also the Binaryen text
+    format supports both reading and writing of such code (whereas our binary
+    format writer will fix things up for the spec, as mentioned before).
 
 As a result, you might notice that round-trip conversions (wasm => Binaryen IR
 => wasm) change code a little in some corner cases.

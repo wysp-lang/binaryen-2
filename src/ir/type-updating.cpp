@@ -318,6 +318,14 @@ void handleNonDefaultableLocals(Function* func, Module& wasm) {
     return;
   }
 
+  if (func->stackIR) {
+    // TODO Do similar operations on stack IR. For now, if we end up needing to
+    //      fix things after stack IR was created, just drop the stack IR. As
+    //      the normal optimization pipeline should have handled non-nullable
+    //      locals *before* emitting stack IR, this should be very rare.
+    func->stackIR = nullptr;
+  }
+
   // Rewrite the local.gets.
   Builder builder(wasm);
   for (auto** getp : FindAllPointers<LocalGet>(func->body).list) {

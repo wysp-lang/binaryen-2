@@ -44,6 +44,7 @@ Pass* createDuplicateFunctionEliminationPass();
 Pass* createEmitTargetFeaturesPass();
 Pass* createExtractFunctionPass();
 Pass* createExtractFunctionIndexPass();
+Pass* createFixNonNullableLocalsPass();
 Pass* createFlattenPass();
 Pass* createFuncCastEmulationPass();
 Pass* createFullPrinterPass();

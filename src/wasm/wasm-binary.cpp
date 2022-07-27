@@ -20,6 +20,7 @@
 #include "ir/eh-utils.h"
 #include "ir/module-utils.h"
 #include "ir/table-utils.h"
+#include "ir/type-updating.h"
 #include "support/bits.h"
 #include "support/debug.h"
 #include "wasm-binary.h"
@@ -389,6 +390,11 @@ void WasmBinaryWriter::writeFunctions() {
     size_t sizePos = writeU32LEBPlaceholder();
     size_t start = o.size();
     BYN_TRACE("writing" << func->name << std::endl);
+    // The optimization pipeline will handle nondefaultable locals earlier in a
+    // hopefully optimal way. We also handle them here, which avoids problems if
+    // the normal optimization pipeline was not run (say, only a single pass
+    // was).
+    TypeUpdating::handleNonDefaultableLocals(func, wasm);
     // Emit Stack IR if present, and if we can
     if (func->stackIR && !sourceMap && !DWARF) {
       BYN_TRACE("write Stack IR\n");

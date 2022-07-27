@@ -34,6 +34,7 @@ set(passes_SOURCES
   DuplicateFunctionElimination.cpp
   DWARF.cpp
   ExtractFunction.cpp
+  FixNonNullableLocals.cpp
   Flatten.cpp
   FuncCastEmulation.cpp
   GenerateDynCalls.cpp

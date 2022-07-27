@@ -148,6 +148,8 @@ void PassRegistry::registerPasses() {
                "leaves just one function selected by index",
                createExtractFunctionIndexPass);
   registerPass(
+    "fix-nnl", "fixes up non-nullable locals so they validate in the wasm spec", createFixNonNullableLocalsPass);
+  registerPass(
     "flatten", "flattens out code, removing nesting", createFlattenPass);
   registerPass("fpcast-emu",
                "emulates function pointer casts, allowing incorrect indirect "
@@ -547,6 +549,12 @@ void PassRunner::addDefaultFunctionOptimizationPasses() {
     addIfNoDWARFIssues("precompute-propagate");
   } else {
     addIfNoDWARFIssues("precompute");
+  }
+  if (wasm->features.hasReferenceTypes()) {
+    // Fix up non-nullable locals late in the pipeline, so we can benefit from
+    // them as much as possible. We must do another optimize-instructions after
+    // this, so it removes extra ref.as_non_null that we might emit.
+    addIfNoDWARFIssues("fix-nnl");
   }
   addIfNoDWARFIssues("optimize-instructions");
   if (options.optimizeLevel >= 2 || options.shrinkLevel >= 1) {
