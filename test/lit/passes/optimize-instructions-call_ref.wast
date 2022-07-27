@@ -125,7 +125,7 @@
  )
 
  ;; CHECK:      (func $fallthrough-non-nullable (param $x dataref)
- ;; CHECK-NEXT:  (local $1 (ref null data))
+ ;; CHECK-NEXT:  (local $1 dataref)
  ;; CHECK-NEXT:  (call $fallthrough-non-nullable
  ;; CHECK-NEXT:   (block (result dataref)
  ;; CHECK-NEXT:    (local.set $1
@@ -137,9 +137,7 @@
  ;; CHECK-NEXT:      (ref.func $fallthrough-non-nullable)
  ;; CHECK-NEXT:     )
  ;; CHECK-NEXT:    )
- ;; CHECK-NEXT:    (ref.as_non_null
- ;; CHECK-NEXT:     (local.get $1)
- ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:    (local.get $1)
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT: )

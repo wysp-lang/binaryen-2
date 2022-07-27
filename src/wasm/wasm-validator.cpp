@@ -24,7 +24,6 @@
 #include "ir/global-utils.h"
 #include "ir/intrinsics.h"
 #include "ir/local-graph.h"
-#include "ir/local-structural-dominance.h"
 #include "ir/module-utils.h"
 #include "ir/stack-utils.h"
 #include "ir/utils.h"
@@ -2751,48 +2750,6 @@ void FunctionValidator::visitFunction(Function* curr) {
   for (auto& pair : curr->localNames) {
     Name name = pair.second;
     shouldBeTrue(seen.insert(name).second, name, "local names must be unique");
-  }
-
-  if (getModule()->features.hasGC()) {
-    // If we have non-nullable locals, verify that local.get are valid.
-    if (!getModule()->features.hasGCNNLocals()) {
-      // Without the special GCNNLocals feature, we implement "1a" semantics,
-      // that is, a set allows gets until the end of the block.
-      LocalStructuralDominance info(curr, *getModule());
-      for (auto index : info.nonDominatingIndexes) {
-        shouldBeTrue(!curr->getLocalType(index).isNonNullable(),
-                     index,
-                     "non-nullable local's sets must dominate gets");
-      }
-    } else {
-      // With the special GCNNLocals feature, we allow gets anywhere, so long as
-      // we can prove they cannot read the null value. (TODO: remove this once
-      // 1a is stable).
-      //
-      // This is slow, so only do it if we find such locals exist at all.
-      bool hasNNLocals = false;
-      for (const auto& var : curr->vars) {
-        if (var.isNonNullable()) {
-          hasNNLocals = true;
-          break;
-        }
-      }
-      if (hasNNLocals) {
-        LocalGraph graph(curr);
-        for (auto& [get, sets] : graph.getSetses) {
-          auto index = get->index;
-          // It is always ok to read nullable locals, and it is always ok to
-          // read params even if they are non-nullable.
-          if (!curr->getLocalType(index).isNonNullable() ||
-              curr->isParam(index)) {
-            continue;
-          }
-          for (auto* set : sets) {
-            shouldBeTrue(!!set, index, "non-nullable local must not read null");
-          }
-        }
-      }
-    }
   }
 }
 
