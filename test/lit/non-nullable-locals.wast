@@ -9,15 +9,23 @@
 ;;    locals become nullable.
 ;;  * Optimizing also enforces "1a".
 ;;
-;; Note: all functions have some extra params added, which look silly. Those
+;; Note: All functions have some extra params added, which look silly. Those
 ;; prevent the optimization pipeline from merging functions, which would make
 ;; the results very hard to read.
+;;
+;; Note: The optimizing path will optimize almost all testcases into nothing. It
+;; is hard to avoid that while writing small testcases that clearly show the
+;; situations. Coverage by roundtripping should be enough there. $need-fix is
+;; a larger testcase that is designed to not be optimized out, and shows the
+;; changes.
 
 ;; RUN: wasm-opt %s -all             -S -o - | filecheck %s --check-prefix PRINT
 ;; RUN: wasm-opt %s -all --roundtrip -S -o - | filecheck %s --check-prefix ROUNDTRIP
 ;; RUN: wasm-opt %s -all -O1         -S -o - | filecheck %s --check-prefix OPTIMIZE
 
 (module
+  (import "a" "b" (func $import (param anyref)))
+
   ;; PRINT:      (type $i32_=>_none (func (param i32)))
 
   ;; PRINT:      (type $i64_=>_none (func (param i64)))
@@ -27,6 +35,8 @@
   ;; PRINT:      (type $f64_=>_none (func (param f64)))
 
   ;; PRINT:      (type $i32_i32_=>_none (func (param i32 i32)))
+
+  ;; PRINT:      (type $i32_i64_=>_none (func (param i32 i64)))
 
   ;; PRINT:      (type $i64_i64_=>_none (func (param i64 i64)))
 
@@ -48,6 +58,8 @@
 
   ;; PRINT:      (export "inner-to-func" (func $inner-to-func))
 
+  ;; PRINT:      (export "inner-to-func-fix" (func $inner-to-func-fix))
+
   ;; PRINT:      (export "if-condition" (func $if-condition))
 
   ;; PRINT:      (export "get-without-set-but-param" (func $get-without-set-but-param))
@@ -65,6 +77,8 @@
   ;; ROUNDTRIP:      (type $f64_=>_none (func (param f64)))
 
   ;; ROUNDTRIP:      (type $i32_i32_=>_none (func (param i32 i32)))
+
+  ;; ROUNDTRIP:      (type $i32_i64_=>_none (func (param i32 i64)))
 
   ;; ROUNDTRIP:      (type $i64_i64_=>_none (func (param i64 i64)))
 
@@ -86,6 +100,8 @@
 
   ;; ROUNDTRIP:      (export "inner-to-func" (func $inner-to-func))
 
+  ;; ROUNDTRIP:      (export "inner-to-func-fix" (func $inner-to-func-fix))
+
   ;; ROUNDTRIP:      (export "if-condition" (func $if-condition))
 
   ;; ROUNDTRIP:      (export "get-without-set-but-param" (func $get-without-set-but-param))
@@ -103,6 +119,8 @@
   ;; OPTIMIZE:      (type $f64_=>_none (func (param f64)))
 
   ;; OPTIMIZE:      (type $i32_i32_=>_none (func (param i32 i32)))
+
+  ;; OPTIMIZE:      (type $i32_i64_=>_none (func (param i32 i64)))
 
   ;; OPTIMIZE:      (type $i64_i64_=>_none (func (param i64 i64)))
 
@@ -123,6 +141,8 @@
   ;; OPTIMIZE:      (export "func-to-inner" (func $func-to-inner))
 
   ;; OPTIMIZE:      (export "inner-to-func" (func $inner-to-func))
+
+  ;; OPTIMIZE:      (export "inner-to-func-fix" (func $inner-to-func-fix))
 
   ;; OPTIMIZE:      (export "if-condition" (func $if-condition))
 
@@ -281,17 +301,50 @@
     )
   )
 
-  (func $inner-to-func-fix (export "inner-to-func-fix") (param i32 i32)
-    ;; As before, 
-    (local $x (ref null func))
-    (block $b
+  ;; PRINT:      (func $inner-to-func-fix (param $0 i32) (param $1 i64)
+  ;; PRINT-NEXT:  (local $x (ref func))
+  ;; PRINT-NEXT:  (block $b
+  ;; PRINT-NEXT:   (local.set $x
+  ;; PRINT-NEXT:    (ref.func $helper)
+  ;; PRINT-NEXT:   )
+  ;; PRINT-NEXT:  )
+  ;; PRINT-NEXT:  (drop
+  ;; PRINT-NEXT:   (local.get $x)
+  ;; PRINT-NEXT:  )
+  ;; PRINT-NEXT: )
+  ;; ROUNDTRIP:      (func $inner-to-func-fix (param $0 i32) (param $1 i64)
+  ;; ROUNDTRIP-NEXT:  (local $x funcref)
+  ;; ROUNDTRIP-NEXT:  (block $label$1
+  ;; ROUNDTRIP-NEXT:   (local.set $x
+  ;; ROUNDTRIP-NEXT:    (ref.func $helper)
+  ;; ROUNDTRIP-NEXT:   )
+  ;; ROUNDTRIP-NEXT:  )
+  ;; ROUNDTRIP-NEXT:  (drop
+  ;; ROUNDTRIP-NEXT:   (ref.as_non_null
+  ;; ROUNDTRIP-NEXT:    (local.get $x)
+  ;; ROUNDTRIP-NEXT:   )
+  ;; ROUNDTRIP-NEXT:  )
+  ;; ROUNDTRIP-NEXT: )
+  ;; OPTIMIZE:      (func $inner-to-func-fix (param $0 i32) (param $1 i64)
+  ;; OPTIMIZE-NEXT:  (nop)
+  ;; OPTIMIZE-NEXT: )
+  (func $need-fix (export "need-fix") (param i32 i64) (result anyref)
+    ;; As before, but now the type is non-nullable. Here we *will* see changes
+    ;; in the paths that fix up such locals (everything but PRINT).
+    (local $x (ref func))
+    (if
+      (local.get $0)
       (local.set $x
         (ref.func $helper)
       )
+      (local.set $x
+        (ref.func $helper2)
+      )
     )
-    (drop
+    (call $import
       (local.get $x)
     )
+    (local.get $x)
   )
 
   ;; PRINT:      (func $if-condition (param $0 i64) (param $1 i64)
