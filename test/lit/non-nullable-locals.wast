@@ -36,6 +36,8 @@
 
   ;; PRINT:      (type $i32_i32_=>_none (func (param i32 i32)))
 
+  ;; PRINT:      (type $i32_f64_=>_none (func (param i32 f64)))
+
   ;; PRINT:      (type $i32_i64_=>_anyref (func (param i32 i64) (result anyref)))
 
   ;; PRINT:      (type $i64_i64_=>_none (func (param i64 i64)))
@@ -59,6 +61,8 @@
 
   ;; ROUNDTRIP:      (type $i32_i32_=>_none (func (param i32 i32)))
 
+  ;; ROUNDTRIP:      (type $i32_f64_=>_none (func (param i32 f64)))
+
   ;; ROUNDTRIP:      (type $i32_i64_=>_anyref (func (param i32 i64) (result anyref)))
 
   ;; ROUNDTRIP:      (type $i64_i64_=>_none (func (param i64 i64)))
@@ -81,6 +85,8 @@
   ;; OPTIMIZE:      (type $f64_=>_none (func (param f64)))
 
   ;; OPTIMIZE:      (type $i32_i32_=>_none (func (param i32 i32)))
+
+  ;; OPTIMIZE:      (type $i32_f64_=>_none (func (param i32 f64)))
 
   ;; OPTIMIZE:      (type $i32_i64_=>_anyref (func (param i32 i64) (result anyref)))
 
@@ -112,6 +118,8 @@
 
   ;; PRINT:      (export "inner-to-func" (func $inner-to-func))
 
+  ;; PRINT:      (export "inner-to-func2" (func $inner-to-func2))
+
   ;; PRINT:      (export "need-fix" (func $need-fix))
 
   ;; PRINT:      (export "if-condition" (func $if-condition))
@@ -134,6 +142,8 @@
 
   ;; ROUNDTRIP:      (export "inner-to-func" (func $inner-to-func))
 
+  ;; ROUNDTRIP:      (export "inner-to-func2" (func $inner-to-func2))
+
   ;; ROUNDTRIP:      (export "need-fix" (func $need-fix))
 
   ;; ROUNDTRIP:      (export "if-condition" (func $if-condition))
@@ -155,6 +165,8 @@
   ;; OPTIMIZE:      (export "func-to-inner" (func $func-to-inner))
 
   ;; OPTIMIZE:      (export "inner-to-func" (func $inner-to-func))
+
+  ;; OPTIMIZE:      (export "inner-to-func2" (func $inner-to-func2))
 
   ;; OPTIMIZE:      (export "need-fix" (func $need-fix))
 
@@ -305,6 +317,47 @@
     ;; a set in an inner scope does *not* help a get validate, but the type is
     ;; nullable so that's ok.
     (local $x (ref null func))
+    (block $b
+      (local.set $x
+        (ref.func $helper)
+      )
+    )
+    (drop
+      (local.get $x)
+    )
+  )
+
+  ;; PRINT:      (func $inner-to-func2 (param $0 i32) (param $1 f64)
+  ;; PRINT-NEXT:  (local $x (ref func))
+  ;; PRINT-NEXT:  (block $b
+  ;; PRINT-NEXT:   (local.set $x
+  ;; PRINT-NEXT:    (ref.func $helper)
+  ;; PRINT-NEXT:   )
+  ;; PRINT-NEXT:  )
+  ;; PRINT-NEXT:  (drop
+  ;; PRINT-NEXT:   (local.get $x)
+  ;; PRINT-NEXT:  )
+  ;; PRINT-NEXT: )
+  ;; ROUNDTRIP:      (func $inner-to-func2 (param $0 i32) (param $1 f64)
+  ;; ROUNDTRIP-NEXT:  (local $x funcref)
+  ;; ROUNDTRIP-NEXT:  (block $label$1
+  ;; ROUNDTRIP-NEXT:   (local.set $x
+  ;; ROUNDTRIP-NEXT:    (ref.func $helper)
+  ;; ROUNDTRIP-NEXT:   )
+  ;; ROUNDTRIP-NEXT:  )
+  ;; ROUNDTRIP-NEXT:  (drop
+  ;; ROUNDTRIP-NEXT:   (ref.as_non_null
+  ;; ROUNDTRIP-NEXT:    (local.get $x)
+  ;; ROUNDTRIP-NEXT:   )
+  ;; ROUNDTRIP-NEXT:  )
+  ;; ROUNDTRIP-NEXT: )
+  ;; OPTIMIZE:      (func $inner-to-func2 (param $0 i32) (param $1 f64)
+  ;; OPTIMIZE-NEXT:  (nop)
+  ;; OPTIMIZE-NEXT: )
+  (func $inner-to-func2 (export "inner-to-func2") (param i32 f64)
+    ;; as above, but the type is non-nullable. this requires fixups in ROUNDTRIP
+    ;; (PRINT never does fixups, and OPTIMIZE can optimize away the problem)
+    (local $x (ref func))
     (block $b
       (local.set $x
         (ref.func $helper)
