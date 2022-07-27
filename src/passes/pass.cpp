@@ -147,8 +147,9 @@ void PassRegistry::registerPasses() {
   registerPass("extract-function-index",
                "leaves just one function selected by index",
                createExtractFunctionIndexPass);
-  registerPass(
-    "fix-nnl", "fixes up non-nullable locals so they validate in the wasm spec", createFixNonNullableLocalsPass);
+  registerPass("fix-nnl",
+               "fixes up non-nullable locals so they validate in the wasm spec",
+               createFixNonNullableLocalsPass);
   registerPass(
     "flatten", "flattens out code, removing nesting", createFlattenPass);
   registerPass("fpcast-emu",

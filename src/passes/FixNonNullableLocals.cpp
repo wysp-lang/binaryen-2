@@ -48,7 +48,8 @@
 
 namespace wasm {
 
-struct FixNonNullableLocals : public WalkerPass<PostWalker<FixNonNullableLocals>> {
+struct FixNonNullableLocals
+  : public WalkerPass<PostWalker<FixNonNullableLocals>> {
   bool isFunctionParallel() override { return true; }
 
   Pass* create() override { return new FixNonNullableLocals(); }

@@ -1358,9 +1358,7 @@ struct OptimizeInstructions
         // We cannot create a local, so we must give up.
         return;
       }
-      Index tempLocal = builder.addVar(
-        getFunction(),
-        lastOperandType);
+      Index tempLocal = builder.addVar(getFunction(), lastOperandType);
       auto* set = builder.makeLocalSet(tempLocal, lastOperand);
       auto* drop = builder.makeDrop(curr->target);
       auto* get = builder.makeLocalGet(tempLocal, lastOperandType);
