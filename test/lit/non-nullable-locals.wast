@@ -14,18 +14,6 @@
 ;; RUN: wasm-opt %s -all -O1         -S -o - | filecheck %s --check-prefix OPTIMIZE
 
 (module
-  ;; CHECK:      (type $none_=>_none (func))
-
-  ;; CHECK:      (type $ref|func|_=>_none (func (param (ref func))))
-
-  ;; CHECK:      (type $anyref_=>_i32 (func (param anyref) (result i32)))
-
-  ;; CHECK:      (elem declare func $helper)
-
-  ;; CHECK:      (func $no-uses
-  ;; CHECK-NEXT:  (local $x (ref func))
-  ;; CHECK-NEXT:  (nop)
-  ;; CHECK-NEXT: )
   ;; PRINT:      (type $none_=>_none (func))
 
   ;; PRINT:      (type $ref|func|_=>_none (func (param (ref func))))
@@ -108,15 +96,6 @@
     (local $x (ref func))
   )
 
-  ;; CHECK:      (func $func-scope
-  ;; CHECK-NEXT:  (local $x (ref func))
-  ;; CHECK-NEXT:  (local.set $x
-  ;; CHECK-NEXT:   (ref.func $helper)
-  ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (local.get $x)
-  ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT: )
   ;; PRINT:      (func $func-scope
   ;; PRINT-NEXT:  (local $x (ref func))
   ;; PRINT-NEXT:  (local.set $x
@@ -146,17 +125,6 @@
     )
   )
 
-  ;; CHECK:      (func $inner-scope
-  ;; CHECK-NEXT:  (local $x (ref func))
-  ;; CHECK-NEXT:  (block $b
-  ;; CHECK-NEXT:   (local.set $x
-  ;; CHECK-NEXT:    (ref.func $helper)
-  ;; CHECK-NEXT:   )
-  ;; CHECK-NEXT:   (drop
-  ;; CHECK-NEXT:    (local.get $x)
-  ;; CHECK-NEXT:   )
-  ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT: )
   ;; PRINT:      (func $inner-scope
   ;; PRINT-NEXT:  (local $x (ref func))
   ;; PRINT-NEXT:  (block $b
@@ -190,17 +158,6 @@
     )
   )
 
-  ;; CHECK:      (func $func-to-inner
-  ;; CHECK-NEXT:  (local $x (ref func))
-  ;; CHECK-NEXT:  (local.set $x
-  ;; CHECK-NEXT:   (ref.func $helper)
-  ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT:  (block $b
-  ;; CHECK-NEXT:   (drop
-  ;; CHECK-NEXT:    (local.get $x)
-  ;; CHECK-NEXT:   )
-  ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT: )
   ;; PRINT:      (func $func-to-inner
   ;; PRINT-NEXT:  (local $x (ref func))
   ;; PRINT-NEXT:  (local.set $x
@@ -236,17 +193,6 @@
     )
   )
 
-  ;; CHECK:      (func $inner-to-func
-  ;; CHECK-NEXT:  (local $x funcref)
-  ;; CHECK-NEXT:  (block $b
-  ;; CHECK-NEXT:   (local.set $x
-  ;; CHECK-NEXT:    (ref.func $helper)
-  ;; CHECK-NEXT:   )
-  ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (local.get $x)
-  ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT: )
   ;; PRINT:      (func $inner-to-func
   ;; PRINT-NEXT:  (local $x funcref)
   ;; PRINT-NEXT:  (block $b
@@ -283,22 +229,6 @@
     )
   )
 
-  ;; CHECK:      (func $if-condition
-  ;; CHECK-NEXT:  (local $x (ref func))
-  ;; CHECK-NEXT:  (if
-  ;; CHECK-NEXT:   (call $helper2
-  ;; CHECK-NEXT:    (local.tee $x
-  ;; CHECK-NEXT:     (ref.func $helper)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:   )
-  ;; CHECK-NEXT:   (drop
-  ;; CHECK-NEXT:    (local.get $x)
-  ;; CHECK-NEXT:   )
-  ;; CHECK-NEXT:   (drop
-  ;; CHECK-NEXT:    (local.get $x)
-  ;; CHECK-NEXT:   )
-  ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT: )
   ;; PRINT:      (func $if-condition
   ;; PRINT-NEXT:  (local $x (ref func))
   ;; PRINT-NEXT:  (if
@@ -356,11 +286,6 @@
     )
   )
 
-  ;; CHECK:      (func $get-without-set-but-param (param $x (ref func))
-  ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (local.get $x)
-  ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT: )
   ;; PRINT:      (func $get-without-set-but-param (param $x (ref func))
   ;; PRINT-NEXT:  (drop
   ;; PRINT-NEXT:   (local.get $x)
@@ -382,9 +307,6 @@
     )
   )
 
-  ;; CHECK:      (func $helper
-  ;; CHECK-NEXT:  (nop)
-  ;; CHECK-NEXT: )
   ;; PRINT:      (func $helper
   ;; PRINT-NEXT:  (nop)
   ;; PRINT-NEXT: )
@@ -393,9 +315,6 @@
   ;; ROUNDTRIP-NEXT: )
   (func $helper)
 
-  ;; CHECK:      (func $helper2 (param $0 anyref) (result i32)
-  ;; CHECK-NEXT:  (unreachable)
-  ;; CHECK-NEXT: )
   ;; PRINT:      (func $helper2 (param $0 anyref) (result i32)
   ;; PRINT-NEXT:  (unreachable)
   ;; PRINT-NEXT: )
