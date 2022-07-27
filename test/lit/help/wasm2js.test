@@ -104,6 +104,9 @@
 ;; CHECK-NEXT:   --extract-function-index                      leaves just one function
 ;; CHECK-NEXT:                                                 selected by index
 ;; CHECK-NEXT:
+;; CHECK-NEXT:   --fix-nnl                                     fixes up non-nullable locals so
+;; CHECK-NEXT:                                                 they validate in the wasm spec
+;; CHECK-NEXT:
 ;; CHECK-NEXT:   --flatten                                     flattens out code, removing
 ;; CHECK-NEXT:                                                 nesting
 ;; CHECK-NEXT:

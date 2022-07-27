@@ -63,7 +63,7 @@
  )
 
  ;; CHECK:      (func $nn-dead
- ;; CHECK-NEXT:  (local $0 funcref)
+ ;; CHECK-NEXT:  (local $0 (ref func))
  ;; CHECK-NEXT:  (drop
  ;; CHECK-NEXT:   (ref.func $nn-dead)
  ;; CHECK-NEXT:  )
@@ -73,9 +73,7 @@
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (drop
- ;; CHECK-NEXT:   (ref.as_non_null
- ;; CHECK-NEXT:    (local.get $0)
- ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (local.get $0)
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT: )
  (func $nn-dead
