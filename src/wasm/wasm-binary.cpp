@@ -394,7 +394,7 @@ void WasmBinaryWriter::writeFunctions() {
     // hopefully optimal way. We also handle them here, which avoids problems if
     // the normal optimization pipeline was not run (say, only a single pass
     // was).
-    TypeUpdating::handleNonDefaultableLocals(func, wasm);
+    TypeUpdating::handleNonDefaultableLocals(func, *wasm);
     // Emit Stack IR if present, and if we can
     if (func->stackIR && !sourceMap && !DWARF) {
       BYN_TRACE("write Stack IR\n");

@@ -1303,8 +1303,6 @@ struct OptimizeInstructions
       return;
     }
 
-    auto features = getModule()->features;
-
     // It is possible the target is not a function reference, but we can infer
     // the fallthrough value there. It takes more work to optimize this case,
     // but it is pretty important to allow a call_ref to become a fast direct

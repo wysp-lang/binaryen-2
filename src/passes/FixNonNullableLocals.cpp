@@ -55,7 +55,7 @@ struct FixNonNullableLocals
   Pass* create() override { return new FixNonNullableLocals(); }
 
   void doWalkFunction(Function* func) {
-    TypeUpdating::handleNonDefaultableLocals(func, wasm);
+    TypeUpdating::handleNonDefaultableLocals(func, *getModule());
   }
 };
 
