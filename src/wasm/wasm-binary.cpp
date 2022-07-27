@@ -20,7 +20,6 @@
 #include "ir/eh-utils.h"
 #include "ir/module-utils.h"
 #include "ir/table-utils.h"
-#include "ir/type-updating.h"
 #include "support/bits.h"
 #include "support/debug.h"
 #include "wasm-binary.h"
@@ -2475,10 +2474,6 @@ void WasmBinaryBuilder::readFunctions() {
       if (pos != endOfFunction) {
         throwError("binary offset at function exit not at expected location");
       }
-    }
-
-    if (!wasm.features.hasGCNNLocals()) {
-      TypeUpdating::handleNonDefaultableLocals(func, wasm);
     }
 
     std::swap(func->epilogLocation, debugLocation);

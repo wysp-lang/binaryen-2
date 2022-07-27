@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 WebAssembly Community Group participants
+ * Copyright 2022 WebAssembly Community Group participants
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,104 +14,34 @@
  * limitations under the License.
  */
 
-//
-// Local CSE
-//
-// This finds common sub-expressions and saves them to a local to avoid
-// recomputing them. It runs in each basic block separately, and uses a simple
-// algorithm, where we track "requests" to reuse a value. That is, if we see
-// an add operation appear twice, and the inputs must be identical in both
-// cases, then the second one requests to reuse the computed value from the
-// first. The first one to appear is the "original" expression that will remain
-// in the code; we will save it's value to a local, and get it from that local
-// later:
-//
-//  (i32.add (A) (B))
-//  (i32.add (A) (B))
-//
-//    =>
-//
-//  (local.tee $temp (i32.add (A) (B)))
-//  (local.get $temp)
-//
-// The algorithm used here is as follows:
-//
-//  * Scan: Hash each expression and see if it repeats later.
-//          If it does:
-//            * Note that the original appearance is requested to be reused
-//              an additional time.
-//            * Link the first expression as the original appearance of the
-//              later one.
-//            * Scan the children of the repeat and undo their requests to be
-//              replaced (as if we will reuse the parent, we don't need to do
-//              anything for the children, see below).
-//
-//  * Check: Check if effects prevent some of the requests from being done. For
-//           example, if the value contains a load from memory, we cannot
-//           optimize around a store, as the value before the store might be
-//           different (see below).
-//
-//  * Apply: Go through the basic block again, this time adding a tee on an
-//           expression whose value we want to use later, and replacing the
-//           uses with gets.
-//
-// For example, here is what the algorithm would do on
-//
-//  (i32.eqz (A))
-//  ..
-//  (i32.eqz (A))
-//
-// Assuming A does not have side effects that interfere, this will happen:
-//
-//  1. Scan A and add it to the hash map of things we have seen.
-//  2. Scan the eqz, and do the same for it.
-//  3. Scan the second A. Increment the first A's requests counter, and mark the
-//     second A as intended to be replaced by the original A.
-//  4. Scan the second eqz, and do similar things for it: increment the requests
-//     for the original eqz, and point to the original from the repeat.
-//     * Then also scan its children, in this case A, and decrement the first
-//       A's reuse counter, and unmark the second A's note that it is intended
-//       to be replaced.
-//  5. After that, the second eqz requests to be replaced by the first, and
-//     there is no request on A.
-//  6. Run through the block again, adding a tee and replacing the second eqz,
-//     resulting in:
-//
-//   (local.tee $temp
-//     (i32.eqz
-//       (A)
-//     )
-//   )
-//   (local.get $temp)
-//
-// Note how the scanning of children avoids us adding a local for A: when we
-// reuse the parent, we don't need to also try to reuse the child.
-//
-// Effects must be considered carefully by the Checker phase. E.g.:
-//
-//  x = load(a);
-//  store(..)
-//  y = load(a);
-//
-// Even though the load looks identical, the store means we may load a
-// different value, so we will invalidate the request to optimize here.
-//
-// This pass only finds entire expression trees, and not parts of them, so we
-// will not optimize this:
-//
-//  (A (B (C (D1))))
-//  (A (B (C (D2))))
-//
-// The innermost child is different, so the trees are not identical. However,
-// running flatten before running this pass would allow those to be optimized as
-// well (we would also need to simplify locals somewhat to allow the locals to
-// be identified as identical, see pass.cpp).
-//
-// TODO: Global, inter-block gvn etc. However, note that atm the cost of our
-//       adding new locals here is low because their lifetimes are all within a
-//       single basic block. A global optimization here could add long-lived
-//       locals with register allocation costs in the entire function.
-//
+  // Fix up non-nullable locals: Passes can make many changes that break the
+  // validation of non-nullable locals, which validate according to the "1a"
+  // rule of each get needing to be structurally dominated by a set - sets allow
+  // gets until the end of the set's block. Any time a pass adds a block, that
+  // can break:
+  //
+  //  (local.set $x ..)
+  //  (local.get $x)
+  //
+  // =>
+  //
+  //  (block
+  //    ..new code..
+  //    (local.set $x ..)
+  //  )
+  //  (local.get $x)
+  //
+  // This example is the common case of adding new code at a location by
+  // wrapping it in a block and appending or prepending the old code. But now
+  // the set does not structurally dominate the get. To avoid each pass needing
+  // to handle this, do it after every function-parallel pass, which is the
+  // vast majority of passes. The few non-function-parallel passes need to add
+  // this handling themselves if they require it (not doing it by default
+  // avoids iterating on all functions in each such pass, which may be
+  // wasteful).
+  if (func) {
+    TypeUpdating::handleNonDefaultableLocals(func, *wasm);
+  }
 
 #include <algorithm>
 #include <memory>
@@ -549,6 +479,8 @@ struct LocalCSE : public WalkerPass<PostWalker<LocalCSE>> {
 
     Applier applier(requestInfos);
     applier.walkFunctionInModule(func, getModule());
+
+    TypeUpdating::handleNonDefaultableLocals(func, *getModule());
   }
 };
 

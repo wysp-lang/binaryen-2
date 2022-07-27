@@ -755,9 +755,7 @@ struct Heap2Local : public WalkerPass<PostWalker<Heap2Local>> {
     // vacuum, in particular, to optimize such nested allocations.
     // TODO Consider running multiple iterations here, and running vacuum in
     //      between them.
-    if (Heap2LocalOptimizer(func, getModule(), getPassOptions()).optimized) {
-      TypeUpdating::handleNonDefaultableLocals(func, *getModule());
-    }
+    Heap2LocalOptimizer(func, getModule(), getPassOptions());
   }
 };
 

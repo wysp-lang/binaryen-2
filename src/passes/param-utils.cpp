@@ -132,7 +132,6 @@ bool removeParameter(const std::vector<Function*>& funcs,
     auto* func = funcs[i];
     if (!func->imported()) {
       LocalUpdater(funcs[i], index, newIndexes[i]);
-      TypeUpdating::handleNonDefaultableLocals(func, *module);
     }
   }
 

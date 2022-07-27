@@ -238,9 +238,6 @@ struct OptimizeInstructions
       optimizer.walkFunction(func);
     }
 
-    // Some patterns create locals (like when we use getResultOfFirst), which we
-    // may need to fix up.
-    TypeUpdating::handleNonDefaultableLocals(func, *getModule());
     // Some patterns create blocks that can interfere 'catch' and 'pop', nesting
     // the 'pop' into a block making it invalid.
     EHUtils::handleBlockNestedPops(func, *getModule());
@@ -1363,11 +1360,10 @@ struct OptimizeInstructions
       }
       Index tempLocal = builder.addVar(
         getFunction(),
-        TypeUpdating::getValidLocalType(lastOperandType, features));
+        lastOperandType);
       auto* set = builder.makeLocalSet(tempLocal, lastOperand);
       auto* drop = builder.makeDrop(curr->target);
-      auto* get = TypeUpdating::fixLocalGet(
-        builder.makeLocalGet(tempLocal, lastOperandType), *getModule());
+      auto* get = builder.makeLocalGet(tempLocal, lastOperandType);
       curr->operands.back() = builder.makeBlock({set, drop, get});
       replaceCurrent(builder.makeCall(
         ref->func, curr->operands, curr->type, curr->isReturn));
