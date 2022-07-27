@@ -24,9 +24,9 @@
 ;; RUN: wasm-opt %s -all -O1         -S -o - | filecheck %s --check-prefix OPTIMIZE
 
 (module
-  ;; PRINT:      (type $anyref_=>_none (func (param anyref)))
-
   ;; PRINT:      (type $i32_=>_none (func (param i32)))
+
+  ;; PRINT:      (type $anyref_=>_none (func (param anyref)))
 
   ;; PRINT:      (type $i64_=>_none (func (param i64)))
 
@@ -47,9 +47,9 @@
   ;; PRINT:      (type $anyref_=>_i32 (func (param anyref) (result i32)))
 
   ;; PRINT:      (import "a" "b" (func $import (param anyref)))
-  ;; ROUNDTRIP:      (type $anyref_=>_none (func (param anyref)))
-
   ;; ROUNDTRIP:      (type $i32_=>_none (func (param i32)))
+
+  ;; ROUNDTRIP:      (type $anyref_=>_none (func (param anyref)))
 
   ;; ROUNDTRIP:      (type $i64_=>_none (func (param i64)))
 
@@ -70,9 +70,9 @@
   ;; ROUNDTRIP:      (type $anyref_=>_i32 (func (param anyref) (result i32)))
 
   ;; ROUNDTRIP:      (import "a" "b" (func $import (param anyref)))
-  ;; OPTIMIZE:      (type $anyref_=>_none (func (param anyref)))
-
   ;; OPTIMIZE:      (type $i32_=>_none (func (param i32)))
+
+  ;; OPTIMIZE:      (type $anyref_=>_none (func (param anyref)))
 
   ;; OPTIMIZE:      (type $i64_=>_none (func (param i64)))
 
@@ -95,6 +95,9 @@
   ;; OPTIMIZE:      (import "a" "b" (func $import (param anyref)))
   (import "a" "b" (func $import (param anyref)))
 
+  ;; PRINT:      (import "a" "b" (func $import2 (param i32)))
+  ;; ROUNDTRIP:      (import "a" "b" (func $import2 (param i32)))
+  ;; OPTIMIZE:      (import "a" "b" (func $import2 (param i32)))
   (import "a" "b" (func $import2 (param i32)))
 
   ;; PRINT:      (elem declare func $helper $helper2)
@@ -314,29 +317,54 @@
 
   ;; PRINT:      (func $need-fix (param $0 i32) (param $1 i64) (result anyref)
   ;; PRINT-NEXT:  (local $x (ref func))
+  ;; PRINT-NEXT:  (local $y i32)
   ;; PRINT-NEXT:  (if
   ;; PRINT-NEXT:   (local.get $0)
-  ;; PRINT-NEXT:   (local.set $x
-  ;; PRINT-NEXT:    (ref.func $helper)
+  ;; PRINT-NEXT:   (block $block
+  ;; PRINT-NEXT:    (local.set $y
+  ;; PRINT-NEXT:     (i32.const 1)
+  ;; PRINT-NEXT:    )
+  ;; PRINT-NEXT:    (local.set $x
+  ;; PRINT-NEXT:     (ref.func $helper)
+  ;; PRINT-NEXT:    )
   ;; PRINT-NEXT:   )
-  ;; PRINT-NEXT:   (local.set $x
-  ;; PRINT-NEXT:    (ref.func $helper2)
+  ;; PRINT-NEXT:   (block $block0
+  ;; PRINT-NEXT:    (local.set $y
+  ;; PRINT-NEXT:     (i32.const 2)
+  ;; PRINT-NEXT:    )
+  ;; PRINT-NEXT:    (local.set $x
+  ;; PRINT-NEXT:     (ref.func $helper2)
+  ;; PRINT-NEXT:    )
   ;; PRINT-NEXT:   )
   ;; PRINT-NEXT:  )
   ;; PRINT-NEXT:  (call $import
   ;; PRINT-NEXT:   (local.get $x)
   ;; PRINT-NEXT:  )
+  ;; PRINT-NEXT:  (call $import2
+  ;; PRINT-NEXT:   (local.get $y)
+  ;; PRINT-NEXT:  )
   ;; PRINT-NEXT:  (local.get $x)
   ;; PRINT-NEXT: )
   ;; ROUNDTRIP:      (func $need-fix (param $0 i32) (param $1 i64) (result anyref)
   ;; ROUNDTRIP-NEXT:  (local $x funcref)
+  ;; ROUNDTRIP-NEXT:  (local $y i32)
   ;; ROUNDTRIP-NEXT:  (if
   ;; ROUNDTRIP-NEXT:   (local.get $0)
-  ;; ROUNDTRIP-NEXT:   (local.set $x
-  ;; ROUNDTRIP-NEXT:    (ref.func $helper)
+  ;; ROUNDTRIP-NEXT:   (block
+  ;; ROUNDTRIP-NEXT:    (local.set $y
+  ;; ROUNDTRIP-NEXT:     (i32.const 1)
+  ;; ROUNDTRIP-NEXT:    )
+  ;; ROUNDTRIP-NEXT:    (local.set $x
+  ;; ROUNDTRIP-NEXT:     (ref.func $helper)
+  ;; ROUNDTRIP-NEXT:    )
   ;; ROUNDTRIP-NEXT:   )
-  ;; ROUNDTRIP-NEXT:   (local.set $x
-  ;; ROUNDTRIP-NEXT:    (ref.func $helper2)
+  ;; ROUNDTRIP-NEXT:   (block
+  ;; ROUNDTRIP-NEXT:    (local.set $y
+  ;; ROUNDTRIP-NEXT:     (i32.const 2)
+  ;; ROUNDTRIP-NEXT:    )
+  ;; ROUNDTRIP-NEXT:    (local.set $x
+  ;; ROUNDTRIP-NEXT:     (ref.func $helper2)
+  ;; ROUNDTRIP-NEXT:    )
   ;; ROUNDTRIP-NEXT:   )
   ;; ROUNDTRIP-NEXT:  )
   ;; ROUNDTRIP-NEXT:  (call $import
@@ -344,22 +372,43 @@
   ;; ROUNDTRIP-NEXT:    (local.get $x)
   ;; ROUNDTRIP-NEXT:   )
   ;; ROUNDTRIP-NEXT:  )
+  ;; ROUNDTRIP-NEXT:  (call $import2
+  ;; ROUNDTRIP-NEXT:   (local.get $y)
+  ;; ROUNDTRIP-NEXT:  )
   ;; ROUNDTRIP-NEXT:  (ref.as_non_null
   ;; ROUNDTRIP-NEXT:   (local.get $x)
   ;; ROUNDTRIP-NEXT:  )
   ;; ROUNDTRIP-NEXT: )
   ;; OPTIMIZE:      (func $need-fix (param $0 i32) (param $1 i64) (result anyref)
-  ;; OPTIMIZE-NEXT:  (local $2 (ref func))
-  ;; OPTIMIZE-NEXT:  (call $import
-  ;; OPTIMIZE-NEXT:   (local.tee $2
-  ;; OPTIMIZE-NEXT:    (select (result (ref func))
-  ;; OPTIMIZE-NEXT:     (ref.func $helper)
-  ;; OPTIMIZE-NEXT:     (ref.func $helper2)
-  ;; OPTIMIZE-NEXT:     (local.get $0)
+  ;; OPTIMIZE-NEXT:  (local $2 funcref)
+  ;; OPTIMIZE-NEXT:  (local.set $0
+  ;; OPTIMIZE-NEXT:   (if (result i32)
+  ;; OPTIMIZE-NEXT:    (local.get $0)
+  ;; OPTIMIZE-NEXT:    (block (result i32)
+  ;; OPTIMIZE-NEXT:     (local.set $2
+  ;; OPTIMIZE-NEXT:      (ref.func $helper)
+  ;; OPTIMIZE-NEXT:     )
+  ;; OPTIMIZE-NEXT:     (i32.const 1)
+  ;; OPTIMIZE-NEXT:    )
+  ;; OPTIMIZE-NEXT:    (block (result i32)
+  ;; OPTIMIZE-NEXT:     (local.set $2
+  ;; OPTIMIZE-NEXT:      (ref.func $helper2)
+  ;; OPTIMIZE-NEXT:     )
+  ;; OPTIMIZE-NEXT:     (i32.const 2)
   ;; OPTIMIZE-NEXT:    )
   ;; OPTIMIZE-NEXT:   )
   ;; OPTIMIZE-NEXT:  )
-  ;; OPTIMIZE-NEXT:  (local.get $2)
+  ;; OPTIMIZE-NEXT:  (call $import
+  ;; OPTIMIZE-NEXT:   (ref.as_non_null
+  ;; OPTIMIZE-NEXT:    (local.get $2)
+  ;; OPTIMIZE-NEXT:   )
+  ;; OPTIMIZE-NEXT:  )
+  ;; OPTIMIZE-NEXT:  (call $import2
+  ;; OPTIMIZE-NEXT:   (local.get $0)
+  ;; OPTIMIZE-NEXT:  )
+  ;; OPTIMIZE-NEXT:  (ref.as_non_null
+  ;; OPTIMIZE-NEXT:   (local.get $2)
+  ;; OPTIMIZE-NEXT:  )
   ;; OPTIMIZE-NEXT: )
   (func $need-fix (export "need-fix") (param i32 i64) (result anyref)
     ;; This function requires changes, and even in the optimized case: the
