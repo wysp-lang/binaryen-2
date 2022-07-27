@@ -18,9 +18,21 @@
 ;; RUN: wasm-opt %s -all -O1         -S -o - | filecheck %s --check-prefix OPTIMIZE
 
 (module
-  ;; PRINT:      (type $none_=>_none (func))
+  ;; PRINT:      (type $i32_=>_none (func (param i32)))
 
-  ;; PRINT:      (type $ref|func|_=>_none (func (param (ref func))))
+  ;; PRINT:      (type $i64_=>_none (func (param i64)))
+
+  ;; PRINT:      (type $f32_=>_none (func (param f32)))
+
+  ;; PRINT:      (type $f64_=>_none (func (param f64)))
+
+  ;; PRINT:      (type $i32_i32_=>_none (func (param i32 i32)))
+
+  ;; PRINT:      (type $i64_i64_=>_none (func (param i64 i64)))
+
+  ;; PRINT:      (type $f32_f32_ref|func|_=>_none (func (param f32 f32 (ref func))))
+
+  ;; PRINT:      (type $none_=>_none (func))
 
   ;; PRINT:      (type $anyref_=>_i32 (func (param anyref) (result i32)))
 
@@ -40,13 +52,25 @@
 
   ;; PRINT:      (export "get-without-set-but-param" (func $get-without-set-but-param))
 
-  ;; PRINT:      (func $no-uses
+  ;; PRINT:      (func $no-uses (param $0 i32)
   ;; PRINT-NEXT:  (local $x (ref func))
   ;; PRINT-NEXT:  (nop)
   ;; PRINT-NEXT: )
-  ;; ROUNDTRIP:      (type $none_=>_none (func))
+  ;; ROUNDTRIP:      (type $i32_=>_none (func (param i32)))
 
-  ;; ROUNDTRIP:      (type $ref|func|_=>_none (func (param (ref func))))
+  ;; ROUNDTRIP:      (type $i64_=>_none (func (param i64)))
+
+  ;; ROUNDTRIP:      (type $f32_=>_none (func (param f32)))
+
+  ;; ROUNDTRIP:      (type $f64_=>_none (func (param f64)))
+
+  ;; ROUNDTRIP:      (type $i32_i32_=>_none (func (param i32 i32)))
+
+  ;; ROUNDTRIP:      (type $i64_i64_=>_none (func (param i64 i64)))
+
+  ;; ROUNDTRIP:      (type $f32_f32_ref|func|_=>_none (func (param f32 f32 (ref func))))
+
+  ;; ROUNDTRIP:      (type $none_=>_none (func))
 
   ;; ROUNDTRIP:      (type $anyref_=>_i32 (func (param anyref) (result i32)))
 
@@ -66,41 +90,53 @@
 
   ;; ROUNDTRIP:      (export "get-without-set-but-param" (func $get-without-set-but-param))
 
-  ;; ROUNDTRIP:      (func $no-uses
+  ;; ROUNDTRIP:      (func $no-uses (param $0 i32)
   ;; ROUNDTRIP-NEXT:  (local $x (ref func))
   ;; ROUNDTRIP-NEXT:  (nop)
   ;; ROUNDTRIP-NEXT: )
-  ;; OPTIMIZE:      (type $none_=>_none (func))
+  ;; OPTIMIZE:      (type $i32_=>_none (func (param i32)))
 
-  ;; OPTIMIZE:      (type $ref|func|_=>_none (func (param (ref func))))
+  ;; OPTIMIZE:      (type $i64_=>_none (func (param i64)))
+
+  ;; OPTIMIZE:      (type $f32_=>_none (func (param f32)))
+
+  ;; OPTIMIZE:      (type $f64_=>_none (func (param f64)))
+
+  ;; OPTIMIZE:      (type $i32_i32_=>_none (func (param i32 i32)))
+
+  ;; OPTIMIZE:      (type $i64_i64_=>_none (func (param i64 i64)))
+
+  ;; OPTIMIZE:      (type $f32_f32_ref|func|_=>_none (func (param f32 f32 (ref func))))
+
+  ;; OPTIMIZE:      (type $none_=>_none (func))
 
   ;; OPTIMIZE:      (type $anyref_=>_i32 (func (param anyref) (result i32)))
 
-  ;; OPTIMIZE:      (elem declare func $no-uses)
+  ;; OPTIMIZE:      (elem declare func $helper)
 
   ;; OPTIMIZE:      (export "no-uses" (func $no-uses))
 
-  ;; OPTIMIZE:      (export "func-scope" (func $no-uses))
+  ;; OPTIMIZE:      (export "func-scope" (func $func-scope))
 
-  ;; OPTIMIZE:      (export "inner-scope" (func $no-uses))
+  ;; OPTIMIZE:      (export "inner-scope" (func $inner-scope))
 
-  ;; OPTIMIZE:      (export "func-to-inner" (func $no-uses))
+  ;; OPTIMIZE:      (export "func-to-inner" (func $func-to-inner))
 
-  ;; OPTIMIZE:      (export "inner-to-func" (func $no-uses))
+  ;; OPTIMIZE:      (export "inner-to-func" (func $inner-to-func))
 
   ;; OPTIMIZE:      (export "if-condition" (func $if-condition))
 
   ;; OPTIMIZE:      (export "get-without-set-but-param" (func $get-without-set-but-param))
 
-  ;; OPTIMIZE:      (func $no-uses
+  ;; OPTIMIZE:      (func $no-uses (param $0 i32)
   ;; OPTIMIZE-NEXT:  (nop)
   ;; OPTIMIZE-NEXT: )
-  (func $no-uses (param i32) (export "no-uses") ;; see note above on param
+  (func $no-uses (export "no-uses") (param i32) ;; see note above on param
     ;; A local with no uses validates - no need for changes.
     (local $x (ref func))
   )
 
-  ;; PRINT:      (func $func-scope
+  ;; PRINT:      (func $func-scope (param $0 i64)
   ;; PRINT-NEXT:  (local $x (ref func))
   ;; PRINT-NEXT:  (local.set $x
   ;; PRINT-NEXT:   (ref.func $helper)
@@ -109,7 +145,7 @@
   ;; PRINT-NEXT:   (local.get $x)
   ;; PRINT-NEXT:  )
   ;; PRINT-NEXT: )
-  ;; ROUNDTRIP:      (func $func-scope
+  ;; ROUNDTRIP:      (func $func-scope (param $0 i64)
   ;; ROUNDTRIP-NEXT:  (local $x (ref func))
   ;; ROUNDTRIP-NEXT:  (local.set $x
   ;; ROUNDTRIP-NEXT:   (ref.func $helper)
@@ -118,7 +154,10 @@
   ;; ROUNDTRIP-NEXT:   (local.get $x)
   ;; ROUNDTRIP-NEXT:  )
   ;; ROUNDTRIP-NEXT: )
-  (func $func-scope (param i64) (export "func-scope")
+  ;; OPTIMIZE:      (func $func-scope (param $0 i64)
+  ;; OPTIMIZE-NEXT:  (nop)
+  ;; OPTIMIZE-NEXT: )
+  (func $func-scope (export "func-scope") (param i64)
     ;; a set in the func scope helps a get validate there.
     (local $x (ref func))
     (local.set $x
@@ -129,7 +168,7 @@
     )
   )
 
-  ;; PRINT:      (func $inner-scope
+  ;; PRINT:      (func $inner-scope (param $0 f32)
   ;; PRINT-NEXT:  (local $x (ref func))
   ;; PRINT-NEXT:  (block $b
   ;; PRINT-NEXT:   (local.set $x
@@ -140,7 +179,7 @@
   ;; PRINT-NEXT:   )
   ;; PRINT-NEXT:  )
   ;; PRINT-NEXT: )
-  ;; ROUNDTRIP:      (func $inner-scope
+  ;; ROUNDTRIP:      (func $inner-scope (param $0 f32)
   ;; ROUNDTRIP-NEXT:  (local $x (ref func))
   ;; ROUNDTRIP-NEXT:  (local.set $x
   ;; ROUNDTRIP-NEXT:   (ref.func $helper)
@@ -149,7 +188,10 @@
   ;; ROUNDTRIP-NEXT:   (local.get $x)
   ;; ROUNDTRIP-NEXT:  )
   ;; ROUNDTRIP-NEXT: )
-  (func $inner-scope (param f32) (export "inner-scope")
+  ;; OPTIMIZE:      (func $inner-scope (param $0 f32)
+  ;; OPTIMIZE-NEXT:  (nop)
+  ;; OPTIMIZE-NEXT: )
+  (func $inner-scope (export "inner-scope") (param f32)
     ;; a set in an inner scope helps a get validate there.
     (local $x (ref func))
     (block $b
@@ -162,7 +204,7 @@
     )
   )
 
-  ;; PRINT:      (func $func-to-inner
+  ;; PRINT:      (func $func-to-inner (param $0 f64)
   ;; PRINT-NEXT:  (local $x (ref func))
   ;; PRINT-NEXT:  (local.set $x
   ;; PRINT-NEXT:   (ref.func $helper)
@@ -173,7 +215,7 @@
   ;; PRINT-NEXT:   )
   ;; PRINT-NEXT:  )
   ;; PRINT-NEXT: )
-  ;; ROUNDTRIP:      (func $func-to-inner
+  ;; ROUNDTRIP:      (func $func-to-inner (param $0 f64)
   ;; ROUNDTRIP-NEXT:  (local $x (ref func))
   ;; ROUNDTRIP-NEXT:  (local.set $x
   ;; ROUNDTRIP-NEXT:   (ref.func $helper)
@@ -184,7 +226,10 @@
   ;; ROUNDTRIP-NEXT:   )
   ;; ROUNDTRIP-NEXT:  )
   ;; ROUNDTRIP-NEXT: )
-  (func $func-to-inner (param f64) (export "func-to-inner")
+  ;; OPTIMIZE:      (func $func-to-inner (param $0 f64)
+  ;; OPTIMIZE-NEXT:  (nop)
+  ;; OPTIMIZE-NEXT: )
+  (func $func-to-inner (export "func-to-inner") (param f64)
     ;; a set in an outer scope helps a get validate.
     (local $x (ref func))
     (local.set $x
@@ -197,7 +242,7 @@
     )
   )
 
-  ;; PRINT:      (func $inner-to-func
+  ;; PRINT:      (func $inner-to-func (param $0 i32) (param $1 i32)
   ;; PRINT-NEXT:  (local $x funcref)
   ;; PRINT-NEXT:  (block $b
   ;; PRINT-NEXT:   (local.set $x
@@ -208,7 +253,7 @@
   ;; PRINT-NEXT:   (local.get $x)
   ;; PRINT-NEXT:  )
   ;; PRINT-NEXT: )
-  ;; ROUNDTRIP:      (func $inner-to-func
+  ;; ROUNDTRIP:      (func $inner-to-func (param $0 i32) (param $1 i32)
   ;; ROUNDTRIP-NEXT:  (local $x funcref)
   ;; ROUNDTRIP-NEXT:  (block $label$1
   ;; ROUNDTRIP-NEXT:   (local.set $x
@@ -219,7 +264,10 @@
   ;; ROUNDTRIP-NEXT:   (local.get $x)
   ;; ROUNDTRIP-NEXT:  )
   ;; ROUNDTRIP-NEXT: )
-  (func $inner-to-func (param i32 i32) (export "inner-to-func")
+  ;; OPTIMIZE:      (func $inner-to-func (param $0 i32) (param $1 i32)
+  ;; OPTIMIZE-NEXT:  (nop)
+  ;; OPTIMIZE-NEXT: )
+  (func $inner-to-func (export "inner-to-func") (param i32 i32)
     ;; a set in an inner scope does *not* help a get validate, but the type is
     ;; nullable so that's ok.
     (local $x (ref null func))
@@ -233,7 +281,20 @@
     )
   )
 
-  ;; PRINT:      (func $if-condition
+  (func $inner-to-func-fix (export "inner-to-func-fix") (param i32 i32)
+    ;; As before, 
+    (local $x (ref null func))
+    (block $b
+      (local.set $x
+        (ref.func $helper)
+      )
+    )
+    (drop
+      (local.get $x)
+    )
+  )
+
+  ;; PRINT:      (func $if-condition (param $0 i64) (param $1 i64)
   ;; PRINT-NEXT:  (local $x (ref func))
   ;; PRINT-NEXT:  (if
   ;; PRINT-NEXT:   (call $helper2
@@ -249,7 +310,7 @@
   ;; PRINT-NEXT:   )
   ;; PRINT-NEXT:  )
   ;; PRINT-NEXT: )
-  ;; ROUNDTRIP:      (func $if-condition
+  ;; ROUNDTRIP:      (func $if-condition (param $0 i64) (param $1 i64)
   ;; ROUNDTRIP-NEXT:  (local $x (ref func))
   ;; ROUNDTRIP-NEXT:  (if
   ;; ROUNDTRIP-NEXT:   (call $helper2
@@ -265,14 +326,14 @@
   ;; ROUNDTRIP-NEXT:   )
   ;; ROUNDTRIP-NEXT:  )
   ;; ROUNDTRIP-NEXT: )
-  ;; OPTIMIZE:      (func $if-condition
+  ;; OPTIMIZE:      (func $if-condition (param $0 i64) (param $1 i64)
   ;; OPTIMIZE-NEXT:  (drop
   ;; OPTIMIZE-NEXT:   (call $helper2
-  ;; OPTIMIZE-NEXT:    (ref.func $no-uses)
+  ;; OPTIMIZE-NEXT:    (ref.func $helper)
   ;; OPTIMIZE-NEXT:   )
   ;; OPTIMIZE-NEXT:  )
   ;; OPTIMIZE-NEXT: )
-  (func $if-condition (param i64 i64) (export "if-condition")
+  (func $if-condition (export "if-condition") (param i64 i64)
     (local $x (ref func))
     (if
       (call $helper2
@@ -290,20 +351,20 @@
     )
   )
 
-  ;; PRINT:      (func $get-without-set-but-param (param $x (ref func))
+  ;; PRINT:      (func $get-without-set-but-param (param $0 f32) (param $1 f32) (param $x (ref func))
   ;; PRINT-NEXT:  (drop
   ;; PRINT-NEXT:   (local.get $x)
   ;; PRINT-NEXT:  )
   ;; PRINT-NEXT: )
-  ;; ROUNDTRIP:      (func $get-without-set-but-param (param $x (ref func))
+  ;; ROUNDTRIP:      (func $get-without-set-but-param (param $0 f32) (param $1 f32) (param $x (ref func))
   ;; ROUNDTRIP-NEXT:  (drop
   ;; ROUNDTRIP-NEXT:   (local.get $x)
   ;; ROUNDTRIP-NEXT:  )
   ;; ROUNDTRIP-NEXT: )
-  ;; OPTIMIZE:      (func $get-without-set-but-param (param $0 (ref func))
+  ;; OPTIMIZE:      (func $get-without-set-but-param (param $0 f32) (param $1 f32) (param $2 (ref func))
   ;; OPTIMIZE-NEXT:  (nop)
   ;; OPTIMIZE-NEXT: )
-  (func $get-without-set-but-param (param f32 f32) (export "get-without-set-but-param")
+  (func $get-without-set-but-param (export "get-without-set-but-param") (param f32 f32)
     ;; As a parameter, this is ok to get without a set.
     (param $x (ref func))
     (drop
@@ -317,6 +378,9 @@
   ;; ROUNDTRIP:      (func $helper
   ;; ROUNDTRIP-NEXT:  (nop)
   ;; ROUNDTRIP-NEXT: )
+  ;; OPTIMIZE:      (func $helper
+  ;; OPTIMIZE-NEXT:  (unreachable)
+  ;; OPTIMIZE-NEXT: )
   (func $helper)
 
   ;; PRINT:      (func $helper2 (param $0 anyref) (result i32)
