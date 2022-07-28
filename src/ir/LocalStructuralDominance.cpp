@@ -41,7 +41,7 @@ LocalStructuralDominance::LocalStructuralDominance(Function* func,
   }
 
   // The locals that have been set, and so at the current time, they
-  // structurally dominate.
+  // structurally dominate. Begins with no locals set.
   std::vector<bool> localsSet(num);
 
   // Parameters always dominate.
@@ -72,17 +72,10 @@ LocalStructuralDominance::LocalStructuralDominance(Function* func,
   std::vector<WorkItem> workStack;
 
   // The stack begins with a new scope for the function, and then we start on
-  // the body. (Note that we don't need to exit that scope, that work would not
-  // do anything useful.)
+  // the body. (Note that we don't need to exit that scope, as that work would
+  // not do anything useful - no gets can appear after the body.)
   workStack.push_back(WorkItem{WorkItem::Scan, func->body});
   workStack.push_back(WorkItem{WorkItem::EnterScope, nullptr});
-
-  // A special marker for "start or finis/cleanup a scope". When we scan a block
-  // we'll add its children to the stack + cleanup at the end. When we get to
-  // the marker we'll pop the control flow stack and do any undoing we need to.
-  // This could be anything, so Nop is arbitrary, it just needs to not collide
-  // with anything else.
-  Nop scopeStart, scopeEnd;
 
   while (!workStack.empty()) {
     auto item = workStack.back();
@@ -98,15 +91,16 @@ LocalStructuralDominance::LocalStructuralDominance(Function* func,
         continue;
       }
 
-      // First, go through the structure children. Blocks are special in that
-      // all their children go in a single scope.
+      // First, go through the structure children.
       if (item.curr->is<Block>()) {
+        // Blocks are special in that all their children go in a single scope.
         workStack.push_back(WorkItem{WorkItem::ExitScope, nullptr});
         for (auto* child : StructuralChildIterator(item.curr).children) {
           workStack.push_back(WorkItem{WorkItem::Scan, *child});
         }
         workStack.push_back(WorkItem{WorkItem::EnterScope, nullptr});
       } else {
+        // Any structure other than a Block creates a new scope per child.
         for (auto* child : StructuralChildIterator(item.curr).children) {
           workStack.push_back(WorkItem{WorkItem::ExitScope, nullptr});
           workStack.push_back(WorkItem{WorkItem::Scan, *child});
@@ -114,27 +108,24 @@ LocalStructuralDominance::LocalStructuralDominance(Function* func,
         }
       }
 
-      // Next handle value children, which are not involved in structuring (like
-      // the If condition).
+      // Next, handle value children, which are not involved in structuring
+      // (like the If condition, or all normal children of non-control-flow-
+      // structures).
       for (auto* child : ValueChildIterator(item.curr).children) {
         workStack.push_back(WorkItem{WorkItem::Scan, *child});
       }
     } else if (item.op == WorkItem::Visit) {
       if (auto* set = item.curr->dynCast<LocalSet>()) {
         auto index = set->index;
-        if (func->getLocalType(index).isRef()) {
-          if (!localsSet[index]) {
-            // This local is now set until the end of this scope.
-            localsSet[index] = true;
-            cleanupStack.back().insert(index);
-          }
+        if (func->getLocalType(index).isRef() && !localsSet[index]) {
+          // This local is now set until the end of this scope.
+          localsSet[index] = true;
+          cleanupStack.back().insert(index);
         }
       } else if (auto* get = item.curr->dynCast<LocalGet>()) {
         auto index = get->index;
-        if (func->getLocalType(index).isRef()) {
-          if (!localsSet[index]) {
-            nonDominatingIndexes.insert(index);
-          }
+        if (func->getLocalType(index).isRef() && !localsSet[index]) {
+          nonDominatingIndexes.insert(index);
         }
       }
     } else if (item.op == WorkItem::EnterScope) {
