@@ -78,12 +78,15 @@
  ;; CHECK-NEXT: )
  (func $nn-dead
   (local $x (ref func))
-  (local.set $x
-   (ref.func $nn-dead) ;; this will be removed, as it is not needed.
+  (local.set $x ;; this will become a drop, as it is not needed.
+   (ref.func $nn-dead)
   )
   (block $inner
    (local.set $x
-    (ref.func $nn-dead) ;; this is not enough for validation of the get.
+    (ref.func $nn-dead) ;; this is not enough for validation of the get, as it
+                        ;; is inside a block. later passes will fix that up;
+                        ;; here nothing changes and the local remains non-
+                        ;; nullable for now.
    )
   )
   (drop
