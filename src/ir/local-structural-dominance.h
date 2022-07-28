@@ -22,12 +22,12 @@
 namespace wasm {
 
 //
-// Finds which local.sets have structural dominance over their gets. This is
+// Finds which local indexes have structural dominance of sets on gets. This is
 // important for things like non-nullable locals, and so this class only looks
 // at reference types and not anything else. It does look at both nullable and
-// non-nullable references, though, as it can be used to validate non-nullable
-// ones, and also to check if a nullable one could become non-nullable and still
-// validate.
+// non-nullable references, though, as it can be used to find which non-nullable
+// ones would not validate in the wasm spec ("1a"), and also which nullable ones
+// could become non-nullable and still validate.
 //
 // The property of "structural dominance" means that the set dominates the gets
 // using wasm's structured control flow constructs, like this:
@@ -41,7 +41,7 @@ namespace wasm {
 //  )
 //
 // That set structurally dominates both of those gets. However, in this example
-// it does not:
+// the set does not dominate the get:
 //
 //  (block
 //    (local.set $x ..)
@@ -51,15 +51,10 @@ namespace wasm {
 // This is a little similar to breaks: (br $foo) can only go to a label $foo
 // that is in scope.
 //
-// Note that this properly must hold on the final wasm binary, while we are
+// Note that this property must hold on the final wasm binary, while we are
 // checking it on Binaryen IR. The propery will carry over, however: when
-// lowering to wasm we may remove some Block nodes, but removing nodes cannot
+// lowering to wasm we may remove some Block nodes, but removing Blocks cannot
 // break validation.
-//
-// This concept is useful for the "1a" form of non-nullable locals that is in
-// the wasm spec: a local.get validates if it is structurally dominated by a
-// set. That dominance proves the get cannot access the default null value, and,
-// nicely, it can be validated in linear time.
 //
 struct LocalStructuralDominance {
   LocalStructuralDominance(Function* func, Module& wasm);
