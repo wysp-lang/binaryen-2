@@ -16,8 +16,8 @@
 ;; Note: The optimizing path will optimize almost all testcases into nothing. It
 ;; is hard to avoid that while writing small testcases that clearly show the
 ;; situations. Coverage by roundtripping should be enough there. $need-fix is
-;; a larger testcase that is designed to not be optimized out, and shows the
-;; changes.
+;; a larger testcase that is designed to not be optimized out, and shows that
+;; optimizing path also does the fixes.
 
 ;; RUN: wasm-opt %s -all             -S -o - | filecheck %s --check-prefix PRINT
 ;; RUN: wasm-opt %s -all --roundtrip -S -o - | filecheck %s --check-prefix ROUNDTRIP
@@ -27,6 +27,8 @@
   ;; PRINT:      (type $i32_=>_none (func (param i32)))
 
   ;; PRINT:      (type $anyref_=>_none (func (param anyref)))
+
+  ;; PRINT:      (type $i64_anyref_=>_none (func (param i64 anyref)))
 
   ;; PRINT:      (type $i64_=>_none (func (param i64)))
 
@@ -53,6 +55,8 @@
 
   ;; ROUNDTRIP:      (type $anyref_=>_none (func (param anyref)))
 
+  ;; ROUNDTRIP:      (type $i64_anyref_=>_none (func (param i64 anyref)))
+
   ;; ROUNDTRIP:      (type $i64_=>_none (func (param i64)))
 
   ;; ROUNDTRIP:      (type $f32_=>_none (func (param f32)))
@@ -77,6 +81,8 @@
   ;; OPTIMIZE:      (type $i32_=>_none (func (param i32)))
 
   ;; OPTIMIZE:      (type $anyref_=>_none (func (param anyref)))
+
+  ;; OPTIMIZE:      (type $i64_anyref_=>_none (func (param i64 anyref)))
 
   ;; OPTIMIZE:      (type $i64_=>_none (func (param i64)))
 
@@ -110,6 +116,8 @@
 
   ;; PRINT:      (export "no-uses" (func $no-uses))
 
+  ;; PRINT:      (export "just-use" (func $just-use))
+
   ;; PRINT:      (export "func-scope" (func $func-scope))
 
   ;; PRINT:      (export "inner-scope" (func $inner-scope))
@@ -133,6 +141,8 @@
   ;; ROUNDTRIP:      (elem declare func $helper $helper2)
 
   ;; ROUNDTRIP:      (export "no-uses" (func $no-uses))
+
+  ;; ROUNDTRIP:      (export "just-use" (func $just-use))
 
   ;; ROUNDTRIP:      (export "func-scope" (func $func-scope))
 
@@ -158,6 +168,8 @@
 
   ;; OPTIMIZE:      (export "no-uses" (func $no-uses))
 
+  ;; OPTIMIZE:      (export "just-use" (func $just-use))
+
   ;; OPTIMIZE:      (export "func-scope" (func $func-scope))
 
   ;; OPTIMIZE:      (export "inner-scope" (func $inner-scope))
@@ -180,6 +192,33 @@
   (func $no-uses (export "no-uses") (param i32) ;; see note above on param
     ;; A local with no uses validates - no need for changes.
     (local $x (ref func))
+  )
+
+  ;; PRINT:      (func $just-use (param $0 i64) (param $1 anyref)
+  ;; PRINT-NEXT:  (local $x (ref func))
+  ;; PRINT-NEXT:  (drop
+  ;; PRINT-NEXT:   (local.get $x)
+  ;; PRINT-NEXT:  )
+  ;; PRINT-NEXT: )
+  ;; ROUNDTRIP:      (func $just-use (param $0 i64) (param $1 anyref)
+  ;; ROUNDTRIP-NEXT:  (local $x funcref)
+  ;; ROUNDTRIP-NEXT:  (drop
+  ;; ROUNDTRIP-NEXT:   (ref.as_non_null
+  ;; ROUNDTRIP-NEXT:    (local.get $x)
+  ;; ROUNDTRIP-NEXT:   )
+  ;; ROUNDTRIP-NEXT:  )
+  ;; ROUNDTRIP-NEXT: )
+  ;; OPTIMIZE:      (func $just-use (param $0 i64) (param $1 anyref)
+  ;; OPTIMIZE-NEXT:  (nop)
+  ;; OPTIMIZE-NEXT: )
+  (func $just-use (export "just-use") (param i64 anyref)
+    ;; a set in the func scope helps a get validate there.
+    (local $x (ref func))
+    ;; A get without a set will not validate. We will fix this up in ROUNDTRIP
+    ;; (and OPTIMIZE will just optimize it all away).
+    (drop
+      (local.get $x)
+    )
   )
 
   ;; PRINT:      (func $func-scope (param $0 i64)
