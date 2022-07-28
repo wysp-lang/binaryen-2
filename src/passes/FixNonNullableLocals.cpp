@@ -16,10 +16,10 @@
 
 //
 // Fix up non-nullable locals: Passes can make many changes that break the
-// validation of non-nullable locals, which validate according to the "1a"
-// rule of each get needing to be structurally dominated by a set - sets allow
-// gets until the end of the set's block. Any time a pass adds a block, that
-// can break:
+// validation of non-nullable locals, which validate according to the "1a" rule
+// of each get needing to be structurally dominated by a set - sets allow gets
+// until the end of the set's block. Any time a pass adds a block, that can
+// break:
 //
 //  (local.set $x ..)
 //  (local.get $x)
@@ -32,14 +32,8 @@
 //  )
 //  (local.get $x)
 //
-// This example is the common case of adding new code at a location by
-// wrapping it in a block and appending or prepending the old code. But now
-// the set does not structurally dominate the get. To avoid each pass needing
-// to handle this, do it after every function-parallel pass, which is the
-// vast majority of passes. The few non-function-parallel passes need to add
-// this handling themselves if they require it (not doing it by default
-// avoids iterating on all functions in each such pass, which may be
-// wasteful).
+// (This example is the common case of adding new code at a location by wrapping
+// wrapping it in a block and appending or prepending the old code.)
 //
 
 #include "ir/type-updating.h"
