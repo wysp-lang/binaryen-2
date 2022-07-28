@@ -223,7 +223,6 @@
   ;; CHECK-NEXT:    (ref.func $if-nnl)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT:  (call $helper
   ;; CHECK-NEXT:   (local.tee $x
   ;; CHECK-NEXT:    (ref.func $if-nnl)
@@ -241,7 +240,6 @@
   ;; NOMNL-NEXT:    (ref.func $if-nnl)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
-  ;; NOMNL-NEXT:  (nop)
   ;; NOMNL-NEXT:  (call $helper
   ;; NOMNL-NEXT:   (local.tee $x
   ;; NOMNL-NEXT:    (ref.func $if-nnl)
@@ -269,12 +267,11 @@
    )
    ;; An exta set + gets, just to avoid other optimizations kicking in
    ;; (without them, the function only has a set and nothing else, and will
-   ;; remove the set entirely).
-   (local.set $x
-    (ref.func $if-nnl)
-   )
+   ;; remove the set entirely). Nothing should change here.
    (call $helper
-    (local.get $x)
+    (local.tee $x
+     (ref.func $if-nnl)
+    )
    )
    (call $helper
     (local.get $x)
