@@ -99,7 +99,10 @@
       )
     )
     (drop
-      ;; This get may use the null value, so we do not refine anything here.
+      ;; This get is not dominated by a set in the way "1a" needs, so the
+      ;; local cannot be refined to non-nullable. we could refine the heap type
+      ;; at least, but for simplicity we don't do that either and depend on
+      ;; running later, after the local has been fixed up.
       (local.get $x)
     )
   )
