@@ -231,7 +231,7 @@
   )
 
   ;; CHECK:      (func $uses-default (param $i i32)
-  ;; CHECK-NEXT:  (local $x (ref null $i32_=>_none))
+  ;; CHECK-NEXT:  (local $x anyref)
   ;; CHECK-NEXT:  (if
   ;; CHECK-NEXT:   (local.get $i)
   ;; CHECK-NEXT:   (local.set $x
@@ -246,12 +246,16 @@
     (local $x anyref)
     (if
       (local.get $i)
-      ;; The only set to this local uses a more specific type than anyref.
       (local.set $x (ref.func $uses-default))
     )
+    ;; The set does not structurally dominate the get, which means this does not
+    ;; validate in the wasm spec ("1a"). This situation can happen if this pass
+    ;; runs before we get to the fixup pass for this kind of thing. We should
+    ;; do nothing here: we shouldn't change the local to be nullable (leave that
+    ;; for the proper pass), and we shouldn't try to refine the heap type (we
+    ;; could, but it would add complexity, and just running after the fixup pass
+    ;; would achieve the same).
     (drop
-      ;; This get may use the default value, but it is ok to have a null of a
-      ;; more refined type in the local.
       (local.get $x)
     )
   )
@@ -406,6 +410,36 @@
     (local $x (ref func))
     (local.set $x
       (ref.func $already-non-nullable)
+    )
+  )
+
+  ;; CHECK:      (func $already-non-nullable-and-invalid
+  ;; CHECK-NEXT:  (local $x (ref func))
+  ;; CHECK-NEXT:  (block $block
+  ;; CHECK-NEXT:   (local.set $x
+  ;; CHECK-NEXT:    (ref.func $already-non-nullable-and-invalid)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $already-non-nullable-and-invalid
+    (local $x (ref func))
+    ;; The set does not structurally dominate the get, which means this does not
+    ;; validate in the wasm spec ("1a"). This situation can happen if this pass
+    ;; runs before we get to the fixup pass for this kind of thing. We should
+    ;; do nothing here: we shouldn't change the local to be nullable (leave that
+    ;; for the proper pass), and we shouldn't try to refine the heap type (we
+    ;; could, but it would add complexity, and just running after the fixup pass
+    ;; would achieve the same).
+    (block
+      (local.set $x
+        (ref.func $already-non-nullable-and-invalid)
+      )
+    )
+    (drop
+      (local.get $x)
     )
   )
 )

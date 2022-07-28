@@ -62,7 +62,7 @@
   )
 
   ;; CHECK:      (func $uses-default (param $i i32)
-  ;; CHECK-NEXT:  (local $x (ref null $struct))
+  ;; CHECK-NEXT:  (local $x anyref)
   ;; CHECK-NEXT:  (if
   ;; CHECK-NEXT:   (local.get $i)
   ;; CHECK-NEXT:   (local.set $x
@@ -76,7 +76,7 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   ;; NOMNL:      (func $uses-default (type $i32_=>_none) (param $i i32)
-  ;; NOMNL-NEXT:  (local $x (ref null $struct))
+  ;; NOMNL-NEXT:  (local $x anyref)
   ;; NOMNL-NEXT:  (if
   ;; NOMNL-NEXT:   (local.get $i)
   ;; NOMNL-NEXT:   (local.set $x
@@ -99,8 +99,7 @@
       )
     )
     (drop
-      ;; This get may use the null value, so we can refine the heap type but not
-      ;; alter nullability.
+      ;; This get may use the null value, so we do not refine anything here.
       (local.get $x)
     )
   )

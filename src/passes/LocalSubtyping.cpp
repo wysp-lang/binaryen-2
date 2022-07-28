@@ -144,7 +144,13 @@ struct LocalSubtyping : public WalkerPass<PostWalker<LocalSubtyping>> {
         // Remove non-nullability if we disallow that in locals.
         if (newType.isNonNullable()) {
           if (cannotBeNonNullable.count(i)) {
-            newType = Type(newType.getHeapType(), Nullable);
+            // This local was non-nullable, which we allow in Binaryen IR, but
+            // it can't be non-nullable in the wasm spec. This can happen when
+            // we haven't yet gotten to fixing up this local. Leave it alone for
+            // now: we could in theory refine the heap type if that is possible,
+            // but it's simpler to do nothing and let the user run this pass
+            // again after the fixup.
+            continue;
           }
         } else if (!newType.isDefaultable()) {
           // Aside from the case we just handled of allowed non-nullability, we
