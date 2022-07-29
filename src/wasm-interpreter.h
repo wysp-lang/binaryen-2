@@ -2088,7 +2088,27 @@ public:
     // Check if a constant value has been set in the context of this runner.
     auto iter = localValues.find(curr->index);
     if (iter != localValues.end()) {
-      return Flow(iter->second);
+      auto result = iter->second;
+      if (curr->type.isNonNullable() && result[0].isNull()) {
+        // Reading a null into a non-nullable local should never happen, but it
+        // can occur in code that should never be reached. For example, a pass
+        // might reorder these:
+        //
+        //  (unreachable)
+        //  (local.get $nn)
+        //
+        // It's always ok to reorder a local.get, but after the reordering we'll
+        // actually execute the get, which will hit an assertion later on. This
+        // get should not be executed - it began in unreachable code - but the
+        // reordering can cause it to. To get proper interpreter behavior, trap
+        // here. That basically implements trapping non-nullable locals (option
+        // 6 during the spec discussion), and it makes this case work properly
+        // since traps are ok to reorder. It also makes the behavior identical
+        // to the code after fixing it up during binary writing, where we'll add
+        // a ref.as_non_null after making the local nullable, which also traps.
+        trap("non-nullable local reading null");
+      }
+      return result;
     }
     return Flow(NONCONSTANT_FLOW);
   }
@@ -2903,7 +2923,12 @@ public:
     auto index = curr->index;
     NOTE_EVAL1(index);
     NOTE_EVAL1(scope->locals[index]);
-    return scope->locals[index];
+    auto result = scope->locals[index];
+    if (curr->type.isNonNullable() && result[0].isNull()) {
+      // See comment on earlier visitLocalGet.
+      trap("non-nullable local reading null");
+    }
+    return result;
   }
   Flow visitLocalSet(LocalSet* curr) {
     NOTE_ENTER("LocalSet");
