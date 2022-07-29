@@ -3,7 +3,9 @@
 ;; RUN: wasm-opt %s -all --simplify-locals --fuzz-exec -q -o /dev/null 2>&1 | filecheck %s
 
 (module
-  (func $test (export "test")
+  ;; CHECK:      [fuzz-exec] calling test
+  ;; CHECK-NEXT: [trap unreachable]
+  (func "test"
     (local $x i32)
     (local $nn (ref func))
     ;; This sets an unreachable value, but wrapped in a concrete type, so
@@ -13,7 +15,9 @@
     ;; trap when we get it, which is the same behavior as we'd get after fixing
     ;; up the local to be nullable (we'd add a ref.as_non_null).
     ;;
-    ;; This test should trap both before and after the optimization.
+    ;; This test should trap both before and after the optimization. It is ok
+    ;; that the trap messages changes from "unreachable" to "non-nullable
+    ;; local reading null".
     (local.set $x
       (block (result i32)
         (unreachable)
@@ -27,3 +31,6 @@
     )
   )
 )
+;; CHECK:      [fuzz-exec] calling test
+;; CHECK-NEXT: [trap non-nullable local reading null]
+;; CHECK-NEXT: [fuzz-exec] comparing test
