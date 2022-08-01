@@ -124,9 +124,14 @@ There are a few differences between Binaryen IR and the WebAssembly language:
     that all binaries validate properly in engines. In addition, Binaryen will
     fix things up during the optimization pipeline in an optimal position (the
     fixups add code that other passes can remove). As a result of all this, you
-    may notice that Binaryen can load binaries that would not validate in
-    engines, and that it does not roundtrip such binaries perfectly (as it will
-    fix up validation when writing back to binary).
+    may notice the following:
+    * Binaryen can load binaries that would not validate in engines, and that it
+      does not roundtrip such binaries perfectly (as it will fix up validation
+      when writing back to binary).
+    * If the Binaryen interpreter executes a `local.get` that reads a null from
+      a non-nullable local then it will trap. This should only happen if the
+      optimizer transforms code that would trap anyhow in another way (and this
+      is valid since Binaryen is allowed to reorder traps).
 
 As a result, you might notice that round-trip conversions (wasm => Binaryen IR
 => wasm) change code a little in some corner cases.
