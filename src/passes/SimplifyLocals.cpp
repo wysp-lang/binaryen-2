@@ -54,6 +54,7 @@
 #include <ir/local-utils.h>
 #include <ir/manipulation.h>
 #include <ir/properties.h>
+#include <ir/type-updating.h>
 #include <pass.h>
 #include <wasm-builder.h>
 #include <wasm-traversal.h>
@@ -939,6 +940,11 @@ struct SimplifyLocals
         }
       }
     } while (anotherCycle);
+
+    // See the comment in CoalesceLocals about this. Like there, we may remove
+    // local.sets, and unreachable code can cause difficulties, so immediately
+    // fix up non-nullable locals to avoid that.
+    TypeUpdating::handleNonDefaultableLocals(func, *getModule());
   }
 
   bool runMainOptimizations(Function* func) {

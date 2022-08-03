@@ -15,6 +15,12 @@
 ;; the local. Even if we make the interpreter trap on such things, it is not
 ;; enough here since the logging call will no longer happen (since the local.get
 ;; was reorderd to before the logging).
+;;
+;; These dangers can only happen due to moving unreachable code into a reachable
+;; location, and after that the non-nullable fixups for 1a add a trap onto
+;; something that looked like it didn't trap. To avoid this, we should either
+;; remove unreachable code before dangerous operations, or we should make sure
+;; that things that can trap are marked as such before we move them around.
 
 (module
   (import "fuzzing-support" "log-i32" (func $log (param i32)))

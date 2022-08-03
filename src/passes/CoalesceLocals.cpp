@@ -31,6 +31,7 @@
 
 #include "cfg/liveness-traversal.h"
 #include "ir/numbering.h"
+#include "ir/type-updating.h"
 #include "ir/utils.h"
 #include "pass.h"
 #include "support/learning.h"
@@ -112,6 +113,18 @@ void CoalesceLocals::doWalkFunction(Function* func) {
   pickIndices(indices);
   // apply indices
   applyIndices(indices, func->body);
+
+  // Removing dead sets to locals can affect the validation of non-nullable
+  // locals. Normally we can fix them up, but such fixes only make sense if the
+  // set still exists (but has moved to a block scope that is not allowed in
+  // the "1a" validation rules). Without such a set, the get becomes dangerous
+  // to execute (it would read a null, but the get's type is non-nullable; or,
+  // after we fix it up and add a ref.as_non_null, that will trap). Normally
+  // such a get cannot exist, but this situation can happen due to unreachable
+  // code, see the "read-nn-null.wast" testcase in the test suite. To avoid such
+  // problems, fix up non-nullable locals right now, before anything after us
+  // can try to do anything with them.
+  TypeUpdating::handleNonDefaultableLocals(func, *getModule());
 }
 
 // A copy on a backedge can be especially costly, forcing us to branch just to
