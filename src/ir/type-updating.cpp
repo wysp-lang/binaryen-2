@@ -16,6 +16,7 @@
 
 #include "type-updating.h"
 #include "find_all.h"
+#include "ir/local-graph.h"
 #include "ir/local-structural-dominance.h"
 #include "ir/module-utils.h"
 #include "ir/utils.h"
@@ -316,6 +317,39 @@ void handleNonDefaultableLocals(Function* func, Module& wasm) {
   }
   if (badIndexes.empty()) {
     return;
+  }
+
+  if (PassRunner::getPassDebug()) {
+    // As a costly additional validation in pass-debug mode, verify that we do
+    // not emit ref.as_non_nulls that can be observable. In general, if a local
+    // is non-nullable then the default value of null must never be read. That
+    // invariant is broken in code like this:
+    //
+    // (func $foo
+    //   (local $ref (ref func))
+    //   (local.get $ref) ;; reads the null, as there is no write before
+    //
+    // Such code is invalid, and may be produced by a buggy compiler or a buggy
+    // pass. Verifying it requires nonlinear work, however, so we only do it in
+    // pass-debug mode.
+    //
+    // One tricky case is with unreachable code TODO explain.
+    LocalGraph graph(func);
+    for (auto& [get, sets] : graph.getSetses) {
+      auto index = get->index;
+      // It is always ok to read nullable locals, and it is always ok to read
+      // params even if they are non-nullable.
+      if (!func->getLocalType(index).isNonNullable() ||
+          func->isParam(index)) {
+        continue;
+      }
+      for (auto* set : sets) {
+        if (!set) {
+          Fatal() << "Non-nullable local " << index << " may read a null in "
+                  << func->name;
+        }
+      }
+    }
   }
 
   if (func->stackIR) {
