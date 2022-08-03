@@ -2751,6 +2751,36 @@ void FunctionValidator::visitFunction(Function* curr) {
     Name name = pair.second;
     shouldBeTrue(seen.insert(name).second, name, "local names must be unique");
   }
+
+  if (getModule()->features.hasReferenceTypes() &&
+      PassRunner::getPassDebug()) {
+    // If we have non-nullable locals, verify that no local.get can read a null
+    // default value. This can be fairly slow, so only do it in pass-debug mode.
+    // TODO: a more optimal implementation tailored to validation here could be
+    //       faster.
+    bool hasNNLocals = false;
+    for (const auto& var : curr->vars) {
+      if (var.isNonNullable()) {
+        hasNNLocals = true;
+        break;
+      }
+    }
+    if (hasNNLocals) {
+      LocalGraph graph(curr);
+      for (auto& [get, sets] : graph.getSetses) {
+        auto index = get->index;
+        // It is always ok to read nullable locals, and it is always ok to read
+        // params even if they are non-nullable.
+        if (!curr->getLocalType(index).isNonNullable() ||
+            curr->isParam(index)) {
+          continue;
+        }
+        for (auto* set : sets) {
+          shouldBeTrue(!!set, index, "non-nullable local must not read null");
+        }
+      }
+    }
+  }
 }
 
 static bool checkSegmentOffset(Expression* curr,
