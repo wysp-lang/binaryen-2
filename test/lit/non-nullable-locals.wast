@@ -209,13 +209,20 @@
   ;; ROUNDTRIP-NEXT:  )
   ;; ROUNDTRIP-NEXT: )
   ;; OPTIMIZE:      (func $just-use (param $0 i64) (param $1 anyref)
-  ;; OPTIMIZE-NEXT:  (nop)
+  ;; OPTIMIZE-NEXT:  (local $2 funcref)
+  ;; OPTIMIZE-NEXT:  (drop
+  ;; OPTIMIZE-NEXT:   (ref.as_non_null
+  ;; OPTIMIZE-NEXT:    (local.get $2)
+  ;; OPTIMIZE-NEXT:   )
+  ;; OPTIMIZE-NEXT:  )
   ;; OPTIMIZE-NEXT: )
   (func $just-use (export "just-use") (param i64 anyref)
     ;; a set in the func scope helps a get validate there.
     (local $x (ref func))
-    ;; A get without a set will not validate. We will fix this up in ROUNDTRIP
-    ;; (and OPTIMIZE will just optimize it all away).
+    ;; A get without a set will not validate in the spec's "1a" rule for non-
+    ;; nullable locals. This code is not valid anyhow - we are reading the null
+    ;; default - but we will fix it up anyhow so it validates (it will then trap
+    ;; at runtime).
     (drop
       (local.get $x)
     )

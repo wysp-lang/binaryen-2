@@ -32,5 +32,5 @@
   )
 )
 ;; CHECK:      [fuzz-exec] calling test
-;; CHECK-NEXT: [trap non-nullable local reading null]
+;; CHECK-NEXT: [trap null ref]
 ;; CHECK-NEXT: [fuzz-exec] comparing test

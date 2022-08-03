@@ -944,7 +944,7 @@ struct SimplifyLocals
     // See the comment in CoalesceLocals about this. Like there, we may remove
     // local.sets, and unreachable code can cause difficulties, so immediately
     // fix up non-nullable locals to avoid that.
-    TypeUpdating::handleNonDefaultableLocals(func, *getModule());
+    TypeUpdating::handleNonDefaultableLocals(func, *this->getModule());
   }
 
   bool runMainOptimizations(Function* func) {

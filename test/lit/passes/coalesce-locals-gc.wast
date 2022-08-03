@@ -63,7 +63,7 @@
  )
 
  ;; CHECK:      (func $nn-dead
- ;; CHECK-NEXT:  (local $0 (ref func))
+ ;; CHECK-NEXT:  (local $0 funcref)
  ;; CHECK-NEXT:  (drop
  ;; CHECK-NEXT:   (ref.func $nn-dead)
  ;; CHECK-NEXT:  )
@@ -73,7 +73,9 @@
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (drop
- ;; CHECK-NEXT:   (local.get $0)
+ ;; CHECK-NEXT:   (ref.as_non_null
+ ;; CHECK-NEXT:    (local.get $0)
+ ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT: )
  (func $nn-dead
@@ -84,9 +86,8 @@
   (block $inner
    (local.set $x
     (ref.func $nn-dead) ;; this is not enough for validation of the get, as it
-                        ;; is inside a block. later passes will fix that up;
-                        ;; here nothing changes and the local remains non-
-                        ;; nullable for now.
+                        ;; is inside a block. coalesce-locals will immediately
+                        ;; fix that up, so the local will become nullable.
    )
   )
   (drop
