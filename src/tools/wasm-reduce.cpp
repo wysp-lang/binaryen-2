@@ -446,6 +446,8 @@ struct Reducer
     if (!shouldTryToReduce()) {
       return false;
     }
+    // Validate here, and return false if not? Seems like it handles things like
+    // removing a break that breaks validation, and 1a if we remove a set. TODO
     replaceCurrent(with);
     if (!writeAndTestReduction()) {
       replaceCurrent(curr);
