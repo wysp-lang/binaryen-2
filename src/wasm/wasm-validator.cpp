@@ -2610,7 +2610,8 @@ void FunctionValidator::visitFunction(Function* curr) {
   }
   for (const auto& var : curr->vars) {
     features |= var.getFeatures();
-    bool valid = getModule()->features.hasGCNNLocals() || var.isDefaultable() || var.isNonNullable();
+    bool valid = getModule()->features.hasGCNNLocals() || var.isDefaultable() ||
+                 var.isNonNullable();
     shouldBeTrue(valid, var, "vars must be defaultable");
   }
   shouldBeTrue(features <= getModule()->features,
@@ -2645,8 +2646,7 @@ void FunctionValidator::visitFunction(Function* curr) {
     shouldBeTrue(seen.insert(name).second, name, "local names must be unique");
   }
 
-  if (getModule()->features.hasReferenceTypes() &&
-      PassRunner::getPassDebug()) {
+  if (getModule()->features.hasReferenceTypes() && PassRunner::getPassDebug()) {
     // If we have non-nullable locals, verify that no local.get can read a null
     // default value. This can be fairly slow, so only do it in pass-debug mode.
     // TODO: a more optimal implementation tailored to validation here could be
