@@ -11,22 +11,20 @@
 
   ;; CHECK:      (type $struct.recursive (struct (field (mut (ref null $struct.recursive)))))
 
-  ;; CHECK:      (type $struct.nonnullable (struct (field (ref $struct.A))))
+  ;; CHECK:      (type $struct.nondefaultable (struct (field (ref $struct.A))))
 
   ;; CHECK:      (type $struct.packed (struct (field (mut i8))))
   ;; NOMNL:      (type $struct.recursive (struct_subtype (field (mut (ref null $struct.recursive))) data))
 
-  ;; NOMNL:      (type $struct.nonnullable (struct_subtype (field (ref $struct.A)) data))
-
   ;; NOMNL:      (type $struct.packed (struct_subtype (field (mut i8)) data))
   (type $struct.packed (struct (field (mut i8))))
 
-  ;; CHECK:      (type $struct.nondefaultable (struct (field (rtt $struct.A))))
-  ;; NOMNL:      (type $struct.nondefaultable (struct_subtype (field (rtt $struct.A)) data))
-  (type $struct.nondefaultable (struct (field (rtt $struct.A))))
+  ;; NOMNL:      (type $struct.nondefaultable (struct_subtype (field (ref $struct.A)) data))
+  (type $struct.nondefaultable (struct (field (ref $struct.A))))
 
   (type $struct.recursive (struct (field (mut (ref null $struct.recursive)))))
 
+  ;; NOMNL:      (type $struct.nonnullable (struct_subtype (field (ref $struct.A)) data))
   (type $struct.nonnullable (struct (field (ref $struct.A))))
 
   ;; CHECK:      (func $simple
@@ -39,9 +37,6 @@
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (local.set $1
   ;; CHECK-NEXT:     (f64.const 0)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.A)
   ;; CHECK-NEXT:   )
@@ -58,9 +53,6 @@
   ;; NOMNL-NEXT:    (local.set $1
   ;; NOMNL-NEXT:     (f64.const 0)
   ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -69,9 +61,7 @@
     ;; Other passes can remove such a trivial case of an unused allocation, but
     ;; we still optimize it.
     (drop
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
   )
 
@@ -86,9 +76,6 @@
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (local.set $2
   ;; CHECK-NEXT:     (f64.const 0)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.A)
   ;; CHECK-NEXT:   )
@@ -106,9 +93,6 @@
   ;; NOMNL-NEXT:    (local.set $2
   ;; NOMNL-NEXT:     (f64.const 0)
   ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -120,9 +104,7 @@
     ;; drop (and adding some unnecessary code to allocate the values, which we
     ;; depend on other passes to remove).
     (local.set $ref
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
   )
 
@@ -138,9 +120,6 @@
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:      (local.set $1
   ;; CHECK-NEXT:       (f64.const 0)
-  ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (drop
-  ;; CHECK-NEXT:       (rtt.canon $struct.A)
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:      (ref.null $struct.A)
   ;; CHECK-NEXT:     )
@@ -162,9 +141,6 @@
   ;; NOMNL-NEXT:      (local.set $1
   ;; NOMNL-NEXT:       (f64.const 0)
   ;; NOMNL-NEXT:      )
-  ;; NOMNL-NEXT:      (drop
-  ;; NOMNL-NEXT:       (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:      )
   ;; NOMNL-NEXT:      (ref.null $struct.A)
   ;; NOMNL-NEXT:     )
   ;; NOMNL-NEXT:    )
@@ -180,9 +156,7 @@
     ;; locals, and we read from the locals instead of the struct.get.
     (drop
       (struct.get $struct.A 0
-        (struct.new_default_with_rtt $struct.A
-          (rtt.canon $struct.A)
-        )
+        (struct.new_default $struct.A)
       )
     )
   )
@@ -199,9 +173,6 @@
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:      (local.set $1
   ;; CHECK-NEXT:       (f64.const 0)
-  ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (drop
-  ;; CHECK-NEXT:       (rtt.canon $struct.A)
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:      (ref.null $struct.A)
   ;; CHECK-NEXT:     )
@@ -223,9 +194,6 @@
   ;; NOMNL-NEXT:      (local.set $1
   ;; NOMNL-NEXT:       (f64.const 0)
   ;; NOMNL-NEXT:      )
-  ;; NOMNL-NEXT:      (drop
-  ;; NOMNL-NEXT:       (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:      )
   ;; NOMNL-NEXT:      (ref.null $struct.A)
   ;; NOMNL-NEXT:     )
   ;; NOMNL-NEXT:    )
@@ -237,9 +205,7 @@
     ;; Similar to the above, but using a different field index.
     (drop
       (struct.get $struct.A 1
-        (struct.new_default_with_rtt $struct.A
-          (rtt.canon $struct.A)
-        )
+        (struct.new_default $struct.A)
       )
     )
   )
@@ -254,9 +220,6 @@
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (local.set $1
   ;; CHECK-NEXT:     (f64.const 0)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.A)
   ;; CHECK-NEXT:   )
@@ -276,9 +239,6 @@
   ;; NOMNL-NEXT:    (local.set $1
   ;; NOMNL-NEXT:     (f64.const 0)
   ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -289,9 +249,7 @@
   (func $one-set
     ;; A simple optimizable allocation only used in one set.
     (struct.set $struct.A 0
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
       (i32.const 1)
     )
   )
@@ -299,18 +257,14 @@
   ;; CHECK:      (func $packed
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (struct.get_u $struct.packed 0
-  ;; CHECK-NEXT:    (struct.new_default_with_rtt $struct.packed
-  ;; CHECK-NEXT:     (rtt.canon $struct.packed)
-  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (struct.new_default $struct.packed)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   ;; NOMNL:      (func $packed (type $none_=>_none)
   ;; NOMNL-NEXT:  (drop
   ;; NOMNL-NEXT:   (struct.get_u $struct.packed 0
-  ;; NOMNL-NEXT:    (struct.new_default_with_rtt $struct.packed
-  ;; NOMNL-NEXT:     (rtt.canon $struct.packed)
-  ;; NOMNL-NEXT:    )
+  ;; NOMNL-NEXT:    (struct.new_default $struct.packed)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
   ;; NOMNL-NEXT: )
@@ -318,9 +272,7 @@
     ;; We do not optimize packed structs yet.
     (drop
       (struct.get $struct.packed 0
-        (struct.new_default_with_rtt $struct.packed
-          (rtt.canon $struct.packed)
-        )
+        (struct.new_default $struct.packed)
       )
     )
   )
@@ -345,9 +297,6 @@
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:      (local.set $1
   ;; CHECK-NEXT:       (local.get $3)
-  ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (drop
-  ;; CHECK-NEXT:       (rtt.canon $struct.A)
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:      (ref.null $struct.A)
   ;; CHECK-NEXT:     )
@@ -377,9 +326,6 @@
   ;; NOMNL-NEXT:      (local.set $1
   ;; NOMNL-NEXT:       (local.get $3)
   ;; NOMNL-NEXT:      )
-  ;; NOMNL-NEXT:      (drop
-  ;; NOMNL-NEXT:       (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:      )
   ;; NOMNL-NEXT:      (ref.null $struct.A)
   ;; NOMNL-NEXT:     )
   ;; NOMNL-NEXT:    )
@@ -392,10 +338,9 @@
     ;; proper locals.
     (drop
       (struct.get $struct.A 0
-        (struct.new_with_rtt $struct.A
+        (struct.new $struct.A
           (i32.const 2)
           (f64.const 3.14159)
-          (rtt.canon $struct.A)
         )
       )
     )
@@ -411,9 +356,6 @@
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:      (drop
   ;; CHECK-NEXT:       (unreachable)
-  ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (drop
-  ;; CHECK-NEXT:       (rtt.canon $struct.A)
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
@@ -431,9 +373,6 @@
   ;; NOMNL-NEXT:      (drop
   ;; NOMNL-NEXT:       (unreachable)
   ;; NOMNL-NEXT:      )
-  ;; NOMNL-NEXT:      (drop
-  ;; NOMNL-NEXT:       (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:      )
   ;; NOMNL-NEXT:     )
   ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:   )
@@ -444,43 +383,70 @@
     ;; remove it.
     (drop
       (struct.get $struct.A 0
-        (struct.new_with_rtt $struct.A
+        (struct.new $struct.A
           (i32.const 2)
           (unreachable)
-          (rtt.canon $struct.A)
         )
       )
     )
   )
 
   ;; CHECK:      (func $nondefaultable
+  ;; CHECK-NEXT:  (local $0 (ref null $struct.A))
+  ;; CHECK-NEXT:  (local $1 (ref null $struct.A))
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $struct.nondefaultable 0
-  ;; CHECK-NEXT:    (struct.new_with_rtt $struct.nondefaultable
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
-  ;; CHECK-NEXT:     (rtt.canon $struct.nondefaultable)
+  ;; CHECK-NEXT:   (block (result (ref $struct.A))
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (block (result (ref null $struct.nondefaultable))
+  ;; CHECK-NEXT:      (local.set $1
+  ;; CHECK-NEXT:       (struct.new_default $struct.A)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (local.set $0
+  ;; CHECK-NEXT:       (ref.as_non_null
+  ;; CHECK-NEXT:        (local.get $1)
+  ;; CHECK-NEXT:       )
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:      (ref.null $struct.nondefaultable)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (ref.as_non_null
+  ;; CHECK-NEXT:     (local.get $0)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   ;; NOMNL:      (func $nondefaultable (type $none_=>_none)
+  ;; NOMNL-NEXT:  (local $0 (ref null $struct.A))
+  ;; NOMNL-NEXT:  (local $1 (ref null $struct.A))
   ;; NOMNL-NEXT:  (drop
-  ;; NOMNL-NEXT:   (struct.get $struct.nondefaultable 0
-  ;; NOMNL-NEXT:    (struct.new_with_rtt $struct.nondefaultable
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:     (rtt.canon $struct.nondefaultable)
+  ;; NOMNL-NEXT:   (block (result (ref $struct.A))
+  ;; NOMNL-NEXT:    (drop
+  ;; NOMNL-NEXT:     (block (result (ref null $struct.nondefaultable))
+  ;; NOMNL-NEXT:      (local.set $1
+  ;; NOMNL-NEXT:       (struct.new_default $struct.A)
+  ;; NOMNL-NEXT:      )
+  ;; NOMNL-NEXT:      (local.set $0
+  ;; NOMNL-NEXT:       (ref.as_non_null
+  ;; NOMNL-NEXT:        (local.get $1)
+  ;; NOMNL-NEXT:       )
+  ;; NOMNL-NEXT:      )
+  ;; NOMNL-NEXT:      (ref.null $struct.nondefaultable)
+  ;; NOMNL-NEXT:     )
+  ;; NOMNL-NEXT:    )
+  ;; NOMNL-NEXT:    (ref.as_non_null
+  ;; NOMNL-NEXT:     (local.get $0)
   ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
   ;; NOMNL-NEXT: )
   (func $nondefaultable
     ;; We do not optimize structs with nondefaultable types that we cannot
-    ;; handle, like rtts.
+    ;; handle.
+    ;; TODO: We should be able to handle this after #4824 is resolved.
     (drop
       (struct.get $struct.nondefaultable 0
-        (struct.new_with_rtt $struct.nondefaultable
-          (rtt.canon $struct.A)
-          (rtt.canon $struct.nondefaultable)
+        (struct.new $struct.nondefaultable
+          (struct.new_default $struct.A)
         )
       )
     )
@@ -497,9 +463,6 @@
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (local.set $2
   ;; CHECK-NEXT:     (f64.const 0)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.A)
   ;; CHECK-NEXT:   )
@@ -525,9 +488,6 @@
   ;; NOMNL-NEXT:    (local.set $2
   ;; NOMNL-NEXT:     (f64.const 0)
   ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -546,9 +506,7 @@
     ;; to a local. The local.set should not prevent our optimization, and the
     ;; local.set can be turned into a drop.
     (local.set $ref
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     (struct.set $struct.A 0
       (local.get $ref)
@@ -567,9 +525,6 @@
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (local.set $2
   ;; CHECK-NEXT:     (f64.const 0)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.A)
   ;; CHECK-NEXT:   )
@@ -593,9 +548,6 @@
   ;; NOMNL-NEXT:    (local.set $2
   ;; NOMNL-NEXT:     (f64.const 0)
   ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -609,9 +561,7 @@
   (func $simple-one-local-get (result f64)
     (local $ref (ref null $struct.A))
     (local.set $ref
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     ;; A simple optimizable allocation only used in one get, via a local.
     (struct.get $struct.A 1
@@ -640,9 +590,6 @@
   ;; CHECK-NEXT:    (local.set $2
   ;; CHECK-NEXT:     (f64.const 0)
   ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
-  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.A)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
@@ -668,9 +615,6 @@
   ;; NOMNL-NEXT:    (local.set $2
   ;; NOMNL-NEXT:     (f64.const 0)
   ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -687,9 +631,7 @@
   (func $safe-to-drop (result f64)
     (local $ref (ref null $struct.A))
     (local.set $ref
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     ;; An extra drop does not let the allocation escape.
     (drop
@@ -703,9 +645,7 @@
   ;; CHECK:      (func $escape-via-call (result f64)
   ;; CHECK-NEXT:  (local $ref (ref null $struct.A))
   ;; CHECK-NEXT:  (local.set $ref
-  ;; CHECK-NEXT:   (struct.new_default_with_rtt $struct.A
-  ;; CHECK-NEXT:    (rtt.canon $struct.A)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (struct.new_default $struct.A)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (call $send-ref
   ;; CHECK-NEXT:   (local.get $ref)
@@ -717,9 +657,7 @@
   ;; NOMNL:      (func $escape-via-call (type $none_=>_f64) (result f64)
   ;; NOMNL-NEXT:  (local $ref (ref null $struct.A))
   ;; NOMNL-NEXT:  (local.set $ref
-  ;; NOMNL-NEXT:   (struct.new_default_with_rtt $struct.A
-  ;; NOMNL-NEXT:    (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:   )
+  ;; NOMNL-NEXT:   (struct.new_default $struct.A)
   ;; NOMNL-NEXT:  )
   ;; NOMNL-NEXT:  (call $send-ref
   ;; NOMNL-NEXT:   (local.get $ref)
@@ -731,9 +669,7 @@
   (func $escape-via-call (result f64)
     (local $ref (ref null $struct.A))
     (local.set $ref
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     ;; The allocation escapes into a call.
     (call $send-ref
@@ -755,9 +691,6 @@
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (local.set $2
   ;; CHECK-NEXT:     (f64.const 0)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.A)
   ;; CHECK-NEXT:   )
@@ -788,9 +721,6 @@
   ;; NOMNL-NEXT:    (local.set $2
   ;; NOMNL-NEXT:     (f64.const 0)
   ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -811,9 +741,7 @@
   (func $safe-to-drop-multiflow (result f64)
     (local $ref (ref null $struct.A))
     (local.set $ref
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     ;; An extra drop + multiple flows through things do not stop us.
     (drop
@@ -833,9 +761,7 @@
   ;; CHECK:      (func $escape-after-multiflow (result f64)
   ;; CHECK-NEXT:  (local $ref (ref null $struct.A))
   ;; CHECK-NEXT:  (local.set $ref
-  ;; CHECK-NEXT:   (struct.new_default_with_rtt $struct.A
-  ;; CHECK-NEXT:    (rtt.canon $struct.A)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (struct.new_default $struct.A)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (call $send-ref
   ;; CHECK-NEXT:   (block (result (ref null $struct.A))
@@ -851,9 +777,7 @@
   ;; NOMNL:      (func $escape-after-multiflow (type $none_=>_f64) (result f64)
   ;; NOMNL-NEXT:  (local $ref (ref null $struct.A))
   ;; NOMNL-NEXT:  (local.set $ref
-  ;; NOMNL-NEXT:   (struct.new_default_with_rtt $struct.A
-  ;; NOMNL-NEXT:    (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:   )
+  ;; NOMNL-NEXT:   (struct.new_default $struct.A)
   ;; NOMNL-NEXT:  )
   ;; NOMNL-NEXT:  (call $send-ref
   ;; NOMNL-NEXT:   (block (result (ref null $struct.A))
@@ -869,9 +793,7 @@
   (func $escape-after-multiflow (result f64)
     (local $ref (ref null $struct.A))
     (local.set $ref
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     ;; An escape after multiple flows.
     (call $send-ref
@@ -892,12 +814,8 @@
   ;; CHECK-NEXT:  (local $ref (ref null $struct.A))
   ;; CHECK-NEXT:  (local.set $ref
   ;; CHECK-NEXT:   (select (result (ref $struct.A))
-  ;; CHECK-NEXT:    (struct.new_default_with_rtt $struct.A
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (struct.new_default_with_rtt $struct.A
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
-  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (struct.new_default $struct.A)
+  ;; CHECK-NEXT:    (struct.new_default $struct.A)
   ;; CHECK-NEXT:    (i32.const 1)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
@@ -909,12 +827,8 @@
   ;; NOMNL-NEXT:  (local $ref (ref null $struct.A))
   ;; NOMNL-NEXT:  (local.set $ref
   ;; NOMNL-NEXT:   (select (result (ref $struct.A))
-  ;; NOMNL-NEXT:    (struct.new_default_with_rtt $struct.A
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (struct.new_default_with_rtt $struct.A
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
+  ;; NOMNL-NEXT:    (struct.new_default $struct.A)
+  ;; NOMNL-NEXT:    (struct.new_default $struct.A)
   ;; NOMNL-NEXT:    (i32.const 1)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -928,12 +842,8 @@
     ;; to optimize it.
     (local.set $ref
       (select
-        (struct.new_default_with_rtt $struct.A
-          (rtt.canon $struct.A)
-        )
-        (struct.new_default_with_rtt $struct.A
-          (rtt.canon $struct.A)
-        )
+        (struct.new_default $struct.A)
+        (struct.new_default $struct.A)
         (i32.const 1)
       )
     )
@@ -953,9 +863,6 @@
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (local.set $2
   ;; CHECK-NEXT:     (f64.const 0)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.A)
   ;; CHECK-NEXT:   )
@@ -982,9 +889,6 @@
   ;; NOMNL-NEXT:    (local.set $2
   ;; NOMNL-NEXT:     (f64.const 0)
   ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -1001,9 +905,7 @@
   (func $local-copies (result f64)
     (local $ref (ref null $struct.A))
     (local.set $ref
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     ;; Copying our allocation through locals does not bother us.
     (local.set $ref
@@ -1026,9 +928,6 @@
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (local.set $3
   ;; CHECK-NEXT:     (f64.const 0)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.A)
   ;; CHECK-NEXT:   )
@@ -1066,9 +965,6 @@
   ;; NOMNL-NEXT:    (local.set $3
   ;; NOMNL-NEXT:     (f64.const 0)
   ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -1096,9 +992,7 @@
     (local $ref (ref null $struct.A))
     (local $ref-2 (ref null $struct.A))
     (local.set $ref
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     ;; Copying our allocation through locals does not bother us, even if it's
     ;; another local.
@@ -1129,9 +1023,6 @@
   ;; CHECK-NEXT:    (local.set $3
   ;; CHECK-NEXT:     (f64.const 0)
   ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
-  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.A)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
@@ -1160,9 +1051,6 @@
   ;; NOMNL-NEXT:    (local.set $3
   ;; NOMNL-NEXT:     (f64.const 0)
   ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -1182,9 +1070,7 @@
   (func $local-copies-conditional (param $x i32) (result f64)
     (local $ref (ref null $struct.A))
     (local.set $ref
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     ;; Possibly copying our allocation through locals does not bother us. Note
     ;; that as a result of this the final local.get has two sets that send it
@@ -1210,9 +1096,6 @@
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (local.set $2
   ;; CHECK-NEXT:     (f64.const 0)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.A)
   ;; CHECK-NEXT:   )
@@ -1241,9 +1124,6 @@
   ;; NOMNL-NEXT:    (local.set $2
   ;; NOMNL-NEXT:     (f64.const 0)
   ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -1262,9 +1142,7 @@
   (func $block-value (result f64)
     (local $ref (ref null $struct.A))
     (local.set $ref
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     ;; Returning our allocation from a block does not bother us.
     (struct.get $struct.A 1
@@ -1281,9 +1159,7 @@
   ;; CHECK:      (func $non-exclusive-get (param $x i32) (result f64)
   ;; CHECK-NEXT:  (local $ref (ref null $struct.A))
   ;; CHECK-NEXT:  (local.set $ref
-  ;; CHECK-NEXT:   (struct.new_default_with_rtt $struct.A
-  ;; CHECK-NEXT:    (rtt.canon $struct.A)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (struct.new_default $struct.A)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (if
   ;; CHECK-NEXT:   (local.get $x)
@@ -1298,9 +1174,7 @@
   ;; NOMNL:      (func $non-exclusive-get (type $i32_=>_f64) (param $x i32) (result f64)
   ;; NOMNL-NEXT:  (local $ref (ref null $struct.A))
   ;; NOMNL-NEXT:  (local.set $ref
-  ;; NOMNL-NEXT:   (struct.new_default_with_rtt $struct.A
-  ;; NOMNL-NEXT:    (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:   )
+  ;; NOMNL-NEXT:   (struct.new_default $struct.A)
   ;; NOMNL-NEXT:  )
   ;; NOMNL-NEXT:  (if
   ;; NOMNL-NEXT:   (local.get $x)
@@ -1315,9 +1189,7 @@
   (func $non-exclusive-get (param $x i32) (result f64)
     (local $ref (ref null $struct.A))
     (local.set $ref
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     (if (local.get $x)
       (local.set $ref
@@ -1343,9 +1215,6 @@
   ;; CHECK-NEXT:    (local.set $2
   ;; CHECK-NEXT:     (f64.const 0)
   ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
-  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.A)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
@@ -1363,9 +1232,6 @@
   ;; NOMNL-NEXT:    (local.set $2
   ;; NOMNL-NEXT:     (f64.const 0)
   ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -1376,9 +1242,7 @@
     (struct.get $struct.A 0
       ;; A tee flows out the value, and we can optimize this allocation.
       (local.tee $ref
-        (struct.new_default_with_rtt $struct.A
-          (rtt.canon $struct.A)
-        )
+        (struct.new_default $struct.A)
       )
     )
   )
@@ -1390,9 +1254,6 @@
   ;; CHECK-NEXT:   (block (result (ref null $struct.recursive))
   ;; CHECK-NEXT:    (local.set $1
   ;; CHECK-NEXT:     (ref.null $struct.recursive)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.recursive)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.recursive)
   ;; CHECK-NEXT:   )
@@ -1409,9 +1270,6 @@
   ;; NOMNL-NEXT:    (local.set $1
   ;; NOMNL-NEXT:     (ref.null $struct.recursive)
   ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.recursive)
-  ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.recursive)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -1424,9 +1282,7 @@
     ;; As above, but with a set, and also a recursive type.
     (struct.set $struct.recursive 0
       (local.tee $ref
-        (struct.new_default_with_rtt $struct.recursive
-          (rtt.canon $struct.recursive)
-        )
+        (struct.new_default $struct.recursive)
       )
       (ref.null $struct.recursive)
     )
@@ -1437,9 +1293,7 @@
   ;; CHECK-NEXT:  (struct.set $struct.recursive 0
   ;; CHECK-NEXT:   (ref.null $struct.recursive)
   ;; CHECK-NEXT:   (local.tee $ref
-  ;; CHECK-NEXT:    (struct.new_default_with_rtt $struct.recursive
-  ;; CHECK-NEXT:     (rtt.canon $struct.recursive)
-  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (struct.new_default $struct.recursive)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -1448,9 +1302,7 @@
   ;; NOMNL-NEXT:  (struct.set $struct.recursive 0
   ;; NOMNL-NEXT:   (ref.null $struct.recursive)
   ;; NOMNL-NEXT:   (local.tee $ref
-  ;; NOMNL-NEXT:    (struct.new_default_with_rtt $struct.recursive
-  ;; NOMNL-NEXT:     (rtt.canon $struct.recursive)
-  ;; NOMNL-NEXT:    )
+  ;; NOMNL-NEXT:    (struct.new_default $struct.recursive)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
   ;; NOMNL-NEXT: )
@@ -1461,9 +1313,7 @@
       ;; As above, but operands reversed: the allocation is now the value, not
       ;; the reference, and so it escapes.
       (local.tee $ref
-        (struct.new_default_with_rtt $struct.recursive
-          (rtt.canon $struct.recursive)
-        )
+        (struct.new_default $struct.recursive)
       )
     )
   )
@@ -1475,15 +1325,10 @@
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (block (result (ref null $struct.recursive))
   ;; CHECK-NEXT:    (local.set $2
-  ;; CHECK-NEXT:     (struct.new_default_with_rtt $struct.recursive
-  ;; CHECK-NEXT:      (rtt.canon $struct.recursive)
-  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (struct.new_default $struct.recursive)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (local.set $1
   ;; CHECK-NEXT:     (local.get $2)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.recursive)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.recursive)
   ;; CHECK-NEXT:   )
@@ -1504,15 +1349,10 @@
   ;; NOMNL-NEXT:  (drop
   ;; NOMNL-NEXT:   (block (result (ref null $struct.recursive))
   ;; NOMNL-NEXT:    (local.set $2
-  ;; NOMNL-NEXT:     (struct.new_default_with_rtt $struct.recursive
-  ;; NOMNL-NEXT:      (rtt.canon $struct.recursive)
-  ;; NOMNL-NEXT:     )
+  ;; NOMNL-NEXT:     (struct.new_default $struct.recursive)
   ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (local.set $1
   ;; NOMNL-NEXT:     (local.get $2)
-  ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.recursive)
   ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.recursive)
   ;; NOMNL-NEXT:   )
@@ -1530,7 +1370,7 @@
     (local $0 (ref null $struct.recursive))
     (local.set $0
       ;; The outer allocation can be optimized, as it does not escape.
-      (struct.new_with_rtt $struct.recursive
+      (struct.new $struct.recursive
         ;; The inner allocation should not prevent the outer one from being
         ;; optimized through some form of confusion.
         ;; After the outer one is optimized, the inner one can be optimized in
@@ -1538,10 +1378,7 @@
         ;; on other optimizations to actually remove the outer allocation (like
         ;; vacuum), and so it cannot be optimized. If we ran vaccum, and then
         ;; additional iterations, this might be handled.
-        (struct.new_default_with_rtt $struct.recursive
-          (rtt.canon $struct.recursive)
-        )
-        (rtt.canon $struct.recursive)
+        (struct.new_default $struct.recursive)
       )
     )
     (drop
@@ -1555,9 +1392,7 @@
   ;; CHECK-NEXT:  (local $ref (ref null $struct.A))
   ;; CHECK-NEXT:  (struct.set $struct.A 0
   ;; CHECK-NEXT:   (local.tee $ref
-  ;; CHECK-NEXT:    (struct.new_default_with_rtt $struct.A
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
-  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (struct.new_default $struct.A)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:   (i32.const 1)
   ;; CHECK-NEXT:  )
@@ -1567,9 +1402,7 @@
   ;; NOMNL-NEXT:  (local $ref (ref null $struct.A))
   ;; NOMNL-NEXT:  (struct.set $struct.A 0
   ;; NOMNL-NEXT:   (local.tee $ref
-  ;; NOMNL-NEXT:    (struct.new_default_with_rtt $struct.A
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
+  ;; NOMNL-NEXT:    (struct.new_default $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:   (i32.const 1)
   ;; NOMNL-NEXT:  )
@@ -1579,9 +1412,7 @@
     (local $ref (ref null $struct.A))
     (struct.set $struct.A 0
       (local.tee $ref
-        (struct.new_default_with_rtt $struct.A
-          (rtt.canon $struct.A)
-        )
+        (struct.new_default $struct.A)
       )
       (i32.const 1)
     )
@@ -1593,9 +1424,7 @@
   ;; CHECK-NEXT:  (local $ref (ref null $struct.A))
   ;; CHECK-NEXT:  (struct.set $struct.A 0
   ;; CHECK-NEXT:   (local.tee $ref
-  ;; CHECK-NEXT:    (struct.new_default_with_rtt $struct.A
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
-  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (struct.new_default $struct.A)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:   (i32.const 1)
   ;; CHECK-NEXT:  )
@@ -1607,9 +1436,7 @@
   ;; NOMNL-NEXT:  (local $ref (ref null $struct.A))
   ;; NOMNL-NEXT:  (struct.set $struct.A 0
   ;; NOMNL-NEXT:   (local.tee $ref
-  ;; NOMNL-NEXT:    (struct.new_default_with_rtt $struct.A
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
+  ;; NOMNL-NEXT:    (struct.new_default $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:   (i32.const 1)
   ;; NOMNL-NEXT:  )
@@ -1621,9 +1448,7 @@
     (local $ref (ref null $struct.A))
     (struct.set $struct.A 0
       (local.tee $ref
-        (struct.new_default_with_rtt $struct.A
-          (rtt.canon $struct.A)
-        )
+        (struct.new_default $struct.A)
       )
       (i32.const 1)
     )
@@ -1639,17 +1464,14 @@
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (block (result (ref $struct.A))
   ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (block (result (ref null $struct.nonnullable))
+  ;; CHECK-NEXT:     (block (result (ref null $struct.nondefaultable))
   ;; CHECK-NEXT:      (local.set $2
   ;; CHECK-NEXT:       (local.get $a)
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:      (local.set $1
   ;; CHECK-NEXT:       (local.get $2)
   ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (drop
-  ;; CHECK-NEXT:       (rtt.canon $struct.nonnullable)
-  ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (ref.null $struct.nonnullable)
+  ;; CHECK-NEXT:      (ref.null $struct.nondefaultable)
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (local.get $1)
@@ -1669,9 +1491,6 @@
   ;; NOMNL-NEXT:      (local.set $1
   ;; NOMNL-NEXT:       (local.get $2)
   ;; NOMNL-NEXT:      )
-  ;; NOMNL-NEXT:      (drop
-  ;; NOMNL-NEXT:       (rtt.canon $struct.nonnullable)
-  ;; NOMNL-NEXT:      )
   ;; NOMNL-NEXT:      (ref.null $struct.nonnullable)
   ;; NOMNL-NEXT:     )
   ;; NOMNL-NEXT:    )
@@ -1684,9 +1503,8 @@
       ;; An optimizable case where the type is non-nullable, which requires
       ;; special handling in locals.
       (struct.get $struct.nonnullable 0
-        (struct.new_with_rtt $struct.nonnullable
+        (struct.new $struct.nonnullable
           (local.get $a)
-          (rtt.canon $struct.nonnullable)
         )
       )
     )
@@ -1712,9 +1530,6 @@
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:     (local.set $3
   ;; CHECK-NEXT:      (local.get $5)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (drop
-  ;; CHECK-NEXT:      (rtt.canon $struct.A)
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:     (ref.null $struct.A)
   ;; CHECK-NEXT:    )
@@ -1810,9 +1625,6 @@
   ;; NOMNL-NEXT:     (local.set $3
   ;; NOMNL-NEXT:      (local.get $5)
   ;; NOMNL-NEXT:     )
-  ;; NOMNL-NEXT:     (drop
-  ;; NOMNL-NEXT:      (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:     )
   ;; NOMNL-NEXT:     (ref.null $struct.A)
   ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:   )
@@ -1892,10 +1704,9 @@
     ;; in various ways inside.
     (loop $outer
       (local.set $ref
-        (struct.new_with_rtt $struct.A
+        (struct.new $struct.A
           (i32.const 2)
           (f64.const 2.1828)
-          (rtt.canon $struct.A)
         )
       )
       (drop
@@ -1961,9 +1772,6 @@
   ;; CHECK-NEXT:      (local.set $1
   ;; CHECK-NEXT:       (f64.const 0)
   ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (drop
-  ;; CHECK-NEXT:       (rtt.canon $struct.A)
-  ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:      (ref.null $struct.A)
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
@@ -1980,9 +1788,6 @@
   ;; CHECK-NEXT:      (local.set $3
   ;; CHECK-NEXT:       (f64.const 0)
   ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (drop
-  ;; CHECK-NEXT:       (rtt.canon $struct.A)
-  ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:      (ref.null $struct.A)
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
@@ -1998,9 +1803,6 @@
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:      (local.set $5
   ;; CHECK-NEXT:       (f64.const 0)
-  ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (drop
-  ;; CHECK-NEXT:       (rtt.canon $struct.A)
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:      (ref.null $struct.A)
   ;; CHECK-NEXT:     )
@@ -2026,9 +1828,6 @@
   ;; NOMNL-NEXT:      (local.set $1
   ;; NOMNL-NEXT:       (f64.const 0)
   ;; NOMNL-NEXT:      )
-  ;; NOMNL-NEXT:      (drop
-  ;; NOMNL-NEXT:       (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:      )
   ;; NOMNL-NEXT:      (ref.null $struct.A)
   ;; NOMNL-NEXT:     )
   ;; NOMNL-NEXT:    )
@@ -2044,9 +1843,6 @@
   ;; NOMNL-NEXT:      )
   ;; NOMNL-NEXT:      (local.set $3
   ;; NOMNL-NEXT:       (f64.const 0)
-  ;; NOMNL-NEXT:      )
-  ;; NOMNL-NEXT:      (drop
-  ;; NOMNL-NEXT:       (rtt.canon $struct.A)
   ;; NOMNL-NEXT:      )
   ;; NOMNL-NEXT:      (ref.null $struct.A)
   ;; NOMNL-NEXT:     )
@@ -2064,9 +1860,6 @@
   ;; NOMNL-NEXT:      (local.set $5
   ;; NOMNL-NEXT:       (f64.const 0)
   ;; NOMNL-NEXT:      )
-  ;; NOMNL-NEXT:      (drop
-  ;; NOMNL-NEXT:       (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:      )
   ;; NOMNL-NEXT:      (ref.null $struct.A)
   ;; NOMNL-NEXT:     )
   ;; NOMNL-NEXT:    )
@@ -2078,23 +1871,17 @@
     ;; Multiple independent things we can optimize.
     (drop
       (struct.get $struct.A 0
-        (struct.new_default_with_rtt $struct.A
-          (rtt.canon $struct.A)
-        )
+        (struct.new_default $struct.A)
       )
     )
     (drop
       (struct.get $struct.A 0
-        (struct.new_default_with_rtt $struct.A
-          (rtt.canon $struct.A)
-        )
+        (struct.new_default $struct.A)
       )
     )
     (drop
       (struct.get $struct.A 1
-        (struct.new_default_with_rtt $struct.A
-          (rtt.canon $struct.A)
-        )
+        (struct.new_default $struct.A)
       )
     )
   )
@@ -2112,9 +1899,6 @@
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (local.set $2
   ;; CHECK-NEXT:     (f64.const 0)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.A)
   ;; CHECK-NEXT:   )
@@ -2134,9 +1918,6 @@
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (local.set $4
   ;; CHECK-NEXT:     (f64.const 0)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.A)
   ;; CHECK-NEXT:   )
@@ -2164,9 +1945,6 @@
   ;; NOMNL-NEXT:    (local.set $2
   ;; NOMNL-NEXT:     (f64.const 0)
   ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -2186,9 +1964,6 @@
   ;; NOMNL-NEXT:    (local.set $4
   ;; NOMNL-NEXT:     (f64.const 0)
   ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -2206,9 +1981,7 @@
     ;; Multiple independent things we can optimize that use the same local
     ;; index, but they do not conflict in their live ranges.
     (local.set $ref
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     (drop
       (struct.get $struct.A 0
@@ -2216,9 +1989,7 @@
       )
     )
     (local.set $ref
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     (drop
       (struct.get $struct.A 0
@@ -2242,9 +2013,6 @@
   ;; CHECK-NEXT:    (local.set $3
   ;; CHECK-NEXT:     (f64.const 0)
   ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
-  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.A)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
@@ -2255,9 +2023,6 @@
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (local.set $5
   ;; CHECK-NEXT:     (f64.const 0)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.A)
   ;; CHECK-NEXT:   )
@@ -2294,9 +2059,6 @@
   ;; NOMNL-NEXT:    (local.set $3
   ;; NOMNL-NEXT:     (f64.const 0)
   ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -2307,9 +2069,6 @@
   ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (local.set $5
   ;; NOMNL-NEXT:     (f64.const 0)
-  ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
   ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.A)
   ;; NOMNL-NEXT:   )
@@ -2337,14 +2096,10 @@
     ;; Multiple independent things we can optimize that use different local
     ;; indexes, but whose lifetimes overlap. We should not be confused by that.
     (local.set $ref1
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     (local.set $ref2
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     (drop
       (struct.get $struct.A 0
@@ -2361,9 +2116,7 @@
   ;; CHECK:      (func $get-through-block (result f64)
   ;; CHECK-NEXT:  (local $0 (ref null $struct.A))
   ;; CHECK-NEXT:  (local.set $0
-  ;; CHECK-NEXT:   (struct.new_default_with_rtt $struct.A
-  ;; CHECK-NEXT:    (rtt.canon $struct.A)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (struct.new_default $struct.A)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (struct.get $struct.A 1
   ;; CHECK-NEXT:   (block $block (result (ref null $struct.A))
@@ -2380,9 +2133,7 @@
   ;; NOMNL:      (func $get-through-block (type $none_=>_f64) (result f64)
   ;; NOMNL-NEXT:  (local $0 (ref null $struct.A))
   ;; NOMNL-NEXT:  (local.set $0
-  ;; NOMNL-NEXT:   (struct.new_default_with_rtt $struct.A
-  ;; NOMNL-NEXT:    (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:   )
+  ;; NOMNL-NEXT:   (struct.new_default $struct.A)
   ;; NOMNL-NEXT:  )
   ;; NOMNL-NEXT:  (struct.get $struct.A 1
   ;; NOMNL-NEXT:   (block $block (result (ref null $struct.A))
@@ -2399,9 +2150,7 @@
   (func $get-through-block (result f64)
     (local $0 (ref null $struct.A))
     (local.set $0
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     (struct.get $struct.A 1
       (block $block (result (ref null $struct.A))
@@ -2423,9 +2172,7 @@
   ;; CHECK:      (func $branch-to-block (result f64)
   ;; CHECK-NEXT:  (local $0 (ref null $struct.A))
   ;; CHECK-NEXT:  (local.set $0
-  ;; CHECK-NEXT:   (struct.new_default_with_rtt $struct.A
-  ;; CHECK-NEXT:    (rtt.canon $struct.A)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (struct.new_default $struct.A)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (struct.get $struct.A 1
   ;; CHECK-NEXT:   (block $block (result (ref null $struct.A))
@@ -2442,9 +2189,7 @@
   ;; NOMNL:      (func $branch-to-block (type $none_=>_f64) (result f64)
   ;; NOMNL-NEXT:  (local $0 (ref null $struct.A))
   ;; NOMNL-NEXT:  (local.set $0
-  ;; NOMNL-NEXT:   (struct.new_default_with_rtt $struct.A
-  ;; NOMNL-NEXT:    (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:   )
+  ;; NOMNL-NEXT:   (struct.new_default $struct.A)
   ;; NOMNL-NEXT:  )
   ;; NOMNL-NEXT:  (struct.get $struct.A 1
   ;; NOMNL-NEXT:   (block $block (result (ref null $struct.A))
@@ -2461,9 +2206,7 @@
   (func $branch-to-block (result f64)
     (local $0 (ref null $struct.A))
     (local.set $0
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     (struct.get $struct.A 1
       (block $block (result (ref null $struct.A))
@@ -2491,9 +2234,6 @@
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (local.set $2
   ;; CHECK-NEXT:     (f64.const 0)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.A)
   ;; CHECK-NEXT:   )
@@ -2527,9 +2267,6 @@
   ;; NOMNL-NEXT:    (local.set $2
   ;; NOMNL-NEXT:     (f64.const 0)
   ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -2553,9 +2290,7 @@
   (func $branch-to-block-no-fallthrough (result f64)
     (local $0 (ref null $struct.A))
     (local.set $0
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     (struct.get $struct.A 1
       (block $block (result (ref null $struct.A))
@@ -2576,9 +2311,7 @@
   ;; CHECK:      (func $two-branches (result f64)
   ;; CHECK-NEXT:  (local $0 (ref null $struct.A))
   ;; CHECK-NEXT:  (local.set $0
-  ;; CHECK-NEXT:   (struct.new_default_with_rtt $struct.A
-  ;; CHECK-NEXT:    (rtt.canon $struct.A)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (struct.new_default $struct.A)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (struct.get $struct.A 1
   ;; CHECK-NEXT:   (block $block (result (ref null $struct.A))
@@ -2603,9 +2336,7 @@
   ;; NOMNL:      (func $two-branches (type $none_=>_f64) (result f64)
   ;; NOMNL-NEXT:  (local $0 (ref null $struct.A))
   ;; NOMNL-NEXT:  (local.set $0
-  ;; NOMNL-NEXT:   (struct.new_default_with_rtt $struct.A
-  ;; NOMNL-NEXT:    (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:   )
+  ;; NOMNL-NEXT:   (struct.new_default $struct.A)
   ;; NOMNL-NEXT:  )
   ;; NOMNL-NEXT:  (struct.get $struct.A 1
   ;; NOMNL-NEXT:   (block $block (result (ref null $struct.A))
@@ -2630,9 +2361,7 @@
   (func $two-branches (result f64)
     (local $0 (ref null $struct.A))
     (local.set $0
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     (struct.get $struct.A 1
       (block $block (result (ref null $struct.A))
@@ -2658,9 +2387,7 @@
   ;; CHECK:      (func $two-branches-b (result f64)
   ;; CHECK-NEXT:  (local $0 (ref null $struct.A))
   ;; CHECK-NEXT:  (local.set $0
-  ;; CHECK-NEXT:   (struct.new_default_with_rtt $struct.A
-  ;; CHECK-NEXT:    (rtt.canon $struct.A)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (struct.new_default $struct.A)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (struct.get $struct.A 1
   ;; CHECK-NEXT:   (block $block (result (ref null $struct.A))
@@ -2685,9 +2412,7 @@
   ;; NOMNL:      (func $two-branches-b (type $none_=>_f64) (result f64)
   ;; NOMNL-NEXT:  (local $0 (ref null $struct.A))
   ;; NOMNL-NEXT:  (local.set $0
-  ;; NOMNL-NEXT:   (struct.new_default_with_rtt $struct.A
-  ;; NOMNL-NEXT:    (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:   )
+  ;; NOMNL-NEXT:   (struct.new_default $struct.A)
   ;; NOMNL-NEXT:  )
   ;; NOMNL-NEXT:  (struct.get $struct.A 1
   ;; NOMNL-NEXT:   (block $block (result (ref null $struct.A))
@@ -2712,9 +2437,7 @@
   (func $two-branches-b (result f64)
     (local $0 (ref null $struct.A))
     (local.set $0
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     (struct.get $struct.A 1
       (block $block (result (ref null $struct.A))
@@ -2741,9 +2464,7 @@
   ;; CHECK:      (func $br_if_flow (result f64)
   ;; CHECK-NEXT:  (local $0 (ref null $struct.A))
   ;; CHECK-NEXT:  (local.set $0
-  ;; CHECK-NEXT:   (struct.new_default_with_rtt $struct.A
-  ;; CHECK-NEXT:    (rtt.canon $struct.A)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (struct.new_default $struct.A)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (struct.get $struct.A 1
   ;; CHECK-NEXT:   (block $block (result (ref null $struct.A))
@@ -2762,9 +2483,7 @@
   ;; NOMNL:      (func $br_if_flow (type $none_=>_f64) (result f64)
   ;; NOMNL-NEXT:  (local $0 (ref null $struct.A))
   ;; NOMNL-NEXT:  (local.set $0
-  ;; NOMNL-NEXT:   (struct.new_default_with_rtt $struct.A
-  ;; NOMNL-NEXT:    (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:   )
+  ;; NOMNL-NEXT:   (struct.new_default $struct.A)
   ;; NOMNL-NEXT:  )
   ;; NOMNL-NEXT:  (struct.get $struct.A 1
   ;; NOMNL-NEXT:   (block $block (result (ref null $struct.A))
@@ -2783,9 +2502,7 @@
   (func $br_if_flow (result f64)
     (local $0 (ref null $struct.A))
     (local.set $0
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     (struct.get $struct.A 1
       (block $block (result (ref null $struct.A))
@@ -2814,9 +2531,6 @@
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (local.set $2
   ;; CHECK-NEXT:     (f64.const 0)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.A)
   ;; CHECK-NEXT:   )
@@ -2847,9 +2561,6 @@
   ;; NOMNL-NEXT:    (local.set $2
   ;; NOMNL-NEXT:     (f64.const 0)
   ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -2870,9 +2581,7 @@
   (func $ref-as-non-null
     (local $ref (ref null $struct.A))
     (local.set $ref
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     (struct.set $struct.A 0
       ;; We can see that the input to this RefAsNonNull is always non-null, as
@@ -2903,9 +2612,6 @@
   ;; CHECK-NEXT:    (local.set $2
   ;; CHECK-NEXT:     (f64.const 0)
   ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (rtt.canon $struct.A)
-  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (ref.null $struct.A)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
@@ -2931,9 +2637,6 @@
   ;; NOMNL-NEXT:    (local.set $2
   ;; NOMNL-NEXT:     (f64.const 0)
   ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (drop
-  ;; NOMNL-NEXT:     (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:    (ref.null $struct.A)
   ;; NOMNL-NEXT:   )
   ;; NOMNL-NEXT:  )
@@ -2950,9 +2653,7 @@
   (func $ref-as-non-null-through-local (result i32)
     (local $ref (ref null $struct.A))
     (local.set $ref
-      (struct.new_default_with_rtt $struct.A
-        (rtt.canon $struct.A)
-      )
+      (struct.new_default $struct.A)
     )
     ;; Copy the allocation through a ref.as_non_null. This must not trap: it may
     ;; trap if we leave the ref.as_non_null there and also we do not assign
@@ -2993,9 +2694,6 @@
   ;; CHECK-NEXT:       (local.set $2
   ;; CHECK-NEXT:        (local.get $4)
   ;; CHECK-NEXT:       )
-  ;; CHECK-NEXT:       (drop
-  ;; CHECK-NEXT:        (rtt.canon $struct.A)
-  ;; CHECK-NEXT:       )
   ;; CHECK-NEXT:       (ref.null $struct.A)
   ;; CHECK-NEXT:      )
   ;; CHECK-NEXT:      (i32.const 0)
@@ -3031,9 +2729,6 @@
   ;; NOMNL-NEXT:       (local.set $2
   ;; NOMNL-NEXT:        (local.get $4)
   ;; NOMNL-NEXT:       )
-  ;; NOMNL-NEXT:       (drop
-  ;; NOMNL-NEXT:        (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:       )
   ;; NOMNL-NEXT:       (ref.null $struct.A)
   ;; NOMNL-NEXT:      )
   ;; NOMNL-NEXT:      (i32.const 0)
@@ -3054,54 +2749,15 @@
           ;; Our allocation flows into a br_if, which therefore has non-nullable
           ;; type, which we must update after optimizing.
           (br_if $block
-            (struct.new_with_rtt $struct.A
+            (struct.new $struct.A
               (i32.const 42)
               (f64.const 13.37)
-              (rtt.canon $struct.A)
             )
             (i32.const 0)
           )
         )
         (return (f64.const 2.1828))
       )
-    )
-  )
-
-  ;; CHECK:      (func $simple-no-rtt
-  ;; CHECK-NEXT:  (local $0 i32)
-  ;; CHECK-NEXT:  (local $1 f64)
-  ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (block (result (ref null $struct.A))
-  ;; CHECK-NEXT:    (local.set $0
-  ;; CHECK-NEXT:     (i32.const 0)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (local.set $1
-  ;; CHECK-NEXT:     (f64.const 0)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (ref.null $struct.A)
-  ;; CHECK-NEXT:   )
-  ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT: )
-  ;; NOMNL:      (func $simple-no-rtt (type $none_=>_none)
-  ;; NOMNL-NEXT:  (local $0 i32)
-  ;; NOMNL-NEXT:  (local $1 f64)
-  ;; NOMNL-NEXT:  (drop
-  ;; NOMNL-NEXT:   (block (result (ref null $struct.A))
-  ;; NOMNL-NEXT:    (local.set $0
-  ;; NOMNL-NEXT:     (i32.const 0)
-  ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (local.set $1
-  ;; NOMNL-NEXT:     (f64.const 0)
-  ;; NOMNL-NEXT:    )
-  ;; NOMNL-NEXT:    (ref.null $struct.A)
-  ;; NOMNL-NEXT:   )
-  ;; NOMNL-NEXT:  )
-  ;; NOMNL-NEXT: )
-  (func $simple-no-rtt
-    (drop
-      ;; This allocation has no rtt, so we have nothing to drop from it when
-      ;; we optimize.
-      (struct.new_default $struct.A)
     )
   )
 
@@ -3120,9 +2776,6 @@
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:     (local.set $2
   ;; CHECK-NEXT:      (f64.const 0)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (drop
-  ;; CHECK-NEXT:      (rtt.canon $struct.A)
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:     (ref.null $struct.A)
   ;; CHECK-NEXT:    )
@@ -3145,9 +2798,6 @@
   ;; NOMNL-NEXT:     (local.set $2
   ;; NOMNL-NEXT:      (f64.const 0)
   ;; NOMNL-NEXT:     )
-  ;; NOMNL-NEXT:     (drop
-  ;; NOMNL-NEXT:      (rtt.canon $struct.A)
-  ;; NOMNL-NEXT:     )
   ;; NOMNL-NEXT:     (ref.null $struct.A)
   ;; NOMNL-NEXT:    )
   ;; NOMNL-NEXT:   )
@@ -3164,9 +2814,7 @@
         ;; block).
         (br_if $loop (i32.const 0))
         ;; The allocation that will be turned into locals.
-        (struct.new_default_with_rtt $struct.A
-          (rtt.canon $struct.A)
-        )
+        (struct.new_default $struct.A)
       )
     )
   )
