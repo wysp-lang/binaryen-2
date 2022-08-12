@@ -21,8 +21,8 @@ namespace wasm::Properties {
 
 bool isGenerative(Expression* curr, FeatureSet features) {
   // Practically no wasm instructions are generative. Exceptions occur only in
-  // GC atm.
-  if (!features.hasGC()) {
+  // GC and Strings atm.
+  if (!features.hasGC() && !features.hasStrings()) {
     return false;
   }
 
@@ -31,6 +31,12 @@ bool isGenerative(Expression* curr, FeatureSet features) {
     void visitStructNew(StructNew* curr) { generative = true; }
     void visitArrayNew(ArrayNew* curr) { generative = true; }
     void visitArrayInit(ArrayInit* curr) { generative = true; }
+    void visitStringNew(StringNew* curr) { generative = true; }
+    void visitStringConst(StringConst* curr) { generative = true; }
+    void visitStringConcat(StringConcat* curr) { generative = true; }
+    void visitStringAs(StringAs* curr) { generative = true; }
+    void visitStringSliceWTF(StringSliceWTF* curr) { generative = true; }
+    void visitStringSliceIter(StringSliceIter* curr) { generative = true; }
   } scanner;
   scanner.walk(curr);
   return scanner.generative;
