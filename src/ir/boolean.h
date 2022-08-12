@@ -29,6 +29,10 @@ inline bool emitsBoolean(Expression* curr) {
   } else if (curr->is<RefIs>() || curr->is<RefEq>() || curr->is<RefTest>() ||
              curr->is<StringEq>()) {
     return true;
+  } else if (auto* measure = curr->dynCast<StringMeasure>()) {
+    if (measure->op == StringMeasureIsUSV) {
+      return true;
+    }
   }
   return false;
 }
