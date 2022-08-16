@@ -560,6 +560,8 @@ struct Reducer
         }
       }
       // try to get rid of nops
+      // TODO: does this not work in sequence? it seems to require a completely
+      // new pass for every nop in the list.
       Index i = 0;
       while (list.size() > 1 && i < list.size()) {
         auto* curr = list[i];
@@ -572,7 +574,7 @@ struct Reducer
           if (writeAndTestReduction()) {
             std::cerr << "|      block-nop removed\n";
             noteReduction();
-            return;
+            return; // problem right here. should continue
           }
           list.push_back(nullptr);
           // we failed; undo
@@ -1142,6 +1144,9 @@ struct Reducer
     }
     // try to replace with a trivial value
     if (curr->type.isNullable()) {
+      if (curr->is<RefNull>()) {
+        return false;
+      }
       RefNull* n = builder->makeRefNull(curr->type);
       return tryToReplaceCurrent(n);
     }

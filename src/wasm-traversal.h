@@ -358,17 +358,32 @@ struct PostWalker : public Walker<SubType, VisitorType> {
 #define DELEGATE_ID curr->_id
 
 #define DELEGATE_START(id)                                                     \
-  self->pushTask(SubType::doVisit##id, currp);                                 \
   auto* cast = curr->cast<id>();                                               \
-  WASM_UNUSED(cast);
+  WASM_UNUSED(cast); \
+  bool seenChildren = false;
 
 #define DELEGATE_GET_FIELD(id, field) cast->field
 
 #define DELEGATE_FIELD_CHILD(id, field)                                        \
-  self->pushTask(SubType::scan, &cast->field);
+  if (!seenChildren) { \
+    self->pushTask(SubType::doVisit##id, currp);                                 \
+    seenChildren = true; \
+  } \
+  self->pushTask(SubType::scan, &cast->field); seenChildren = true;
 
 #define DELEGATE_FIELD_OPTIONAL_CHILD(id, field)                               \
-  self->maybePushTask(SubType::scan, &cast->field);
+  if (!seenChildren) { \
+    self->pushTask(SubType::doVisit##id, currp);                                 \
+    seenChildren = true; \
+  } \
+  self->maybePushTask(SubType::scan, &cast->field); seenChildren = true;
+
+// If there are no children, we can just immediately execute the doVisit task
+// right now.
+#define DELEGATE_END(id)                                                     \
+  if (!seenChildren) { \
+    SubType::doVisit##id(self, currp);                                 \
+  }
 
 #define DELEGATE_FIELD_INT(id, field)
 #define DELEGATE_FIELD_INT_ARRAY(id, field)

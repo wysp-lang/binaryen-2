@@ -566,7 +566,7 @@ switch (DELEGATE_ID) {
   }
   case Expression::Id::TupleMakeId: {
     DELEGATE_START(TupleMake);
-    DELEGATE_FIELD_CHILD_VECTOR(Tuple, operands);
+    DELEGATE_FIELD_CHILD_VECTOR(TupleMake, operands);
     DELEGATE_END(TupleMake);
     break;
   }
