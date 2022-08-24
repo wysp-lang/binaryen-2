@@ -2,6 +2,7 @@
 ;; RUN: wasm-opt %s --dce -tnh -all -S -o - | filecheck %s
 
 (module
+  ;; CHECK:      (tag $tag (param i32))
   (tag $tag (param i32))
 
   ;; CHECK:      (func $block-in-if-arm
@@ -150,6 +151,19 @@
     )
   )
 
+  ;; CHECK:      (func $eh-pop
+  ;; CHECK-NEXT:  (try $try
+  ;; CHECK-NEXT:   (do
+  ;; CHECK-NEXT:    (nop)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (catch $tag
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (pop i32)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
   (func $eh-pop
     (try
       (do
