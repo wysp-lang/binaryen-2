@@ -297,11 +297,8 @@ struct Vacuum : public WalkerPass<ExpressionStackWalker<Vacuum>> {
           }
         }
         assert(!value->is<Nop>());
-        replaceCurrent(
-          builder.makeBlock({
-            builder.makeDrop(curr->condition),
-            value
-          }, curr->type));
+        replaceCurrent(builder.makeBlock(
+          {builder.makeDrop(curr->condition), value}, curr->type));
         return;
       }
     }
