@@ -107,6 +107,49 @@ struct DeadCodeElimination
     // This is a control flow structure.
     if (auto* block = curr->dynCast<Block>()) {
       auto& list = block->list;
+      // In trapsNeverHappen mode, code that must lead to an unreachable can be
+      // assumed to not execute:
+      //
+      //  (block
+      //    (local.set ..)
+      //    (unreachable)
+      //  )
+      //
+      // In TNH the unreachable is assumed to not actually be reached, which
+      // implies that local.set is not reached either.
+      if (getPassOptions().trapsNeverHappen) {
+        for (Index i = 0; i < list.size(); i++) {
+          if (list[i]->is<Unreachable>()) {
+            // Go backwards and try to remove code. Anywhere that control flow
+            // might branch stops us,
+            //
+            //  (block
+            //    (local.set ..)
+            //    (br_if ..)
+            //    (local.set ..)
+            //    (unreachable)
+            //  )
+            //
+            // The last local.set can be removed, but not the first (since we
+            // might branch away before reaching it and the unreachable).
+            auto j = i;
+            while (j > 0) {
+              j--;
+              if (list[j]->is<Unreachable>()) {
+                // This a previous unreachable, so we've already optimized here.
+                break;
+              }
+              if (EffectAnalyzer(getPassOptions(), *getModule(), list[j]).transfersControlFlow()) {
+                // Control flow might transfer here; stop.
+                break;
+              }
+
+              // This can be optimized away! Do so and then continue to loop.
+              list[j] = Builder(*getModule()).makeUnreachable();
+            }
+          }
+        }
+      }
       // The index from which to remove, which is one after the first
       // unreachable instruction. Note that 0 is not a valid value, so we can
       // use it as such.
