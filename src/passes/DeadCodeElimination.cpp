@@ -139,7 +139,8 @@ struct DeadCodeElimination
                 // This a previous unreachable, so we've already optimized here.
                 break;
               }
-              if (EffectAnalyzer(getPassOptions(), *getModule(), list[j]).transfersControlFlow()) {
+              if (EffectAnalyzer(getPassOptions(), *getModule(), list[j])
+                    .transfersControlFlow()) {
                 // Control flow might transfer here; stop.
                 break;
               }
