@@ -232,27 +232,20 @@ struct Vacuum : public WalkerPass<ExpressionStackWalker<Vacuum>> {
     }
     // From here on, we can assume the condition executed.
 
-    // An if that does not return a value can have its arms be optimized in
-    // trapsNeverHappen mode: if an arm is an unreachable, we can assume that
+    // In trapsNeverHappen mode, if an arm is an unreachable, we can assume that
     // arm is never taken, so we can just turn it into an nop. The code after us
     // will then optimize that further when it handles nops.
-    //
-    // Note that we don't handle an if with a return value here, because in that
-    // case we need to use that return value, and cannot optimize things away.
-    // Other passes can handle that situation (specifically,
-    // OptimizeInstructions will see the if has identical arms, and fold them
-    // together, after which it becomes optimizable.
-    if (getPassOptions().trapsNeverHappen && !curr->type.isConcrete()) {
-      size_t numNops = 0;
+    if (getPassOptions().trapsNeverHappen) {
+      size_t numNoppings = 0;
       if (curr->ifTrue->is<Unreachable>()) {
         typeUpdater.noteRecursiveRemoval(curr->ifTrue);
         ExpressionManipulator::nop(curr->ifTrue);
-        numNops++;
+        numNoppings++;
       }
       if (curr->ifFalse && curr->ifFalse->is<Unreachable>()) {
         typeUpdater.noteRecursiveRemoval(curr->ifFalse);
         ExpressionManipulator::nop(curr->ifFalse);
-        numNops++;
+        numNoppings++;
       }
 
       // If the original if here was unreachable, then that must have been
@@ -261,18 +254,58 @@ struct Vacuum : public WalkerPass<ExpressionStackWalker<Vacuum>> {
       // change the type, so we must handle that, which we can do by emitting
       // an unreachable after us. We also know we do not need either if arm, and
       // just leave a drop of the condition.
-      if (curr->type == Type::unreachable) {
+      if (numNoppings && curr->type == Type::unreachable) {
         curr->finalize();
         if (curr->type != Type::unreachable) {
           // The original type was none, and we nopped both arms.
           assert(curr->type == Type::none);
-          assert(numNops == 2);
+          assert(numNoppings == 2);
 
           Builder builder(*getModule());
           replaceCurrent(builder.makeSequence(builder.makeDrop(curr->condition),
                                               builder.makeUnreachable()));
           return;
         }
+      }
+
+      // If the original if here had a concrete type, we may need to handle
+      // that, for example:
+      //
+      //  (if (result i32)
+      //    ..condition..
+      //    (i32.const)
+      //    (unreachable)
+      //  )
+      //
+      // We just turned that unreachable into a nop, and so we must fix things
+      // up for validation to work.
+      if (numNoppings && curr->type.isConcrete()) {
+        Builder builder(*getModule());
+        if (numNoppings == 2) {
+          // Both arms were removed. To keep the type, add a block with a type.
+          replaceCurrent(
+            builder.makeBlock({
+              builder.makeDrop(curr->condition),
+              builder.makeUnreachable()
+            }, curr->type));
+        } else {
+          // One arm was removed. Just return that value.
+          assert(numNoppings == 1);
+          Expression* value = nullptr;
+          if (curr->ifTrue->is<Nop>()) {
+            value = curr->ifFalse;
+          } else {
+            assert(curr->ifFalse->is<Nop>());
+            value = curr->ifTrue;
+          }
+          assert(!value->is<Nop>());
+          replaceCurrent(
+            builder.makeBlock({
+              builder.makeDrop(curr->condition),
+              value
+            }, curr->type));
+        }
+        return;
       }
     }
     if (curr->ifFalse) {
