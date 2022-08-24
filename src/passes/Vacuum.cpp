@@ -281,30 +281,27 @@ struct Vacuum : public WalkerPass<ExpressionStackWalker<Vacuum>> {
       // up for validation to work.
       if (numNoppings && curr->type.isConcrete()) {
         Builder builder(*getModule());
+        Expression* value = nullptr;
         if (numNoppings == 2) {
-          // Both arms were removed. To keep the type, add a block with a type.
-          replaceCurrent(
-            builder.makeBlock({
-              builder.makeDrop(curr->condition),
-              builder.makeUnreachable()
-            }, curr->type));
+          // Both arms were removed. There is no actual value returned here, and
+          // we emit an unreachable instead, which.
+          value = builder.makeUnreachable();
         } else {
           // One arm was removed. Just return that value.
           assert(numNoppings == 1);
-          Expression* value = nullptr;
           if (curr->ifTrue->is<Nop>()) {
             value = curr->ifFalse;
           } else {
             assert(curr->ifFalse->is<Nop>());
             value = curr->ifTrue;
           }
-          assert(!value->is<Nop>());
-          replaceCurrent(
-            builder.makeBlock({
-              builder.makeDrop(curr->condition),
-              value
-            }, curr->type));
         }
+        assert(!value->is<Nop>());
+        replaceCurrent(
+          builder.makeBlock({
+            builder.makeDrop(curr->condition),
+            value
+          }, curr->type));
         return;
       }
     }
