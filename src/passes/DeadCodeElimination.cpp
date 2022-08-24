@@ -139,9 +139,12 @@ struct DeadCodeElimination
                 // This a previous unreachable, so we've already optimized here.
                 break;
               }
-              if (EffectAnalyzer(getPassOptions(), *getModule(), list[j])
-                    .transfersControlFlow()) {
-                // Control flow might transfer here; stop.
+
+              // Stop if control flow transfers here, or if this is something we
+              // cannot remove (we must leave a dangling pop in place so that we
+              // still validate).
+              EffectAnalyzer effects(getPassOptions(), *getModule(), list[j]);
+              if (effects.transfersControlFlow() || effects.danglingPop) {
                 break;
               }
 

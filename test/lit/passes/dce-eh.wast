@@ -5,13 +5,12 @@
 ;; reachable
 (module
   ;; CHECK:      (tag $e (param))
+  (tag $e)
 
   ;; CHECK:      (func $foo
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT: )
   (func $foo)
-  (tag $e)
-
 
   ;; CHECK:      (func $try_unreachable
   ;; CHECK-NEXT:  (try $try

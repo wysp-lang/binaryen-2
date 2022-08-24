@@ -2,6 +2,8 @@
 ;; RUN: wasm-opt %s --dce -tnh -all -S -o - | filecheck %s
 
 (module
+  (tag $tag (param i32))
+
   ;; CHECK:      (func $block-in-if-arm
   ;; CHECK-NEXT:  (local $x i32)
   ;; CHECK-NEXT:  (if
@@ -145,6 +147,23 @@
     )
     (local.set $x
       (i32.const 6)
+    )
+  )
+
+  (func $eh-pop
+    (try
+      (do
+        (nop)
+      )
+      (catch $tag
+        ;; We can dce out the nop, but not the pop - the pop is necessary for
+        ;; validation.
+        (drop
+          (pop i32)
+        )
+        (nop)
+        (unreachable)
+      )
     )
   )
 )
