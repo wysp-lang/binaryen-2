@@ -2,7 +2,7 @@
 ;; RUN: wasm-opt %s --dce -tnh -all -S -o - | filecheck %s
 
 (module
-  ;; CHECK:      (func $foo
+  ;; CHECK:      (func $block-in-if-arm
   ;; CHECK-NEXT:  (local $x i32)
   ;; CHECK-NEXT:  (if
   ;; CHECK-NEXT:   (i32.const 1)
@@ -21,7 +21,7 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  (func $foo
+  (func $block-in-if-arm
     (local $x i32)
     (if
       (i32.const 1)
@@ -55,6 +55,48 @@
           (i32.const 6)
         )
       )
+    )
+  )
+
+  ;; CHECK:      (func $toplevel
+  ;; CHECK-NEXT:  (local $x i32)
+  ;; CHECK-NEXT:  (local.set $x
+  ;; CHECK-NEXT:   (i32.const 1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $x
+  ;; CHECK-NEXT:   (i32.const 2)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (i32.const -1)
+  ;; CHECK-NEXT:   (return)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (unreachable)
+  ;; CHECK-NEXT: )
+  (func $toplevel
+    (local $x i32)
+    ;; As above but at the toplevel.
+    (local.set $x
+      (i32.const 1)
+    )
+    (local.set $x
+      (i32.const 2)
+    )
+    (if
+      (i32.const -1)
+      (return)
+    )
+    (local.set $x
+      (i32.const 3)
+    )
+    (local.set $x
+      (i32.const 4)
+    )
+    (unreachable)
+    (local.set $x
+      (i32.const 5)
+    )
+    (local.set $x
+      (i32.const 6)
     )
   )
 )
