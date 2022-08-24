@@ -125,4 +125,101 @@
     ;; into a nop.
     (unreachable)
   )
+
+  ;; CHECK:      (func $if-unreachable-arm (param $x i32)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:   (nop)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:   (call $toplevel)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (i32.eqz
+  ;; CHECK-NEXT:    (local.get $x)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (call $toplevel)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:   (return)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $if-unreachable-arm (param $x i32)
+    ;; In all these cases we can assume the unreachable arm is never reached,
+    ;; so we can turn it into a nop, and then further optimize that nop as
+    ;; relevant.
+    (if
+      (local.get $x)
+      (unreachable)
+    )
+    (if
+      (local.get $x)
+      (nop)
+      (unreachable)
+    )
+    (if
+      (local.get $x)
+      (call $toplevel) ;; something with a side effect
+      (unreachable)
+    )
+    (if
+      (local.get $x)
+      (unreachable)
+      (call $toplevel) ;; something with a side effect
+    )
+    ;; We have nothing to optimize here: the type is unreachable, but we need
+    ;; an actual unreachable to optimize (a return has side effects we cannot
+    ;; remove).
+    (if
+      (local.get $x)
+      (return)
+    )
+  )
+
+  ;; CHECK:      (func $if-unreachable-arms (param $x i32)
+  ;; CHECK-NEXT:  (call $toplevel)
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (if
+  ;; CHECK-NEXT:    (local.get $x)
+  ;; CHECK-NEXT:    (nop)
+  ;; CHECK-NEXT:    (nop)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $if-unreachable-arms (param $x i32)
+    ;; Both arms are unreachable. We can optimize both into nops. To avoid
+    ;; changing the type, we emit an unreachable after the if, and leave fully
+    ;; optimizing the if away for later passes. The call is added here just to
+    ;; avoid the function body being completely optimized away by other
+    ;; optimizations.
+    (call $toplevel)
+    (if
+      (local.get $x)
+      (unreachable)
+      (unreachable)
+    )
+  )
+
+  ;; CHECK:      (func $if-unreachable-arms-value (param $x i32) (result i32)
+  ;; CHECK-NEXT:  (if (result i32)
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $if-unreachable-arms-value (param $x i32) (result i32)
+    ;; We cannot optimize this case as easily, since there is a return value,
+    ;; and we leave it for other passes.
+    (if (result i32)
+      (local.get $x)
+      (unreachable)
+      (unreachable)
+    )
+  )
 )

@@ -230,7 +230,50 @@ struct Vacuum : public WalkerPass<ExpressionStackWalker<Vacuum>> {
       replaceCurrent(curr->condition);
       return;
     }
-    // from here on, we can assume the condition executed
+    // From here on, we can assume the condition executed.
+
+    // An if that does not return a value can have its arms be optimized in
+    // trapsNeverHappen mode: if an arm is an unreachable, we can assume that
+    // arm is never taken, so we can just turn it into an nop. The code after us
+    // will then optimize that further when it handles nops.
+    //
+    // Note that we don't handle an if with a return value here, because in that
+    // case we need to use that return value, and cannot optimize things away.
+    // Other passes can handle that situation (specifically,
+    // OptimizeInstructions will see the if has identical arms, and fold them
+    // together, after which it becomes optimizable.
+    if (getPassOptions().trapsNeverHappen && !curr->type.isConcrete()) {
+      size_t numNops = 0;
+      if (curr->ifTrue->is<Unreachable>()) {
+        typeUpdater.noteRecursiveRemoval(curr->ifTrue);
+        ExpressionManipulator::nop(curr->ifTrue);
+        numNops++;
+      }
+      if (curr->ifFalse && curr->ifFalse->is<Unreachable>()) {
+        typeUpdater.noteRecursiveRemoval(curr->ifFalse);
+        ExpressionManipulator::nop(curr->ifFalse);
+        numNops++;
+      }
+
+      // If the original if here was unreachable, then that must have been
+      // because both arms were unreachable (since earlier above we already
+      // handled an unreachable condition). Changing both arms to nops would
+      // change the type, so we must handle that, which we can do by emitting
+      // an unreachable after us. We also know we do not need either if arm, and
+      // just leave a drop of the condition.
+      if (curr->type == Type::unreachable) {
+        curr->finalize();
+        if (curr->type != Type::unreachable) {
+          // The original type was none, and we nopped both arms.
+          assert(curr->type == Type::none);
+          assert(numNops == 2);
+
+          Builder builder(*getModule());
+          replaceCurrent(builder.makeSequence(builder.makeDrop(curr->condition), builder.makeUnreachable()));
+          return;
+        }
+      }
+    }
     if (curr->ifFalse) {
       if (curr->ifFalse->is<Nop>()) {
         curr->ifFalse = nullptr;
@@ -281,11 +324,11 @@ struct Vacuum : public WalkerPass<ExpressionStackWalker<Vacuum>> {
     }
 
     // If the value has no side effects, or it has side effects we can remove,
-    // do so. This basically means that if noTrapsHappen is set then we can
+    // do so. This basically means that if trapsNeverHappen is set then we can
     // use that assumption (that no trap actually happens at runtime) and remove
     // a trapping value.
     //
-    // TODO: A complete CFG analysis for noTrapsHappen mode, removing all code
+    // TODO: A complete CFG analysis for trapsNeverHappen, removing all code
     //       that definitely reaches a trap, *even if* it has side effects.
     //
     // Note that we check the type here to avoid removing unreachable code - we
