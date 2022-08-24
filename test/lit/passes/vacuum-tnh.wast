@@ -185,8 +185,10 @@
   ;; CHECK:      (func $if-unreachable-arms (param $x i32)
   ;; CHECK-NEXT:  (call $toplevel)
   ;; CHECK-NEXT:  (block
-  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:   (if
   ;; CHECK-NEXT:    (local.get $x)
+  ;; CHECK-NEXT:    (nop)
+  ;; CHECK-NEXT:    (nop)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:   (unreachable)
   ;; CHECK-NEXT:  )
@@ -266,6 +268,16 @@
     )
   )
 
+  ;; CHECK:      (func $if-unreachable-arms-no-value (param $x i32) (result i32)
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:   (return
+  ;; CHECK-NEXT:    (i32.const 1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (nop)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (unreachable)
+  ;; CHECK-NEXT: )
   (func $if-unreachable-arms-no-value (param $x i32) (result i32)
     ;; As above, but the if has no return value.
     (if

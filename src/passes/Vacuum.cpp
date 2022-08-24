@@ -257,13 +257,13 @@ struct Vacuum : public WalkerPass<ExpressionStackWalker<Vacuum>> {
       if (numNoppings && curr->type == Type::unreachable) {
         curr->finalize();
         if (curr->type != Type::unreachable) {
-          // The original type was none, and we nopped both arms.
+          // The original type was unreachable, and we nopped at least one
+          // arm, which makes it now have type none.
           assert(curr->type == Type::none);
-std::cout << *curr << '\n';
-          assert(numNoppings == 2);
 
+          // To avoid changing the type, emit an unreachable after it.
           Builder builder(*getModule());
-          replaceCurrent(builder.makeSequence(builder.makeDrop(curr->condition),
+          replaceCurrent(builder.makeSequence(curr,
                                               builder.makeUnreachable()));
           return;
         }
