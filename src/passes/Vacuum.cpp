@@ -259,6 +259,7 @@ struct Vacuum : public WalkerPass<ExpressionStackWalker<Vacuum>> {
         if (curr->type != Type::unreachable) {
           // The original type was none, and we nopped both arms.
           assert(curr->type == Type::none);
+std::cout << *curr << '\n';
           assert(numNoppings == 2);
 
           Builder builder(*getModule());

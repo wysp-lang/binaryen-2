@@ -246,4 +246,34 @@
       (unreachable)
     )
   )
+
+  ;; CHECK:      (func $if-unreachable-arms-non-noppable (param $x i32) (result i32)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (return
+  ;; CHECK-NEXT:   (i32.const 1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $if-unreachable-arms-non-noppable (param $x i32) (result i32)
+    (if (result i32)
+      (local.get $x)
+      ;; This arm has type unreachable, but is not an unreachable.
+      (return
+        (i32.const 1)
+      )
+      (unreachable)
+    )
+  )
+
+  (func $if-unreachable-arms-no-value (param $x i32) (result i32)
+    ;; As above, but the if has no return value.
+    (if
+      (local.get $x)
+      (return
+        (i32.const 1)
+      )
+      (unreachable)
+    )
+  )
 )
