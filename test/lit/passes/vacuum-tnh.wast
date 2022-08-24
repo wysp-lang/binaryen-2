@@ -260,7 +260,9 @@
   (func $if-unreachable-arms-non-noppable (param $x i32) (result i32)
     (if (result i32)
       (local.get $x)
-      ;; This arm has type unreachable, but is not an unreachable.
+      ;; This arm has type unreachable, but is not an unreachable. We can only
+      ;; modify the other arm (which can be a nop, which then unlocks more
+      ;; simplifications).
       (return
         (i32.const 1)
       )
@@ -279,7 +281,9 @@
   ;; CHECK-NEXT:  (unreachable)
   ;; CHECK-NEXT: )
   (func $if-unreachable-arms-no-value (param $x i32) (result i32)
-    ;; As above, but the if has no return value.
+    ;; As above, but the if has no return value. We can nop one arm, but must be
+    ;; careful to leave an unreachable on the outside so the type does not
+    ;; change. The if is not fully optimized here, but later passes can do so.
     (if
       (local.get $x)
       (return
