@@ -184,10 +184,8 @@
   ;; CHECK:      (func $if-unreachable-arms (param $x i32)
   ;; CHECK-NEXT:  (call $toplevel)
   ;; CHECK-NEXT:  (block
-  ;; CHECK-NEXT:   (if
+  ;; CHECK-NEXT:   (drop
   ;; CHECK-NEXT:    (local.get $x)
-  ;; CHECK-NEXT:    (nop)
-  ;; CHECK-NEXT:    (nop)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:   (unreachable)
   ;; CHECK-NEXT:  )

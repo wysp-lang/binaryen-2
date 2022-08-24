@@ -269,7 +269,8 @@ struct Vacuum : public WalkerPass<ExpressionStackWalker<Vacuum>> {
           assert(numNops == 2);
 
           Builder builder(*getModule());
-          replaceCurrent(builder.makeSequence(builder.makeDrop(curr->condition), builder.makeUnreachable()));
+          replaceCurrent(builder.makeSequence(builder.makeDrop(curr->condition),
+                                              builder.makeUnreachable()));
           return;
         }
       }
