@@ -152,7 +152,8 @@
   (func $if-unreachable-arm (param $x i32)
     ;; In all these cases we can assume the unreachable arm is never reached,
     ;; so we can turn it into a nop, and then further optimize that nop as
-    ;; relevant.
+    ;; relevant. Some of these may require further passes to fully optimize, but
+    ;; at least all the unreachables must be optimized out.
     (if
       (local.get $x)
       (unreachable)
@@ -204,16 +205,41 @@
     )
   )
 
-  ;; CHECK:      (func $if-unreachable-arms-value (param $x i32) (result i32)
-  ;; CHECK-NEXT:  (if (result i32)
+  ;; CHECK:      (func $if-unreachable-arms-value-left (param $x i32) (result i32)
+  ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (local.get $x)
-  ;; CHECK-NEXT:   (unreachable)
-  ;; CHECK-NEXT:   (unreachable)
   ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (i32.const 1)
   ;; CHECK-NEXT: )
-  (func $if-unreachable-arms-value (param $x i32) (result i32)
-    ;; We cannot optimize this case as easily, since there is a return value,
-    ;; and we leave it for other passes.
+  (func $if-unreachable-arms-value-left (param $x i32) (result i32)
+    (if (result i32)
+      (local.get $x)
+      (unreachable)
+      (i32.const 1)
+    )
+  )
+
+  ;; CHECK:      (func $if-unreachable-arms-value-right (param $x i32) (result i32)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (i32.const 1)
+  ;; CHECK-NEXT: )
+  (func $if-unreachable-arms-value-right (param $x i32) (result i32)
+    (if (result i32)
+      (local.get $x)
+      (i32.const 1)
+      (unreachable)
+    )
+  )
+
+  ;; CHECK:      (func $if-unreachable-arms-value-both (param $x i32) (result i32)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (unreachable)
+  ;; CHECK-NEXT: )
+  (func $if-unreachable-arms-value-both (param $x i32) (result i32)
     (if (result i32)
       (local.get $x)
       (unreachable)
