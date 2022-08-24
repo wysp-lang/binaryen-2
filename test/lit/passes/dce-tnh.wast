@@ -99,4 +99,52 @@
       (i32.const 6)
     )
   )
+
+  ;; CHECK:      (func $middle
+  ;; CHECK-NEXT:  (local $x i32)
+  ;; CHECK-NEXT:  (local.set $x
+  ;; CHECK-NEXT:   (i32.const 1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $x
+  ;; CHECK-NEXT:   (i32.const 2)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (i32.const -1)
+  ;; CHECK-NEXT:   (return)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (unreachable)
+  ;; CHECK-NEXT: )
+  (func $middle
+    (local $x i32)
+    (local.set $x
+      (i32.const 1)
+    )
+    (local.set $x
+      (i32.const 2)
+    )
+    (if
+      (i32.const -1)
+      (return)
+    )
+    (local.set $x
+      (i32.const 3)
+    )
+    (local.set $x
+      (i32.const 4)
+    )
+    ;; The unreachable occurs in the middle of an expression here, not at the
+    ;; top level of a block. But we'll optimize it to the top level first, so
+    ;; we'll optimize just as fully here as before.
+    (drop
+      (i32.eqz
+        (unreachable)
+      )
+    )
+    (local.set $x
+      (i32.const 5)
+    )
+    (local.set $x
+      (i32.const 6)
+    )
+  )
 )
