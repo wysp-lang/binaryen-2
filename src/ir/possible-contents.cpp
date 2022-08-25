@@ -86,7 +86,7 @@ void PossibleContents::combine(const PossibleContents& other) {
     // combination here is if they have the same type (since we've already ruled
     // out the case of them being equal). If they have the same type then
     // neither is a reference and we can emit an exact type (since subtyping is
-    // not relevant for non-references.
+    // not relevant for non-references).
     if (type == otherType) {
       value = ExactType(type);
     } else {
@@ -362,8 +362,8 @@ struct InfoCollector
       PossibleContents::literal(Literal::makeNull(curr->type.getHeapType())));
   }
   void visitRefIs(RefIs* curr) {
-    // TODO: optimize when possible
-    addRoot(curr);
+    // We will handle this in a special way later during the flow.
+    addChildParentLink(curr->ref, curr);
   }
   void visitRefFunc(RefFunc* curr) {
     addRoot(
@@ -413,8 +413,7 @@ struct InfoCollector
     addRoot(curr);
   }
   void visitRefCast(RefCast* curr) {
-    // We will handle this in a special way later during the flow, as ref.cast
-    // only allows valid values to flow through.
+    // We will handle this in a special way later during the flow.
     addChildParentLink(curr->ref, curr);
   }
   void visitBrOn(BrOn* curr) {
@@ -1103,8 +1102,9 @@ private:
   // Similar to readFromData, but does a write for a struct.set or array.set.
   void writeToData(Expression* ref, Expression* value, Index fieldIndex);
 
-  // Special handling for RefCast during the flow: RefCast only admits valid
-  // values to flow through it.
+  // Special handling for certain things. Each function receives the new
+  // contents arriving, and the expression they arrive to.
+  void flowRefIs(const PossibleContents& contents, RefIs* is);
   void flowRefCast(const PossibleContents& contents, RefCast* cast);
 
   // We will need subtypes during the flow, so compute them once ahead of time.
@@ -1456,6 +1456,9 @@ void Flower::flowAfterUpdate(LocationIndex locationIndex) {
     } else if (auto* set = parent->dynCast<ArraySet>()) {
       assert(set->ref == child || set->value == child);
       writeToData(set->ref, set->value, 0);
+    } else if (auto* is = parent->dynCast<RefIs>()) {
+      assert(is->ref == child);
+      flowRefIs(contents, is);
     } else if (auto* cast = parent->dynCast<RefCast>()) {
       assert(cast->ref == child);
       flowRefCast(contents, cast);
@@ -1679,6 +1682,31 @@ void Flower::writeToData(Expression* ref, Expression* value, Index fieldIndex) {
       updateContents(heapLoc, valueContents);
     }
   }
+}
+
+void Flower::flowRefIs(const PossibleContents& contents, RefIs* is) {
+  // RefIs's result can be inferred in certain cases. By default, assume we
+  // only know the result is 0 or 1, so we just know the type.
+  PossibleContents inferred = PossibleContents::exactType(Type::i32);
+
+  // Empty contents are not flowed around. If they did, we'd need to be more
+  // careful here and not unconditionally updateContents below with the exact
+  // type default we just set.
+  assert(!contents.isNone());
+
+  auto contentType = contents.getType();
+  if (contentType.isConcrete()) {
+    // A known specific type is arriving here. Check to see if we know the
+    // result at compile time.
+    auto result = GCTypeUtils::evaluateKindCheck(is, contentType);
+    if (result == GCTypeUtils::Success) {
+      inferred = PossibleContents::literal(Literal(int32_t(1)));
+    } else if (result == GCTypeUtils::Failure) {
+      inferred = PossibleContents::literal(Literal(int32_t(0)));
+    }
+  }
+
+  updateContents(ExpressionLocation{is, 0}, inferred);
 }
 
 void Flower::flowRefCast(const PossibleContents& contents, RefCast* cast) {

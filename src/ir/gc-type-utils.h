@@ -40,7 +40,12 @@ enum EvaluationResult {
 // (like br_on_func checks if it is a function), see if type info lets us
 // determine that at compile time.
 // This ignores nullability - it just checks the kind.
-inline EvaluationResult evaluateKindCheck(Expression* curr) {
+//
+// If |childType| is not provided, this will automatically look at the child of
+// |curr| to see the input type. Providing childType allows the caller to
+// inform this function about a more specific type than is present in the IR.
+inline EvaluationResult evaluateKindCheck(Expression* curr,
+                                          std::optional<Type> childType={}) {
   Kind expected;
   Expression* child;
 
@@ -125,15 +130,17 @@ inline EvaluationResult evaluateKindCheck(Expression* curr) {
     WASM_UNREACHABLE("invalid input to evaluateKindCheck");
   }
 
-  auto childType = child->type;
+  if (!childType) {
+    childType = child->type;
+  }
 
   Kind actual;
 
-  if (childType.isFunction()) {
+  if (childType->isFunction()) {
     actual = Func;
-  } else if (childType.isData()) {
+  } else if (childType->isData()) {
     actual = Data;
-  } else if (childType.getHeapType() == HeapType::i31) {
+  } else if (childType->getHeapType() == HeapType::i31) {
     actual = I31;
   } else {
     return Unknown;
