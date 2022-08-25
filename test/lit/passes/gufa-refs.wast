@@ -141,13 +141,14 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (ref.is_null
+  ;; CHECK-NEXT:   (block
   ;; CHECK-NEXT:    (block
   ;; CHECK-NEXT:     (drop
   ;; CHECK-NEXT:      (call $get-nothing)
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:     (unreachable)
   ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (unreachable)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -166,8 +167,7 @@
         (call $get-nothing)
       )
     )
-    ;; As above, but we do not optimize ref.is_null yet so nothing happens for
-    ;; it (but the call still gets optimized as before).
+    ;; As above, but with ref.is.
     (drop
       (ref.is_null
         (call $get-nothing)
