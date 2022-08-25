@@ -45,7 +45,7 @@ enum EvaluationResult {
 // |curr| to see the input type. Providing childType allows the caller to
 // inform this function about a more specific type than is present in the IR.
 inline EvaluationResult evaluateKindCheck(Expression* curr,
-                                          std::optional<Type> childType={}) {
+                                          std::optional<Type> childType = {}) {
   Kind expected;
   Expression* child;
 
