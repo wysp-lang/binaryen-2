@@ -14,8 +14,13 @@
 
   ;; CHECK:      (type $none_=>_ref|any| (func_subtype (result (ref any)) func))
 
+  ;; CHECK:      (type $none_=>_anyref (func_subtype (result anyref) func))
+
   ;; CHECK:      (import "a" "b" (func $import (result i32)))
   (import "a" "b" (func $import (result i32)))
+
+  ;; CHECK:      (import "a" "c" (func $import-any (result anyref)))
+  (import "a" "c" (func $import-any (result anyref)))
 
   ;; CHECK:      (func $no-non-null (type $none_=>_ref|any|) (result (ref any))
   ;; CHECK-NEXT:  (unreachable)
@@ -359,6 +364,57 @@
     )
     (drop
       (local.get $z)
+    )
+  )
+
+  ;; CHECK:      (func $ref.is (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.is_func
+  ;; CHECK-NEXT:    (call $import-any)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $ref.is
+    ;; This can be optimized to 1.
+    (drop
+      (ref.is_func
+        (ref.func $ref.is)
+      )
+    )
+    ;; This can be optimized to 0.
+    (drop
+      (ref.is_data
+        (ref.func $ref.is)
+      )
+    )
+    ;; These can be optimized to 0 since it is a null, regardless of the type.
+    (drop
+      (ref.is_func
+        (ref.null func)
+      )
+    )
+    (drop
+      (ref.is_data
+        (ref.null func)
+      )
+    )
+    ;; This cannot be optimized.
+    (drop
+      (ref.is_func
+        (call $import-any)
+      )
     )
   )
 )
