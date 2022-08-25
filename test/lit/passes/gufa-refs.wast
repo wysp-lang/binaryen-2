@@ -22,6 +22,8 @@
   ;; CHECK:      (import "a" "c" (func $import-any (result anyref)))
   (import "a" "c" (func $import-any (result anyref)))
 
+  ;; CHECK:      (elem declare func $ref.is_kind $ref.is_null)
+
   ;; CHECK:      (func $no-non-null (type $none_=>_ref|any|) (result (ref any))
   ;; CHECK-NEXT:  (unreachable)
   ;; CHECK-NEXT: )
@@ -36,26 +38,25 @@
   )
 
   ;; CHECK:      (func $nested (type $none_=>_i32) (result i32)
-  ;; CHECK-NEXT:  (ref.is_null
-  ;; CHECK-NEXT:   (block
-  ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (loop $loop
-  ;; CHECK-NEXT:      (block
-  ;; CHECK-NEXT:       (unreachable)
-  ;; CHECK-NEXT:       (unreachable)
-  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:  (block
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (loop $loop
+  ;; CHECK-NEXT:     (block
+  ;; CHECK-NEXT:      (unreachable)
   ;; CHECK-NEXT:      (unreachable)
   ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (unreachable)
   ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (unreachable)
   ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (unreachable)
   ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (i32.const 0)
   ;; CHECK-NEXT: )
   (func $nested (result i32)
     ;; As above, but add other instructions on the outside, which can also be
     ;; replaced with an unreachable (except for the loop, which as a control
     ;; flow structure with a name we keep it around and just add an unreachable
-    ;; after it; and for now we don't optimize ref.is* so that stays).
+    ;; after it).
     (ref.is_null
       (loop $loop (result (ref func))
         (nop)
@@ -367,7 +368,7 @@
     )
   )
 
-  ;; CHECK:      (func $ref.is (type $none_=>_none)
+  ;; CHECK:      (func $ref.is_kind (type $none_=>_none)
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (i32.const 1)
   ;; CHECK-NEXT:  )
@@ -375,10 +376,31 @@
   ;; CHECK-NEXT:   (i32.const 0)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (i32.const 1)
+  ;; CHECK-NEXT:   (i32.const 0)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.is_func
+  ;; CHECK-NEXT:    (select (result funcref)
+  ;; CHECK-NEXT:     (ref.func $ref.is_kind)
+  ;; CHECK-NEXT:     (ref.null func)
+  ;; CHECK-NEXT:     (call $import)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (select (result funcref)
+  ;; CHECK-NEXT:      (ref.func $ref.is_kind)
+  ;; CHECK-NEXT:      (ref.null func)
+  ;; CHECK-NEXT:      (call $import)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 0)
+  ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (ref.is_func
@@ -386,17 +408,17 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  (func $ref.is
+  (func $ref.is_kind
     ;; This can be optimized to 1.
     (drop
       (ref.is_func
-        (ref.func $ref.is)
+        (ref.func $ref.is_kind)
       )
     )
     ;; This can be optimized to 0.
     (drop
       (ref.is_data
-        (ref.func $ref.is)
+        (ref.func $ref.is_kind)
       )
     )
     ;; These can be optimized to 0 since it is a null, regardless of the type.
@@ -410,9 +432,82 @@
         (ref.null func)
       )
     )
-    ;; This cannot be optimized.
+    ;; Either a non-null or a null is possible here, so we cannot optimize.
     (drop
       (ref.is_func
+        (select
+          (ref.func $ref.is_kind)
+          (ref.null func)
+          (call $import)
+        )
+      )
+    )
+    ;; The same, but with is_data. Here we know it must return 0: either it is
+    ;; the wrong kind, or it is a null, and both lead to 0.
+    (drop
+      (ref.is_data
+        (select
+          (ref.func $ref.is_kind)
+          (ref.null func)
+          (call $import)
+        )
+      )
+    )
+    ;; This is totally unknown and cannot be optimized.
+    (drop
+      (ref.is_func
+        (call $import-any)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $ref.is_null (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.is_null
+  ;; CHECK-NEXT:    (ref.func $ref.is_null)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.is_null
+  ;; CHECK-NEXT:    (select (result funcref)
+  ;; CHECK-NEXT:     (ref.func $ref.is_null)
+  ;; CHECK-NEXT:     (ref.null func)
+  ;; CHECK-NEXT:     (call $import)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.is_null
+  ;; CHECK-NEXT:    (call $import-any)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $ref.is_null
+    ;; As above, but with .is_null. Only the nulls return 1 here.
+    (drop
+      (ref.is_null
+        (ref.func $ref.is_null)
+      )
+    )
+    (drop
+      (ref.is_null
+        (ref.null func)
+      )
+    )
+    (drop
+      (ref.is_null
+        (select
+          (ref.func $ref.is_null)
+          (ref.null func)
+          (call $import)
+        )
+      )
+    )
+    (drop
+      (ref.is_null
         (call $import-any)
       )
     )
