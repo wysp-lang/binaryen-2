@@ -1700,8 +1700,11 @@ void Flower::flowRefIs(const PossibleContents& contents, RefIs* is) {
     // A known specific type is arriving here. Check to see if we know the
     // result at compile time.
     if (contents.isNull()) {
-      // A null always results in 0.
-      inferred = PossibleContents::literal(Literal(int32_t(0)));
+      if (is->op == RefIsNull) {
+        inferred = PossibleContents::literal(Literal(int32_t(1)));
+      } else {
+        inferred = PossibleContents::literal(Literal(int32_t(0)));
+      }
     } else {
       auto result = GCTypeUtils::evaluateKindCheck(is, contentType);
       if (result == GCTypeUtils::Success && contentType.isNonNullable()) {
