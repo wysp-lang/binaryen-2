@@ -19,6 +19,7 @@
 
 #include "ir/branch-utils.h"
 #include "ir/eh-utils.h"
+#include "ir/gc-type-utils.h"
 #include "ir/module-utils.h"
 #include "ir/possible-contents.h"
 #include "wasm.h"
@@ -363,7 +364,7 @@ struct InfoCollector
   }
   void visitRefIs(RefIs* curr) {
     // We will handle this in a special way later during the flow.
-    addChildParentLink(curr->ref, curr);
+    addChildParentLink(curr->value, curr);
   }
   void visitRefFunc(RefFunc* curr) {
     addRoot(
@@ -1457,7 +1458,7 @@ void Flower::flowAfterUpdate(LocationIndex locationIndex) {
       assert(set->ref == child || set->value == child);
       writeToData(set->ref, set->value, 0);
     } else if (auto* is = parent->dynCast<RefIs>()) {
-      assert(is->ref == child);
+      assert(is->value == child);
       flowRefIs(contents, is);
     } else if (auto* cast = parent->dynCast<RefCast>()) {
       assert(cast->ref == child);
