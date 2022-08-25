@@ -10,11 +10,13 @@
 
   ;; CHECK:      (type $none_=>_ref|$struct| (func_subtype (result (ref $struct)) func))
 
-  ;; CHECK:      (type $none_=>_i32 (func_subtype (result i32) func))
-
   ;; CHECK:      (type $none_=>_ref|any| (func_subtype (result (ref any)) func))
 
+  ;; CHECK:      (type $none_=>_i32 (func_subtype (result i32) func))
+
   ;; CHECK:      (type $none_=>_anyref (func_subtype (result anyref) func))
+
+  ;; CHECK:      (type $none_=>_ref|func| (func_subtype (result (ref func)) func))
 
   ;; CHECK:      (import "a" "b" (func $import (result i32)))
   (import "a" "b" (func $import (result i32)))
@@ -37,33 +39,28 @@
     )
   )
 
-  ;; CHECK:      (func $nested (type $none_=>_i32) (result i32)
-  ;; CHECK-NEXT:  (block
-  ;; CHECK-NEXT:   (drop
-  ;; CHECK-NEXT:    (loop $loop
-  ;; CHECK-NEXT:     (block
-  ;; CHECK-NEXT:      (unreachable)
-  ;; CHECK-NEXT:      (unreachable)
-  ;; CHECK-NEXT:     )
+  ;; CHECK:      (func $nested (type $none_=>_ref|func|) (result (ref func))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (loop $loop
+  ;; CHECK-NEXT:    (block
+  ;; CHECK-NEXT:     (unreachable)
   ;; CHECK-NEXT:     (unreachable)
   ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (unreachable)
   ;; CHECK-NEXT:   )
-  ;; CHECK-NEXT:   (unreachable)
   ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT:  (i32.const 0)
+  ;; CHECK-NEXT:  (unreachable)
   ;; CHECK-NEXT: )
-  (func $nested (result i32)
+  (func $nested (result (ref func))
     ;; As above, but add other instructions on the outside, which can also be
     ;; replaced with an unreachable (except for the loop, which as a control
     ;; flow structure with a name we keep it around and just add an unreachable
     ;; after it).
-    (ref.is_null
-      (loop $loop (result (ref func))
-        (nop)
-        (ref.as_func
-          (ref.as_non_null
-            (ref.null any)
-          )
+    (loop $loop (result (ref func))
+      (nop)
+      (ref.as_func
+        (ref.as_non_null
+          (ref.null any)
         )
       )
     )
@@ -463,12 +460,10 @@
 
   ;; CHECK:      (func $ref.is_null (type $none_=>_none)
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (ref.is_null
-  ;; CHECK-NEXT:    (ref.func $ref.is_null)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.const 0)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:   (i32.const 1)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (ref.is_null

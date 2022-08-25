@@ -1699,20 +1699,27 @@ void Flower::flowRefIs(const PossibleContents& contents, RefIs* is) {
   if (contentType.isConcrete()) {
     // A known specific type is arriving here. Check to see if we know the
     // result at compile time.
-    if (contents.isNull()) {
-      if (is->op == RefIsNull) {
+    if (is->op == RefIsNull) {
+      if (contents.isNull()) {
         inferred = PossibleContents::literal(Literal(int32_t(1)));
-      } else {
+      } else if (contentType.isNonNullable()) {
         inferred = PossibleContents::literal(Literal(int32_t(0)));
       }
     } else {
-      auto result = GCTypeUtils::evaluateKindCheck(is, contentType);
-      if (result == GCTypeUtils::Success && contentType.isNonNullable()) {
-        // The kind matches, and a null is not possible, so this will definitely
-        // succeed.
-        inferred = PossibleContents::literal(Literal(int32_t(1)));
-      } else if (result == GCTypeUtils::Failure) {
+      // Anything aside from RefIsNull: RefIsFunc, Data, etc.
+      if (contents.isNull()) {
         inferred = PossibleContents::literal(Literal(int32_t(0)));
+      } else {
+        auto result = GCTypeUtils::evaluateKindCheck(is, contentType);
+        if (result == GCTypeUtils::Success && contentType.isNonNullable()) {
+          // The kind matches, and a null is not possible, so this will
+          // definitely succeed.
+          inferred = PossibleContents::literal(Literal(int32_t(1)));
+        } else if (result == GCTypeUtils::Failure) {
+          // In this case it doesn't matter if a null is possible, as null leads
+          // to 0, the same as the kind.
+          inferred = PossibleContents::literal(Literal(int32_t(0)));
+        }
       }
     }
   }
