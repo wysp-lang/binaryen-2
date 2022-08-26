@@ -481,17 +481,20 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   (func $ref.is_null
-    ;; As above, but with .is_null. Only the nulls return 1 here.
+    ;; As above, but with .is_null.
+    ;; This is not a null, and we can optimize to 0.
     (drop
       (ref.is_null
         (ref.func $ref.is_null)
       )
     )
+    ;; This is a null, and we can optimize to 1.
     (drop
       (ref.is_null
         (ref.null func)
       )
     )
+    ;; In these two we can't tell, and can't optimize.
     (drop
       (ref.is_null
         (select
