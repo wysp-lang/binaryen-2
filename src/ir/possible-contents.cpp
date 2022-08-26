@@ -925,6 +925,8 @@ struct InfoCollector
   void addChildParentLink(Expression* child, Expression* parent) {
     if (isRelevant(child->type)) {
       info.childParents[child] = parent;
+    } else {
+      addRoot(parent); // ?
     }
   }
 
