@@ -524,7 +524,8 @@ struct OptimizeInstructions
           // trivial (and would complicate the code below).
           if (leftMaxBits > 0 &&
               leftMaxBits < curr->left->type.getByteSize() * 8) {
-            auto leftMaxVal = Literal::makeFromInt64(uint64_t(-1) >> (64 - leftMaxBits), c->type);
+            auto leftMaxVal = Literal::makeFromInt64(
+              uint64_t(-1) >> (64 - leftMaxBits), c->type);
             auto cVal = c->value;
             // If we know the result, we'll set it here.
             std::optional<Literal> result;
@@ -538,26 +539,31 @@ struct OptimizeInstructions
               if (auto temp = leftMaxVal.ltU(cVal); temp.getInteger()) {
                 result = temp;
               }
-            } else if (curr->op == Abstract::getBinary(curr->type, Abstract::LeU)) {
+            } else if (curr->op ==
+                       Abstract::getBinary(curr->type, Abstract::LeU)) {
               if (auto temp = leftMaxVal.leU(cVal); temp.getInteger()) {
                 result = temp;
               }
-            } else if (curr->op == Abstract::getBinary(curr->type, Abstract::LtS)) {
+            } else if (curr->op ==
+                       Abstract::getBinary(curr->type, Abstract::LtS)) {
               if (auto temp = leftMaxVal.ltS(cVal); temp.getInteger()) {
                 result = temp;
               }
-            } else if (curr->op == Abstract::getBinary(curr->type, Abstract::LeS)) {
+            } else if (curr->op ==
+                       Abstract::getBinary(curr->type, Abstract::LeS)) {
               if (auto temp = leftMaxVal.leS(cVal); temp.getInteger()) {
                 result = temp;
               }
-            } else if (curr->op == Abstract::getBinary(curr->type, Abstract::Eq)) {
+            } else if (curr->op ==
+                       Abstract::getBinary(curr->type, Abstract::Eq)) {
               // Equality:
               //   left <= leftMaxVal < cVal  =>  left != cVal  => 0
               // I.e. if left cannot be large enough to be equal, return 0.
               if (auto temp = leftMaxVal.ltU(cVal); temp.getInteger()) {
                 result = temp.eqz();
               }
-            } else if (curr->op == Abstract::getBinary(curr->type, Abstract::Ne)) {
+            } else if (curr->op ==
+                       Abstract::getBinary(curr->type, Abstract::Ne)) {
               // Non-equality:
               //   left <= leftMaxVal < cVal  =>  left != cVal  => 1
               // I.e. if left cannot be large enough to be equal, return 1.;
@@ -567,7 +573,9 @@ struct OptimizeInstructions
             }
 
             if (result) {
-              return replaceCurrent(getDroppedChildrenAndAppend(curr, *result));
+              auto* finalResult = Builder(*getModule()).makeConst(*result);
+              return replaceCurrent(getDroppedChildrenAndAppend(curr,
+                                                                finalResult));
             }
           }
         }
@@ -1537,9 +1545,10 @@ struct OptimizeInstructions
   }
 
   // Appends a result after the dropped children, if we need them.
-  Expression* getDroppedChildrenAndAppend(Expression* curr, Expression* result) {
-    return getDroppedChildrenAndAppend(
-        curr, *getModule(), getPassOptions(), result);
+  Expression* getDroppedChildrenAndAppend(Expression* curr,
+                                          Expression* result) {
+    return wasm::getDroppedChildrenAndAppend(
+      curr, *getModule(), getPassOptions(), result);
   }
 
   void visitRefEq(RefEq* curr) {
@@ -1583,8 +1592,7 @@ struct OptimizeInstructions
     if (areConsecutiveInputsEqualAndFoldable(curr->left, curr->right)) {
       auto* result =
         Builder(*getModule()).makeConst(Literal::makeOne(Type::i32));
-      replaceCurrent(getDroppedChildrenAndAppend(
-        curr, result));
+      replaceCurrent(getDroppedChildrenAndAppend(curr, result));
       return;
     }
 
