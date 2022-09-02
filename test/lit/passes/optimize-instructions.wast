@@ -14746,4 +14746,174 @@
     (drop (i64.extend_i32_s (i32.load16_s (local.get $x))))
     (drop (i64.extend_i32_s (i32.load (local.get $x))))
   )
+
+  ;; CHECK:      (func $comparisons-of-small-values-less (param $x i32)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.lt_u
+  ;; CHECK-NEXT:    (i32.and
+  ;; CHECK-NEXT:     (local.get $x)
+  ;; CHECK-NEXT:     (i32.const 31)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 32)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.lt_u
+  ;; CHECK-NEXT:    (i32.and
+  ;; CHECK-NEXT:     (local.get $x)
+  ;; CHECK-NEXT:     (i32.const 31)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 31)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.le_u
+  ;; CHECK-NEXT:    (i32.and
+  ;; CHECK-NEXT:     (local.get $x)
+  ;; CHECK-NEXT:     (i32.const 31)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 31)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.le_u
+  ;; CHECK-NEXT:    (i32.and
+  ;; CHECK-NEXT:     (local.get $x)
+  ;; CHECK-NEXT:     (i32.const 31)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 30)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $comparisons-of-small-values-less (param $x i32)
+    (drop
+      ;; This `and` returns something of size 31 or less, so the < must be
+      ;; true.
+      (i32.lt_u
+        (i32.and
+          (local.get $x)
+          (i32.const 31)
+        )
+        (i32.const 32)
+      )
+    )
+    ;; The < constant is one less now, and we cannot optimize.
+    (drop
+      (i32.lt_u
+        (i32.and
+          (local.get $x)
+          (i32.const 31)
+        )
+        (i32.const 31)
+      )
+    )
+    ;; With <= we can optimize once again.
+    (drop
+      (i32.le_u
+        (i32.and
+          (local.get $x)
+          (i32.const 31)
+        )
+        (i32.const 31)
+      )
+    )
+    ;; But with a constant of one less, we cannot.
+    (drop
+      (i32.le_u
+        (i32.and
+          (local.get $x)
+          (i32.const 31)
+        )
+        (i32.const 30)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $comparisons-of-small-values-eq (param $x i32)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.eq
+  ;; CHECK-NEXT:    (i32.and
+  ;; CHECK-NEXT:     (local.get $x)
+  ;; CHECK-NEXT:     (i32.const 31)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 32)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.eq
+  ;; CHECK-NEXT:    (i32.and
+  ;; CHECK-NEXT:     (local.get $x)
+  ;; CHECK-NEXT:     (i32.const 31)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 31)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $comparisons-of-small-values-eq (param $x i32)
+    (drop
+      ;; This `and` returns something of size 31 or less, so the == cannot be
+      ;; true.
+      (i32.eq
+        (i32.and
+          (local.get $x)
+          (i32.const 31)
+        )
+        (i32.const 32)
+      )
+    )
+    ;; The < constant is one less now, and we cannot optimize.
+    (drop
+      (i32.eq
+        (i32.and
+          (local.get $x)
+          (i32.const 31)
+        )
+        (i32.const 31)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $comparisons-of-small-values-ne (param $x i32)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.ne
+  ;; CHECK-NEXT:    (i32.and
+  ;; CHECK-NEXT:     (local.get $x)
+  ;; CHECK-NEXT:     (i32.const 31)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 32)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.ne
+  ;; CHECK-NEXT:    (i32.and
+  ;; CHECK-NEXT:     (local.get $x)
+  ;; CHECK-NEXT:     (i32.const 31)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 31)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $comparisons-of-small-values-ne (param $x i32)
+    (drop
+      ;; This `and` returns something of size 31 or less, so the != must be
+      ;; true.
+      (i32.ne
+        (i32.and
+          (local.get $x)
+          (i32.const 31)
+        )
+        (i32.const 32)
+      )
+    )
+    ;; The < constant is one less now, and we cannot optimize.
+    (drop
+      (i32.ne
+        (i32.and
+          (local.get $x)
+          (i32.const 31)
+        )
+        (i32.const 31)
+      )
+    )
+  )
 )

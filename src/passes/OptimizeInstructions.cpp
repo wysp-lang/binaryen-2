@@ -511,6 +511,67 @@ struct OptimizeInstructions
           return replaceCurrent(c);
         }
       }
+      {
+        // Comparisons can benefit from getMaxBits, if it informs us that a
+        // value is small enough to infer a result for, e.g.
+        //
+        //   (x & 7) < 1000  =>  true
+        Const* c;
+        if (matches(curr, binary(any(), ival(&c)))) {
+          auto leftMaxBits = Bits::getMaxBits(curr->left, this);
+          // See if this is a nontrivial amount of bits that we can optimize.
+          // Leave the case of leftMaxBits == 0 for other places, since it is
+          // trivial (and would complicate the code below).
+          if (leftMaxBits > 0 &&
+              leftMaxBits < curr->left->type.getByteSize() * 8) {
+            auto leftMaxVal = Literal::makeFromInt64(uint64_t(-1) >> (64 - leftMaxBits), c->type);
+            auto cVal = c->value;
+            // If we know the result, we'll set it here.
+            std::optional<Literal> result;
+
+            if (curr->op == Abstract::getBinary(curr->type, Abstract::LtU)) {
+              // Less than:
+              //   left <= leftMaxVal <(=) cVal  =>  left <(=) cVal  => 1
+              // I.e. left is less than leftMaxVal, so if that is smaller (in
+              // the proper meaning, signed or unsigned, and including or not
+              // including equality) then so must left be smaller.
+              if (auto temp = leftMaxVal.ltU(cVal); temp.getInteger()) {
+                result = temp;
+              }
+            } else if (curr->op == Abstract::getBinary(curr->type, Abstract::LeU)) {
+              if (auto temp = leftMaxVal.leU(cVal); temp.getInteger()) {
+                result = temp;
+              }
+            } else if (curr->op == Abstract::getBinary(curr->type, Abstract::LtS)) {
+              if (auto temp = leftMaxVal.ltS(cVal); temp.getInteger()) {
+                result = temp;
+              }
+            } else if (curr->op == Abstract::getBinary(curr->type, Abstract::LeS)) {
+              if (auto temp = leftMaxVal.leS(cVal); temp.getInteger()) {
+                result = temp;
+              }
+            } else if (curr->op == Abstract::getBinary(curr->type, Abstract::Eq)) {
+              // Equality:
+              //   left <= leftMaxVal < cVal  =>  left != cVal  => 0
+              // I.e. if left cannot be large enough to be equal, return 0.
+              if (auto temp = leftMaxVal.ltU(cVal); temp.getInteger()) {
+                result = temp.eqz();
+              }
+            } else if (curr->op == Abstract::getBinary(curr->type, Abstract::Ne)) {
+              // Non-equality:
+              //   left <= leftMaxVal < cVal  =>  left != cVal  => 1
+              // I.e. if left cannot be large enough to be equal, return 1.;
+              if (auto temp = leftMaxVal.ltU(cVal); temp.getInteger()) {
+                result = temp;
+              }
+            }
+
+            if (result) {
+              return replaceCurrent(getDroppedChildrenAndAppend(curr, *result));
+            }
+          }
+        }
+      }
     }
     if (auto* ext = Properties::getAlmostSignExt(curr)) {
       Index extraLeftShifts;
@@ -1475,6 +1536,12 @@ struct OptimizeInstructions
     }
   }
 
+  // Appends a result after the dropped children, if we need them.
+  Expression* getDroppedChildrenAndAppend(Expression* curr, Expression* result) {
+    return getDroppedChildrenAndAppend(
+        curr, *getModule(), getPassOptions(), result);
+  }
+
   void visitRefEq(RefEq* curr) {
     // The types may prove that the same reference cannot appear on both sides.
     auto leftType = curr->left->type;
@@ -1495,8 +1562,7 @@ struct OptimizeInstructions
       // reference can appear on both sides.
       auto* result =
         Builder(*getModule()).makeConst(Literal::makeZero(Type::i32));
-      replaceCurrent(getDroppedChildrenAndAppend(
-        curr, *getModule(), getPassOptions(), result));
+      replaceCurrent(getDroppedChildrenAndAppend(curr, result));
       return;
     }
 
@@ -1518,7 +1584,7 @@ struct OptimizeInstructions
       auto* result =
         Builder(*getModule()).makeConst(Literal::makeOne(Type::i32));
       replaceCurrent(getDroppedChildrenAndAppend(
-        curr, *getModule(), getPassOptions(), result));
+        curr, result));
       return;
     }
 
