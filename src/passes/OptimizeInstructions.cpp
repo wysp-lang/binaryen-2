@@ -574,8 +574,8 @@ struct OptimizeInstructions
 
             if (result) {
               auto* finalResult = Builder(*getModule()).makeConst(*result);
-              return replaceCurrent(getDroppedChildrenAndAppend(curr,
-                                                                finalResult));
+              return replaceCurrent(
+                getDroppedChildrenAndAppend(curr, finalResult));
             }
           }
         }
