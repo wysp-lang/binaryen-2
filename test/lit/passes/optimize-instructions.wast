@@ -152,10 +152,7 @@
     )
   )
   ;; CHECK:      (func $eqz-gt_s (result i32)
-  ;; CHECK-NEXT:  (i32.le_u
-  ;; CHECK-NEXT:   (i32.const 1)
-  ;; CHECK-NEXT:   (i32.const 2)
-  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (i32.const 1)
   ;; CHECK-NEXT: )
   (func $eqz-gt_s (result i32)
     (i32.eqz
@@ -166,10 +163,7 @@
     )
   )
   ;; CHECK:      (func $eqz-ge_s (result i32)
-  ;; CHECK-NEXT:  (i32.lt_u
-  ;; CHECK-NEXT:   (i32.const 1)
-  ;; CHECK-NEXT:   (i32.const 2)
-  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (i32.const 1)
   ;; CHECK-NEXT: )
   (func $eqz-ge_s (result i32)
     (i32.eqz
@@ -180,9 +174,8 @@
     )
   )
   ;; CHECK:      (func $eqz-lt_s (result i32)
-  ;; CHECK-NEXT:  (i32.ge_u
+  ;; CHECK-NEXT:  (i32.eqz
   ;; CHECK-NEXT:   (i32.const 1)
-  ;; CHECK-NEXT:   (i32.const 2)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   (func $eqz-lt_s (result i32)
@@ -194,9 +187,8 @@
     )
   )
   ;; CHECK:      (func $eqz-le_s (result i32)
-  ;; CHECK-NEXT:  (i32.gt_u
+  ;; CHECK-NEXT:  (i32.eqz
   ;; CHECK-NEXT:   (i32.const 1)
-  ;; CHECK-NEXT:   (i32.const 2)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   (func $eqz-le_s (result i32)
@@ -208,10 +200,7 @@
     )
   )
   ;; CHECK:      (func $eqz-gt_u (result i32)
-  ;; CHECK-NEXT:  (i32.le_u
-  ;; CHECK-NEXT:   (i32.const 1)
-  ;; CHECK-NEXT:   (i32.const 2)
-  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (i32.const 1)
   ;; CHECK-NEXT: )
   (func $eqz-gt_u (result i32)
     (i32.eqz
@@ -222,10 +211,7 @@
     )
   )
   ;; CHECK:      (func $eqz-ge_u (result i32)
-  ;; CHECK-NEXT:  (i32.lt_u
-  ;; CHECK-NEXT:   (i32.const 1)
-  ;; CHECK-NEXT:   (i32.const 2)
-  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (i32.const 1)
   ;; CHECK-NEXT: )
   (func $eqz-ge_u (result i32)
     (i32.eqz
@@ -236,9 +222,8 @@
     )
   )
   ;; CHECK:      (func $eqz-lt_u (result i32)
-  ;; CHECK-NEXT:  (i32.ge_u
+  ;; CHECK-NEXT:  (i32.eqz
   ;; CHECK-NEXT:   (i32.const 1)
-  ;; CHECK-NEXT:   (i32.const 2)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   (func $eqz-lt_u (result i32)
@@ -250,9 +235,8 @@
     )
   )
   ;; CHECK:      (func $eqz-le_u (result i32)
-  ;; CHECK-NEXT:  (i32.gt_u
+  ;; CHECK-NEXT:  (i32.eqz
   ;; CHECK-NEXT:   (i32.const 1)
-  ;; CHECK-NEXT:   (i32.const 2)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   (func $eqz-le_u (result i32)
@@ -1385,10 +1369,7 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (i32.lt_u
-  ;; CHECK-NEXT:    (i32.const 2000)
-  ;; CHECK-NEXT:    (i32.const 3000)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.const 1)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   (func $and-pos1
@@ -12307,13 +12288,7 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (i32.eq
-  ;; CHECK-NEXT:    (i32.and
-  ;; CHECK-NEXT:     (local.get $x)
-  ;; CHECK-NEXT:     (i32.const 2147483647)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const -2147483648)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.const 0)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (i64.shr_u
@@ -14749,13 +14724,7 @@
 
   ;; CHECK:      (func $comparisons-of-small-values-less (param $x i32)
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (i32.lt_u
-  ;; CHECK-NEXT:    (i32.and
-  ;; CHECK-NEXT:     (local.get $x)
-  ;; CHECK-NEXT:     (i32.const 31)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 32)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.const 1)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (i32.lt_u
@@ -14767,13 +14736,7 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (i32.le_u
-  ;; CHECK-NEXT:    (i32.and
-  ;; CHECK-NEXT:     (local.get $x)
-  ;; CHECK-NEXT:     (i32.const 31)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 31)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.const 1)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (i32.le_u
@@ -14831,13 +14794,7 @@
 
   ;; CHECK:      (func $comparisons-of-small-values-eq (param $x i32)
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (i32.eq
-  ;; CHECK-NEXT:    (i32.and
-  ;; CHECK-NEXT:     (local.get $x)
-  ;; CHECK-NEXT:     (i32.const 31)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 32)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.const 0)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (i32.eq
@@ -14875,13 +14832,7 @@
 
   ;; CHECK:      (func $comparisons-of-small-values-ne (param $x i32)
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (i32.ne
-  ;; CHECK-NEXT:    (i32.and
-  ;; CHECK-NEXT:     (local.get $x)
-  ;; CHECK-NEXT:     (i32.const 31)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (i32.const 32)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.const 1)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (i32.ne
