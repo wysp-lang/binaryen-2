@@ -54,10 +54,16 @@ struct GlobalVacuum : public Pass {
           return;
         }
 
-        // Gather the effects. Ignore calls - we'll compute them transitively
-        // later.
+        // Gather the effects.
         EffectAnalyzer effects(runner->options, *module, func->body);
+
+        // Ignore calls - we'll compute them transitively later.
         effects.calls = false;
+
+        // Ignore local writes - when the function exits, those become
+        // unnoticeable anyhow.
+        effects.localsWritten.clear();
+
         info.hasUnremovableSideEffects = effects.hasUnremovableSideEffects();
 
         // Note that we don't need to handle call.without.effects here in any
@@ -127,6 +133,10 @@ todo share codes
         }
 
         // replace with droped childs
+      }
+
+      void visitFunction(Function* curr) {
+// If entire function has no effects then nop it all if no return val
       }
     };
     Optimize(analyzer.map).run(runner, module);
