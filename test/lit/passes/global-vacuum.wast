@@ -27,6 +27,7 @@
   ;; CHECK-NEXT: )
   (func $cycle
     ;; Calling a function with no effects in a cycle can be optimized out.
+    ;; XXX
     (call $cycle)
   )
 

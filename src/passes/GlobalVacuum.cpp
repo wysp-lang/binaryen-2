@@ -84,6 +84,8 @@ struct GlobalVacuum : public Pass {
             // Assume indirect calls can do anything. TODO optimize
             info.hasUnremovableSideEffects = true;
           }
+          // TODO loops, and infinite recursion - we need to model iloop hangs
+          // as effects
         };
 
         CallFinder callFinder(info);
