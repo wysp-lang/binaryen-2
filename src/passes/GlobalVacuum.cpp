@@ -50,7 +50,8 @@ struct GlobalVacuum : public Pass {
       *module, [&](Function* func, Info& info) {
         if (func->imported()) {
           // Assume an import has effects, unless it is call.without.effects.
-          info.hasUnremovableSideEffects = !Intrinsics::isCallWithoutEffects(func);
+          info.hasUnremovableSideEffects =
+            !Intrinsics::isCallWithoutEffects(func);
           return;
         }
 
@@ -91,7 +92,9 @@ struct GlobalVacuum : public Pass {
     analyzer.propagateBack(
       [](const Info& info) { return info.hasUnremovableSideEffects; },
       [](const Info& info) { return true; },
-      [](Info& info, Function* reason) { info.hasUnremovableSideEffects = true; },
+      [](Info& info, Function* reason) {
+        info.hasUnremovableSideEffects = true;
+      },
       analyzer.IgnoreNonDirectCalls);
 
     // We now know which functions have effects we cannot remove. Calls to
@@ -103,8 +106,7 @@ struct GlobalVacuum : public Pass {
 
       std::map<Function*, Info>& map;
 
-      Optimize(std::map<Function*, Info>& map)
-        : map(map) {}
+      Optimize(std::map<Function*, Info>& map) : map(map) {}
 
       void visitDrop(Drop* curr) {
         if (curr->type != Type::none) {
@@ -129,7 +131,12 @@ struct GlobalVacuum : public Pass {
       void replaceIfCallHasNoEffects(Call* call) {
         auto* target = getModule()->getFunction(call->target);
         if (!map[target].hasUnremovableSideEffects) {
-          replaceCurrent(getDroppedChildrenAndAppend(curr, *getModule(), getPassOptions(), Builder(*getModule()).makeNop()));,
+          replaceCurrent(
+            getDroppedChildrenAndAppend(curr,
+                                        *getModule(),
+                                        getPassOptions(),
+                                        Builder(*getModule()).makeNop()));
+          ,
         }
       }
 
