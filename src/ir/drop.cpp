@@ -14,9 +14,6 @@
  * limitations under the License.
  */
 
-#ifndef wasm_ir_drop_h
-#define wasm_ir_drop_h
-
 #include "ir/branch-utils.h"
 #include "ir/drop.h"
 #include "ir/effects.h"
@@ -87,5 +84,3 @@ Expression* alwaysGetDroppedChildrenAndAppend(Expression* curr,
 }
 
 } // namespace wasm
-
-#endif // wasm_ir_drop_h
