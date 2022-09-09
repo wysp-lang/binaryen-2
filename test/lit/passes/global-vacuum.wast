@@ -6,10 +6,28 @@
 
   ;; CHECK:      (func $foo
   ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT:  (call $unreachable)
+  ;; CHECK-NEXT:  (call $call-nop)
+  ;; CHECK-NEXT:  (call $call-unreachable)
   ;; CHECK-NEXT: )
   (func $foo
     ;; Calling a function with no effects can be optimized away.
     (call $nop)
+    ;; Calling a function with effects cannot.
+    (call $unreachable)
+    ;; Calling something that calls something with no effects can be optimized
+    ;; away.
+    (call $call-nop)
+    ;; Calling something that calls something with effects cannot.
+    (call $call-unreachable)
+  )
+
+  ;; CHECK:      (func $cycle
+  ;; CHECK-NEXT:  (call $cycle)
+  ;; CHECK-NEXT: )
+  (func $cycle
+    ;; Calling a function with no effects in a cycle can be optimized out.
+    (call $cycle)
   )
 
   ;; CHECK:      (func $nop
@@ -17,5 +35,26 @@
   ;; CHECK-NEXT: )
   (func $nop
     (nop)
+  )
+
+  ;; CHECK:      (func $unreachable
+  ;; CHECK-NEXT:  (unreachable)
+  ;; CHECK-NEXT: )
+  (func $unreachable
+    (unreachable)
+  )
+
+  ;; CHECK:      (func $call-nop
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $call-nop
+    (call $nop)
+  )
+
+  ;; CHECK:      (func $call-unreachable
+  ;; CHECK-NEXT:  (call $unreachable)
+  ;; CHECK-NEXT: )
+  (func $call-unreachable
+    (call $unreachable)
   )
 )
