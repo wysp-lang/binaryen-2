@@ -128,6 +128,9 @@
 ;; CHECK-NEXT:
 ;; CHECK-NEXT:   --global-refining                             refine the types of globals
 ;; CHECK-NEXT:
+;; CHECK-NEXT:   --global-vacuum                               removes obviously unneeded code
+;; CHECK-NEXT:                                                 across the whole program
+;; CHECK-NEXT:
 ;; CHECK-NEXT:   --gsi                                         globally optimize struct values
 ;; CHECK-NEXT:
 ;; CHECK-NEXT:   --gto                                         globally optimize GC types
