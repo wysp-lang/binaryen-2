@@ -25,12 +25,6 @@
 
 namespace wasm {
 
-// Given an expression, returns a new expression that drops the given
-// expression's children that cannot be removed outright due to their side
-// effects. Note that this only operates on children that execute
-// unconditionally. That is the case in almost all expressions, except for those
-// with conditional execution, like if, which unconditionally executes the
-// condition but then conditionally executes one of the two arms.
 Expression* getDroppedChildrenAndAppend(Expression* curr,
                                         Module& wasm,
                                         const PassOptions& options,
@@ -62,6 +56,14 @@ Expression* getDroppedChildrenAndAppend(Expression* curr,
     return builder.makeSequence(builder.makeDrop(curr), last);
   }
 
+  // It is safe to proceed here.
+  return alwaysGetDroppedChildrenAndAppend(curr, wasm, options, last);
+}
+
+Expression* alwaysGetDroppedChildrenAndAppend(Expression* curr,
+                                              Module& wasm,
+                                              const PassOptions& options,
+                                              Expression* last) {
   std::vector<Expression*> contents;
   for (auto* child : ChildIterator(curr)) {
     if (!EffectAnalyzer(options, wasm, child).hasUnremovableSideEffects()) {

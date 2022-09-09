@@ -173,7 +173,7 @@ void PassRegistry::registerPasses() {
     "gsi", "globally optimize struct values", createGlobalStructInferencePass);
   registerPass(
     "gto", "globally optimize GC types", createGlobalTypeOptimizationPass);
-  registerPass("gv",
+  registerPass("global-vacuum",
                "removes obviously unneeded code across the whole program",
                createGlobalVacuumPass);
   registerPass("gufa",

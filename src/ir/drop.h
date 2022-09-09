@@ -29,6 +29,14 @@ struct PassOptions;
 // need to keep the children around; this utility will automatically remove any
 // children we do not actually need to keep, based on their effects.
 //
+// This only replaces the input if it is safe to do so. For example, if it has
+// side effects then we do not replace it. It also only replaces the input if
+// the children execute unconditionally (that is the case in almost all
+// expressions, except for those with conditional execution, like if, which
+// unconditionally executes the condition but then conditionally executes one of
+// the two arms; replacing the if with drops of the children would change
+// behavior by executing all the children).
+//
 // The caller must also pass in a last item to append to the output (which is
 // typically what the original expression is replaced with).
 //
@@ -76,6 +84,14 @@ Expression* getDroppedChildrenAndAppend(Expression* curr,
                                         Module& wasm,
                                         const PassOptions& options,
                                         Expression* last);
+
+// As getDroppedChildrenAndAppend(), but always replaces the input with drops
+// of the (necessary) children. This assumes the caller knows that the input is
+// safe to remove.
+Expression* alwaysGetDroppedChildrenAndAppend(Expression* curr,
+                                              Module& wasm,
+                                              const PassOptions& options,
+                                              Expression* last);
 
 } // namespace wasm
 

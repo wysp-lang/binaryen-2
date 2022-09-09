@@ -135,7 +135,7 @@ struct GlobalVacuum : public Pass {
         auto* target = getModule()->getFunction(call->target);
         if (!map[target].hasUnremovableSideEffects) {
           replaceCurrent(
-            getDroppedChildrenAndAppend(call,
+            alwaysGetDroppedChildrenAndAppend(call,
                                         *getModule(),
                                         getPassOptions(),
                                         Builder(*getModule()).makeNop()));
