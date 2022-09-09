@@ -134,11 +134,12 @@ struct GlobalVacuum : public Pass {
       void replaceIfCallHasNoEffects(Call* call) {
         auto* target = getModule()->getFunction(call->target);
         if (!map[target].hasUnremovableSideEffects) {
+          auto* nop = Builder(*getModule()).makeNop();
           replaceCurrent(
             alwaysGetDroppedChildrenAndAppend(call,
                                         *getModule(),
                                         getPassOptions(),
-                                        Builder(*getModule()).makeNop()));
+                                        nop));
         }
       }
 
