@@ -18,6 +18,7 @@
 #define wasm_ir_drop_h
 
 #include "ir/branch-utils.h"
+#include "ir/drop.h"
 #include "ir/effects.h"
 #include "ir/iteration.h"
 #include "wasm-builder.h"
@@ -64,6 +65,7 @@ Expression* alwaysGetDroppedChildrenAndAppend(Expression* curr,
                                               Module& wasm,
                                               const PassOptions& options,
                                               Expression* last) {
+  Builder builder(wasm);
   std::vector<Expression*> contents;
   for (auto* child : ChildIterator(curr)) {
     if (!EffectAnalyzer(options, wasm, child).hasUnremovableSideEffects()) {
