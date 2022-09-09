@@ -112,31 +112,36 @@ struct GlobalVacuum : public Pass {
           return;
         }
         if (auto* call = curr->value->dynCast<Call>()) {
-          auto* target = getModule()->getFunction(call->target);
-          if (map[target].hasUnremovableSideEffects) {
-            return;
-          }
-                  // replace with droped childs
-todo share codes
+          replaceIfCallHasNoEffects(call);
         }
       }
 
       void visitCall(Call* curr) {
         // The case of a call that returns a value is handled in visitDrop. Here
         // we just look at none-returning ones.
-        if (curr->type != Type::none) {
-          return;
+        if (curr->type == Type::none) {
+          replaceIfCallHasNoEffects(curr);
         }
-        auto* target = getModule()->getFunction(curr->target);
-        if (map[target].hasUnremovableSideEffects) {
-          return;
-        }
+      }
 
-        // replace with droped childs
+      // Replace the current expression in the walk if a given call has no side
+      // effects.
+      void replaceIfCallHasNoEffects(Call* call) {
+        auto* target = getModule()->getFunction(call->target);
+        if (!map[target].hasUnremovableSideEffects) {
+          replaceCurrent(getDroppedChildrenAndAppend(curr, *getModule(), getPassOptions(), Builder(*getModule()).makeNop()));,
+        }
       }
 
       void visitFunction(Function* curr) {
-// If entire function has no effects then nop it all if no return val
+        // If entire function body has no effects, and it does not return a
+        // value, then nop it out. This optimizes the case where the only
+        // effects are either calls, that turn out to not actually have effects
+        // in our analysis, or local sets, which do not matter after the
+        // function exits.
+        if (!map[curr].hasUnremovableSideEffects) {
+          curr->body = Builder(*getModule()).makeNop();
+        }
       }
     };
     Optimize(analyzer.map).run(runner, module);
