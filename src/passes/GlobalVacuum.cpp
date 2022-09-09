@@ -27,6 +27,7 @@
 // functions. It also helps when using the call.without.effects intrinsic.
 //
 
+#include "ir/drop.h"
 #include "ir/intrinsics.h"
 #include "ir/module-utils.h"
 #include "pass.h"
@@ -51,7 +52,7 @@ struct GlobalVacuum : public Pass {
         if (func->imported()) {
           // Assume an import has effects, unless it is call.without.effects.
           info.hasUnremovableSideEffects =
-            !Intrinsics::isCallWithoutEffects(func);
+            !Intrinsics(*module).isCallWithoutEffects(func);
           return;
         }
 
@@ -71,13 +72,15 @@ struct GlobalVacuum : public Pass {
         // special way:
         // Find calls and handle them.
         struct CallFinder : public PostWalker<CallFinder> {
+          Info& info;
+
           CallFinder(Info& info) : info(info) {}
 
-          visitCallIndirect(CallIndirect* call) {
+          void visitCallIndirect(CallIndirect* call) {
             // Assume indirect calls can do anything. TODO optimize
             info.hasUnremovableSideEffects = true;
           }
-          visitCallRef(CallRef* call) {
+          void visitCallRef(CallRef* call) {
             // Assume indirect calls can do anything. TODO optimize
             info.hasUnremovableSideEffects = true;
           }
@@ -132,11 +135,10 @@ struct GlobalVacuum : public Pass {
         auto* target = getModule()->getFunction(call->target);
         if (!map[target].hasUnremovableSideEffects) {
           replaceCurrent(
-            getDroppedChildrenAndAppend(curr,
+            getDroppedChildrenAndAppend(call,
                                         *getModule(),
                                         getPassOptions(),
                                         Builder(*getModule()).makeNop()));
-          ,
         }
       }
 
