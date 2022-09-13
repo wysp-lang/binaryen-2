@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include "ir/branch-utils.h"
 #include "ir/drop.h"
+#include "ir/branch-utils.h"
 #include "ir/effects.h"
 #include "ir/iteration.h"
 #include "wasm-builder.h"

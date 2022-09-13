@@ -60,8 +60,9 @@ struct GlobalVacuum : public Pass {
       *module, [&](Function* func, Info& info) {
         if (func->imported()) {
           // Assume an import has effects, unless it is call.without.effects.
-          info.effects =
-            Intrinsics(*module).isCallWithoutEffects(func) ? Info::No : Info::Yes;
+          info.effects = Intrinsics(*module).isCallWithoutEffects(func)
+                           ? Info::No
+                           : Info::Yes;
           return;
         }
 
