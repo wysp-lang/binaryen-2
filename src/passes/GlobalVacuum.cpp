@@ -32,6 +32,7 @@
 #include "ir/intrinsics.h"
 #include "ir/module-utils.h"
 #include "pass.h"
+#include "support/unique_deferring_queue.h"
 #include "wasm-builder.h"
 #include "wasm.h"
 
@@ -128,8 +129,8 @@ struct GlobalVacuum : public Pass {
           callerCallsTo.erase(func);
           if (callerCallsTo.empty()) {
             // No calls left; we've proven this has no effects.
-            callerInfo.effects = Info::None;
-            queue.push_back(caller);
+            callerInfo.effects = Info::No;
+            queue.push(caller);
           }
         }
       }
