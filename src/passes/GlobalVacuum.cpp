@@ -57,6 +57,10 @@ struct GlobalVacuum : public Pass {
       } effects = Pending;
     };
 
+    // Perform any temporary allocations we may need below in a temporary
+    // module, so they all get GC'd automatically at the end.
+    Module tempModule;
+
     ModuleUtils::CallGraphPropertyAnalysis<Info> analyzer(
       *module, [&](Function* func, Info& info) {
         if (func->imported()) {
@@ -70,8 +74,29 @@ struct GlobalVacuum : public Pass {
         // Gather the effects.
         EffectAnalyzer effects(runner->options, *module, func->body);
 
-        // Ignore calls - we'll be computing them transitively.
-        effects.calls = false;
+        // We can ignore branching out of the function body - this can only be
+        // a return, and that is only noticeable in the function, not outside.
+        effects.branchesOut = false;
+
+        // We want to ignore calls, since we'll be computing them explicitly
+        // below, transitively. If calls exist, and exceptions are enabled, then
+        // calls were marked as throwing, and as a result we'll need to
+        // recompute effect to remove that.
+        if (effects.calls && passRunner->options.hasExceptions()) {
+          // Copy the function and make the calls lack effects, then recompute
+          // effects on that.
+          auto* funcCopy = ModuleUtils::copyFunction(func, tempModule);
+
+          struct CallEffectRemover : public WalkerPass<PostWalker<CallEffectRemover>> {
+            void visitCall(Call* curr) {
+              
+            }
+          } callEffectRemover;
+
+          callEffectRemover.setPassOptions(runner->options);
+          callEffectRemover.walkFunctionInModule(funcCopy, &tempModule);
+        }
+        assert(!effects.calls);
 
         // Ignore local writes - when the function exits, those become
         // unnoticeable anyhow.
