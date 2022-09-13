@@ -169,7 +169,7 @@ struct GlobalVacuum : public Pass {
       // effects.
       void replaceIfCallHasNoEffects(Call* call) {
         auto* target = getModule()->getFunction(call->target);
-        if (!map[target].effects) {
+        if (map[target].effects == Info::No) {
           auto* nop = Builder(*getModule()).makeNop();
           replaceCurrent(alwaysGetDroppedChildrenAndAppend(
             call, *getModule(), getPassOptions(), nop));
@@ -182,7 +182,7 @@ struct GlobalVacuum : public Pass {
         // effects are either calls, that turn out to not actually have effects
         // in our analysis, or local sets, which do not matter after the
         // function exits.
-        if (!map[curr].effects) {
+        if (map[curr].effects == Info::No) {
           curr->body = Builder(*getModule()).makeNop();
         }
       }

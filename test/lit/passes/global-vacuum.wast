@@ -7,6 +7,7 @@
   ;; CHECK:      (func $foo
   ;; CHECK-NEXT:  (nop)
   ;; CHECK-NEXT:  (call $unreachable)
+  ;; CHECK-NEXT:  (call $loop)
   ;; CHECK-NEXT:  (call $call-nop)
   ;; CHECK-NEXT:  (call $call-unreachable)
   ;; CHECK-NEXT: )
@@ -48,6 +49,11 @@
     (unreachable)
   )
 
+  ;; CHECK:      (func $loop
+  ;; CHECK-NEXT:  (loop $loop-in
+  ;; CHECK-NEXT:   (nop)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
   (func $loop
     (loop)
   )
