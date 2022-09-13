@@ -18,6 +18,7 @@
 // Remove calls to code that has no effects. For example:
 //
 // function foo() {}
+//
 // function bar() {
 //   foo();
 // }
@@ -42,65 +43,96 @@ struct GlobalVacuum : public Pass {
     struct Info
       : public ModuleUtils::CallGraphPropertyAnalysis<Info>::FunctionInfo {
 
-      // Whether the function has effects (we only care about non-removable ones
-      // since we'll be removing the call, if we can do so).
-      bool hasUnremovableSideEffects;
+      // Whether the function has effects. Note that we only care about non-
+      // removable ones since we'll be removing calls to here, if we can do so).
+      enum {
+        // We know this has effects.
+        Yes,
+        // We know this has no effects.
+        No,
+        // We don't know yet. This is the status a function is in while we
+        // figure out if the things it calls have effects.
+        Pending
+      } effects = Pending;
     };
 
     ModuleUtils::CallGraphPropertyAnalysis<Info> analyzer(
       *module, [&](Function* func, Info& info) {
         if (func->imported()) {
           // Assume an import has effects, unless it is call.without.effects.
-          info.hasUnremovableSideEffects =
-            !Intrinsics(*module).isCallWithoutEffects(func);
+          info.effects =
+            Intrinsics(*module).isCallWithoutEffects(func) ? Info::No : Info::Yes;
           return;
         }
 
         // Gather the effects.
         EffectAnalyzer effects(runner->options, *module, func->body);
 
-        // Ignore calls - we'll compute them transitively later.
+        // Ignore calls - we'll be computing them transitively.
         effects.calls = false;
 
         // Ignore local writes - when the function exits, those become
         // unnoticeable anyhow.
         effects.localsWritten.clear();
 
-        info.hasUnremovableSideEffects = effects.hasUnremovableSideEffects();
-
-        // Note that we don't need to handle call.without.effects here in any
-        // special way:
-        // Find calls and handle them.
-        struct CallFinder : public PostWalker<CallFinder> {
-          Info& info;
-
-          CallFinder(Info& info) : info(info) {}
-
-          void visitCallIndirect(CallIndirect* call) {
-            // Assume indirect calls can do anything. TODO optimize
-            info.hasUnremovableSideEffects = true;
-          }
-          void visitCallRef(CallRef* call) {
-            // Assume indirect calls can do anything. TODO optimize
-            info.hasUnremovableSideEffects = true;
-          }
-          // TODO loops, and infinite recursion - we need to model iloop hangs
-          // as effects
-        };
-
-        CallFinder callFinder(info);
-        callFinder.walk(func->body);
+        // We have effects either if the effect handler found any, or if we have
+        // a loop (which may hang forever, which is not something we can
+        // remove).
+        if (effects.hasUnremovableSideEffects() ||
+            !FindAll<Loop>(func->body).list.empty()) {
+          info.effects = Info::Yes;
+        }
       });
 
-    // Propagate the property of having effects to callers. We ignore non-
-    // direct calls since we handled them ourselves earlier.
-    analyzer.propagateBack(
-      [](const Info& info) { return info.hasUnremovableSideEffects; },
-      [](const Info& info) { return true; },
-      [](Info& info, Function* reason) {
-        info.hasUnremovableSideEffects = true;
-      },
-      analyzer.IgnoreNonDirectCalls);
+    auto& map = analyzer.map;
+
+    // Anything with a non-direct call is assumed to have effects. Anything with
+    // no effects in itself, and that has no calls at all, definitely has no
+    // effects.
+    for (auto& [func, info] : map) {
+      if (info.hasNonDirectCall) {
+        info.effects = Info::Yes;
+      } else if (info.effects == Info::Pending && info.callsTo.empty()) {
+        info.effects = Info::No;
+      }
+    }
+
+    // Propagate the property of having no effects to callers. The basic idea is
+    // that if a function has no effects in its body, and everything it calls
+    // also has no effects, then it has no effects. Start by queuing all items
+    // that have no effects. This queue will contain items that we just learned
+    // have no effects.
+    UniqueDeferredQueue<Function*> queue;
+    for (auto& [func, info] : map) {
+      if (info.effects == Info::No) {
+        queue.push(func);
+      }
+    }
+
+    // Process the queue. As we work, we remove items from |callsTo|. That is,
+    // once we see that foo() has no effects, we process all callers and remove
+    // their call to foo() (since we can ignore it). Once such a caller has no
+    // calls left, we can mark it has having no effects itself (if it has no
+    // effects in its body).
+    while (!queue.empty()) {
+      auto* func = queue.pop();
+      assert(map[func].effects == Info::No);
+      for (auto* caller : map[func].calledBy) {
+        auto& callerInfo = map[caller];
+        auto& callerCallsTo = callerInfo.callsTo;
+        assert(callerCallsTo.count(func));
+        if (callerInfo.effects == Info::Pending) {
+          // This is pending, so there is a chance this can be found to have no
+          // effects. Remove the call.
+          callerCallsTo.erase(func);
+          if (callerCallsTo.empty()) {
+            // No calls left; we've proven this has no effects.
+            callerInfo.effects = Info::None;
+            queue.push_back(caller);
+          }
+        }
+      }
+    }
 
     // We now know which functions have effects we cannot remove. Calls to
     // functions without such effects can be removed.
@@ -135,7 +167,7 @@ struct GlobalVacuum : public Pass {
       // effects.
       void replaceIfCallHasNoEffects(Call* call) {
         auto* target = getModule()->getFunction(call->target);
-        if (!map[target].hasUnremovableSideEffects) {
+        if (!map[target].effects) {
           auto* nop = Builder(*getModule()).makeNop();
           replaceCurrent(alwaysGetDroppedChildrenAndAppend(
             call, *getModule(), getPassOptions(), nop));
@@ -148,12 +180,12 @@ struct GlobalVacuum : public Pass {
         // effects are either calls, that turn out to not actually have effects
         // in our analysis, or local sets, which do not matter after the
         // function exits.
-        if (!map[curr].hasUnremovableSideEffects) {
+        if (!map[curr].effects) {
           curr->body = Builder(*getModule()).makeNop();
         }
       }
     };
-    Optimize(analyzer.map).run(runner, module);
+    Optimize(map).run(runner, module);
   }
 };
 
