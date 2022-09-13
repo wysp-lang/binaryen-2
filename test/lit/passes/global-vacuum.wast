@@ -15,6 +15,9 @@
     (call $nop)
     ;; Calling a function with effects cannot.
     (call $unreachable)
+    ;; Calling a function with a loop cannot (the loop might hang forever, and
+    ;; must stay that way).
+    (call $loop)
     ;; Calling something that calls something with no effects can be optimized
     ;; away.
     (call $call-nop)
@@ -26,8 +29,8 @@
   ;; CHECK-NEXT:  (call $cycle)
   ;; CHECK-NEXT: )
   (func $cycle
-    ;; Calling a function with no effects in a cycle can be optimized out.
-    ;; XXX
+    ;; Calling a function with no effects in a cycle cannot be optimized out -
+    ;; this must keep hanging forever.
     (call $cycle)
   )
 
@@ -43,6 +46,10 @@
   ;; CHECK-NEXT: )
   (func $unreachable
     (unreachable)
+  )
+
+  (func $loop
+    (loop)
   )
 
   ;; CHECK:      (func $call-nop
