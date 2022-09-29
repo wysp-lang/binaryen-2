@@ -230,7 +230,11 @@ struct GUFAOptimizer
       auto* result = Builder(*getModule()).makeConst(Literal(int32_t(0)));
       replaceCurrent(getDroppedChildrenAndAppend(
         curr, *getModule(), getPassOptions(), result));
+      return;
     }
+
+    // Fall back to the generic optimization path.
+    visitExpression(curr);
   }
 
   void visitRefTest(RefTest* curr) {
@@ -256,10 +260,15 @@ struct GUFAOptimizer
 
       if (!isSubType) {
         optimize(0);
+        return;
       } else if (!mayBeNull) {
         optimize(1);
+        return;
       }
     }
+
+    // Fall back to the generic optimization path.
+    visitExpression(curr);
   }
 
   // TODO: If an instruction would trap on null, like struct.get, we could
