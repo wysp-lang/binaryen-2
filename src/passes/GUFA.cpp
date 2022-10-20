@@ -245,8 +245,35 @@ struct GUFAOptimizer
       //  global b = a;
       //
       // The PossibleContents of a global.get of b will contain Global(a). Given
-      // that, checking for equality is simple.
-      replaceWithConst(leftContents == rightContents);
+      // that, if we have the same global on both sides then they definitely
+      // refer to the same thing.
+      if (leftContents == rightContents)
+        replaceWithConst(1);
+        return;
+      }
+
+      // Checking for inequality is slightly trickier, since we may have two
+      // immutable globals that refer to the same thing, or different things:
+      //
+      //  global a = 5;
+      //  global b = 5; // same as a
+      //  global c = 6; // different from a
+      //
+      // Or:
+      //
+      //  global x = new T{42};
+      //  global y = new T{42};
+      //  global a = x;
+      //  global b = x; // same as a
+      //  global c = y; // different from a
+      //
+      // In these cases we can look at the global's contents.
+      auto leftGlobalContents = getContents(GlobalLocation{getModule()->getGlobal(leftGlobal.getGlobal())});
+      auto rightGlobalContents = getContents(GlobalLocation{getModule()->getGlobal(rightGlobal.getGlobal())});
+      if ((leftGlobalContents.isLiteral() || leftGlobalContents.isGlobal()) &&
+          (rightGlobalContents.isLiteral() || rightGlobalContents.isGlobal()) {
+        replaceWithConst(leftGlobalContents == rightGlobalContents);
+      }
     }
   }
 
