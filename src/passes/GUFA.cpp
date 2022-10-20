@@ -210,6 +210,12 @@ struct GUFAOptimizer
     }
   }
 
+  void replaceWithConst(int32_t result) {
+    auto* last = Builder(*getModule()).makeConst(Literal(int32_t(result)));
+    replaceCurrent(getDroppedChildrenAndAppend(
+      getCurrent(), *getModule(), getPassOptions(), last));
+  };
+
   void visitRefEq(RefEq* curr) {
     if (curr->type == Type::unreachable) {
       // Leave this for DCE.
@@ -227,9 +233,20 @@ struct GUFAOptimizer
       // no value is possible there, and the intersection is empty, so we will
       // get here and emit a 0. That 0 will never be reached as the None child
       // will be turned into an unreachable, so it does not cause any problem.
-      auto* result = Builder(*getModule()).makeConst(Literal(int32_t(0)));
-      replaceCurrent(getDroppedChildrenAndAppend(
-        curr, *getModule(), getPassOptions(), result));
+      replaceWithConst(0);
+      return;
+    }
+
+    if (leftContents.isGlobal() && rightContents.isGlobal()) {
+      // Two immutable globals is a specific case we can optimize well. The
+      // oracle will always use the earliest global, that is:
+      //
+      //  global a = ..
+      //  global b = a;
+      //
+      // The PossibleContents of a global.get of b will contain Global(a). Given
+      // that, checking for equality is simple.
+      replaceWithConst(leftContents == rightContents);
     }
   }
 
@@ -249,17 +266,11 @@ struct GUFAOptimizer
       auto intendedContents =
         PossibleContents::fullConeType(Type(curr->intendedType, NonNullable));
 
-      auto optimize = [&](int32_t result) {
-        auto* last = Builder(*getModule()).makeConst(Literal(int32_t(result)));
-        replaceCurrent(getDroppedChildrenAndAppend(
-          curr, *getModule(), getPassOptions(), last));
-      };
-
       if (!PossibleContents::haveIntersection(refContents, intendedContents)) {
-        optimize(0);
+        replaceWithConst(0);
       } else if (PossibleContents::isSubContents(refContents,
                                                  intendedContents)) {
-        optimize(1);
+        replaceWithConst(1);
       }
     }
   }

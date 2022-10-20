@@ -3386,28 +3386,16 @@
 
   ;; CHECK:      (func $compare-a (type $none_=>_none)
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (ref.eq
-  ;; CHECK-NEXT:    (global.get $a)
-  ;; CHECK-NEXT:    (global.get $a)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.const 1)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (ref.eq
-  ;; CHECK-NEXT:    (global.get $a)
-  ;; CHECK-NEXT:    (global.get $a)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.const 1)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (ref.eq
-  ;; CHECK-NEXT:    (global.get $a)
-  ;; CHECK-NEXT:    (global.get $a)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.const 1)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (ref.eq
-  ;; CHECK-NEXT:    (global.get $a)
-  ;; CHECK-NEXT:    (global.get $a-other)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.const 0)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (ref.eq
@@ -3416,10 +3404,7 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (ref.eq
-  ;; CHECK-NEXT:    (global.get $a)
-  ;; CHECK-NEXT:    (global.get $a-copy-mut)
-  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (i32.const 0)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (global.set $a-mut-copy-written
   ;; CHECK-NEXT:   (global.get $a-other)
@@ -3434,14 +3419,17 @@
   (func $compare-a
     ;; Comparisons of $a to everything else.
     ;;
-    ;; GUFA does not compute the results of these yet, as it leaves it to other
-    ;; passes. This test guards against us doing anything unexpected here.
+    ;; When comparing two global.gets of immutable globals we can infer the
+    ;; result, since gufa will always emit a reference to the earliest global in
+    ;; a chain,
     ;;
-    ;; What we do change here is update a copied global to the original,
-    ;; so $a-copy will turn into $a (because that is the only value it can
-    ;; contain). That should happen for the first three only. (For the 3rd, it
-    ;; works even though it is mutable, since there is only a single write
-    ;; anywhere.)
+    ;;  global a = ..
+    ;;  global b = a;
+    ;;
+    ;; The PossibleContents of a global.get of b will contain Global(a). This
+    ;; is visible in the results by changing $a-copy to $a, etc. Using that,
+    ;; when comparing two global.gets of immutable globals we can emit either 0
+    ;; or 1.
     (drop
       (ref.eq
         (global.get $a)
@@ -3466,12 +3454,19 @@
         (global.get $a-other)
       )
     )
+    ;; This one cannot be optimized since we compare an immutable to a mutable
+    ;; global. If we knew the latter was immutable (which it is in practice)
+    ;; then we could optimize, but GUFA does not try to prove immutability - it
+    ;; leaves that for other passes.
     (drop
       (ref.eq
         (global.get $a)
         (global.get $a-mut)
       )
     )
+    ;; This one can be optimized: Both are immutable, and so we know that if
+    ;; they are equal they'll have the same PossibleContents. In this case they
+    ;; do not, so the result is 0.
     (drop
       (ref.eq
         (global.get $a)
