@@ -3384,6 +3384,59 @@
   ;; CHECK:      (global $a-mut-copy-written (mut (ref $A)) (global.get $a))
   (global $a-mut-copy-written (mut (ref $A)) (global.get $a))
 
+  ;; CHECK:      (func $reads (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (global.get $a)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (global.get $a)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (global.get $a)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (global.get $a-other)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (global.get $a-mut)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (global.get $a-copy-mut)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (global.get $a-mut-copy-written)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $reads
+    ;; In some cases we can infer that that a global contains a reference to
+    ;; another global. The first three are all equal to $a.
+    (drop
+      (global.get $a)
+    )
+    (drop
+      (global.get $a-copy)
+    )
+    (drop
+      (global.get $a-mut-copy)
+    )
+    ;; This is another value entirely, and will remain unchanged.
+    (drop
+      (global.get $a-other)
+    )
+    ;; Mutable globals are left unchanged.
+    (drop
+      (global.get $a-mut)
+    )
+    ;; This is immutable, but refers to a mutable one, so no change.
+    (drop
+      (global.get $a-copy-mut)
+    )
+    ;; Also mutable (and even has a write).
+    (drop
+      (global.get $a-mut-copy-written)
+    )
+  )
+
   ;; CHECK:      (func $compare-a (type $none_=>_none)
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (i32.const 1)
@@ -3427,9 +3480,9 @@
     ;;  global b = a;
     ;;
     ;; The PossibleContents of a global.get of b will contain Global(a). This
-    ;; is visible in the results by changing $a-copy to $a, etc. Using that,
-    ;; when comparing two global.gets of immutable globals we can emit either 0
-    ;; or 1.
+    ;; is visible in the results by changing $a-copy to $a, etc., in the
+    ;; previous test. Using that, when comparing two global.gets of immutable
+    ;; globals we can emit either 0 or 1.
     (drop
       (ref.eq
         (global.get $a)
