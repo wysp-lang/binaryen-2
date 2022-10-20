@@ -3381,6 +3381,9 @@
   ;; CHECK:      (global $a-copy-mut (ref $A) (global.get $a-mut))
   (global $a-copy-mut (ref $A) (global.get $a-mut))
 
+  ;; CHECK:      (global $a-copy-mut-2 (ref $A) (global.get $a-mut))
+  (global $a-copy-mut-2 (ref $A) (global.get $a-mut))
+
   ;; CHECK:      (global $a-mut-copy-written (mut (ref $A)) (global.get $a))
   (global $a-mut-copy-written (mut (ref $A)) (global.get $a))
 
@@ -3402,6 +3405,9 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (global.get $a-copy-mut)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (global.get $a-copy-mut-2)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (global.get $a-mut-copy-written)
@@ -3427,9 +3433,12 @@
     (drop
       (global.get $a-mut)
     )
-    ;; This is immutable, but refers to a mutable one, so no change.
+    ;; These two are immutable, but refers to a mutable one, so no change.
     (drop
       (global.get $a-copy-mut)
+    )
+    (drop
+      (global.get $a-copy-mut-2)
     )
     ;; Also mutable (and even has a write).
     (drop
@@ -3455,6 +3464,9 @@
   ;; CHECK-NEXT:    (global.get $a)
   ;; CHECK-NEXT:    (global.get $a-mut)
   ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 0)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (i32.const 0)
@@ -3524,6 +3536,15 @@
       (ref.eq
         (global.get $a)
         (global.get $a-copy-mut)
+      )
+    )
+    ;; These both refer to the same thing. And they are both immutable so we can
+    ;; compare them. We must not emit a 0 here: the immutable globals are
+    ;; different, but they refer to the same value. FIXME bug
+    (drop
+      (ref.eq
+        (global.get $a-copy-mut)
+        (global.get $a-copy-mut-2)
       )
     )
     (global.set $a-mut-copy-written
