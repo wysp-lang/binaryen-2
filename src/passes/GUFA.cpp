@@ -267,9 +267,19 @@ struct GUFAOptimizer
       //  global b = x; // same as a
       //  global c = y; // different from a
       //
-      // In these cases we can look at the global's contents.
-      auto leftGlobalContents = getContents(GlobalLocation{getModule()->getGlobal(leftGlobal.getGlobal())});
-      auto rightGlobalContents = getContents(GlobalLocation{getModule()->getGlobal(rightGlobal.getGlobal())});
+      // In these cases we can look at the contents that the globals are
+      // initialized with. Those contents must be a cone type: If it was
+      // something more specific than Global then we'd have kept it as such,
+      // that is, in the first example in this paragraph, (global.get $b) would
+      // return not a Global but a Literal(5). We only use Global when it
+      // replaces something *less* precise.
+      auto getGlobalInitContents = [&](Name global) {
+        auto contents = getContents(ExpressionLocation{getModule()->getGlobal(global), 0});
+        assert(contents.isConeType());
+        return contents;
+      };
+      auto leftGlobalContents = getGlobalInitContents(leftGlobal.getGlobal());
+      auto rightGlobalContents = getGlobalInitContents(rightGlobal.getGlobal());
       if ((leftGlobalContents.isLiteral() || leftGlobalContents.isGlobal()) &&
           (rightGlobalContents.isLiteral() || rightGlobalContents.isGlobal()) {
         replaceWithConst(leftGlobalContents == rightGlobalContents);
