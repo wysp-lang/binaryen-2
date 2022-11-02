@@ -51,6 +51,7 @@
 #include <ir/effects.h>
 #include <ir/find_all.h>
 #include <ir/linear-execution.h>
+#include <ir/local-graph.h>
 #include <ir/local-utils.h>
 #include <ir/manipulation.h>
 #include <ir/utils.h>
@@ -997,6 +998,75 @@ struct SimplifyLocals
     // will inhibit us creating an if return value.
     struct EquivalentOptimizer
       : public LinearExecutionWalker<EquivalentOptimizer> {
+
+      // (A, B) here means that A and B have the same value. We canonicalize the
+      // lower pointer to be first.
+      std::unordered_set<std::pair<Expression*, Expression*>> equivalentPairs;
+
+      void addEquivalence(Expression* x, Expression* y) {
+        assert(x != y);
+        if (x > y) {
+          std::swap(x, y);
+        }
+        equivalentPairs.insert({x, y});
+      }
+
+      bool areEquivalent(Expression* x, Expression* y) {
+        assert(x != y);
+        if (x > y) {
+          std::swap(x, y);
+        }
+        return equivalentPairs.count({x, y});
+      }
+
+      EquivalentOptimizer(Function* func) {
+        LocalGraph localGraph(func);
+
+        // TODO: this can be quite slow
+        bool more = true;
+        while (more) {
+          more = false;
+          for (auto& [curr, _] : localGraph.locations) {
+            if (auto* get = curr->template dynCast<LocalGet>()) {
+              auto& sets = localGraph.getSetses[get];
+              if (sets.size() == 0) {
+                continue;
+              }
+
+              // A get is equivalent to all its sets, if they are all
+              // equivalent to each other.
+              auto equivalent = true;
+              for (auto* set : sets) {
+                if (!areEquivalent(get, set)) {
+                  equivalent = false;
+                  break;
+                }
+              }
+              if (equivalent) {
+                for (auto* set : sets) {
+                  addEquivalence(get, set);
+                }
+              }
+              continue;
+            }
+
+            // A set is equivalent to the things written to it.
+            auto* set = curr->template cast<LocalSet>();
+            auto* value = set->value;
+            while (1) {
+              if (value->template is<LocalGet>() || value->template is<LocalSet>()) {
+                addEquivalence(set, value);
+              }
+              auto* fallthrough = Properties::getImmediateFallthrough(value, passOptions, *module);
+              if (fallthrough == value) {
+                break;
+              }
+              value = fallthrough;
+            }
+          }
+        }
+      }
+
       std::vector<Index>* numLocalGets;
       bool removeEquivalentSets;
       Module* module;
@@ -1115,7 +1185,7 @@ struct SimplifyLocals
       }
     };
 
-    EquivalentOptimizer eqOpter;
+    EquivalentOptimizer eqOpter(func);
     eqOpter.module = this->getModule();
     eqOpter.passOptions = this->getPassOptions();
     eqOpter.numLocalGets = &getCounter.num;
