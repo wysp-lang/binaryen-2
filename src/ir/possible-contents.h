@@ -378,10 +378,10 @@ public:
         }
       }
     } else if (isUnion()) {
-      o << "Union {";
+      o << "Union{";
       bool first = true;
       for (auto& contents : getUnion()) {
-        if (!first) {
+        if (first) {
           o << ", ";
           first = false;
         }
