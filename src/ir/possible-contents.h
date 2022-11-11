@@ -86,7 +86,7 @@ class PossibleContents {
     }
   };
 
-  using Union = std::vector<PossibleContents>;
+  using Union = std::unordered_set<PossibleContents>;
 
   struct Many : public std::monostate {};
 

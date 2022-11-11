@@ -69,6 +69,25 @@ PossibleContents PossibleContents::combine(const PossibleContents& a,
     return Union{a, b};
   }
 
+  auto mergeLiteralAndUnion = [&](const PossibleContents& lit, const PossibleContents& u) {
+    assert(lit.isLiteral());
+    assert(u.isUnion());
+    for (uContents : u.getUnion()) {
+      if (uContents == lit) {
+        // The literal is already in the union.
+        return u;
+      }
+    }
+    return FullConeType(Type::getLeastUpperBound(lit.getType(), u.getType()));
+  };
+
+  if (a.isLiteral() && b.isUnion()) {
+    return mergeLiteralAndUnion(a, b);
+  }
+  if (b.isLiteral() && a.isUnion()) {
+    return mergeLiteralAndUnion(b, a);
+  }
+
   if (!aType.isRef() || !bType.isRef()) {
     // At least one is not a reference. The only possibility left for a useful
     // combination here is if they have the same type (since we've already ruled
@@ -284,6 +303,25 @@ bool PossibleContents::haveIntersection(const PossibleContents& a,
     // One is the set of all things, so definitely something can intersect since
     // we've ruled out an empty set for both.
     return true;
+  }
+
+  auto intersectLiteralAndUnion = [&](const PossibleContents& lit, const PossibleContents& u) {
+    assert(lit.isLiteral());
+    assert(u.isUnion());
+    for (uContents : u.getUnion()) {
+      if (uContents == lit) {
+        // The literal is in the union, so there is an intersection.
+        return true;
+      }
+    }
+    return false;
+  };
+
+  if (a.isLiteral() && b.isUnion()) {
+    return intersectLiteralAndUnion(a, b);
+  }
+  if (b.isLiteral() && a.isUnion()) {
+    return intersectLiteralAndUnion(b, a);
   }
 
   auto aType = a.getType();
