@@ -64,6 +64,11 @@ PossibleContents PossibleContents::combine(const PossibleContents& a,
     return b;
   }
 
+  if (a.isLiteral() && b.isLiteral()) {
+    // Two different literals => a union.
+    return Union{a, b};
+  }
+
   if (!aType.isRef() || !bType.isRef()) {
     // At least one is not a reference. The only possibility left for a useful
     // combination here is if they have the same type (since we've already ruled

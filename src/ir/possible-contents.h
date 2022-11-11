@@ -133,6 +133,9 @@ public:
   static PossibleContents coneType(Type type, Index depth) {
     return PossibleContents{ConeType{type, depth}};
   }
+  static PossibleContents union(const Union& vec) {
+    return PossibleContents{vec};
+  }
   static PossibleContents many() { return PossibleContents{Many()}; }
 
   // Helper for creating a PossibleContents based on a wasm type, that is, where
