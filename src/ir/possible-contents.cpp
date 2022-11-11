@@ -69,10 +69,10 @@ PossibleContents PossibleContents::combine(const PossibleContents& a,
     return Union{a, b};
   }
 
-  auto mergeLiteralAndUnion = [&](const PossibleContents& lit, const PossibleContents& u) {
+  auto mergeLiteralAndUnion = [&](const PossibleContents& lit, const PossibleContents& u) -> PossibleContents {
     assert(lit.isLiteral());
     assert(u.isUnion());
-    for (uContents : u.getUnion()) {
+    for (auto& uContents : u.getUnion()) {
       if (uContents == lit) {
         // The literal is already in the union.
         return u;
@@ -308,7 +308,7 @@ bool PossibleContents::haveIntersection(const PossibleContents& a,
   auto intersectLiteralAndUnion = [&](const PossibleContents& lit, const PossibleContents& u) {
     assert(lit.isLiteral());
     assert(u.isUnion());
-    for (uContents : u.getUnion()) {
+    for (auto& uContents : u.getUnion()) {
       if (uContents == lit) {
         // The literal is in the union, so there is an intersection.
         return true;

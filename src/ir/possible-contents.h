@@ -86,7 +86,8 @@ class PossibleContents {
     }
   };
 
-  using Union = std::unordered_set<PossibleContents>;
+  // TODO: set?
+  using Union = std::vector<PossibleContents>;
 
   struct Many : public std::monostate {};
 
@@ -331,10 +332,14 @@ public:
     } else if (auto* u_ = std::get_if<Union>(&value)) {
       auto& u = *u_;
       assert(u.size() >= 2);
+      rehash(ret, u.size());
+      // Is there a better way to hash a vector whose order does not matter?
+      size_t combined = 0;
       for (auto& contents : u) {
         assert(contents.isLiteral());
-        rehash(ret, contents.hash());
+        combined ^= contents.hash();
       }
+      rehash(ret, combined);
     } else {
       WASM_UNREACHABLE("bad variant");
     }
