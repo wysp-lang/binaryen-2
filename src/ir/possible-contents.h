@@ -57,6 +57,8 @@ namespace wasm {
 //                           to which we assign a constant: not only do we know
 //                           the type, but also certain field's values.
 //
+//  * Union            Currently just of Literals.
+//
 //  * Many:            Anything else. Many things are possible here, and we do
 //                     not track what they might be, so we must assume the worst
 //                     in the calling code.
@@ -83,6 +85,8 @@ class PossibleContents {
       return type == other.type && depth == other.depth;
     }
   };
+
+  using Union = std::vector<PossibleContents>;
 
   struct Many : public std::monostate {};
 
@@ -179,6 +183,7 @@ public:
   bool isLiteral() const { return std::get_if<Literal>(&value); }
   bool isGlobal() const { return std::get_if<GlobalInfo>(&value); }
   bool isConeType() const { return std::get_if<ConeType>(&value); }
+  bool isUnion() const { return std::get_id<Union>(&value); }
   bool isMany() const { return std::get_if<Many>(&value); }
 
   Literal getLiteral() const {
@@ -190,6 +195,12 @@ public:
     assert(isGlobal());
     return std::get<GlobalInfo>(value).name;
   }
+
+  Union getUnion() const {
+    assert(isUnion());
+    return std::get<Union>(value);
+  }
+
 
   bool isNull() const { return isLiteral() && getLiteral().isNull(); }
 
@@ -207,6 +218,15 @@ public:
       return global->type;
     } else if (auto* coneType = std::get_if<ConeType>(&value)) {
       return coneType->type;
+    } else if (auto* u_ = std::get_if<Union>(&value)) {
+      auto& u = *u_;
+      assert(u->size() >= 2);
+      Type lub = Type::unreachable;
+      for (auto& contents : u) {
+        assert(contents.isLiteral());
+        lub = Type::getLeastUpperBound(lub, contents.getType());
+      }
+      return lub; // TODO cache it?
     } else if (std::get_if<None>(&value)) {
       return Type::unreachable;
     } else if (std::get_if<Many>(&value)) {
@@ -228,6 +248,8 @@ public:
       return FullConeType(global->type);
     } else if (auto* coneType = std::get_if<ConeType>(&value)) {
       return *coneType;
+    } else if (std::get_if<Union>(&value)) {
+      return FullConeType(getType());
     } else if (std::get_if<None>(&value)) {
       return ExactType(Type::unreachable);
     } else if (std::get_if<Many>(&value)) {
@@ -303,6 +325,13 @@ public:
     } else if (auto* coneType = std::get_if<ConeType>(&value)) {
       rehash(ret, coneType->type);
       rehash(ret, coneType->depth);
+    } else if (auto* u_ = std::get_if<Union>(&value)) {
+      auto& u = *u_;
+      assert(u->size() >= 2);
+      for (auto& contents : u) {
+        assert(contents.isLiteral());
+        rehash(ret, contents.hash());
+      }
     } else {
       WASM_UNREACHABLE("bad variant");
     }
@@ -340,6 +369,18 @@ public:
           o << " null";
         }
       }
+    } else if (isUnion()) {
+      o << "Union {";
+      bool first = true;
+      for (auto& contents : u) {
+        if (!first) {
+          o << ", ";
+          first = false;
+        }
+        assert(contents.isLiteral());
+        contents.dump(o, wasm);
+      }
+      o << '}';
     } else if (isMany()) {
       o << "Many";
     } else {
