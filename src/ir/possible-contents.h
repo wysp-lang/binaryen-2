@@ -94,7 +94,7 @@ class PossibleContents {
   //       we could share code, but extending a variant using template magic may
   //       not be worthwhile. Another option might be to make PCV inherit from
   //       this and disallow ConeType etc., but PCV might get slower.
-  using Variant = std::variant<None, Literal, GlobalInfo, ConeType, Many>;
+  using Variant = std::variant<None, Literal, GlobalInfo, ConeType, Union, Many>;
   Variant value;
 
   // Internal convenience for creating a cone type with depth 0, i.e,, an exact
@@ -133,8 +133,8 @@ public:
   static PossibleContents coneType(Type type, Index depth) {
     return PossibleContents{ConeType{type, depth}};
   }
-  static PossibleContents union(const Union& vec) {
-    return PossibleContents{vec};
+  static PossibleContents union_(const Union& vec) {
+    return PossibleContents{Union{vec}};
   }
   static PossibleContents many() { return PossibleContents{Many()}; }
 
@@ -186,7 +186,7 @@ public:
   bool isLiteral() const { return std::get_if<Literal>(&value); }
   bool isGlobal() const { return std::get_if<GlobalInfo>(&value); }
   bool isConeType() const { return std::get_if<ConeType>(&value); }
-  bool isUnion() const { return std::get_id<Union>(&value); }
+  bool isUnion() const { return std::get_if<Union>(&value); }
   bool isMany() const { return std::get_if<Many>(&value); }
 
   Literal getLiteral() const {
@@ -223,7 +223,7 @@ public:
       return coneType->type;
     } else if (auto* u_ = std::get_if<Union>(&value)) {
       auto& u = *u_;
-      assert(u->size() >= 2);
+      assert(u.size() >= 2);
       Type lub = Type::unreachable;
       for (auto& contents : u) {
         assert(contents.isLiteral());
@@ -330,7 +330,7 @@ public:
       rehash(ret, coneType->depth);
     } else if (auto* u_ = std::get_if<Union>(&value)) {
       auto& u = *u_;
-      assert(u->size() >= 2);
+      assert(u.size() >= 2);
       for (auto& contents : u) {
         assert(contents.isLiteral());
         rehash(ret, contents.hash());
@@ -375,7 +375,7 @@ public:
     } else if (isUnion()) {
       o << "Union {";
       bool first = true;
-      for (auto& contents : u) {
+      for (auto& contents : getUnion()) {
         if (!first) {
           o << ", ";
           first = false;
