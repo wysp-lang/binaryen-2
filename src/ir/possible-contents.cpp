@@ -1,3 +1,4 @@
+//#define POSSIBLE_CONTENTS_DEBUG 2
 /*
  * Copyright 2022 WebAssembly Community Group participants
  *
@@ -174,6 +175,11 @@ void PossibleContents::intersectWithFullCone(const PossibleContents& other) {
     // The intersection is just |other|.
     // Note that this code path handles |this| being Many.
     value = other.value;
+    return;
+  }
+
+  if (isSubContents(*this, other)) {
+    // The intersection is just |this|.
     return;
   }
 

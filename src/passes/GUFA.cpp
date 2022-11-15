@@ -233,6 +233,18 @@ struct GUFAOptimizer
     }
   }
 
+  void visitCallRef(CallRef* curr) {
+    if (curr->type == Type::unreachable) {
+      // Leave this for DCE.
+      return;
+    }
+
+    auto targetContents = getContents(curr->target);
+    if (targetContents.isUnion()) {
+      std::cout << "CALLREF TO UNION " << getFunction()->name << " : " << targetContents << '\n';
+    }
+  }
+
   void visitRefTest(RefTest* curr) {
     if (curr->type == Type::unreachable) {
       // Leave this for DCE.

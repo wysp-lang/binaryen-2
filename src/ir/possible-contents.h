@@ -381,10 +381,10 @@ public:
       o << "Union{";
       bool first = true;
       for (auto& contents : getUnion()) {
-        if (first) {
+        if (!first) {
           o << ", ";
-          first = false;
         }
+        first = false;
         assert(contents.isLiteral());
         contents.dump(o, wasm);
       }
