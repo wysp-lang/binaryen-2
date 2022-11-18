@@ -98,39 +98,44 @@ struct BestCastFinder : public LinearExecutionWalker<BestCastFinder> {
 
   PassOptions options;
 
-  // Map local indices to the most refined downcastings of local.gets from those
-  // indices.
+  // Map local indices to all gets seen for that index. These are either literal
+  // local.gets, or casts of local.gets, so the list can contain things like
+  // (ref.cast (local.get ..)). That is, all the things in each vector here
+  // contain the same local.get value, but perhaps casted.
   //
   // This is tracked in each basic block, and cleared between them.
-  std::unordered_map<Index, Expression*> mostCastedGets;
+  std::unordered_map<Index, std::vector<Expression*>> getsForIndex;
 
-  // For each most-downcasted local.get, a vector of other local.gets that could
-  // be replaced with gets of the downcasted value.
+  // The findings: things we can optimize. Each is a sequence of local.gets, all
+  // of whom can use the most-casted value, and that best cast which we want to
+  // use for all of them. The key in the map is the first of the local.gets, who
+  // we will apply the cast to, then all others will read from it.
   //
   // This is tracked until the end of the entire function, and contains the
   // information we need to optimize later. That is, entries here are things we
   // want to apply.
-  std::unordered_map<Expression*, std::vector<LocalGet*>> lessCastedGets;
+  struct Finding {
+    std::vector<LocalGet*> gets;
+    Expression* bestCast;
+  };
+  std::unordered_map<Expression*, Finding> findings;
 
   static void doNoteNonLinear(BestCastFinder* self, Expression** currp) {
-    self->mostCastedGets.clear();
+    // This basic block is ending. Make decisions about all we've seen.
+    self->decideAboutAllGets();
+    self->getsForIndex.clear();
   }
 
   void visitLocalSet(LocalSet* curr) {
-    // Clear any information about this local; it has a new value here.
-    mostCastedGets.erase(curr->index);
+    // This index has a new value here, so make a decision up to here, and
+    // clear the state.
+    auto index = curr->index;
+    decideAboutGets(index, getsForIndex[index]);
+    getsForIndex.erase(index);
   }
 
   void visitLocalGet(LocalGet* curr) {
-    auto iter = mostCastedGets.find(curr->index);
-    if (iter != mostCastedGets.end()) {
-      auto* bestCast = iter->second;
-      if (curr->type != bestCast->type &&
-          Type::isSubType(bestCast->type, curr->type)) {
-        // The best cast has a more refined type, note that we want to use it.
-        lessCastedGets[bestCast].push_back(curr);
-      }
-    }
+    getsForIndex[curr->index].push_back(curr);
   }
 
   void visitRefAs(RefAs* curr) { handleRefinement(curr); }
@@ -140,18 +145,65 @@ struct BestCastFinder : public LinearExecutionWalker<BestCastFinder> {
   void handleRefinement(Expression* curr) {
     auto* fallthrough = Properties::getFallthrough(curr, options, *getModule());
     if (auto* get = fallthrough->dynCast<LocalGet>()) {
-      auto*& bestCast = mostCastedGets[get->index];
+      getsForIndex[get->index].push_back(curr);
+    }
+  }
+
+  void visitFunction(Function* curr) {
+    // The last basic block ended.
+    decideAboutAllGets();
+  }
+
+  void decideAboutAllGets() {
+    for (auto& [index, gets] : getsForIndex) {
+      decideAboutGets(index, gets);
+    }
+  }
+
+  void decideAboutGets(Index index, const std::vector<Expression*>& gets) {
+    // Find the most-cast get in the list.
+    Expression* bestCast = nullptr;
+    for (auto* get : gets) {
+      if (get->is<LocalGet>()) {
+        // A plain local.get, without a cast, cannot be better than any other
+        // local.get.
+        continue;
+      }
+
       if (!bestCast) {
         // This is the first.
         bestCast = curr;
-        return;
+        continue;
       }
 
       // See if we are better than the current best.
-      if (curr->type != bestCast->type &&
-          Type::isSubType(curr->type, bestCast->type)) {
-        bestCast = curr;
+      if (get->type != bestCast->type &&
+          Type::isSubType(get->type, bestCast->type)) {
+        bestCast = get;
       }
+    }
+
+    // See if we can make an actual improvement: a get exists with a less-
+    // refined type than the best. We can improve that one, if so.
+    auto canImprove = false;
+    Finding finding;
+    for (auto* get : gets) {
+      if (get->type != bestCast->type) {
+        canImprove = true;
+      }
+
+      // Only push the actual LocalGets, not casts of them, to the finding's
+      // vector. We'll make them all use the more-casted value (then the casts
+      // of them will be optimized away, when possible, by other passes).
+      // XXX if we store them all, we can optimize the case where the first get
+      // is the cast laready.
+      if (auto* localGet = get->dynCast<LocalGet>()) {
+        finding.gets.push_back(localGet);
+      }
+    }
+    if (canImprove) {
+      finding.bestCast = bestCast;
+      findings[gets[0]] = finding;
     }
   }
 };
@@ -167,27 +219,33 @@ struct FindingApplier : public PostWalker<FindingApplier> {
 
   FindingApplier(BestCastFinder& finder) : finder(finder) {}
 
+  void visitLocalGet(waka..
   void visitRefAs(RefAs* curr) { handleRefinement(curr); }
 
   void visitRefCast(RefCast* curr) { handleRefinement(curr); }
 
   void handleRefinement(Expression* curr) {
-    auto iter = finder.lessCastedGets.find(curr);
-    if (iter == finder.lessCastedGets.end()) {
+    auto iter = finder.findings.find(curr);
+    if (iter == finder.findings.end()) {
       return;
     }
 
-    // This expression was the best cast for some gets. Add a new local to
-    // store this value, then use it for the gets.
+    auto& finding = iter->second;
+    Builder builder(*getModule());
+
+    // This expression was the first local.get in a sequence of them, for whom
+    // we can make an improvement. Put the cast here, save the cast value to a
+    // new local, and use it in all the others.
+    auto* cast = ExpressionManipulator::copy(finding.bestCast, *getModule());
+    ChildIterator(cast).getChild(0) = curr;
     auto var = Builder::addVar(getFunction(), curr->type);
-    auto& gets = iter->second;
-    for (auto* get : gets) {
+    for (auto* get : finding.gets) {
       get->index = var;
       get->type = curr->type;
     }
 
     // Replace ourselves with a tee.
-    replaceCurrent(Builder(*getModule()).makeLocalTee(var, curr, curr->type));
+    replaceCurrent(builder.makeLocalTee(var, curr, curr->type));
   }
 };
 
@@ -210,7 +268,7 @@ struct OptimizeCasts : public WalkerPass<PostWalker<OptimizeCasts>> {
     finder.options = getPassOptions();
     finder.walkFunctionInModule(func, getModule());
 
-    if (finder.lessCastedGets.empty()) {
+    if (finder.findings.empty()) {
       // Nothing to do.
       return;
     }
