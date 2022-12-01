@@ -90,7 +90,16 @@ struct LoopInvariantCodeMotion
     // move out - anything that might or might not be executed
     // may be best left alone anyhow.
     std::vector<Expression**> work;
-    work.push_back(&loop->body);
+    auto** start = &loop->body;
+    if (auto *iff = (*start)->dynCast<If>()) {
+      // If this is an if with one arm, we can look into the arm.
+      if (!iff->ifFalse) {
+        // We must pass the effects in the condition, if we move anything out.
+        start = &iff->ifTrue;
+        effectsSoFar.walk(iff->condition);
+      }
+    }
+    work.push_back(start);
     while (!work.empty()) {
       auto** currp = work.back();
       work.pop_back();

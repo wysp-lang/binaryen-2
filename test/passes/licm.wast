@@ -423,4 +423,43 @@
       (br_if $loop (local.get $x))
     )
   )
+  (func $loop-if
+    (local $x i32)
+    (loop $loop
+      (if
+        (local.get $x)
+        (block
+          (drop (local.get $x)) ;; this can be moved outside of the loop.
+          (br $loop)
+        )
+      )
+    )
+  )
+  (func $loop-if-no-since-effect
+    (local $x i32)
+    (loop $loop
+      (if
+        (local.tee $x ;; this effect in the condition prevents motion.
+          (i32.const 0)
+        )
+        (block
+          (drop (local.get $x))
+          (br $loop)
+        )
+      )
+    )
+  )
+  (func $loop-if-no-since-else
+    (local $x i32)
+    (loop $loop
+      (if
+        (local.get $x)
+        (block
+          (drop (local.get $x))
+          (br $loop)
+        )
+        (nop) ;; the else prevents optimization atm
+      )
+    )
+  )
 )

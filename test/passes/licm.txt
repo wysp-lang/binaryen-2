@@ -725,4 +725,50 @@
    )
   )
  )
+ (func $loop-if
+  (local $x i32)
+  (drop
+   (local.get $x)
+  )
+  (loop $loop
+   (if
+    (local.get $x)
+    (block
+     (nop)
+     (br $loop)
+    )
+   )
+  )
+ )
+ (func $loop-if-no-since-effect
+  (local $x i32)
+  (loop $loop
+   (if
+    (local.tee $x
+     (i32.const 0)
+    )
+    (block
+     (drop
+      (local.get $x)
+     )
+     (br $loop)
+    )
+   )
+  )
+ )
+ (func $loop-if-no-since-else
+  (local $x i32)
+  (loop $loop
+   (if
+    (local.get $x)
+    (block
+     (drop
+      (local.get $x)
+     )
+     (br $loop)
+    )
+    (nop)
+   )
+  )
+ )
 )
