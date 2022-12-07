@@ -61,6 +61,11 @@ using EquivalentFields = std::unordered_set<IndexPair>;
 using EquivalentFieldsMap = std::unordered_map<HeapType, EquilvalentFields>;
 
 struct FieldFinder : public PostWalker<FieldFinder> {
+  PassOptions& options;
+
+  FieldFinder(
+  PassOptions& options) : options(options) {}
+
   EquivalentFieldsMap map;
 
   void visitStructNew(StructNew* curr) {
@@ -101,12 +106,12 @@ struct FieldFinder : public PostWalker<FieldFinder> {
     //      See related code in OptimizeInstructions that can perhaps be
     //      shared. For now just handle immutable globals and constants.
     PossibleConstantValues iValue;
-    iValue.note(list[i], module);
+    iValue.note(list[i], *getModule());
     if (!iValue.isConstantLiteral() && !iValue.isConstantGlobal()) {
       return false;
     }
     PossibleConstantValues jValue;
-    iValue.note(list[j], module);
+    iValue.note(list[j], *getModule());
     return iValue == jValue;
   }
 };
@@ -129,32 +134,35 @@ struct EquivalentFieldOptimization : public Pass {
       return;
     }
 
-    // First, find all the cast types.
+    // First, find all the equivalent pairs.
 
-    ModuleUtils::ParallelFunctionAnalysis<ReferredTypes> analysis(
-      *module, [&](Function* func, ReferredTypes& referredTypes) {
+    ModuleUtils::ParallelFunctionAnalysis<EquivalentFieldsMap> analysis(
+      *module, [&](Function* func, EquivalentFieldsMap& map) {
         if (func->imported()) {
           return;
         }
 
-        FieldFinder finder;
-        finder.walk(func->body);
-        referredTypes = std::move(finder.referredTypes);
+        FieldFinder finder(getPassOptions());
+        finder.walkFunctionInModule(func, *module);
+        map = std::move(finder.map);
       });
 
-    // Also find cast types in the module scope (not possible in the current
-    // spec, but do it to be future-proof).
-    FieldFinder moduleFinder;
+    // Also find struct.news in the module scope.
+    FieldFinder moduleFinder(getPassOptions());
     moduleFinder.walkModuleCode(module);
 
-    // Accumulate all the referredTypes.
-    auto& allReferredTypes = moduleFinder.referredTypes;
+    // Accumulate all the maps of equivalent indexes. For a pair of indexes to
+    // be truly equivalent they must be equivalent in every single struct.new of
+    // that type. TODO FIXME
+    auto& combinedMap = moduleFinder.map;
     for (auto& [k, referredTypes] : analysis.map) {
       for (auto type : referredTypes) {
         allReferredTypes.insert(type);
       }
     }
 
+    // TODO subtyping
+...
     // Find all the heap types.
     std::vector<HeapType> types = ModuleUtils::collectHeapTypes(*module);
 
