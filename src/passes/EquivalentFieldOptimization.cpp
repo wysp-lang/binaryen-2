@@ -47,18 +47,18 @@ namespace {
 // struct.new by scanning all the code, then we'll merge that together and
 // optimize using that information.
 
-struct IndexPair {
+struct Pair {
   // A pair of indexes (of fields), canonicalized to be in order.
   Index low;
   Index high;
-  IndexPair(Index low, Index high) : low(low), high(high) {
+  Pair(Index low, Index high) : low(low), high(high) {
     assert(low <= high);
   }
 };
 
-using EquivalentFields = std::unordered_set<IndexPair>;
+using Pairs = std::unordered_set<Pair>;
 
-using EquivalentFieldsMap = std::unordered_map<HeapType, EquilvalentFields>;
+using PairsMap = std::unordered_map<StructNew*, Pairs>;
 
 struct FieldFinder : public PostWalker<FieldFinder> {
   PassOptions& options;
@@ -66,12 +66,17 @@ struct FieldFinder : public PostWalker<FieldFinder> {
   FieldFinder(
   PassOptions& options) : options(options) {}
 
-  EquivalentFieldsMap map;
+  PairsMap map;
 
   void visitStructNew(StructNew* curr) {
     if (curr->type == Type::unreachable) {
       return;
     }
+
+    // Add an entry for every (reachable) struct.new. We need an entry even if
+    // there are no equivalent pairs, because that rules out the type having any
+    // such pairs globally (a pair must be equivalent in every single new).
+    auto& entry = map[curr->type.getHeapType()];
 
     // Find pairs of immutable fields with equal values.
     auto& fields = curr->type.getHeapType().getStruct().fields;
@@ -95,7 +100,7 @@ struct FieldFinder : public PostWalker<FieldFinder> {
 
         // Finally, see if their values match.
         if (curr->isWithDefault() || areEqual(curr->operands, i, j)) {
-          map[curr->type.getHeapType()].insert(IndexPair(i, j));
+          entry.insert(Pair(i, j));
         }
       }
     }
@@ -105,6 +110,7 @@ struct FieldFinder : public PostWalker<FieldFinder> {
     // TODO Handle more cases like a tee and a get (with nothing in the middle).
     //      See related code in OptimizeInstructions that can perhaps be
     //      shared. For now just handle immutable globals and constants.
+    // TODO Fallthrough.
     PossibleConstantValues iValue;
     iValue.note(list[i], *getModule());
     if (!iValue.isConstantLiteral() && !iValue.isConstantGlobal()) {
@@ -136,8 +142,8 @@ struct EquivalentFieldOptimization : public Pass {
 
     // First, find all the equivalent pairs.
 
-    ModuleUtils::ParallelFunctionAnalysis<EquivalentFieldsMap> analysis(
-      *module, [&](Function* func, EquivalentFieldsMap& map) {
+    ModuleUtils::ParallelFunctionAnalysis<PairsMap> analysis(
+      *module, [&](Function* func, PairsMap& map) {
         if (func->imported()) {
           return;
         }
@@ -151,14 +157,42 @@ struct EquivalentFieldOptimization : public Pass {
     FieldFinder moduleFinder(getPassOptions());
     moduleFinder.walkModuleCode(module);
 
-    // Accumulate all the maps of equivalent indexes. For a pair of indexes to
-    // be truly equivalent they must be equivalent in every single struct.new of
-    // that type. TODO FIXME
-    auto& combinedMap = moduleFinder.map;
-    for (auto& [k, referredTypes] : analysis.map) {
-      for (auto type : referredTypes) {
-        allReferredTypes.insert(type);
+    // Combine all the maps of equivalent indexes. For a pair of indexes to be
+    // truly equivalent globally they must be equivalent in every single
+    // struct.new of that type.
+    std::unordered_map<HeapType, Pairs> unifiedMap;
+
+    auto processStructNew = [&](StructNew* curr, const Pairs& pairs) {
+      auto type = structNew->type.getHeapType();
+      // This is the first time we see this type if we insert a new entry now.
+      auto [iter, first] = unifiedMap.insert(type, {});
+      auto& typePairs = iter->second;
+      if (first) {
+        // Just copy all the pairs we've seen.
+        typePairs = pairs;
+      } else {
+        // This is not the first time, so the current equivalent fields are a
+        // filter: anything we thought was equivalent before, but is not
+        // present now, is not globally equivalent.
+        std::vector<Pair> toDelete;
+        for (const auto& pair : typePairs) {
+          if (pairs.count(pair) == 0) {
+            toDelete.push_back(pair);
+          }
+        }
+        for (auto pair : toDelete) {
+          typePairs.erase(pair);
+        }
       }
+    };
+
+    for (const auto& [_, map] : analysis.map) {
+      for (const auto& [curr, pairs] : map) {
+        processStructNew(curr, pairs);
+      }
+    }
+    for (const auto& [curr, pairs] : moduleFinder.map) {
+      processStructNew(curr, pairs);
     }
 
     // TODO subtyping
