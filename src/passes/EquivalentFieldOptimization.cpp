@@ -205,23 +205,6 @@ struct Finder : public PostWalker<Finder> {
   }
 };
 
-// Given a set, and another set to test against, remove all items in the first
-// set that are not in the second. That is,
-//
-//  set => set - test
-// XXX needed?
-template<typename T> void eraseItemsNotIn(T& set, const T& test) {
-  std::vector<T> toDelete;
-  for (auto x : set) {
-    if (test.count(x) == 0) {
-      toDelete.push_back(x);
-    }
-  }
-  for (auto x : toDelete) {
-    set.erase(x);
-  }
-}
-
 using TypeValueMap = std::unordered_map<HeapType, ValueMap>;
 
 struct EquivalentFieldOptimization : public Pass {
@@ -383,7 +366,10 @@ struct EquivalentFieldOptimization : public Pass {
         return;
       }
 
-      // TODO actually optimize
+      // This heap type has information about possible sequences to optimize.
+      auto& valueMap = iter->second;
+
+      // TODO optimize
     }
 
     void doWalkFunction(Function* func) {
