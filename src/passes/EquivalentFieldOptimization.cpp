@@ -109,42 +109,75 @@ using Sequence = std::vector<Index>;
 // TODO: small 1
 using Sequences = std::unordered_set<Sequence>;
 
-// A map of values to the sequences that lead to those values. For example, if
-// we have
-//
-//    map[(ref.func $foo)] = [[0], [2, 3]]
-//
-// then that means that object.field0 == object.field2.field3 == $foo. In that
-// case we want to optimize the longer sequence to the shorter one.
-using ValueMap = std::unordered_map<PossibleConstantValues, Sequences>;
+// Stores pairs of equivalent sequences.
+struct Equivalences {
+  // We store each pair once to save memory. So checking for existence etc.
+  // requires two operations, see below.
+  std::unordered_set<std::pair<Sequence, Sequence>> pairs;
 
-// First, find ValueMaps for each struct.new, that is, which sequences lead to
-// the same values in each struct.new. Later we'll combine it all.
+  void add(const Sequence& a, const Sequence& b) {
+    pairs.insert({a, b});
+  }
 
-using NewValueMap = std::unordered_map<StructNew*, ValueMap>;
+  bool has(const Sequence& a, const Sequence& b) {
+    return pairs.count({a, b}) || pairs.count({b, a});
+  }
+
+  void erase(const Sequence& a, const Sequence& b) {
+    pairs.erase({a, b});
+    pairs.erase({b, a});
+  }
+};
+
+// First, find equivalent sequences in each struct.new.
+using NewEquivalencesMap = std::unordered_map<StructNew*, Equivalences>;
 
 struct Finder : public PostWalker<Finder> {
   PassOptions& options;
 
   Finder(PassOptions& options) : options(options) {}
 
-  NewValueMap map;
+  NewEquivalencesMap map;
+
+  // A map of values to the sequences that lead to those values. For example, if
+  // we have
+  //
+  //    map[(ref.func $foo)] = [[0], [2, 3]]
+  //
+  // then that means that object.field0 == object.field2.field3 == $foo. In that
+  // case we want to optimize the longer sequence to the shorter one.
+  using ValueMap = std::unordered_map<PossibleConstantValues, Sequences>;
 
   void visitStructNew(StructNew* curr) {
     if (curr->type == Type::unreachable) {
       return;
     }
 
+    // Scan this struct.new, finding values and the sequences that lead to them.
+    // We will recurse as we look through accesses. We start with an empty sequence as our prefix,
+    // which will get built up during the recursion.
+    ValueMap valueMap;
+    scanNew(curr, Sequence(), valueMap);
+
     // Add an entry for every (reachable) struct.new. We need an entry even if
-    // we find nothing useful, because that rules out optimizations later - for
+    // we find no equivalences, because that rules out optimizations later - for
     // two sequences to be equivalent, they must be equivalent in every single
     // struct.new).
     auto& entry = map[curr];
 
-    // Scan this struct.new and fill in data to the entry. This will recurse as
-    // we look through accesses. We start with an empty sequence as our prefix,
-    // which will get built up during the recursion.
-    scanNew(curr, Sequence(), entry);
+    // Fill in the entry with equivalent pairs: all sequences for the same value
+    // are equivalent (the value itself no longer matters from here).
+    for (auto& [_, sequences] : valueMap) {
+      auto num = sequences.size();
+      if (num > 1) {
+        // Great, there are equivalent sequences for this value: all pairs here.
+        for (size_t i = 0; i < num; i++) {
+          for (size_t j = i + 1; j < num; j++) {
+            entry.add(sequences[i], sequences[j]);
+          }
+        }
+      }
+    }
   }
 
   // Given a struct.new and a sequence prefix, look into this struct.new and add
@@ -217,8 +250,8 @@ struct EquivalentFieldOptimization : public Pass {
     }
 
     // First, find all the relevant sequences inside each function.
-    ModuleUtils::ParallelFunctionAnalysis<NewValueMap> analysis(
-      *module, [&](Function* func, NewValueMap& map) {
+    ModuleUtils::ParallelFunctionAnalysis<NewEquivalencesMap> analysis(
+      *module, [&](Function* func, NewEquivalencesMap& map) {
         if (func->imported()) {
           return;
         }
