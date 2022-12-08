@@ -106,8 +106,7 @@ using NewValueMap = std::unordered_map<StructNew*, ValueMap>;
 struct Finder : public PostWalker<Finder> {
   PassOptions& options;
 
-  Finder(
-  PassOptions& options) : options(options) {}
+  Finder(PassOptions& options) : options(options) {}
 
   NewValueMap map;
 
@@ -155,7 +154,7 @@ struct Finder : public PostWalker<Finder> {
       auto* operand = curr->operands[i];
       operand = Properties::getFallthrough(operand, options, *getModule())
 
-      if (auto* subNew = operand->dynCast<StructNew>()) {
+        if (auto* subNew = operand->dynCast<StructNew>()) {
         // Look into this struct.new recursively.
         scan(subNew, currSequence, entry);
         continue;
@@ -189,8 +188,7 @@ struct Finder : public PostWalker<Finder> {
 //
 //  set => set - test
 // XXX needed?
-template<typename T>
-void eraseItemsNotIn(T& set, const T& test) {
+template<typename T> void eraseItemsNotIn(T& set, const T& test) {
   std::vector<T> toDelete;
   for (auto x : set) {
     if (test.count(x) == 0) {
@@ -237,7 +235,8 @@ struct EquivalentFieldOptimization : public Pass {
 
     // Given a type and a ValueMap we found for it somewhere, merge that into
     // the main unified map.
-    auto mergeIntoUnifiedMap = [&](HeapType type, const ValueMap& currValueMap) {
+    auto mergeIntoUnifiedMap = [&](HeapType type,
+                                   const ValueMap& currValueMap) {
       // This is the first time we see this type if we insert a new entry now.
       auto [iter, first] = unifiedMap.insert(type, {});
       auto& typeValueMap = iter->second;
@@ -369,8 +368,8 @@ struct EquivalentFieldOptimization : public Pass {
     void doWalkFunction(Function* func) {
       WalkerPass<PostWalker<FunctionOptimizer>>::doWalkFunction(func);
 
-      // If we changed anything, we need to update parent types as types may have
-      // changed. XXX is this needed? 
+      // If we changed anything, we need to update parent types as types may
+      // have changed. XXX is this needed?
       if (changed) {
         ReFinalize().walkFunctionInModule(func, getModule());
       }
@@ -385,6 +384,8 @@ struct EquivalentFieldOptimization : public Pass {
 
 } // anonymous namespace
 
-Pass* createEquivalentFieldOptimizationPass() { return new EquivalentFieldOptimization(); }
+Pass* createEquivalentFieldOptimizationPass() {
+  return new EquivalentFieldOptimization();
+}
 
 } // namespace wasm
