@@ -238,7 +238,7 @@ struct Finder : public PostWalker<Finder> {
   }
 };
 
-using TypeValueMap = std::unordered_map<HeapType, ValueMap>;
+using TypeEquivalencesMap = std::unordered_map<HeapType, Equivalences>;
 
 struct EquivalentFieldOptimization : public Pass {
   // Only modifies types.
@@ -269,61 +269,46 @@ struct EquivalentFieldOptimization : public Pass {
     // equivalent, that is, lead to the same value. For two sequences to be
     // equal they must be equal in every single struct.new for that type (and
     // subtypes, see below).
-    TypeValueMap unifiedMap;
+    TypeEquivalencesMap unifiedMap;
 
-    // Given a type and a ValueMap we found for it somewhere, merge that into
+    // Given a type and equivalences we found for it somewhere, merge that into
     // the main unified map.
     auto mergeIntoUnifiedMap = [&](HeapType type,
-                                   const ValueMap& currValueMap) {
+                                   const Equivalences& currEquivalences) {
       auto iter = unifiedMap.find(type);
       if (iter == unifiedMap.end()) {
         // This is the first time we see this type. Just copy the data, there is
         // nothing to compare it to yet.
-        unifiedMap[type] = currValueMap;
+        unifiedMap[type] = currEquivalences;
       } else {
         // This is not the first time, so we must filter what we've seen so far
         // with the current data: anything we thought was equivalent before, but
         // is not so in the new data, is not globally equivalent.
         //
         // Iterate on a copy to avoid invalidation. TODO optimize
-        auto& typeValueMap = iter->second;
-        auto copy = typeValueMap;
-        for (auto& [value, sequences] : copy) {
-          auto iter = currValueMap.find(value);
-          if (iter == currValueMap.end()) {
-            // The value is not even present in the current data, so erase it
-            // all.
-            typeValueMap.erase(value);
-            continue;
-          }
-
-          const Sequences& currSequences = iter->second;
-          {
-            auto copy = sequences;
-            for (auto& sequence : copy) {
-              if (currSequences.count(sequence) == 0) {
-                // This sequence is not present, erase it.
-                sequences.erase(sequence);
-              }
-            }
+        auto& unifiedEquivalences = iter->second;
+        auto copy = unifiedEquivalences;
+        for (auto& pair : copy) {
+          if (!currEquivalences.has(pair.first, pair.second)) {
+            unifiedEquivalences.erase(pair.first, pair.second);
           }
         }
       }
     };
 
     for (const auto& [_, map] : analysis.map) {
-      for (const auto& [curr, valueMap] : map) {
-        mergeIntoUnifiedMap(curr->type.getHeapType(), valueMap);
+      for (const auto& [curr, equivalences] : map) {
+        mergeIntoUnifiedMap(curr->type.getHeapType(), equivalences);
       }
     }
-    for (const auto& [curr, valueMap] : moduleFinder.map) {
-      mergeIntoUnifiedMap(curr->type.getHeapType(), valueMap);
+    for (const auto& [curr, equivalences] : moduleFinder.map) {
+      mergeIntoUnifiedMap(curr->type.getHeapType(), equivalences);
     }
 
     // Check if we found anything to work with.
     auto foundWork = [&]() {
-      for (auto& [type, valueMap] : unifiedMap) {
-        if (!valueMap.empty()) {
+      for (auto& [type, equivalences] : unifiedMap) {
+        if (!equivalences.empty()) {
           return true;
         }
       }
@@ -387,7 +372,7 @@ struct EquivalentFieldOptimization : public Pass {
       return std::make_unique<FunctionOptimizer>(unifiedMap);
     }
 
-    FunctionOptimizer(TypeValueMap& unifiedMap) : unifiedMap(unifiedMap) {}
+    FunctionOptimizer(TypeEquivalencesMap& unifiedMap) : unifiedMap(unifiedMap) {}
 
     void visitStructGet(StructGet* curr) {
       if (curr->type == Type::unreachable) {
@@ -400,7 +385,7 @@ struct EquivalentFieldOptimization : public Pass {
       }
 
       // This heap type has information about possible sequences to optimize.
-      auto& valueMap = iter->second;
+      auto& equivalences = iter->second;
 
       // TODO optimize
     }
@@ -416,7 +401,7 @@ struct EquivalentFieldOptimization : public Pass {
     }
 
   private:
-    TypeValueMap& unifiedMap;
+    TypeEquivalencesMap& unifiedMap;
 
     bool changed = false; // XXX
   };
