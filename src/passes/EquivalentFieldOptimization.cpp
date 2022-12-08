@@ -351,23 +351,33 @@ struct EquivalentFieldOptimization : public Pass {
       return std::make_unique<FunctionOptimizer>(infos);
     }
 
-    FunctionOptimizer(TypePairsMap& infos) : infos(infos) {}
+    FunctionOptimizer(TypeValueMap& unifiedMap) : infos(infos) {}
 
     void visitStructGet(StructGet* curr) {
+      if (curr->type == Type::unreachable) {
+        return;
+      }
+
+      auto iter = unifiedMap.find(curr->type.getHeapType());
+      if (iter == unifiedMap.end()) {
+        return;
+      }
+
+      // TODO actually optimize
     }
 
     void doWalkFunction(Function* func) {
       WalkerPass<PostWalker<FunctionOptimizer>>::doWalkFunction(func);
 
       // If we changed anything, we need to update parent types as types may have
-      // changed.
+      // changed. XXX is this needed? 
       if (changed) {
         ReFinalize().walkFunctionInModule(func, getModule());
       }
     }
 
   private:
-    TypePairsMap& map;
+    TypeValueMap& unifiedMap;
 
     bool changed = false; // XXX
   };
