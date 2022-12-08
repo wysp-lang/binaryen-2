@@ -90,7 +90,8 @@ using Sequence = SmallVector<Index, 3>;
 // Use a small set of size 1 here since the common case is to not have anything
 // to optimize, that is, each value has a single sequence leading to it, which
 // means just a single sequence.
-using Sequences = SmallSet<Sequence, 1>;
+// TODO: small 1
+using Sequences = std::unordered_set<Sequence>;
 
 // A map of values to the sequences that lead to those values. For example, if
 // we have
@@ -122,6 +123,13 @@ struct Finder : public PostWalker<Finder> {
     // we find nothing useful, because that rules out optimizations later - for
     // two sequences to be equivalent, they must be equivalent in every single
     // struct.new).
+
+
+std::unordered_map<PossibleConstantValues, int> waka1;
+
+
+    ValueMap foo;
+
     auto& entry = map[curr];
 
     // Scan this struct.new and fill in data to the entry. This will recurse as

@@ -181,8 +181,33 @@ public:
     }
     o << ']';
   }
+
+  size_t hash() const {
+    // First hash the index of the variant, then add the internals for each.
+    size_t ret = std::hash<size_t>()(value.index());
+    if (isNone() || isMany()) {
+      // Nothing to add.
+    } else if (isConstantLiteral()) {
+      rehash(ret, getConstantLiteral());
+    } else if (isConstantGlobal()) {
+      rehash(ret, getConstantGlobal());
+    } else {
+      WASM_UNREACHABLE("bad variant");
+    }
+    return ret;
+  }
 };
 
 } // namespace wasm
+
+namespace std {
+
+template<> struct hash<wasm::PossibleConstantValues> {
+  size_t operator()(const wasm::PossibleConstantValues& value) const {
+    return value.hash();
+  }
+};
+
+} // namespace std
 
 #endif // wasm_ir_possible_constant_h
