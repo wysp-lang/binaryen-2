@@ -85,7 +85,8 @@ namespace {
 // on the object you read there, read field #2" (that is, object.field4.field2).
 // Optimize this to assume a length of 3, which is the size of the itable access
 // mentioned earlier.
-using Sequence = SmallVector<Index, 3>;
+// TODO: small 3
+using Sequence = std::vector<Index>;
 
 // Use a small set of size 1 here since the common case is to not have anything
 // to optimize, that is, each value has a single sequence leading to it, which

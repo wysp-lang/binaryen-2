@@ -199,6 +199,16 @@ public:
     }
     return ret;
   }
+
+  PossibleConstantValues& operator=(const PossibleConstantValues& other) = default;
+
+  bool operator==(const PossibleConstantValues& other) const {
+    return value == other.value;
+  }
+
+  bool operator!=(const PossibleConstantValues& other) const {
+    return !(*this == other);
+  }
 };
 
 } // namespace wasm
