@@ -98,9 +98,11 @@ using Sequences = SmallVector<Sequence, 1>;
 // case we want to optimize the longer sequence to the shorter one.
 using ValueMap = std::unordered_map<PossibleConstantValue, Sequences>;
 
-// First, compute a ValueMap for each struct.new. Later we'll combine it all in
-// a map of heap types to ValueMaps.
-using ValueMapVec = std::vector<ValueMap>;
+// First, find ValueMaps for each struct.new, that is, which sequences lead to
+// the same values in each struct.new. Later we'll combine it all in a map of
+// heap types to ValueMaps.
+
+using NewValueMap = std::unordered_map<StructNew*, ValueMap>;
 using TypeValueMap = std::unordered_map<HeapType, ValueMap>;
 
 struct Finder : public PostWalker<Finder> {
@@ -109,7 +111,7 @@ struct Finder : public PostWalker<Finder> {
   Finder(
   PassOptions& options) : options(options) {}
 
-  ValueMapVec vec;
+  NewValueMap map;
 
   void visitStructNew(StructNew* curr) {
     if (curr->type == Type::unreachable) {
@@ -120,8 +122,7 @@ struct Finder : public PostWalker<Finder> {
     // we find nothing useful, because that rules out optimizations later - for
     // two sequences to be equivalent, they must be equivalent in every single
     // struct.new).
-    vec.resize(vec.size() + 1);
-    auto& entry = vec.back();
+    auto& entry = map[curr];
 
     // Scan this struct.new and fill in data to the entry. This will recurse as
     // we look through accesses. We start with an empty sequence as our prefix,
@@ -151,8 +152,11 @@ struct Finder : public PostWalker<Finder> {
       // which ends with index i.
       currSequence.back() = i;
 
-      // TODO Fallthrough.
+      // Look through things like casts to the fallthrough value (which occur in
+      // the Java itable pattern, for example).
       auto* operand = curr->operands[i];
+      operand = Properties::getFallthrough(operand, options, *getModule())
+
       if (auto* subNew = operand->dynCast<StructNew>()) {
         // Look into this struct.new recursively.
         scan(subNew, currSequence, entry);
@@ -220,22 +224,22 @@ struct EquivalentFieldOptimization : public Pass {
 
     // First, find all the equivalent pairs.
 
-    ModuleUtils::ParallelFunctionAnalysis<ValueMapVec> analysis(
-      *module, [&](Function* func, ValueMapVec& vec) {
+    ModuleUtils::ParallelFunctionAnalysis<NewValueMap> analysis(
+      *module, [&](Function* func, NewValueMap& map) {
         if (func->imported()) {
           return;
         }
 
         Finder finder(getPassOptions());
         finder.walkFunctionInModule(func, *module);
-        vec = std::move(finder.map);
+        map = std::move(finder.map);
       });
 
     // Also find struct.news in the module scope.
     Finder moduleFinder(getPassOptions());
     moduleFinder.walkModuleCode(module);
 
-    // Combine all the info on equivalent indexes. For a pair of indexes to be
+    // Combine all the maps of equivalent indexes. For a pair of indexes to be
     // truly equivalent globally they must be equivalent in every single
     // struct.new of that type.
     std::unordered_map<HeapType, Pairs> unifiedMap;
