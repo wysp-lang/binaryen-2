@@ -206,6 +206,19 @@ struct EquivalentFieldOptimization : public Pass {
       processStructNew(curr, pairs);
     }
 
+    // Check if we found anything to work with.
+    auto foundWork = [&]() {
+      for (auto& [type, pairs] : unifiedMap) {
+        if (!pairs.empty()) {
+          return true;
+        }
+      }
+      return false;
+    };
+    if (!foundWork()) {
+      return;
+    }
+
     // Apply subtyping: To consider fields i, j equivalent in a type, we also
     // need them to be equivalent in all subtypes.
     struct SubTypeAnalyzer : public TopologicalSort<HeapType, SubTypeAnalyzer> {
@@ -231,11 +244,20 @@ struct EquivalentFieldOptimization : public Pass {
 
     SubTypeAnalyzer subTypeAnalyzer(*module);
     for (auto type : subTypeAnalyzer) {
-      // We have visited all subtypes, and can use their information here.
+      // We have visited all subtypes, and can use their information here,
+      // namely that if a pair is not equivalent in a subtype, it isn't in the
+      // super either.
       for (auto subType : subTypes.getStrictSubTypes(type)) {
         eraseItemsNotIn(unifiedMap[type], unifiedMap[subType]);
       }
     }
+
+    // We may have filtered out all the possible work, so check again.
+    if (!foundWork()) {
+      return;
+    }
+
+    // Excellent, we have things we can optimize with!
   }
 };
 
