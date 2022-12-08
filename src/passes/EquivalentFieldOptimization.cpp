@@ -33,8 +33,9 @@
 
 #include "ir/module-utils.h"
 #include "ir/possible-constant.h"
+#include "ir/subtypes.h"
 #include "pass.h"
-#include "support/small_set.h"
+#include "support/topological_sort.h"
 #include "wasm-builder.h"
 #include "wasm.h"
 
@@ -122,6 +123,24 @@ struct FieldFinder : public PostWalker<FieldFinder> {
   }
 };
 
+// Given a set, and another set to test against, remove all items in the first
+// set that are not in the second. That is,
+//
+//  set => set - test
+//
+template<typename T>
+void eraseItemsNotIn(T& set, const T& test) {
+  std::vector<T> toDelete;
+  for (auto x : set) {
+    if (test.count(x) == 0) {
+      toDelete.push_back(x);
+    }
+  }
+  for (auto x : toDelete) {
+    set.erase(x);
+  }
+}
+
 struct EquivalentFieldOptimization : public Pass {
   // Only modifies types.
   bool requiresNonNullableLocalFixups() override { return false; }
@@ -174,15 +193,7 @@ struct EquivalentFieldOptimization : public Pass {
         // This is not the first time, so the current equivalent fields are a
         // filter: anything we thought was equivalent before, but is not
         // present now, is not globally equivalent.
-        std::vector<Pair> toDelete;
-        for (const auto& pair : typePairs) {
-          if (pairs.count(pair) == 0) {
-            toDelete.push_back(pair);
-          }
-        }
-        for (auto pair : toDelete) {
-          typePairs.erase(pair);
-        }
+        eraseItemsNotIn(typePairs, pairs);
       }
     };
 
@@ -195,135 +206,36 @@ struct EquivalentFieldOptimization : public Pass {
       processStructNew(curr, pairs);
     }
 
-    // TODO subtyping
-...
-    // Find all the heap types.
-    std::vector<HeapType> types = ModuleUtils::collectHeapTypes(*module);
+    // Apply subtyping: To consider fields i, j equivalent in a type, we also
+    // need them to be equivalent in all subtypes.
+    struct SubTypeAnalyzer : public TopologicalSort<HeapType, SubTypeAnalyzer> {
+      SubTypes subTypes;
 
-    // TODO: There may be more opportunities after this loop. Imagine that we
-    //       decide to merge A and B into C, and there are types X and Y that
-    //       contain a nested reference to A and B respectively, then after A
-    //       and B become identical so do X and Y. The recursive case is not
-    //       trivial, however, and needs more thought.
-    for (auto type : types) {
-      if (allReferredTypes.count(type)) {
-        // This has a cast, so it is distinguishable nominally.
-        continue;
-      }
-
-      auto super = type.getSuperType();
-      if (!super) {
-        // This has no supertype, so there is nothing to merge it into.
-        continue;
-      }
-
-      if (type.isStruct()) {
-        auto& fields = type.getStruct().fields;
-        auto& superFields = super->getStruct().fields;
-        if (fields == superFields) {
-          // We can merge! This is identical structurally to the super, and also
-          // not distinguishable nominally.
-          merges[type] = *super;
-        }
-      } else if (type.isArray()) {
-        auto element = type.getArray().element;
-        auto superElement = super->getArray().element;
-        if (element == superElement) {
-          merges[type] = *super;
-        }
-      }
-    }
-
-    if (merges.empty()) {
-      return;
-    }
-
-    // We found things to optimize! Rewrite types in the module to apply those
-    // changes.
-
-    // First, close over the map, so if X can be merged into Y and Y into Z then
-    // we map X into Z.
-    for (auto type : types) {
-      if (!merges.count(type)) {
-        continue;
-      }
-
-      auto newType = merges[type];
-      while (merges.count(newType)) {
-        newType = merges[newType];
-      }
-      // Apply the findings to all intermediate types as well, to avoid
-      // duplicate work in later iterations. That is, all the types we saw in
-      // the above loop will all get merged into newType.
-      auto curr = type;
-      while (1) {
-        auto iter = merges.find(curr);
-        if (iter == merges.end()) {
-          break;
-        }
-        auto& currMerge = iter->second;
-        curr = currMerge;
-        currMerge = newType;
-      }
-    }
-
-    // Apply the merges.
-
-    class TypeInternalsUpdater : public GlobalTypeRewriter {
-      const TypeUpdates& merges;
-
-      std::unordered_map<HeapType, Signature> newSignatures;
-
-    public:
-      TypeInternalsUpdater(Module& wasm, const TypeUpdates& merges)
-        : GlobalTypeRewriter(wasm), merges(merges) {
-
-        // Map the types of expressions (curr->type, etc.) to their merged
-        // types.
-        mapTypes(merges);
-
-        // Update the internals of types (struct fields, signatures, etc.) to
-        // refer to the merged types.
-        update();
-      }
-
-      Type getNewType(Type type) {
-        if (!type.isRef()) {
-          return type;
-        }
-        auto heapType = type.getHeapType();
-        auto iter = merges.find(heapType);
-        if (iter != merges.end()) {
-          return getTempType(Type(iter->second, type.getNullability()));
-        }
-        return getTempType(type);
-      }
-
-      void modifyStruct(HeapType oldType, Struct& struct_) override {
-        auto& oldFields = oldType.getStruct().fields;
-        for (Index i = 0; i < oldFields.size(); i++) {
-          auto& oldField = oldFields[i];
-          auto& newField = struct_.fields[i];
-          newField.type = getNewType(oldField.type);
-        }
-      }
-      void modifyArray(HeapType oldType, Array& array) override {
-        array.element.type = getNewType(oldType.getArray().element.type);
-      }
-      void modifySignature(HeapType oldSignatureType, Signature& sig) override {
-        auto getUpdatedTypeList = [&](Type type) {
-          std::vector<Type> vec;
-          for (auto t : type) {
-            vec.push_back(getNewType(t));
+      SubTypeAnalyzer(Module& module) : subTypes(module) {
+        // The roots are types with no super.
+        for (auto type : subTypes.types) {
+          auto super = type.getSuperType();
+          if (!super) {
+            push(type);
           }
-          return getTempTupleType(vec);
-        };
-
-        auto oldSig = oldSignatureType.getSignature();
-        sig.params = getUpdatedTypeList(oldSig.params);
-        sig.results = getUpdatedTypeList(oldSig.results);
+        }
       }
-    } rewriter(*module, merges);
+
+      void pushPredecessors(HeapType type) {
+        // We must visit subtypes before ourselves.
+        for (auto subType : subTypes.getStrictSubTypes(type)) {
+          push(subType);
+        }
+      }
+    };
+
+    SubTypeAnalyzer subTypeAnalyzer(*module);
+    for (auto type : subTypeAnalyzer) {
+      // We have visited all subtypes, and can use their information here.
+      for (auto subType : subTypes.getStrictSubTypes(type)) {
+        eraseItemsNotIn(unifiedMap[type], unifiedMap[subType]);
+      }
+    }
   }
 };
 
