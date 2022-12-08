@@ -145,6 +145,9 @@ void PassRegistry::registerPasses() {
   registerPass("emit-target-features",
                "emit the target features section in the output",
                createEmitTargetFeaturesPass);
+  registerPass("efo",
+               "optimizes accesses to equivalent struct fields",
+               createEquivalentFieldOptimizationPass);
   registerPass("extract-function",
                "leaves just one function (useful for debugging)",
                createExtractFunctionPass);
