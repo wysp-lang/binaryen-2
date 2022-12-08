@@ -76,6 +76,21 @@
 #include "wasm-builder.h"
 #include "wasm.h"
 
+
+#include "support/hash.h" // XXX
+namespace std { // XXX
+// Hashing vectors is often useful
+template<typename T> struct hash<vector<T>> {
+  size_t operator()(const vector<T> v) const {
+    auto digest = wasm::hash(v.size());
+    for (const auto& t : v) {
+      wasm::rehash(digest, t);
+    }
+    return digest;
+  }
+};
+}
+
 namespace wasm {
 
 namespace {
@@ -116,6 +131,21 @@ struct Finder : public PostWalker<Finder> {
   NewValueMap map;
 
   void visitStructNew(StructNew* curr) {
+
+
+
+Sequence s = {1, 2, 3};
+Sequences ss;
+std::cout << ss.count(s);
+
+
+
+
+
+
+
+
+
     if (curr->type == Type::unreachable) {
       return;
     }
@@ -266,7 +296,7 @@ struct EquivalentFieldOptimization : public Pass {
             continue;
           }
 
-          auto& currSequences = iter->second;
+          const Sequences& currSequences = iter->second;
           {
             auto copy = sequences;
             for (auto& sequence : copy) {
