@@ -28,7 +28,8 @@
 //   y.b  =>  y.a
 //
 // By always reading from the earlier field we increase the chance for the later
-// field to be pruned as unused.
+// field to be pruned as unused. A concrete use case this can help with is to
+// allow pruning repeated entries in a vtable.
 //
 // A particular case where this is useful is with sequences of accesses, such as
 // with Java class and interface dispatch. In Java a class may implement an
@@ -96,7 +97,7 @@ using Sequences = SmallVector<Sequence, 1>;
 //
 // then that means that object.field0 == object.field2.field3 == $foo. In that
 // case we want to optimize the longer sequence to the shorter one.
-using ValueMap = std::unordered_map<PossibleConstantValue, Sequences>;
+using ValueMap = std::unordered_map<PossibleConstantValues, Sequences>;
 
 // First, find ValueMaps for each struct.new, that is, which sequences lead to
 // the same values in each struct.new. Later we'll combine it all.
@@ -141,7 +142,7 @@ struct Finder : public PostWalker<Finder> {
 
     for (Index i = 0; i < fields.size(); i++) {
       auto& field = fields[i];
-      if (field.mutability == Mutable) {
+      if (field.mutable_ == Mutable) {
         continue;
       }
 
@@ -152,9 +153,9 @@ struct Finder : public PostWalker<Finder> {
       // Look through things like casts to the fallthrough value (which occur in
       // the Java itable pattern, for example).
       auto* operand = curr->operands[i];
-      operand = Properties::getFallthrough(operand, options, *getModule())
+      operand = Properties::getFallthrough(operand, options, *getModule());
 
-        if (auto* subNew = operand->dynCast<StructNew>()) {
+      if (auto* subNew = operand->dynCast<StructNew>()) {
         // Look into this struct.new recursively.
         scan(subNew, currSequence, entry);
         continue;
@@ -171,8 +172,10 @@ struct Finder : public PostWalker<Finder> {
           // Not only can we track the global itself, but we may be able to look
           // into the object created in the global.
           auto* global = getModule()->getGlobal(value.getConstantGlobal());
-          if (auto* subNew = operand->dynCast<StructNew>()) {
-            scan(subNew, currSequence, entry);
+          if (!global->imported()) {
+            if (auto* subNew = global->init->dynCast<StructNew>()) {
+              scan(subNew, currSequence, entry);
+            }
           }
         }
       }
@@ -219,7 +222,7 @@ struct EquivalentFieldOptimization : public Pass {
         }
 
         Finder finder(getPassOptions());
-        finder.walkFunctionInModule(func, *module);
+        finder.walkFunctionInModule(func, module);
         map = std::move(finder.map);
       });
 
@@ -259,7 +262,6 @@ struct EquivalentFieldOptimization : public Pass {
             continue;
           }
 
-          auto& sequences = typeValueMap[value];
           auto& currSequences = iter->second;
           {
             auto copy = sequences;
@@ -280,7 +282,7 @@ struct EquivalentFieldOptimization : public Pass {
       }
     }
     for (const auto& [curr, valueMap] : moduleFinder.map) {
-      processStructNew(curr->type.getHeapType(), valueMap);
+      mergeIntoUnifiedMap(curr->type.getHeapType(), valueMap);
     }
 
     // Check if we found anything to work with.
@@ -326,7 +328,7 @@ struct EquivalentFieldOptimization : public Pass {
       // super either. This is basically more information to merge into the
       // unified map, like before: as we merge information in, we filter to
       // leave the intersection of all sequences.
-      for (auto subType : subTypes.getStrictSubTypes(type)) {
+      for (auto subType : subTypeAnalyzer.subTypes.getStrictSubTypes(type)) {
         mergeIntoUnifiedMap(type, unifiedMap[subType]);
       }
     }
@@ -337,7 +339,7 @@ struct EquivalentFieldOptimization : public Pass {
     }
 
     // Excellent, we have things we can optimize with!
-    FunctionOptimizer(unifiedMap).run(runner, module);
+    FunctionOptimizer(unifiedMap).run(getPassRunner(), module);
   }
 
   struct FunctionOptimizer : public WalkerPass<PostWalker<FunctionOptimizer>> {
@@ -347,10 +349,10 @@ struct EquivalentFieldOptimization : public Pass {
     bool requiresNonNullableLocalFixups() override { return false; }
 
     std::unique_ptr<Pass> create() override {
-      return std::make_unique<FunctionOptimizer>(infos);
+      return std::make_unique<FunctionOptimizer>(unifiedMap);
     }
 
-    FunctionOptimizer(TypeValueMap& unifiedMap) : infos(infos) {}
+    FunctionOptimizer(TypeValueMap& unifiedMap) : unifiedMap(unifiedMap) {}
 
     void visitStructGet(StructGet* curr) {
       if (curr->type == Type::unreachable) {
