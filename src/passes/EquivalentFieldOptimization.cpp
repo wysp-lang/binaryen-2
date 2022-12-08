@@ -59,7 +59,8 @@ struct Pair {
 
 using Pairs = std::unordered_set<Pair>;
 
-using PairsMap = std::unordered_map<StructNew*, Pairs>;
+using NewPairsMap = std::unordered_map<StructNew*, Pairs>;
+using TypePairsMap = std::unordered_map<HeapType, Pairs>;
 
 struct FieldFinder : public PostWalker<FieldFinder> {
   PassOptions& options;
@@ -67,7 +68,7 @@ struct FieldFinder : public PostWalker<FieldFinder> {
   FieldFinder(
   PassOptions& options) : options(options) {}
 
-  PairsMap map;
+  NewPairsMap map;
 
   void visitStructNew(StructNew* curr) {
     if (curr->type == Type::unreachable) {
@@ -161,8 +162,8 @@ struct EquivalentFieldOptimization : public Pass {
 
     // First, find all the equivalent pairs.
 
-    ModuleUtils::ParallelFunctionAnalysis<PairsMap> analysis(
-      *module, [&](Function* func, PairsMap& map) {
+    ModuleUtils::ParallelFunctionAnalysis<NewPairsMap> analysis(
+      *module, [&](Function* func, NewPairsMap& map) {
         if (func->imported()) {
           return;
         }
@@ -258,7 +259,39 @@ struct EquivalentFieldOptimization : public Pass {
     }
 
     // Excellent, we have things we can optimize with!
+    FunctionOptimizer(unifiedMap).run(runner, module);
   }
+
+  struct FunctionOptimizer : public WalkerPass<PostWalker<FunctionOptimizer>> {
+    bool isFunctionParallel() override { return true; }
+
+    // Only modifies struct.get operations.
+    bool requiresNonNullableLocalFixups() override { return false; }
+
+    std::unique_ptr<Pass> create() override {
+      return std::make_unique<FunctionOptimizer>(infos);
+    }
+
+    FunctionOptimizer(TypePairsMap& infos) : infos(infos) {}
+
+    void visitStructGet(StructGet* curr) {
+    }
+
+    void doWalkFunction(Function* func) {
+      WalkerPass<PostWalker<FunctionOptimizer>>::doWalkFunction(func);
+
+      // If we changed anything, we need to update parent types as types may have
+      // changed.
+      if (changed) {
+        ReFinalize().walkFunctionInModule(func, getModule());
+      }
+    }
+
+  private:
+    TypePairsMap& map;
+
+    bool changed = false; // XXX
+  };
 };
 
 } // anonymous namespace
