@@ -131,21 +131,6 @@ struct Finder : public PostWalker<Finder> {
   NewValueMap map;
 
   void visitStructNew(StructNew* curr) {
-
-
-
-Sequence s = {1, 2, 3};
-Sequences ss;
-std::cout << ss.count(s);
-
-
-
-
-
-
-
-
-
     if (curr->type == Type::unreachable) {
       return;
     }
