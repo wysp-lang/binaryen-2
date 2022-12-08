@@ -143,6 +143,9 @@ public:
     return isConstantLiteral() && getConstantLiteral().isNull();
   }
 
+  bool isNone() const { return std::get_if<None>(&value); }
+  bool isMany() const { return std::get_if<Many>(&value); }
+
   // Returns the single constant value.
   Literal getConstantLiteral() const {
     assert(isConstant());

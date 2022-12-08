@@ -123,13 +123,6 @@ struct Finder : public PostWalker<Finder> {
     // we find nothing useful, because that rules out optimizations later - for
     // two sequences to be equivalent, they must be equivalent in every single
     // struct.new).
-
-
-std::unordered_map<PossibleConstantValues, int> waka1;
-
-
-    ValueMap foo;
-
     auto& entry = map[curr];
 
     // Scan this struct.new and fill in data to the entry. This will recurse as
