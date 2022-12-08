@@ -68,6 +68,7 @@
 #include "ir/possible-constant.h"
 #include "ir/subtypes.h"
 #include "pass.h"
+#include "support/small_vector.h"
 #include "support/topological_sort.h"
 #include "wasm-builder.h"
 #include "wasm.h"
@@ -76,32 +77,40 @@ namespace wasm {
 
 namespace {
 
-// To find things we can optimize, we focus on pairs of immutable fields that
-// always - in all struct.news - begin identical. We find all such pairs in each
-// struct.new by scanning all the code, then we'll merge that together and
-// optimize using that information.
+// A sequence of indexes that represents accesses of fields. For example, the
+// sequence [5] means "read field #5", while [4, 2] means "read field #4, then
+// on the object you read there, read field #2" (that is, object.field4.field2).
+// Optimize this to assume a length of 3, which is the size of the itable access
+// mentioned earlier.
+using Sequence = SmallVector<Index, 3>;
 
-struct Pair {
-  // A pair of indexes (of fields), canonicalized to be in order.
-  Index low;
-  Index high;
-  Pair(Index low, Index high) : low(low), high(high) {
-    assert(low <= high);
-  }
-};
+// Use a small vector of size 1 here since the common case is to not have
+// anything to optimize, that is, each value has a single sequence leading to
+// it, which means just a single sequence.
+using Sequences = SmallVector<Sequence, 1>;
 
-using Pairs = std::unordered_set<Pair>;
+// A map of values to the sequences that lead to those values. For example, if
+// we have
+//
+//    map[(ref.func $foo)] = [[0], [2, 3]]
+//
+// then that means that object.field0 == object.field2.field3 == $foo. In that
+// case we want to optimize the longer sequence to the shorter one.
+using ValueMap = std::unordered_map<PossibleConstantValue, Sequences>;
 
-using NewPairsMap = std::unordered_map<StructNew*, Pairs>;
-using TypePairsMap = std::unordered_map<HeapType, Pairs>;
+// First, find SequenceValueMaps for each struct.new, that is, which sequences
+// lead to the same values in each struct.new. Later we'll combine it all.
 
-struct FieldFinder : public PostWalker<FieldFinder> {
+using NewValueMap = std::unordered_map<StructNew*, ValueMap>;
+using TypeValueMap = std::unordered_map<HeapType, ValueMap>;
+
+struct Finder : public PostWalker<Finder> {
   PassOptions& options;
 
-  FieldFinder(
+  Finder(
   PassOptions& options) : options(options) {}
 
-  NewPairsMap map;
+  NewValueMap map;
 
   void visitStructNew(StructNew* curr) {
     if (curr->type == Type::unreachable) {
@@ -109,51 +118,64 @@ struct FieldFinder : public PostWalker<FieldFinder> {
     }
 
     // Add an entry for every (reachable) struct.new. We need an entry even if
-    // there are no equivalent pairs, because that rules out the type having any
-    // such pairs globally (a pair must be equivalent in every single new).
-    auto& entry = map[curr->type.getHeapType()];
+    // we find nothing useful, because that rules out optimizations later - for
+    // two sequences to be equivalent, they must be equivalent in every single
+    // struct.new).
+    auto& entry = map[curr];
 
-    // Find pairs of immutable fields with equal values.
+    // Scan this struct.new and fill in data to the entry. This will recurse as
+    // we look through accesses. We start with an empty sequence as our prefix,
+    // which will get built up during the recursion.
+    scan(curr, Sequence(), entry);
+  }
+
+  // Given a struct.new and a sequence prefix, look into this struct.new and add
+  // anything we find into the given entry. For example, if the prefix is [1,2]
+  // and we find (ref.func $foo) at index #3 then we can add a note to the entry
+  // that [1,2,3] arrives at value $foo.
+  void scan(StructNew* curr, const Sequence& prefix, ValueMap& entry) {
+    // We'll only look at immutable fields.
     auto& fields = curr->type.getHeapType().getStruct().fields;
+
+    // The current sequence will be the given prefix, plus the current index.
+    auto currSequence = prefix;
+    currSequence.push_back(0);
+
     for (Index i = 0; i < fields.size(); i++) {
-      auto& iField = fields[i];
-      if (iField.mutability == Mutable) {
+      auto& field = fields[i];
+      if (field.mutability == Mutable) {
         continue;
       }
-      for (Index j = i + 1; j < fields.size(); j++) {
-        auto& jField = fields[j];
-        if (jField.mutability == Mutable) {
-          continue;
-        }
 
-        // Great, fields i and j are both immutable.
+      // Excellent, this is immutable, so we can look into the current sequence,
+      // which ends with index i.
+      currSequence.back() = i;
 
-        // See if they have the same declaration (type and packing).
-        if (iField != jField) {
-          continue;
-        }
+      auto* operand = curr->operands[i];
+      if (auto* subNew = operand->dynCast<StructNew>()) {
+        // Look into this struct.new recursively.
+        scan(subNew, currSequence, entry);
+        continue;
+      }
 
-        // Finally, see if their values match.
-        if (curr->isWithDefault() || areEqual(curr->operands, i, j)) {
-          entry.insert(Pair(i, j));
+      // See if this is a constant value.
+      PossibleConstantValues value;
+      value.note(operand, *getModule());
+      if (value.isConstantLiteral() || value.isConstantGlobal()) {
+        // Great, this is something we can track.
+        entry[value].push_back(currSequence);
+
+        if (value.isConstantGlobal()) {
+          // Not only can we track the global itself, but we may be able to look
+          // into the object being read.
+          ...
         }
       }
     }
-  }
-
-  bool areEqual(const ExpressionList& list, Index i, Index j) {
     // TODO Handle more cases like a tee and a get (with nothing in the middle).
     //      See related code in OptimizeInstructions that can perhaps be
     //      shared. For now just handle immutable globals and constants.
     // TODO Fallthrough.
-    PossibleConstantValues iValue;
-    iValue.note(list[i], *getModule());
-    if (!iValue.isConstantLiteral() && !iValue.isConstantGlobal()) {
-      return false;
-    }
-    PossibleConstantValues jValue;
-    iValue.note(list[j], *getModule());
-    return iValue == jValue;
   }
 };
 
@@ -195,19 +217,19 @@ struct EquivalentFieldOptimization : public Pass {
 
     // First, find all the equivalent pairs.
 
-    ModuleUtils::ParallelFunctionAnalysis<NewPairsMap> analysis(
-      *module, [&](Function* func, NewPairsMap& map) {
+    ModuleUtils::ParallelFunctionAnalysis<NewValueMap> analysis(
+      *module, [&](Function* func, NewValueMap& map) {
         if (func->imported()) {
           return;
         }
 
-        FieldFinder finder(getPassOptions());
+        Finder finder(getPassOptions());
         finder.walkFunctionInModule(func, *module);
         map = std::move(finder.map);
       });
 
     // Also find struct.news in the module scope.
-    FieldFinder moduleFinder(getPassOptions());
+    Finder moduleFinder(getPassOptions());
     moduleFinder.walkModuleCode(module);
 
     // Combine all the maps of equivalent indexes. For a pair of indexes to be
