@@ -99,11 +99,9 @@ using Sequences = SmallVector<Sequence, 1>;
 using ValueMap = std::unordered_map<PossibleConstantValue, Sequences>;
 
 // First, find ValueMaps for each struct.new, that is, which sequences lead to
-// the same values in each struct.new. Later we'll combine it all in a map of
-// heap types to ValueMaps.
+// the same values in each struct.new. Later we'll combine it all.
 
 using NewValueMap = std::unordered_map<StructNew*, ValueMap>;
-using TypeValueMap = std::unordered_map<HeapType, ValueMap>;
 
 struct Finder : public PostWalker<Finder> {
   PassOptions& options;
@@ -190,7 +188,7 @@ struct Finder : public PostWalker<Finder> {
 // set that are not in the second. That is,
 //
 //  set => set - test
-//
+// XXX needed?
 template<typename T>
 void eraseItemsNotIn(T& set, const T& test) {
   std::vector<T> toDelete;
@@ -204,26 +202,18 @@ void eraseItemsNotIn(T& set, const T& test) {
   }
 }
 
+using TypeValueMap = std::unordered_map<HeapType, ValueMap>;
+
 struct EquivalentFieldOptimization : public Pass {
   // Only modifies types.
   bool requiresNonNullableLocalFixups() override { return false; }
 
-  Module* module;
-
-  // The types we can merge. We map each such type to merge with the type we
-  // want to merge it with.
-  using TypeUpdates = std::unordered_map<HeapType, HeapType>;
-  TypeUpdates merges;
-
-  void run(Module* module_) override {
-    module = module_;
-
+  void run(Module* module) override {
     if (!module->features.hasGC()) {
       return;
     }
 
-    // First, find all the equivalent pairs.
-
+    // First, find all the relevant sequences inside each function.
     ModuleUtils::ParallelFunctionAnalysis<NewValueMap> analysis(
       *module, [&](Function* func, NewValueMap& map) {
         if (func->imported()) {
@@ -235,44 +225,69 @@ struct EquivalentFieldOptimization : public Pass {
         map = std::move(finder.map);
       });
 
-    // Also find struct.news in the module scope.
+    // Also look in the module scope.
     Finder moduleFinder(getPassOptions());
     moduleFinder.walkModuleCode(module);
 
-    // Combine all the maps of equivalent indexes. For a pair of indexes to be
-    // truly equivalent globally they must be equivalent in every single
-    // struct.new of that type.
-    std::unordered_map<HeapType, Pairs> unifiedMap;
+    // Combine all the info. The property we seek is which sequences are
+    // equivalent, that is, lead to the same value. For two sequences to be
+    // equal they must be equal in every single struct.new for that type (and
+    // subtypes, see below).
+    TypeValueMap unifiedMap;
 
-    auto processStructNew = [&](StructNew* curr, const Pairs& pairs) {
-      auto type = structNew->type.getHeapType();
+    // Given a type and a ValueMap we found for it somewhere, merge that into
+    // the main unified map.
+    auto mergeIntoUnifiedMap = [&](HeapType type, const ValueMap& currValueMap) {
       // This is the first time we see this type if we insert a new entry now.
       auto [iter, first] = unifiedMap.insert(type, {});
-      auto& typePairs = iter->second;
+      auto& typeValueMap = iter->second;
       if (first) {
-        // Just copy all the pairs we've seen.
-        typePairs = pairs;
+        // Just copy the data, there is nothing to compare it to yet.
+        typeValueMap = currValueMap;
       } else {
-        // This is not the first time, so the current equivalent fields are a
-        // filter: anything we thought was equivalent before, but is not
-        // present now, is not globally equivalent.
-        eraseItemsNotIn(typePairs, pairs);
+        // This is not the first time, so we must filter what we've seen so far
+        // with the current data: anything we thought was equivalent before, but
+        // is not so in the new data, is not globally equivalent.
+        //
+        // Iterate on a copy to avoid invalidation. TODO optimize
+        auto copy = typeValueMap;
+        for (auto& [value, sequences] : copy) {
+          auto iter = currValueMap.find(value);
+          if (iter == currValueMap.end()) {
+            // The value is not even present in the current data, so erase it
+            // all.
+            typeValueMap.erase(value);
+            continue;
+          }
+
+          auto& sequences = typeValueMap[value];
+          auto& currSequences = iter->second;
+          {
+            auto copy = sequences;
+            for (auto& sequence : copy) {
+              if (currSequences.count(sequence) == 0) {
+                // This sequence is not present, erase it.
+                sequences.erase(sequences);
+              }
+            }
+          }
+        }
       }
     };
 
     for (const auto& [_, map] : analysis.map) {
-      for (const auto& [curr, pairs] : map) {
-        processStructNew(curr, pairs);
+      for (const auto& [curr, valueMap] : map) {
+        mergeIntoUnifiedMap(curr->type.getHeapType(), valueMap);
       }
     }
-    for (const auto& [curr, pairs] : moduleFinder.map) {
-      processStructNew(curr, pairs);
+    for (const auto& [curr, valueMap] : moduleFinder.map) {
+      processStructNew(curr->type.getHeapType(), valueMap);
     }
 
     // Check if we found anything to work with.
     auto foundWork = [&]() {
-      for (auto& [type, pairs] : unifiedMap) {
-        if (!pairs.empty()) {
+      for (auto& [type, valueMap] : unifiedMap) {
+        if (!valueMap.empty()) {
           return true;
         }
       }
