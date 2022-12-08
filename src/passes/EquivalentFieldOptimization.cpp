@@ -68,7 +68,9 @@
 #include "ir/module-utils.h"
 #include "ir/possible-constant.h"
 #include "ir/subtypes.h"
+#include "ir/utils.h"
 #include "pass.h"
+#include "support/small_set.h"
 #include "support/small_vector.h"
 #include "support/topological_sort.h"
 #include "wasm-builder.h"
@@ -85,10 +87,10 @@ namespace {
 // mentioned earlier.
 using Sequence = SmallVector<Index, 3>;
 
-// Use a small vector of size 1 here since the common case is to not have
-// anything to optimize, that is, each value has a single sequence leading to
-// it, which means just a single sequence.
-using Sequences = SmallVector<Sequence, 1>;
+// Use a small set of size 1 here since the common case is to not have anything
+// to optimize, that is, each value has a single sequence leading to it, which
+// means just a single sequence.
+using Sequences = SmallSet<Sequence, 1>;
 
 // A map of values to the sequences that lead to those values. For example, if
 // we have
@@ -166,7 +168,7 @@ struct Finder : public PostWalker<Finder> {
       value.note(operand, *getModule());
       if (value.isConstantLiteral() || value.isConstantGlobal()) {
         // Great, this is something we can track.
-        entry[value].push_back(currSequence);
+        entry[value].insert(currSequence);
 
         if (value.isConstantGlobal()) {
           // Not only can we track the global itself, but we may be able to look
@@ -240,18 +242,18 @@ struct EquivalentFieldOptimization : public Pass {
     // the main unified map.
     auto mergeIntoUnifiedMap = [&](HeapType type,
                                    const ValueMap& currValueMap) {
-      // This is the first time we see this type if we insert a new entry now.
-      auto [iter, first] = unifiedMap.insert(type, {});
-      auto& typeValueMap = iter->second;
-      if (first) {
-        // Just copy the data, there is nothing to compare it to yet.
-        typeValueMap = currValueMap;
+      auto iter = unifiedMap.find(type);
+      if (iter == unifiedMap.end()) {
+        // This is the first time we see this type. Just copy the data, there is
+        // nothing to compare it to yet.
+        unifiedMap[type] = currValueMap;
       } else {
         // This is not the first time, so we must filter what we've seen so far
         // with the current data: anything we thought was equivalent before, but
         // is not so in the new data, is not globally equivalent.
         //
         // Iterate on a copy to avoid invalidation. TODO optimize
+        auto& typeValueMap = iter->second;
         auto copy = typeValueMap;
         for (auto& [value, sequences] : copy) {
           auto iter = currValueMap.find(value);
@@ -268,7 +270,7 @@ struct EquivalentFieldOptimization : public Pass {
             for (auto& sequence : copy) {
               if (currSequences.count(sequence) == 0) {
                 // This sequence is not present, erase it.
-                sequences.erase(sequences);
+                sequences.erase(sequence);
               }
             }
           }
