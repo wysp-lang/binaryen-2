@@ -324,9 +324,11 @@ struct EquivalentFieldOptimization : public Pass {
     for (auto type : subTypeAnalyzer) {
       // We have visited all subtypes, and can use their information here,
       // namely that if a pair is not equivalent in a subtype, it isn't in the
-      // super either.
+      // super either. This is basically more information to merge into the
+      // unified map, like before: as we merge information in, we filter to
+      // leave the intersection of all sequences.
       for (auto subType : subTypes.getStrictSubTypes(type)) {
-        eraseItemsNotIn(unifiedMap[type], unifiedMap[subType]);
+        mergeIntoUnifiedMap(type, unifiedMap[subType]);
       }
     }
 
