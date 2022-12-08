@@ -30,6 +30,39 @@
 // By always reading from the earlier field we increase the chance for the later
 // field to be pruned as unused.
 //
+// A particular case where this is useful is with sequences of accesses, such as
+// with Java class and interface dispatch. In Java a class may implement an
+// interface, which means the method appears like this:
+//
+//    object.itable.interface-vtable.slot_K
+//
+// That is, we get the itable, then get the interface vtable for a particular
+// interface (say, "Hashable"), then get a particular slot in that vtable (say,
+// "getHash()"). In general all such interface methods also appear in the class
+// vtable as well, like this:
+//
+//    object.vtable.slot_N
+//
+// That is, we get the class vtable, then one of the slots there. We need a
+// shorter sequence of operations to get to the function through the class
+// vtable, so we want to do
+//
+//    object.itable.interface-vtable.slot_K  =>  object.vtable.slot_N
+//
+// This happens in practice if a particular callsite can only have a particular
+// class or any of its subclasses. In that case we don't need to use the more
+// generic interface dispatch method, which can handle classes with no
+// connection whatsoever between them aside from them both implementing a
+// particular interface. (Note that this only really helps when we have a class
+// and some subclasses, and those subclasses override the vtable entry, as if
+// they do not then other passes would completely devirtualize here, as they'd
+// infer that only a single thing can be read from the itable.)
+//
+// To handle situations like this, we look not just at immediate field accesses
+// like x.b but also sequences of them, x.b.g.i etc., and we look through reads
+// of immutable globals while doing so (this works with Java since all the
+// itables and vtables are defined in immutable globals).
+//
 
 #include "ir/module-utils.h"
 #include "ir/possible-constant.h"
