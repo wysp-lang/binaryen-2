@@ -76,9 +76,8 @@
 #include "wasm-builder.h"
 #include "wasm.h"
 
-
 #include "support/hash.h" // XXX
-namespace std { // XXX
+namespace std {           // XXX
 // Hashing vectors is often useful
 template<typename T> struct hash<vector<T>> {
   size_t operator()(const vector<T> v) const {
@@ -89,7 +88,7 @@ template<typename T> struct hash<vector<T>> {
     return digest;
   }
 };
-}
+} // namespace std
 
 namespace wasm {
 
@@ -115,9 +114,7 @@ struct Equivalences {
   // requires two operations, see below.
   std::unordered_set<std::pair<Sequence, Sequence>> pairs;
 
-  void add(const Sequence& a, const Sequence& b) {
-    pairs.insert({a, b});
-  }
+  void add(const Sequence& a, const Sequence& b) { pairs.insert({a, b}); }
 
   bool has(const Sequence& a, const Sequence& b) {
     return pairs.count({a, b}) || pairs.count({b, a});
@@ -154,8 +151,8 @@ struct Finder : public PostWalker<Finder> {
     }
 
     // Scan this struct.new, finding values and the sequences that lead to them.
-    // We will recurse as we look through accesses. We start with an empty sequence as our prefix,
-    // which will get built up during the recursion.
+    // We will recurse as we look through accesses. We start with an empty
+    // sequence as our prefix, which will get built up during the recursion.
     ValueMap valueMap;
     scanNew(curr, Sequence(), valueMap);
 
@@ -372,7 +369,8 @@ struct EquivalentFieldOptimization : public Pass {
       return std::make_unique<FunctionOptimizer>(unifiedMap);
     }
 
-    FunctionOptimizer(TypeEquivalencesMap& unifiedMap) : unifiedMap(unifiedMap) {}
+    FunctionOptimizer(TypeEquivalencesMap& unifiedMap)
+      : unifiedMap(unifiedMap) {}
 
     void visitStructGet(StructGet* curr) {
       if (curr->type == Type::unreachable) {

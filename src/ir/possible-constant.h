@@ -200,7 +200,8 @@ public:
     return ret;
   }
 
-  PossibleConstantValues& operator=(const PossibleConstantValues& other) = default;
+  PossibleConstantValues&
+  operator=(const PossibleConstantValues& other) = default;
 
   bool operator==(const PossibleConstantValues& other) const {
     return value == other.value;
