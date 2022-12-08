@@ -129,14 +129,14 @@ struct Finder : public PostWalker<Finder> {
     // Scan this struct.new and fill in data to the entry. This will recurse as
     // we look through accesses. We start with an empty sequence as our prefix,
     // which will get built up during the recursion.
-    scan(curr, Sequence(), entry);
+    scanNew(curr, Sequence(), entry);
   }
 
   // Given a struct.new and a sequence prefix, look into this struct.new and add
   // anything we find into the given entry. For example, if the prefix is [1,2]
   // and we find (ref.func $foo) at index #3 then we can add a note to the entry
   // that [1,2,3] arrives at value $foo.
-  void scan(StructNew* curr, const Sequence& prefix, ValueMap& entry) {
+  void scanNew(StructNew* curr, const Sequence& prefix, ValueMap& entry) {
     // We'll only look at immutable fields.
     auto& fields = curr->type.getHeapType().getStruct().fields;
 
@@ -161,7 +161,7 @@ struct Finder : public PostWalker<Finder> {
 
       if (auto* subNew = operand->dynCast<StructNew>()) {
         // Look into this struct.new recursively.
-        scan(subNew, currSequence, entry);
+        scanNew(subNew, currSequence, entry);
         continue;
       }
 
@@ -178,7 +178,7 @@ struct Finder : public PostWalker<Finder> {
           auto* global = getModule()->getGlobal(value.getConstantGlobal());
           if (!global->imported()) {
             if (auto* subNew = global->init->dynCast<StructNew>()) {
-              scan(subNew, currSequence, entry);
+              scanNew(subNew, currSequence, entry);
             }
           }
         }
