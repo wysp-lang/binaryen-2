@@ -383,6 +383,7 @@ struct EquivalentFieldOptimization : public Pass {
         return;
       }
 
+      // TODO: we could also look at our supertypes
       auto iter = unifiedMap.find(curr->ref->type.getHeapType());
       if (iter == unifiedMap.end()) {
         return;
