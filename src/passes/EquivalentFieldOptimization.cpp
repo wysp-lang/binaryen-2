@@ -391,37 +391,42 @@ struct EquivalentFieldOptimization : public Pass {
         return;
       }
 
-      // This heap type has information about possible sequences to optimize.
-      auto& equivalences = iter->second;
-
-      // TODO: long sequences, i.e., of more then 1.
-      // Loop, as we may find either a shorter or a longer input sequence leads
-      // to a better final sequence.
-      Sequence currSequence = {curr->index};
-
+      // This heap type has information about possible sequences to optimize. We
+      // will search for any equivalent sequences to our own, and find the best
+      // of them to optimize to. To do so we loop as we consider longer
+      // sequences that include our children.
+      //
       // TODO: Make this more efficient than a brute-force search through all
       //       pairs. However, the number of pairs is usually short so this
       //       might be ok for now.
+      auto& equivalences = iter->second;
+      Sequence original = {curr->index};
 
       // Look for a better sequence: either shorter, or using lower indexes.
-      Sequence best = currSequence;
+      Sequence best = original;
       auto maybeUse = [&](const Sequence& s) {
-        // TODO: full lexical < on 1,2,3,.. etc. once we support long
-        //       sequences
-        if (s.size() < best.size() || s[0] < best[0]) {
+        if (s < best) {
           best = s;
         }
       };
 
-      for (auto& [a, b] : equivalences.pairs) {
-        if (a == currSequence) {
-          maybeUse(b);
-        } else if (b == currSequence) {
-          maybeUse(a);
+      auto currSequence = original;
+      while (1) {
+        for (auto& [a, b] : equivalences.pairs) {
+          if (a == currSequence) {
+            maybeUse(b);
+          } else if (b == currSequence) {
+            maybeUse(a);
+          }
         }
+        break;
       }
 
-      curr->index = best[0];
+      if (best != original) {
+        // Apply the sequence.
+        assert(best.size() == 1);
+        curr->index = best[0];
+      }
     }
 
   private:
