@@ -396,7 +396,7 @@ struct EquivalentFieldOptimization : public Pass {
 
       // Look for a better sequence: either shorter, or using lower indexes.
       Sequence best = currSequence;
-      auto maybeUse(const Sequence& s) {
+      auto maybeUse = [&](const Sequence& s) {
         // TODO: full lexical < on 1,2,3,.. etc. once we support long
         //       sequences
         if (s.size() < best.size() || s[0] < best[0]) {
