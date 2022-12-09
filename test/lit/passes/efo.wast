@@ -28,6 +28,8 @@
   ;; CHECK-NEXT: )
   (func $A
     (local $ref (ref $A))
+    ;; $A is always written the same value in both fields, so they are
+    ;; equivalent, and we optimize to always read from field #0.
     (local.set $ref
       (struct.new $A
         (i32.const 10)
@@ -40,7 +42,7 @@
       )
     )
     (drop
-      (struct.get $A 1
+      (struct.get $A 1   ;; This will be optimized to 0.
         (local.get $ref)
       )
     )
@@ -70,7 +72,8 @@
     (local.set $ref
       (struct.new $B
         (i32.const 10)
-        (i32.const 11)
+        (i32.const 11) ;; This value is different, so in this function we do not
+                       ;; optimize at all, and the get indexes remain 0, 1.
       )
     )
     (drop
