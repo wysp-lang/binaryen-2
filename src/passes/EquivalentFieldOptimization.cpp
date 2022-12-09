@@ -106,7 +106,7 @@ using Sequence = std::vector<Index>;
 // to optimize, that is, each value has a single sequence leading to it, which
 // means just a single sequence.
 // TODO: small 1
-using Sequences = std::unordered_set<Sequence>;
+using Sequences = std::vector<Sequence>;
 
 // Stores pairs of equivalent sequences.
 struct Equivalences {
@@ -116,7 +116,7 @@ struct Equivalences {
 
   void add(const Sequence& a, const Sequence& b) { pairs.insert({a, b}); }
 
-  bool has(const Sequence& a, const Sequence& b) {
+  bool has(const Sequence& a, const Sequence& b) const {
     return pairs.count({a, b}) || pairs.count({b, a});
   }
 
@@ -124,6 +124,8 @@ struct Equivalences {
     pairs.erase({a, b});
     pairs.erase({b, a});
   }
+
+  bool empty() const { return pairs.empty(); }
 };
 
 // First, find equivalent sequences in each struct.new.
@@ -215,7 +217,7 @@ struct Finder : public PostWalker<Finder> {
       value.note(operand, *getModule());
       if (value.isConstantLiteral() || value.isConstantGlobal()) {
         // Great, this is something we can track.
-        entry[value].insert(currSequence);
+        entry[value].push_back(currSequence);
 
         if (value.isConstantGlobal()) {
           // Not only can we track the global itself, but we may be able to look
@@ -285,7 +287,7 @@ struct EquivalentFieldOptimization : public Pass {
         // Iterate on a copy to avoid invalidation. TODO optimize
         auto& unifiedEquivalences = iter->second;
         auto copy = unifiedEquivalences;
-        for (auto& pair : copy) {
+        for (auto& pair : copy.pairs) {
           if (!currEquivalences.has(pair.first, pair.second)) {
             unifiedEquivalences.erase(pair.first, pair.second);
           }
@@ -383,7 +385,7 @@ struct EquivalentFieldOptimization : public Pass {
       }
 
       // This heap type has information about possible sequences to optimize.
-      auto& equivalences = iter->second;
+//      auto& equivalences = iter->second;
 
       // TODO optimize
     }
