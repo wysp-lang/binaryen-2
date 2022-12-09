@@ -65,6 +65,8 @@
 // itables and vtables are defined in immutable globals).
 //
 
+#include <algorithm>
+
 #include "ir/module-utils.h"
 #include "ir/possible-constant.h"
 #include "ir/subtypes.h"
@@ -94,11 +96,8 @@ namespace wasm {
 namespace {
 
 // A sequence of indexes that represents accesses of fields. For example, the
-// sequence [5] means "read field #5", while [2, 4] means "read field #4, then
-// on the object you read there, read field #2" (that is, object.field4.field2;
-// note that the order has the last read in the first index as that is the
-// convenient order to build up these vectors recursively from the top-most
-// expression).
+// sequence [5] means "read field #5", while [4, 2] means "read field #4, then
+// on the object you read there, read field #2" (that is, object.field4.field2).
 // Optimize this to assume a length of 3, which is the size of the itable access
 // mentioned earlier.
 // TODO: small 3
@@ -223,10 +222,15 @@ struct Finder : public PostWalker<Finder> {
       value.note(operand, *getModule());
       if (value.isConstantLiteral() || value.isConstantGlobal()) {
         // Great, this is something we can track.
+
+        // Reverse the sequence so it matches the order of reads (which is what
+        // we'll be doing all the computation on later).
+        auto reverse = currSequence;
+        std::reverse(reverse.begin(), reverse.end());
 std::cout << "add sequence for " << value << " : ";
-for (auto x : currSequence) std::cout << x << ' ';
+for (auto x : reverse) std::cout << x << ' ';
 std::cout << '\n';
-        entry[value].push_back(currSequence);
+        entry[value].push_back(reverse);
 
         if (value.isConstantGlobal()) {
           // Not only can we track the global itself, but we may be able to look
@@ -424,6 +428,8 @@ std::cout << "  yass\n";
 std::cout << "at: " << *curr << '\n';
       while (1) {
 
+std::cout << "inspect sequence for " << *currValue << " : ";
+
         // Apply the current value to the sequence, and point currValue to the
         // next item.
         if (auto* get = currValue->dynCast<StructGet>()) {
@@ -437,7 +443,6 @@ std::cout << "at: " << *curr << '\n';
           break;
         }
 
-std::cout << "inspect sequence for " << *currValue << " : ";
 for (auto x : currSequence) std::cout << x << ' ';
 std::cout << '\n';
 
