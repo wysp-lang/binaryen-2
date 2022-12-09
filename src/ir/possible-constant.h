@@ -216,6 +216,12 @@ public:
 
 namespace std {
 
+inline std::ostream& operator<<(std::ostream& stream,
+                                const wasm::PossibleConstantValues& contents) {
+  contents.dump(stream);
+  return stream;
+}
+
 template<> struct hash<wasm::PossibleConstantValues> {
   size_t operator()(const wasm::PossibleConstantValues& value) const {
     return value.hash();

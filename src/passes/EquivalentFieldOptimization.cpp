@@ -223,6 +223,9 @@ struct Finder : public PostWalker<Finder> {
       value.note(operand, *getModule());
       if (value.isConstantLiteral() || value.isConstantGlobal()) {
         // Great, this is something we can track.
+std::cout << "add sequence for " << value << " : ";
+for (auto x : currSequence) std::cout << x << ' ';
+std::cout << '\n';
         entry[value].push_back(currSequence);
 
         if (value.isConstantGlobal()) {
@@ -397,21 +400,48 @@ struct EquivalentFieldOptimization : public Pass {
       // sequences that include our children.
       auto& equivalences = iter->second;
 
-      // We start with a sequence that reads from our index.
-      Sequence original = {curr->index};
-
-      // Look for a better sequence: either shorter, or using lower indexes.
-      Sequence best = original;
+      // Look for a better sequence: either shorter, or using lower indexes, and
+      // while doing so note if we improved on what |curr| already is.
+      Sequence best;
+      auto improved = false;
       auto maybeUse = [&](const Sequence& s) {
-        if (s.size() < best.size() || (s.size() == best.size() && s < best)) {
+        // The first time we get here, best is empty, and the sequence s is of
+        // length 1 and contains curr, basically. That is not an improvement as
+        // it is what we are already doing.
+        if (best.empty()) {
           best = s;
+          return;
+        }
+        if (s.size() < best.size() || (s.size() == best.size() && s < best)) {
+std::cout << "  yass\n";
+          best = s;
+          improved = true;
         }
       };
 
       Expression* currValue = curr;
-      auto currSequence = original;
+      Sequence currSequence;
+std::cout << "at: " << *curr << '\n';
       while (1) {
-        // Look at everthing equivalent to this sequence.
+
+        // Apply the current value to the sequence, and point currValue to the
+        // next item.
+        if (auto* get = currValue->dynCast<StructGet>()) {
+          currSequence.push_back(get->index);
+          currValue = get->ref;
+        //} else if (auto* cast = currValue->dynCast<RefCast>()) {
+        //  currSequence.push_back(..);
+        //  currValue = cast->value;
+        } else {
+          // The sequence ended.
+          break;
+        }
+
+std::cout << "inspect sequence for " << *currValue << " : ";
+for (auto x : currSequence) std::cout << x << ' ';
+std::cout << '\n';
+
+        // Look at everything equivalent to this sequence.
         //
         // TODO: Make this more efficient than a brute-force search to find the
         //       equivalences and then on those equivalences. However, there are
@@ -423,20 +453,9 @@ struct EquivalentFieldOptimization : public Pass {
             maybeUse(a);
           }
         }
-
-        // Look deeper, if possible.
-        if (auto* get = currValue->dynCast<StructGet>()) {
-          currSequence.push_back(get->index);
-          currValue = get->ref;
-        //} else if (auto* cast = currValue->dynCast<RefCast>()) {
-        //  currSequence.push_back(..);
-        //  currValue = cast->value;
-        } else {
-          break;
-        }
       }
 
-      if (best == original) {
+      if (!improved) {
         return;
       }
 
