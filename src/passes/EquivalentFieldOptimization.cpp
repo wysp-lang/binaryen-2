@@ -68,7 +68,7 @@
 #include "ir/module-utils.h"
 #include "ir/possible-constant.h"
 #include "ir/subtypes.h"
-#include "ir/utils.h"
+#include "ir/utils.h" // refinalize?
 #include "pass.h"
 #include "support/small_set.h"
 #include "support/small_vector.h"
@@ -95,8 +95,11 @@ namespace wasm {
 namespace {
 
 // A sequence of indexes that represents accesses of fields. For example, the
-// sequence [5] means "read field #5", while [4, 2] means "read field #4, then
-// on the object you read there, read field #2" (that is, object.field4.field2).
+// sequence [5] means "read field #5", while [2, 4] means "read field #4, then
+// on the object you read there, read field #2" (that is, object.field4.field2;
+// note that the order has the last read in the first index as that is the
+// convenient order to build up these vectors recursively from the top-most
+// expression).
 // Optimize this to assume a length of 3, which is the size of the itable access
 // mentioned earlier.
 // TODO: small 3
@@ -201,8 +204,10 @@ struct Finder : public PostWalker<Finder> {
       // which ends with index i.
       currSequence.back() = i;
 
-      // Look through things like casts to the fallthrough value (which occur in
-      // the Java itable pattern, for example).
+      // TODO: Look through casts, but also count them (a cast is worse than a
+      // struct.get).
+      // While doing so we must make sure casts succeed (or else we need to keep
+      // them around in non-tnh).
       auto* operand = curr->operands[i];
       operand = Properties::getFallthrough(operand, options, *getModule());
 
