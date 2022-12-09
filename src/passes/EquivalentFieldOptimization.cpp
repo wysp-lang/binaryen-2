@@ -209,7 +209,6 @@ struct Finder : public PostWalker<Finder> {
       // While doing so we must make sure casts succeed (or else we need to keep
       // them around in non-tnh).
       auto* operand = curr->operands[i];
-      operand = Properties::getFallthrough(operand, options, *getModule());
 
       if (auto* subNew = operand->dynCast<StructNew>()) {
         // Look into this struct.new recursively.
