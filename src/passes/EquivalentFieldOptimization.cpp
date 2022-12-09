@@ -440,10 +440,21 @@ struct EquivalentFieldOptimization : public Pass {
         return;
       }
 
-      // We found a better sequence! Apply it.
+      // We found a better sequence! Apply it, going step by step up the
+      // sequence and either reusing the existing expression or making a new
+      // one.
       currValue = curr;
-      assert(best.size() == 1);
-      curr->index = best[0];
+      for (Index i = 0; i < best.size(); i++) {
+        auto sequenceAction = best[i];
+        if (auto* get = currValue->dynCast<StructGet>()) {
+          // The sequence action is a struct.get, and this is a struct.get, so
+          // just reuse it.
+          get->index = sequenceAction;
+          currValue = get->ref;
+        } else {
+          WASM_UNREACHABLE("bad sequence application");
+        }
+      }
     }
 
   private:
