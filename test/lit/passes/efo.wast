@@ -826,9 +826,113 @@
   )
 )
 
+;; Non-constant fields: globals and unknowns.
+(module
+  ;; CHECK:      (type $A (struct (field i32) (field i32) (field i32) (field i32) (field i32) (field i32)))
+  (type $A (struct (field i32) (field i32) (field i32) (field i32) (field i32) (field i32)))
+
+  ;; CHECK:      (global $g10 i32 (i32.const 10))
+  (global $g10 i32 (i32.const 10))
+
+  ;; CHECK:      (global $g10-mut (mut i32) (i32.const 10))
+  (global $g10-mut (mut i32) (i32.const 10))
+
+  ;; CHECK:      (func $A (type $i32_=>_none) (param $x i32)
+  ;; CHECK-NEXT:  (local $ref (ref null $A))
+  ;; CHECK-NEXT:  (local.set $ref
+  ;; CHECK-NEXT:   (struct.new $A
+  ;; CHECK-NEXT:    (global.get $g10)
+  ;; CHECK-NEXT:    (global.get $g10)
+  ;; CHECK-NEXT:    (global.get $g10-mut)
+  ;; CHECK-NEXT:    (global.get $g10-mut)
+  ;; CHECK-NEXT:    (local.get $x)
+  ;; CHECK-NEXT:    (local.get $x)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 0
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 0
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 2
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 3
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 4
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 5
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $A (param $x i32)
+    (local $ref (ref null $A))
+    (local.set $ref
+      (struct.new $A
+        ;; Immutable globals - these are equivalent.
+        (global.get $g10)
+        (global.get $g10)
+        ;; Mutable globals, so we cannot optimize.
+        (global.get $g10-mut)
+        (global.get $g10-mut)
+        ;; Completely unknown values.
+        (local.get $x)
+        (local.get $x)
+      )
+    )
+    (drop
+      (struct.get $A 0
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $A 1
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $A 2
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $A 3
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $A 4
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $A 5
+        (local.get $ref)
+      )
+    )
+  )
+)
+
 ;; Realistic vtable scenario. This is something no other optimization can handle
 ;; as we cannot simply infer the called function here - we can only infer
 ;; equivalence using this pass, and switch the get to the lower index.
+;;
+;; This also tests function references being optimized.
 (module
   ;; CHECK:      (type $vtable (struct (field $op1 funcref) (field $op2 funcref)))
   (type $vtable (struct (field $op1 funcref) (field $op2 funcref)))

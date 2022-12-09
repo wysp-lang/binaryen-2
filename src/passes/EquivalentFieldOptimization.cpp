@@ -392,6 +392,8 @@ struct EquivalentFieldOptimization : public Pass {
       auto& equivalences = iter->second;
 
       // TODO: long sequences, i.e., of more then 1.
+      // Loop, as we may find either a shorter or a longer input sequence leads
+      // to a better final sequence.
       Sequence currSequence = {curr->index};
 
       // TODO: Make this more efficient than a brute-force search through all
