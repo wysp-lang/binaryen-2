@@ -825,3 +825,111 @@
     )
   )
 )
+
+;; Realistic vtable scenario. This is something no other optimization can handle
+;; as we cannot simply infer the called function here - we can only infer
+;; equivalence using this pass, and switch the get to the lower index.
+(module
+  ;; CHECK:      (type $vtable (struct (field $op1 funcref) (field $op2 funcref)))
+  (type $vtable (struct (field $op1 funcref) (field $op2 funcref)))
+
+  ;; CHECK:      (type $A (struct (field $vtable (ref $vtable))))
+  (type $A (struct_subtype (field $vtable (ref $vtable)) data))
+  ;; CHECK:      (type $B (struct_subtype (field $vtable (ref $vtable)) $A))
+  (type $B (struct_subtype (field $vtable (ref $vtable)) $A))
+
+  ;; CHECK:      (global $vtable-A (ref $vtable) (struct.new $vtable
+  ;; CHECK-NEXT:  (ref.func $func-a)
+  ;; CHECK-NEXT:  (ref.func $func-a)
+  ;; CHECK-NEXT: ))
+  (global $vtable-A (ref $vtable) (struct.new $vtable
+    (ref.func $func-a)
+    (ref.func $func-a)
+  ))
+
+  ;; CHECK:      (global $vtable-B (ref $vtable) (struct.new $vtable
+  ;; CHECK-NEXT:  (ref.func $func-b)
+  ;; CHECK-NEXT:  (ref.func $func-b)
+  ;; CHECK-NEXT: ))
+  (global $vtable-B (ref $vtable) (struct.new $vtable
+    (ref.func $func-b)
+    (ref.func $func-b)
+  ))
+
+  ;; CHECK:      (func $func-a (type $none_=>_i32) (result i32)
+  ;; CHECK-NEXT:  (i32.const 10)
+  ;; CHECK-NEXT: )
+  (func $func-a (result i32)
+    (i32.const 10)
+  )
+
+  ;; CHECK:      (func $func-b (type $none_=>_i32) (result i32)
+  ;; CHECK-NEXT:  (i32.const 10)
+  ;; CHECK-NEXT: )
+  (func $func-b (result i32)
+    (i32.const 10)
+  )
+
+  ;; CHECK:      (func $A (type $i32_=>_none) (param $x i32)
+  ;; CHECK-NEXT:  (local $ref (ref null $A))
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:   (local.set $ref
+  ;; CHECK-NEXT:    (struct.new $A
+  ;; CHECK-NEXT:     (global.get $vtable-A)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $ref
+  ;; CHECK-NEXT:    (struct.new $B
+  ;; CHECK-NEXT:     (global.get $vtable-B)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $vtable $op1
+  ;; CHECK-NEXT:    (struct.get $A $vtable
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $vtable $op1
+  ;; CHECK-NEXT:    (struct.get $A $vtable
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $A (param $x i32)
+    (local $ref (ref null $A))
+    (if
+      (local.get $x)
+      (local.set $ref
+        (struct.new $A
+          (global.get $vtable-A)
+        )
+      )
+      (local.set $ref
+        (struct.new $B
+          (global.get $vtable-B)
+        )
+      )
+    )
+    (drop
+      (struct.get $vtable $op1
+        (struct.get $A $vtable
+          (local.get $ref)
+        )
+      )
+    )
+    (drop
+      (struct.get $vtable $op2 ;; This can be switched to op2.
+        (struct.get $A $vtable
+          (local.get $ref)
+        )
+      )
+    )
+  )
+)
+
+;; TODO nesting
