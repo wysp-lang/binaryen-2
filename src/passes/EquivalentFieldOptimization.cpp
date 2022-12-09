@@ -385,9 +385,34 @@ struct EquivalentFieldOptimization : public Pass {
       }
 
       // This heap type has information about possible sequences to optimize.
-//      auto& equivalences = iter->second;
+      auto& equivalences = iter->second;
 
-      // TODO optimize
+      // TODO: long sequences, i.e., of more then 1.
+      Sequence currSequence = {curr->index};
+
+      // TODO: Make this more efficient than a brute-force search through all
+      //       pairs. However, the number of pairs is usually short so this
+      //       might be ok for now.
+
+      // Look for a better sequence: either shorter, or using lower indexes.
+      Sequence best = currSequence;
+      auto maybeUse(const Sequence& s) {
+        // TODO: full lexical < on 1,2,3,.. etc. once we support long
+        //       sequences
+        if (s.size() < best.size() || s[0] < best[0]) {
+          best = s;
+        }
+      };
+
+      for (auto& [a, b] : equivalences.pairs) {
+        if (a == currSequence) {
+          maybeUse(b);
+        } else if (b == currSequence) {
+          maybeUse(a);
+        }
+      }
+
+      curr->index = best[0];
     }
 
     void doWalkFunction(Function* func) {
