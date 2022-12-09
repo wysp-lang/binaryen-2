@@ -609,11 +609,15 @@ void PassRunner::addDefaultGlobalOptimizationPrePasses() {
       addIfNoDWARFIssues("signature-refining");
     }
     addIfNoDWARFIssues("global-refining");
-    // Global type optimization can remove fields that are not needed, which can
-    // remove ref.funcs that were once assigned to vtables but are no longer
-    // needed, which can allow more code to be removed globally. After those,
-    // constant field propagation can be more effective.
     if (options.closedWorld) {
+      // Running EquivalentFieldOptimization before GlobalTypeOptimization is
+      // beneficial as efo may make us stop using a field (by using an
+      // equivalent one) which gto can then remove.
+      addIfNoDWARFIssues("efo");
+      // Global type optimization can remove fields that are not needed, which
+      // removes ref.funcs that were once assigned to vtables but are no longer
+      // needed, which can allow more code to be removed globally. After those,
+      // constant field propagation can be more effective.
       addIfNoDWARFIssues("gto");
     }
     addIfNoDWARFIssues("remove-unused-module-elements");

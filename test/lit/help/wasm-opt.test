@@ -138,6 +138,9 @@
 ;; CHECK-NEXT:   --dwarfdump                                   dump DWARF debug info sections
 ;; CHECK-NEXT:                                                 from the read binary
 ;; CHECK-NEXT:
+;; CHECK-NEXT:   --efo                                         optimizes accesses to equivalent
+;; CHECK-NEXT:                                                 struct fields
+;; CHECK-NEXT:
 ;; CHECK-NEXT:   --emit-target-features                        emit the target features section
 ;; CHECK-NEXT:                                                 in the output
 ;; CHECK-NEXT:

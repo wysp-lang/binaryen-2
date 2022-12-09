@@ -384,7 +384,7 @@ struct EquivalentFieldOptimization : public Pass {
         return;
       }
 
-      auto iter = unifiedMap.find(curr->type.getHeapType());
+      auto iter = unifiedMap.find(curr->ref->type.getHeapType());
       if (iter == unifiedMap.end()) {
         return;
       }
