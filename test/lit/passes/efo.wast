@@ -226,3 +226,123 @@
     )
   )
 )
+
+;; Test separate functions and a struct.new in a global. Here we can optimize.
+(module
+  ;; CHECK:      (type $A (struct (field i32) (field i32)))
+  (type $A (struct (field i32) (field i32)))
+
+  ;; CHECK:      (global $A (ref $A) (struct.new $A
+  ;; CHECK-NEXT:  (i32.const 10)
+  ;; CHECK-NEXT:  (i32.const 10)
+  ;; CHECK-NEXT: ))
+  (global $A (ref $A) (struct.new $A
+    (i32.const 10)
+    (i32.const 10)
+  ))
+
+  ;; CHECK:      (func $new-0 (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $A
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $new-0
+    (drop
+      (struct.new $A
+        (i32.const 20)
+        (i32.const 20)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $new-1 (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $A
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $new-1
+    (drop
+      (struct.new $A
+        (i32.const 20)
+        (i32.const 20)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $get (type $ref|$A|_=>_i32) (param $ref (ref $A)) (result i32)
+  ;; CHECK-NEXT:  (struct.get $A 0
+  ;; CHECK-NEXT:   (local.get $ref)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $get (param $ref (ref $A)) (result i32)
+    (struct.get $A 1
+      (local.get $ref)
+    )
+  )
+)
+
+;; Non-equivalence in the global prevents optimization.
+(module
+  ;; CHECK:      (type $A (struct (field i32) (field i32)))
+  (type $A (struct (field i32) (field i32)))
+
+  ;; CHECK:      (global $A (ref $A) (struct.new $A
+  ;; CHECK-NEXT:  (i32.const 10)
+  ;; CHECK-NEXT:  (i32.const 11)
+  ;; CHECK-NEXT: ))
+  (global $A (ref $A) (struct.new $A
+    (i32.const 10)
+    (i32.const 11)
+  ))
+
+  ;; CHECK:      (func $new-0 (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $A
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $new-0
+    (drop
+      (struct.new $A
+        (i32.const 20)
+        (i32.const 20)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $new-1 (type $none_=>_none)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $A
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $new-1
+    (drop
+      (struct.new $A
+        (i32.const 20)
+        (i32.const 20)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $get (type $ref|$A|_=>_i32) (param $ref (ref $A)) (result i32)
+  ;; CHECK-NEXT:  (struct.get $A 1
+  ;; CHECK-NEXT:   (local.get $ref)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $get (param $ref (ref $A)) (result i32)
+    (struct.get $A 1
+      (local.get $ref)
+    )
+  )
+)
