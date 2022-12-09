@@ -1015,6 +1015,93 @@
   )
 )
 
+;; Subtyping, but now the parent's fields are not equivalent, preventing
+;; optimization there. But we can still optimize the child.
+(module
+  ;; CHECK:      (type $A (struct (field i32) (field i32)))
+  (type $A (struct_subtype (field i32) (field i32) data))
+  ;; CHECK:      (type $B (struct_subtype (field i32) (field i32) $A))
+  (type $B (struct_subtype (field i32) (field i32) $A))
+
+  ;; CHECK:      (func $A (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $A (ref null $A))
+  ;; CHECK-NEXT:  (local.set $A
+  ;; CHECK-NEXT:   (struct.new $A
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (i32.const 11)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 0
+  ;; CHECK-NEXT:    (local.get $A)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 1
+  ;; CHECK-NEXT:    (local.get $A)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $A
+    (local $A (ref null $A))
+    (local.set $A
+      (struct.new $A
+        (i32.const 10)
+        (i32.const 11) ;; This changed.
+      )
+    )
+    (drop
+      (struct.get $A 0
+        (local.get $A)
+      )
+    )
+    (drop
+      (struct.get $A 1
+        (local.get $A)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $B (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $B (ref null $B))
+  ;; CHECK-NEXT:  (local.set $B
+  ;; CHECK-NEXT:   (struct.new $B
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $B 0
+  ;; CHECK-NEXT:    (local.get $B)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $B 0
+  ;; CHECK-NEXT:    (local.get $B)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $B
+    (local $B (ref null $B))
+    (local.set $B
+      (struct.new $B
+        (i32.const 20)
+        (i32.const 20)
+      )
+    )
+    (drop
+      (struct.get $B 0
+        (local.get $B)
+      )
+    )
+    (drop
+      (struct.get $B 1
+        (local.get $B)
+      )
+    )
+  )
+)
+
 ;; Realistic vtable scenario. This is something no other optimization can handle
 ;; as we cannot simply infer the called function here - we can only infer
 ;; equivalence using this pass, and switch the get to the lower index.
