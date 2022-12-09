@@ -1189,6 +1189,51 @@
   )
 )
 
+;; Nested struct.news.
+(module
+  ;; CHECK:      (type $A (struct (field (ref $B)) (field i32)))
+  (type $A (struct (field (ref $B)) (field i32)))
+  ;; CHECK:      (type $B (struct (field i32) (field i32)))
+  (type $B (struct (field i32) (field i32)))
+
+  (func $A
+    (local $ref (ref null $A))
+    (local.set $ref
+      (struct.new $A
+        (struct.new $B
+          (i32.const 10)
+          (i32.const 20) ;; This field of $B is the same as one of $A.
+        )
+        (i32.const 20)
+      )
+    )
+    (drop
+      (struct.get $A 0
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $B 0
+        (struct.get $A 0
+          (local.get $ref)
+        )
+      )
+    )
+    (drop
+      (struct.get $B 1     ;; This can read from $A.1 instead of $A.B.1.
+        (struct.get $A 0
+          (local.get $ref)
+        )
+      )
+    )
+    (drop
+      (struct.get $A 1
+        (local.get $ref)
+      )
+    )
+  )
+)
+
 ;; Realistic vtable scenario. This is something no other optimization can handle
 ;; as we cannot simply infer the called function here - we can only infer
 ;; equivalence using this pass, and switch the get to the lower index.
