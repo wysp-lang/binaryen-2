@@ -642,3 +642,72 @@
     )
   )
 )
+
+;; Four fields, two pairs of whom are equivalent.
+(module
+  ;; CHECK:      (type $A (struct (field i32) (field i32) (field i32) (field i32)))
+  (type $A (struct (field i32) (field i32) (field i32) (field i32)))
+
+  ;; CHECK:      (func $A (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $ref (ref null $A))
+  ;; CHECK-NEXT:  (local.set $ref
+  ;; CHECK-NEXT:   (struct.new $A
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 0
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 0
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 2
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 2
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $A
+    (local $ref (ref null $A))
+    (local.set $ref
+      (struct.new $A
+        (i32.const 10) ;; The first two and last two are equivalent, so we have
+        (i32.const 10) ;; multiple optimization opportunities in a single type.
+        (i32.const 20)
+        (i32.const 20)
+      )
+    )
+    (drop
+      (struct.get $A 0
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $A 1
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $A 2
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $A 3
+        (local.get $ref)
+      )
+    )
+  )
+)
