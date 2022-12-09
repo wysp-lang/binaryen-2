@@ -395,11 +395,9 @@ struct EquivalentFieldOptimization : public Pass {
       // will search for any equivalent sequences to our own, and find the best
       // of them to optimize to. To do so we loop as we consider longer
       // sequences that include our children.
-      //
-      // TODO: Make this more efficient than a brute-force search through all
-      //       pairs. However, the number of pairs is usually short so this
-      //       might be ok for now.
       auto& equivalences = iter->second;
+
+      // We start with a sequence that reads from our index.
       Sequence original = {curr->index};
 
       // Look for a better sequence: either shorter, or using lower indexes.
@@ -410,8 +408,14 @@ struct EquivalentFieldOptimization : public Pass {
         }
       };
 
+      Expression* currValue = curr;
       auto currSequence = original;
       while (1) {
+        // Look at everthing equivalent to this sequence.
+        //
+        // TODO: Make this more efficient than a brute-force search to find the
+        //       equivalences and then on those equivalences. However, there are
+        //       usually not that many equivalences anyhow.
         for (auto& [a, b] : equivalences.pairs) {
           if (a == currSequence) {
             maybeUse(b);
@@ -419,14 +423,27 @@ struct EquivalentFieldOptimization : public Pass {
             maybeUse(a);
           }
         }
-        break;
+
+        // Look deeper, if possible.
+        if (auto* get = currValue->dynCast<StructGet>()) {
+          currSequence.push_back(get->index);
+          currValue = get->ref;
+        //} else if (auto* cast = currValue->dynCast<RefCast>()) {
+        //  currSequence.push_back(..);
+        //  currValue = cast->value;
+        } else {
+          break;
+        }
       }
 
-      if (best != original) {
-        // Apply the sequence.
-        assert(best.size() == 1);
-        curr->index = best[0];
+      if (best == original) {
+        return;
       }
+
+      // We found a better sequence! Apply it.
+      currValue = curr;
+      assert(best.size() == 1);
+      curr->index = best[0];
     }
 
   private:
