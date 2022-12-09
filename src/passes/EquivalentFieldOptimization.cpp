@@ -409,13 +409,11 @@ struct EquivalentFieldOptimization : public Pass {
       Sequence best;
       auto improved = false;
       auto maybeUse = [&](const Sequence& s) {
-        // The first time we get here, best is empty, and the sequence s is of
-        // length 1 and contains curr, basically. That is not an improvement as
-        // it is what we are already doing.
-        if (best.empty()) {
-          best = s;
-          return;
-        }
+std::cout << "mayyyyyyyyybe\n";
+for (auto x : s) std::cout << x << ' ';
+std::cout << '\n';
+
+std::cout << "waka " << s.size() << " : " << best.size() << " : " << (s < best) << '\n';//) {
         if (s.size() < best.size() || (s.size() == best.size() && s < best)) {
 std::cout << "  yass\n";
           best = s;
@@ -441,6 +439,14 @@ std::cout << "inspect sequence for " << *currValue << " : ";
         } else {
           // The sequence ended.
           break;
+        }
+
+        if (best.empty()) {
+          // This is the first part of the sequence, that is, that reflects
+          // |curr| and nothing else. This is what we have if we do not make any
+          // changes, so set it as the default best.
+          assert(currSequence.size() == 1);
+          best = currSequence;
         }
 
 for (auto x : currSequence) std::cout << x << ' ';
