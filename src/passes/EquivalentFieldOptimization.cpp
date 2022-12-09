@@ -403,7 +403,7 @@ struct EquivalentFieldOptimization : public Pass {
       // Look for a better sequence: either shorter, or using lower indexes.
       Sequence best = original;
       auto maybeUse = [&](const Sequence& s) {
-        if (s < best) {
+        if (s.size() < best.size() || (s.size() == best.size() && s < best)) {
           best = s;
         }
       };
@@ -444,8 +444,9 @@ struct EquivalentFieldOptimization : public Pass {
       // sequence and either reusing the existing expression or making a new
       // one.
       currValue = curr;
-      for (Index i = 0; i < best.size(); i++) {
-        auto sequenceAction = best[i];
+std::cout << "found better! for " << *curr << "\n";
+      for (auto sequenceAction : best) {
+std::cout << "  loop " << sequenceAction << " : " << *currValue << '\n';
         if (auto* get = currValue->dynCast<StructGet>()) {
           // The sequence action is a struct.get, and this is a struct.get, so
           // just reuse it.
