@@ -68,7 +68,6 @@
 #include "ir/module-utils.h"
 #include "ir/possible-constant.h"
 #include "ir/subtypes.h"
-#include "ir/utils.h" // refinalize?
 #include "pass.h"
 #include "support/small_set.h"
 #include "support/small_vector.h"
@@ -112,6 +111,9 @@ using Sequence = std::vector<Index>;
 using Sequences = std::vector<Sequence>;
 
 // Stores pairs of equivalent sequences.
+//
+// TODO: We could save memory by storing shared references to immutable
+//       sequences.
 struct Equivalences {
   // We store each pair once to save memory. So checking for existence etc.
   // requires two operations, see below.
@@ -422,20 +424,8 @@ struct EquivalentFieldOptimization : public Pass {
       curr->index = best[0];
     }
 
-    void doWalkFunction(Function* func) {
-      WalkerPass<PostWalker<FunctionOptimizer>>::doWalkFunction(func);
-
-      // If we changed anything, we need to update parent types as types may
-      // have changed. XXX is this needed?
-      if (changed) {
-        ReFinalize().walkFunctionInModule(func, getModule());
-      }
-    }
-
   private:
     TypeEquivalencesMap& unifiedMap;
-
-    bool changed = false; // XXX
   };
 };
 
