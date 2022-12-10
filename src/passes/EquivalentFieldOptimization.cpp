@@ -447,7 +447,7 @@ std::cerr << "mayyyyyyyyybe\n";
 for (auto x : s) std::cerr << x << ' ';
 std::cerr << '\n';
 
-std::cerr << "waka " << s.size() << " : " << best->size() << " : " << (s < *best) << '\n';//) {
+std::cerr << "waka " << s.size() << " : " << best->size() << " : " << currSequence.size() << " : " << (s < *best) << '\n';//) {
           if (isBetter(s, currSequence)) {
             if (!best || isBetter(s, *best)) {
               best = s;
@@ -466,17 +466,28 @@ std::cerr << "waka " << s.size() << " : " << best->size() << " : " << (s < *best
         if (best) {
 std::cerr << "  yes\n";
           // We found a better sequence! Apply it, going step by step up the
-          // sequence and either reusing the existing expression or making a new
-          // one.
-          currValue = curr;
+          // sequence and rewriting: either reusing the existing expression or
+          // making a new one.
+          Expression* currRewrite = curr;
+
+          // |currValue| is where we stopped going up the chain earlier. It is
+          // the point at which the chain of gets begins, the reference that
+          // starts everything. In the new sequence we generate we need to keep
+          // it at the top.
+          auto* top = currValue;
 std::cerr << "found better! for " << *curr << "\n";
-          for (auto sequenceAction : *best) {
-std::cerr << "  loop " << sequenceAction << " : " << *currValue << '\n';
-            if (auto* get = currValue->dynCast<StructGet>()) {
+          for (Index i = 0; i < best->size(); i++) {
+            auto sequenceAction = (*best)[i];
+            auto last = (i + 1) == best->size();
+std::cerr << "  loop " << sequenceAction << " : " << *currRewrite << '\n';
+            if (auto* get = currRewrite->dynCast<StructGet>()) {
               // The sequence action is a struct.get, and this is a struct.get, so
               // just reuse it.
               get->index = sequenceAction;
-              currValue = get->ref;
+              currRewrite = get->ref;
+              if (last) {
+                get->ref = top;
+              }
             } else {
               WASM_UNREACHABLE("bad sequence application");
             }
