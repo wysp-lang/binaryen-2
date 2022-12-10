@@ -227,9 +227,9 @@ struct Finder : public PostWalker<Finder> {
         // we'll be doing all the computation on later).
         auto reverse = currSequence;
         std::reverse(reverse.begin(), reverse.end());
-std::cout << "add sequence for " << value << " : ";
-for (auto x : reverse) std::cout << x << ' ';
-std::cout << '\n';
+std::cerr << "add sequence for " << value << " : ";
+for (auto x : reverse) std::cerr << x << ' ';
+std::cerr << '\n';
         entry[value].push_back(reverse);
 
         if (value.isConstantGlobal()) {
@@ -409,13 +409,13 @@ struct EquivalentFieldOptimization : public Pass {
       Sequence best;
       auto improved = false;
       auto maybeUse = [&](const Sequence& s) {
-std::cout << "mayyyyyyyyybe\n";
-for (auto x : s) std::cout << x << ' ';
-std::cout << '\n';
+std::cerr << "mayyyyyyyyybe\n";
+for (auto x : s) std::cerr << x << ' ';
+std::cerr << '\n';
 
-std::cout << "waka " << s.size() << " : " << best.size() << " : " << (s < best) << '\n';//) {
+std::cerr << "waka " << s.size() << " : " << best.size() << " : " << (s < best) << '\n';//) {
         if (s.size() < best.size() || (s.size() == best.size() && s < best)) {
-std::cout << "  yass\n";
+std::cerr << "  yes\n";
           best = s;
           improved = true;
         }
@@ -423,10 +423,10 @@ std::cout << "  yass\n";
 
       Expression* currValue = curr;
       Sequence currSequence;
-std::cout << "at: " << *curr << '\n';
+std::cerr << "at: " << *curr << '\n';
       while (1) {
 
-std::cout << "inspect sequence for " << *currValue << " : ";
+std::cerr << "inspect sequence for " << *currValue << " : ";
 
         // Apply the current value to the sequence, and point currValue to the
         // next item.
@@ -449,8 +449,8 @@ std::cout << "inspect sequence for " << *currValue << " : ";
           best = currSequence;
         }
 
-for (auto x : currSequence) std::cout << x << ' ';
-std::cout << '\n';
+for (auto x : currSequence) std::cerr << x << ' ';
+std::cerr << '\n';
 
         // Look at everything equivalent to this sequence.
         //
@@ -474,9 +474,9 @@ std::cout << '\n';
       // sequence and either reusing the existing expression or making a new
       // one.
       currValue = curr;
-std::cout << "found better! for " << *curr << "\n";
+std::cerr << "found better! for " << *curr << "\n";
       for (auto sequenceAction : best) {
-std::cout << "  loop " << sequenceAction << " : " << *currValue << '\n';
+std::cerr << "  loop " << sequenceAction << " : " << *currValue << '\n';
         if (auto* get = currValue->dynCast<StructGet>()) {
           // The sequence action is a struct.get, and this is a struct.get, so
           // just reuse it.
