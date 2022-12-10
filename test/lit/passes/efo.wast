@@ -1268,6 +1268,86 @@
   )
 )
 
+;; As above, but reorder a field to make sure we don't confuse field indexes in
+;; A with B.
+(module
+  ;; CHECK:      (type $A (struct (field (ref $B)) (field i32)))
+  (type $A (struct (field (ref $B)) (field i32)))
+  ;; CHECK:      (type $B (struct (field i32) (field i32)))
+  (type $B (struct (field i32) (field i32)))
+
+  ;; CHECK:      (func $A (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $ref (ref null $A))
+  ;; CHECK-NEXT:  (local.set $ref
+  ;; CHECK-NEXT:   (struct.new $A
+  ;; CHECK-NEXT:    (struct.new $B
+  ;; CHECK-NEXT:     (i32.const 20)
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 0
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 1
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $B 1
+  ;; CHECK-NEXT:    (struct.get $A 0
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 1
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $A
+    (local $ref (ref null $A))
+    (local.set $ref
+      (struct.new $A
+        (struct.new $B
+          (i32.const 20) ;; These are reordered
+          (i32.const 10)
+        )
+        (i32.const 20)
+      )
+    )
+    (drop
+      (struct.get $A 0
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $B 0     ;; Since we reordered, we can optimize here instead
+        (struct.get $A 0   ;; the case below.
+          (local.get $ref)
+        )
+      )
+    )
+    (drop
+      (struct.get $B 1
+        (struct.get $A 0
+          (local.get $ref)
+        )
+      )
+    )
+    (drop
+      (struct.get $A 1
+        (local.get $ref)
+      )
+    )
+  )
+)
+
 ;; Realistic vtable scenario. This is something no other optimization can handle
 ;; as we cannot simply infer the called function here - we can only infer
 ;; equivalence using this pass, and switch the get to the lower index.
