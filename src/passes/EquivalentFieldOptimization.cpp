@@ -404,23 +404,6 @@ struct EquivalentFieldOptimization : public Pass {
       // sequences that include our children.
       auto& equivalences = iter->second;
 
-      // Look for a better sequence: either shorter, or using lower indexes, and
-      // while doing so note if we improved on what |curr| already is.
-      Sequence best;
-      auto improved = false;
-      auto maybeUse = [&](const Sequence& s) {
-std::cerr << "mayyyyyyyyybe\n";
-for (auto x : s) std::cerr << x << ' ';
-std::cerr << '\n';
-
-std::cerr << "waka " << s.size() << " : " << best.size() << " : " << (s < best) << '\n';//) {
-        if (s.size() < best.size() || (s.size() == best.size() && s < best)) {
-std::cerr << "  yes\n";
-          best = s;
-          improved = true;
-        }
-      };
-
       Expression* currValue = curr;
       Sequence currSequence;
 std::cerr << "at: " << *curr << '\n';
@@ -441,14 +424,6 @@ std::cerr << "inspect sequence for " << *currValue << " : ";
           break;
         }
 
-        if (best.empty()) {
-          // This is the first part of the sequence, that is, that reflects
-          // |curr| and nothing else. This is what we have if we do not make any
-          // changes, so set it as the default best.
-          assert(currSequence.size() == 1);
-          best = currSequence;
-        }
-
 for (auto x : currSequence) std::cerr << x << ' ';
 std::cerr << '\n';
 
@@ -457,6 +432,33 @@ std::cerr << '\n';
         // TODO: Make this more efficient than a brute-force search to find the
         //       equivalences and then on those equivalences. However, there are
         //       usually not that many equivalences anyhow.
+        //
+        // TODO: We currently stop if we find an improvement at any sequence
+        //       length. However, we could find how much we improve at different
+        //       lengths - perhaps at a longer length we can remove more.
+
+        // If we find a sequence better than currSequence, we'll set it here.
+        std::optional<Sequence> best;
+
+        // Look for a better sequence: either shorter, or using lower indexes, and
+        // while doing so note if we improved on what |curr| already is.
+        auto isBetter = [](const Sequence& a, const Sequence& b) {
+          return a.size() < b.size() || (a.size() == b.size() && a < b);
+        };
+
+        auto maybeUse = [&](const Sequence& s) {
+std::cerr << "mayyyyyyyyybe\n";
+for (auto x : s) std::cerr << x << ' ';
+std::cerr << '\n';
+
+std::cerr << "waka " << s.size() << " : " << best->size() << " : " << (s < *best) << '\n';//) {
+          if (isBetter(s, currSequence)) {
+            if (!best || isBetter(s, *best)) {
+              best = s;
+            }
+          }
+        };
+
         for (auto& [a, b] : equivalences.pairs) {
           if (a == currSequence) {
             maybeUse(b);
@@ -464,26 +466,25 @@ std::cerr << '\n';
             maybeUse(a);
           }
         }
-      }
 
-      if (!improved) {
-        return;
-      }
-
-      // We found a better sequence! Apply it, going step by step up the
-      // sequence and either reusing the existing expression or making a new
-      // one.
-      currValue = curr;
+        if (best) {
+std::cerr << "  yes\n";
+          // We found a better sequence! Apply it, going step by step up the
+          // sequence and either reusing the existing expression or making a new
+          // one.
+          currValue = curr;
 std::cerr << "found better! for " << *curr << "\n";
-      for (auto sequenceAction : best) {
+          for (auto sequenceAction : *best) {
 std::cerr << "  loop " << sequenceAction << " : " << *currValue << '\n';
-        if (auto* get = currValue->dynCast<StructGet>()) {
-          // The sequence action is a struct.get, and this is a struct.get, so
-          // just reuse it.
-          get->index = sequenceAction;
-          currValue = get->ref;
-        } else {
-          WASM_UNREACHABLE("bad sequence application");
+            if (auto* get = currValue->dynCast<StructGet>()) {
+              // The sequence action is a struct.get, and this is a struct.get, so
+              // just reuse it.
+              get->index = sequenceAction;
+              currValue = get->ref;
+            } else {
+              WASM_UNREACHABLE("bad sequence application");
+            }
+          }
         }
       }
     }
