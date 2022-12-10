@@ -432,10 +432,6 @@ std::cerr << '\n';
         // TODO: Make this more efficient than a brute-force search to find the
         //       equivalences and then on those equivalences. However, there are
         //       usually not that many equivalences anyhow.
-        //
-        // TODO: We currently stop if we find an improvement at any sequence
-        //       length. However, we could find how much we improve at different
-        //       lengths - perhaps at a longer length we can remove more.
 
         // If we find a sequence better than currSequence, we'll set it here.
         std::optional<Sequence> best;
@@ -485,6 +481,11 @@ std::cerr << "  loop " << sequenceAction << " : " << *currValue << '\n';
               WASM_UNREACHABLE("bad sequence application");
             }
           }
+
+          // TODO: We currently stop if we find an improvement at any sequence
+          //       length. However, we could find how much we improve at different
+          //       lengths - perhaps at a longer length we can remove more.
+          return;
         }
       }
     }
