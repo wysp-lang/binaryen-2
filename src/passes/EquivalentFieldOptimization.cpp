@@ -167,6 +167,7 @@ struct Finder : public PostWalker<Finder> {
     // two sequences to be equivalent, they must be equivalent in every single
     // struct.new).
     auto& entry = map[curr];
+std::cout << "apply in " << getModule()->typeNames[curr->type.getHeapType()].name << '\n';
 
     // Fill in the entry with equivalent pairs: all sequences for the same value
     // are equivalent (the value itself no longer matters from here).
@@ -392,27 +393,17 @@ struct EquivalentFieldOptimization : public Pass {
         return;
       }
 
-      // TODO: we could also look at our supertypes
-      auto iter = unifiedMap.find(curr->ref->type.getHeapType());
-      if (iter == unifiedMap.end()) {
-        return;
-      }
-
-      // This heap type has information about possible sequences to optimize. We
-      // will search for any equivalent sequences to our own, and find the best
-      // of them to optimize to. To do so we loop as we consider longer
-      // sequences that include our children.
-      auto& equivalences = iter->second;
-
       Expression* currValue = curr;
       Sequence currSequence;
-std::cerr << "at: " << *curr << '\n';
+std::cerr << "\nvisitStructGet: " << *curr << '\n';
       while (1) {
 
-std::cerr << "inspect sequence for " << *currValue << " : ";
+std::cerr << "inspect sequence for " << *currValue << "\n";
 
         // Apply the current value to the sequence, and point currValue to the
-        // next item.
+        // item we are reading from right now (which will be the next item
+        // later, and is also the reference from which the entire sequence
+        // begins).
         if (auto* get = currValue->dynCast<StructGet>()) {
           currSequence.push_back(get->index);
           currValue = get->ref;
@@ -426,6 +417,15 @@ std::cerr << "inspect sequence for " << *currValue << " : ";
 
 for (auto x : currSequence) std::cerr << x << ' ';
 std::cerr << '\n';
+
+        // See if a sequence starting here has anything we can optimize with.
+        // TODO: we could also look at our supertypes
+        auto iter = unifiedMap.find(currValue->type.getHeapType());
+        if (iter == unifiedMap.end()) {
+          continue;
+        }
+        auto& equivalences = iter->second;
+std::cout << "seek in " << getModule()->typeNames[currValue->type.getHeapType()].name << '\n';
 
         // Look at everything equivalent to this sequence.
         //
