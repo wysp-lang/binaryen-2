@@ -488,13 +488,21 @@ struct EquivalentFieldOptimization : public Pass {
       : unifiedMap(unifiedMap) {}
 
     void visitStructGet(StructGet* curr) {
+      optimizeSequence(curr);
+    }
+
+    void visitRefCast(RefCast* curr) {
+      optimizeSequence(curr);
+    }
+
+    void optimizeSequence(Expression* curr) {
       if (curr->type == Type::unreachable) {
         return;
       }
 
       Expression* currValue = curr;
       Sequence currSequence;
-//std::cerr << "\nvisitStructGet: " << *curr << '\n';
+//std::cerr << "\noptimizeSequence in visit: " << *curr << '\n';
       while (1) {
 
 //std::cerr << "inspect sequence for " << *currValue << "\n";
@@ -504,11 +512,11 @@ struct EquivalentFieldOptimization : public Pass {
         // later, and is also the reference from which the entire sequence
         // begins).
         if (auto* get = currValue->dynCast<StructGet>()) {
-          currSequence.push_back(get->index);
+          currSequence.push_back(Item(get->index));
           currValue = get->ref;
-        //} else if (auto* cast = currValue->dynCast<RefCast>()) {
-        //  currSequence.push_back(..);
-        //  currValue = cast->value;
+        } else if (auto* cast = currValue->dynCast<RefCast>()) {
+          currSequence.push_back(Item(cast->intendedType));
+          currValue = cast->ref;
         } else {
           // The sequence ended.
           break;
