@@ -207,6 +207,8 @@ struct Finder : public PostWalker<Finder> {
         continue;
       }
 
+      // TODO: disallow packed fields for now, we need to encode that.
+
       // Excellent, this is immutable, so we can look into the current sequence,
       // which ends with index i.
       currSequence.back() = i;
@@ -482,33 +484,31 @@ struct EquivalentFieldOptimization : public Pass {
 
         if (best) {
 //std::cerr << "  yes\n";
-          // We found a better sequence! Apply it, going step by step up the
-          // sequence and rewriting: either reusing the existing expression or
-          // making a new one.
-          Expression* currRewrite = curr;
+          // We found a better sequence! Apply it, going step by step through
+          // the sequence.
+
+          Builder builder(*getModule());
 
           // |currValue| is where we stopped going up the chain earlier. It is
           // the point at which the chain of gets begins, the reference that
           // starts everything. In the new sequence we generate we need to keep
           // it at the top.
-          auto* top = currValue;
-//std::cerr << "found better! for " << *curr << "\n";
+          auto* result = currValue;
+
+          // Starting from the top, build up the new stack of instructions.
           for (Index i = 0; i < best->size(); i++) {
-            auto sequenceAction = (*best)[i];
-            auto last = (i + 1) == best->size();
-//std::cerr << "  loop " << sequenceAction << " : " << *currRewrite << '\n';
-            if (auto* get = currRewrite->dynCast<StructGet>()) {
-              // The sequence action is a struct.get, and this is a struct.get, so
-              // just reuse it.
-              get->index = sequenceAction;
-              currRewrite = get->ref;
-              if (last) {
-                get->ref = top;
-              }
+            auto sequenceAction = (*best)[best->size() - i - 1];
+
+            if (sequenceAction != CastIndex) {
+              auto type = result->type->getHeapType().getStruct().fields[sequenceAction];
+              result = builder.makeStructGet(sequenceAction, result, type);
             } else {
-              WASM_UNREACHABLE("bad sequence application");
+              abort(); // wat is type?!
+              result = builder.makeRefCast(result, type);
             }
           }
+
+          replaceCurrent(result);
 
           // TODO: We currently stop if we find an improvement at any sequence
           //       length. However, we could find how much we improve at different
