@@ -167,7 +167,7 @@ struct Finder : public PostWalker<Finder> {
     // two sequences to be equivalent, they must be equivalent in every single
     // struct.new).
     auto& entry = map[curr];
-std::cout << "apply in " << getModule()->typeNames[curr->type.getHeapType()].name << '\n';
+//std::cerr << "apply in " << getModule()->typeNames[curr->type.getHeapType()].name << '\n';
 
     // Fill in the entry with equivalent pairs: all sequences for the same value
     // are equivalent (the value itself no longer matters from here).
@@ -228,9 +228,9 @@ std::cout << "apply in " << getModule()->typeNames[curr->type.getHeapType()].nam
         // we'll be doing all the computation on later).
         auto reverse = currSequence;
         std::reverse(reverse.begin(), reverse.end());
-std::cerr << "add sequence for " << value << " : ";
-for (auto x : reverse) std::cerr << x << ' ';
-std::cerr << '\n';
+//std::cerr << "add sequence for " << value << " : ";
+//for (auto x : reverse) std::cerr << x << ' ';
+//std::cerr << '\n';
         entry[value].push_back(reverse);
 
         if (value.isConstantGlobal()) {
@@ -395,10 +395,10 @@ struct EquivalentFieldOptimization : public Pass {
 
       Expression* currValue = curr;
       Sequence currSequence;
-std::cerr << "\nvisitStructGet: " << *curr << '\n';
+//std::cerr << "\nvisitStructGet: " << *curr << '\n';
       while (1) {
 
-std::cerr << "inspect sequence for " << *currValue << "\n";
+//std::cerr << "inspect sequence for " << *currValue << "\n";
 
         // Apply the current value to the sequence, and point currValue to the
         // item we are reading from right now (which will be the next item
@@ -415,8 +415,8 @@ std::cerr << "inspect sequence for " << *currValue << "\n";
           break;
         }
 
-for (auto x : currSequence) std::cerr << x << ' ';
-std::cerr << '\n';
+//for (auto x : currSequence) std::cerr << x << ' ';
+//std::cerr << '\n';
 
         // See if a sequence starting here has anything we can optimize with.
         // TODO: we could also look at our supertypes
@@ -425,7 +425,7 @@ std::cerr << '\n';
           continue;
         }
         auto& equivalences = iter->second;
-std::cout << "seek in " << getModule()->typeNames[currValue->type.getHeapType()].name << '\n';
+//std::cerr << "seek in " << getModule()->typeNames[currValue->type.getHeapType()].name << '\n';
 
         // Look at everything equivalent to this sequence.
         //
@@ -443,11 +443,11 @@ std::cout << "seek in " << getModule()->typeNames[currValue->type.getHeapType()]
         };
 
         auto maybeUse = [&](const Sequence& s) {
-std::cerr << "mayyyyyyyyybe\n";
-for (auto x : s) std::cerr << x << ' ';
-std::cerr << '\n';
+//std::cerr << "mayyyyyyyyybe\n";
+//for (auto x : s) std::cerr << x << ' ';
+//std::cerr << '\n';
 
-std::cerr << "waka " << s.size() << " : " << best->size() << " : " << currSequence.size() << " : " << (s < *best) << '\n';//) {
+//std::cerr << "waka " << s.size() << " : " << best->size() << " : " << currSequence.size() << " : " << (s < *best) << '\n';//) {
           if (isBetter(s, currSequence)) {
             if (!best || isBetter(s, *best)) {
               best = s;
@@ -464,7 +464,7 @@ std::cerr << "waka " << s.size() << " : " << best->size() << " : " << currSequen
         }
 
         if (best) {
-std::cerr << "  yes\n";
+//std::cerr << "  yes\n";
           // We found a better sequence! Apply it, going step by step up the
           // sequence and rewriting: either reusing the existing expression or
           // making a new one.
@@ -475,11 +475,11 @@ std::cerr << "  yes\n";
           // starts everything. In the new sequence we generate we need to keep
           // it at the top.
           auto* top = currValue;
-std::cerr << "found better! for " << *curr << "\n";
+//std::cerr << "found better! for " << *curr << "\n";
           for (Index i = 0; i < best->size(); i++) {
             auto sequenceAction = (*best)[i];
             auto last = (i + 1) == best->size();
-std::cerr << "  loop " << sequenceAction << " : " << *currRewrite << '\n';
+//std::cerr << "  loop " << sequenceAction << " : " << *currRewrite << '\n';
             if (auto* get = currRewrite->dynCast<StructGet>()) {
               // The sequence action is a struct.get, and this is a struct.get, so
               // just reuse it.
