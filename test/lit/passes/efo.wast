@@ -1348,7 +1348,8 @@
   )
 )
 
-;; As above, but now the nesting goes into a global.
+;; As above, but now the nesting goes into a global. We can still optimize as it
+;; is immutable.
 (module
   ;; CHECK:      (type $A (struct (field (ref $B)) (field i32)))
   (type $A (struct (field (ref $B)) (field i32)))
@@ -1417,6 +1418,90 @@
     )
     (drop
       (struct.get $B 1     ;; This can read from $A.1 instead of $A.B.1.
+        (struct.get $A 0
+          (local.get $ref)
+        )
+      )
+    )
+    (drop
+      (struct.get $A 1
+        (local.get $ref)
+      )
+    )
+  )
+)
+
+;; As above, but the global is mutable, so we do not optimize.
+(module
+  ;; CHECK:      (type $A (struct (field (ref $B)) (field i32)))
+  (type $A (struct (field (ref $B)) (field i32)))
+  ;; CHECK:      (type $B (struct (field i32) (field i32)))
+  (type $B (struct (field i32) (field i32)))
+
+  ;; CHECK:      (global $B (mut (ref $B)) (struct.new $B
+  ;; CHECK-NEXT:  (i32.const 10)
+  ;; CHECK-NEXT:  (i32.const 20)
+  ;; CHECK-NEXT: ))
+  (global $B (mut (ref $B)) (struct.new $B
+    (i32.const 10)
+    (i32.const 20)
+  ))
+
+  ;; CHECK:      (func $A (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $ref (ref null $A))
+  ;; CHECK-NEXT:  (local.set $ref
+  ;; CHECK-NEXT:   (struct.new $A
+  ;; CHECK-NEXT:    (global.get $B)
+  ;; CHECK-NEXT:    (i32.const 20)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 0
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $B 0
+  ;; CHECK-NEXT:    (struct.get $A 0
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $B 1
+  ;; CHECK-NEXT:    (struct.get $A 0
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 1
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $A
+    (local $ref (ref null $A))
+    (local.set $ref
+      (struct.new $A
+        (global.get $B)
+        (i32.const 20)
+      )
+    )
+    (drop
+      (struct.get $A 0
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $B 0
+        (struct.get $A 0
+          (local.get $ref)
+        )
+      )
+    )
+    (drop
+      (struct.get $B 1
         (struct.get $A 0
           (local.get $ref)
         )
