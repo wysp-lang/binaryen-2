@@ -103,6 +103,11 @@ namespace {
 // TODO: small 3
 using Sequence = std::vector<Index>;
 
+// An index that is reserved for representing cast operations in Sequences. That
+// is, the sequence [4, -1, 2] means "read field #4, cast to whatever you need,
+// then read field #2."
+const Index CastIndex = Index(-1);
+
 // Use a small set of size 1 here since the common case is to not have anything
 // to optimize, that is, each value has a single sequence leading to it, which
 // means just a single sequence.
@@ -206,47 +211,62 @@ struct Finder : public PostWalker<Finder> {
       // which ends with index i.
       currSequence.back() = i;
 
-      // TODO: Look through casts, but also count them (a cast is worse than a
-      // struct.get).
-      // While doing so we must make sure casts succeed (or else we need to keep
-      // them around in non-tnh).
-      auto* operand = curr->operands[i];
+      scanChild(curr->operands[i], currSequence, entry);
+    }
+  }
 
-      if (auto* subNew = operand->dynCast<StructNew>()) {
-        // Look into this struct.new recursively.
-        scanNew(subNew, currSequence, entry);
-        continue;
-      }
+  void scanCast(RefCast* curr, const Sequence& prefix, ValueMap& entry) {
+    // The current sequence will be the given prefix, plus an index representing
+    // a cast.
+    auto currSequence = prefix;
+    currSequence.push_back(CastIndex);
+    scanChild(curr->ref, currSequence, entry);
+  }
 
-      // See if this is a constant value.
-      PossibleConstantValues value;
-      value.note(operand, *getModule());
-      if (value.isConstantLiteral() || value.isConstantGlobal()) {
-        // Great, this is something we can track.
+  // Note that unlike scanStructNew and scanChild, this is given the current
+  // sequence, which also encodes the current expression (the other two are
+  // given a prefix that they append to).
+  void scanChild(Expression* curr, const Sequence& currSequence, ValueMap& entry) {
+    if (auto* subNew = curr->dynCast<StructNew>()) {
+      // Look into this struct.new recursively.
+      scanNew(subNew, currSequence, entry);
+      return;
+    }
 
-        // Reverse the sequence so it matches the order of reads (which is what
-        // we'll be doing all the computation on later).
-        auto reverse = currSequence;
-        std::reverse(reverse.begin(), reverse.end());
+    if (auto* cast = curr->dynCast<RefCast>()) {
+      scanCast(cast, currSequence, entry);
+      return;
+    }
+
+    // See if this is a constant value.
+    PossibleConstantValues value;
+    value.note(curr, *getModule());
+    if (value.isConstantLiteral() || value.isConstantGlobal()) {
+      // Great, this is something we can track.
+
+      // Reverse the sequence so it matches the order of reads (which is what
+      // we'll be doing all the computation on later).
+      auto reverse = currSequence;
+      std::reverse(reverse.begin(), reverse.end());
 //std::cerr << "add sequence for " << value << " : ";
 //for (auto x : reverse) std::cerr << x << ' ';
 //std::cerr << '\n';
-        entry[value].push_back(reverse);
+      entry[value].push_back(reverse);
 
-        if (value.isConstantGlobal()) {
-          // Not only can we track the global itself, but we may be able to look
-          // into the object created in the global.
-          auto* global = getModule()->getGlobal(value.getConstantGlobal());
-          // We already checked the global is immutable via isConstantGlobal.
-          assert(!global->mutable_);
-          if (!global->imported()) {
-            if (auto* subNew = global->init->dynCast<StructNew>()) {
-              scanNew(subNew, currSequence, entry);
-            }
+      if (value.isConstantGlobal()) {
+        // Not only can we track the global itself, but we may be able to look
+        // into the object created in the global.
+        auto* global = getModule()->getGlobal(value.getConstantGlobal());
+        // We already checked the global is immutable via isConstantGlobal.
+        assert(!global->mutable_);
+        if (!global->imported()) {
+          if (auto* subNew = global->init->dynCast<StructNew>()) {
+            scanNew(subNew, currSequence, entry);
           }
         }
       }
     }
+
     // TODO Handle more cases like a tee and a get (with nothing in the middle).
     //      See related code in OptimizeInstructions that can perhaps be
     //      shared.
