@@ -237,6 +237,8 @@ struct Finder : public PostWalker<Finder> {
           // Not only can we track the global itself, but we may be able to look
           // into the object created in the global.
           auto* global = getModule()->getGlobal(value.getConstantGlobal());
+          // We already checked the global is immutable via isConstantGlobal.
+          assert(!global->mutable_);
           if (!global->imported()) {
             if (auto* subNew = global->init->dynCast<StructNew>()) {
               scanNew(subNew, currSequence, entry);
