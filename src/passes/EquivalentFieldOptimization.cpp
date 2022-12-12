@@ -218,6 +218,7 @@ struct Finder : public PostWalker<Finder> {
   void scanCast(RefCast* curr, const Sequence& prefix, ValueMap& entry) {
     // The current sequence will be the given prefix, plus an index representing
     // a cast.
+    // TODO: avoid these copies?
     auto currSequence = prefix;
     currSequence.push_back(CastIndex);
     processChild(curr->ref, currSequence, entry);
@@ -458,12 +459,6 @@ struct EquivalentFieldOptimization : public Pass {
         // If we find a sequence better than currSequence, we'll set it here.
         std::optional<Sequence> best;
 
-        // Look for a better sequence: either shorter, or using lower indexes, and
-        // while doing so note if we improved on what |curr| already is.
-        auto isBetter = [](const Sequence& a, const Sequence& b) {
-          return a.size() < b.size() || (a.size() == b.size() && a < b);
-        };
-
         auto maybeUse = [&](const Sequence& s) {
 //std::cerr << "mayyyyyyyyybe\n";
 //for (auto x : s) std::cerr << x << ' ';
@@ -521,6 +516,42 @@ struct EquivalentFieldOptimization : public Pass {
           return;
         }
       }
+    }
+
+    // A better sequence is either shorter, or it uses lower indexes. We also do
+    // not want to ever add a cast (a cast involves at least a few memory
+    // accesses and branching, unlike a plain load).
+    bool isBetter(const Sequence& a, const Sequence& b) {
+      if (a.size() < b.size()) {
+        return true;
+      }
+      if (a.size() > b.size()) {
+        return false;
+      }
+
+      // The size is equal, so consider the contents: Fewer casts is better.
+      // TODO: Maybe allow adding a cast if it removes several other operations?
+      auto aCasts = getNumCasts(a);
+      auto bCasts = getNumCasts(b);
+      if (aCasts < bCasts) {
+        return true;
+      }
+      if (aCasts > bCasts) {
+        return false;
+      }
+
+      // Same size and same casts, so prefer lower indexes.
+      return a < b;
+    }
+
+    Index getNumCasts(const Sequence& s) {
+      Index ret = 0;
+      for (auto x : s) {
+        if (x == CastIndex) {
+          ret++;
+        }
+      }
+      return ret;
     }
 
   private:
