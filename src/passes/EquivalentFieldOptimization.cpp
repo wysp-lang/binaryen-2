@@ -105,8 +105,24 @@ struct Item {
   using Variant = std::variant<GetIndex, CastType>;
   Variant value;
 
+  Item() : value(GetIndex(0)) {}
   Item(Index index) : value(GetIndex(index)) {}
   Item(HeapType type) : value(CastType(type)) {}
+
+  bool isGetIndex() {
+    return std::get_if<GetIndex>(&value);
+  }
+  bool isCastType() {
+    return std::get_if<CastType>(&value);
+  }
+  Index getGetIndex() {
+    assert(isGetIndex());
+    return *std::get_if<GetIndex>(&value);
+  }
+  HeapType getCastType() {
+    assert(isCastType());
+    return *std::get_if<CastType>(&value);
+  }
 
   Item& operator=(const Item& other) = default;
 
@@ -122,14 +138,45 @@ struct Item {
     // We use a simple order on get indexes.
     if (auto* getIndex = std::get_if<GetIndex>(&value)) {
       if (auto* otherGetIndex = std::get_if<GetIndex>(&other.value)) {
-        return getIndex < otherGetIndex;
+        return *getIndex < *otherGetIndex;
       }
     }
 
     // Consider everything else equal - the order does not matter there to us.
     return false;
   }
+
+  size_t hash() const {
+    // First hash the index of the variant, then add the internals for each.
+    size_t ret = std::hash<size_t>()(value.index());
+    if (auto* getIndex = std::get_if<GetIndex>(&value)) {
+      rehash(ret, *getIndex);
+    } else if (auto* castType = std::get_if<CastType>(&value)) {
+      rehash(ret, *castType);
+    } else {
+      WASM_UNREACHABLE("bad variant");
+    }
+    return ret;
+  }
 };
+
+} // anonymous namespace
+
+} // namespace wasm
+
+namespace std {
+
+template<> struct hash<wasm::Item> {
+  size_t operator()(const wasm::Item& contents) const {
+    return contents.hash();
+  }
+};
+
+} // namespace std
+
+namespace wasm {
+
+namespace {
 
 // A sequence of items.
 // TODO: small 3
@@ -249,7 +296,7 @@ struct Finder : public PostWalker<Finder> {
     // a cast.
     // TODO: avoid these copies?
     auto currSequence = prefix;
-    currSequence.push_back(CastIndex);
+    currSequence.push_back(Item(curr->intendedType));
     processChild(curr->ref, currSequence, entry);
   }
 
@@ -524,14 +571,15 @@ struct EquivalentFieldOptimization : public Pass {
 
           // Starting from the top, build up the new stack of instructions.
           for (Index i = 0; i < best->size(); i++) {
-            auto sequenceAction = (*best)[best->size() - i - 1];
+            auto item = (*best)[best->size() - i - 1];
 
-            if (sequenceAction != CastIndex) {
-              auto type = result->type->getHeapType().getStruct().fields[sequenceAction];
-              result = builder.makeStructGet(sequenceAction, result, type);
+            if (item.isGetIndex()) {
+              auto index = item.getGetIndex();
+              auto type = result->type.getHeapType().getStruct().fields[index].type;
+              result = builder.makeStructGet(index, result, type);
             } else {
-              abort(); // wat is type?!
-              result = builder.makeRefCast(result, type);
+              assert(item.isCastType());
+              result = builder.makeRefCast(result, item.getCastType(), RefCast::Safe);
             }
           }
 
@@ -574,7 +622,7 @@ struct EquivalentFieldOptimization : public Pass {
     Index getNumCasts(const Sequence& s) {
       Index ret = 0;
       for (auto x : s) {
-        if (x == CastIndex) {
+        if (x.isCastType()) {
           ret++;
         }
       }
