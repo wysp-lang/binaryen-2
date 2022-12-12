@@ -95,18 +95,45 @@ namespace wasm {
 
 namespace {
 
-// A sequence of indexes that represents accesses of fields. For example, the
-// sequence [5] means "read field #5", while [4, 2] means "read field #4, then
-// on the object you read there, read field #2" (that is, object.field4.field2).
-// Optimize this to assume a length of 3, which is the size of the itable access
-// mentioned earlier.
-// TODO: small 3
-using Sequence = std::vector<Index>;
+// An item in a sequence this is either a struct.get or a ref.cast.
+struct Item {
+  // Our contents are either the index of a struct.get, or the cast type of a
+  // cast.
+  using GetIndex = Index;
+  using CastType = HeapType;
 
-// An index that is reserved for representing cast operations in Sequences. That
-// is, the sequence [4, -1, 2] means "read field #4, cast to whatever you need,
-// then read field #2."
-const Index CastIndex = Index(-1);
+  using Variant = std::variant<GetIndex, CastType>;
+  Variant value;
+
+  Item(Index index) : value(GetIndex(index)) {}
+  Item(HeapType type) : value(CastType(type)) {}
+
+  Item& operator=(const Item& other) = default;
+
+  bool operator==(const Item& other) const {
+    return value == other.value;
+  }
+
+  bool operator!=(const Item& other) const {
+    return !(*this == other);
+  }
+
+  bool operator<(const Item& other) const {
+    // We use a simple order on get indexes.
+    if (auto* getIndex = std::get_if<GetIndex>(&value)) {
+      if (auto* otherGetIndex = std::get_if<GetIndex>(&other.value)) {
+        return getIndex < otherGetIndex;
+      }
+    }
+
+    // Consider everything else equal - the order does not matter there to us.
+    return false;
+  }
+};
+
+// A sequence of items.
+// TODO: small 3
+using Sequence = std::vector<Item>;
 
 // Use a small set of size 1 here since the common case is to not have anything
 // to optimize, that is, each value has a single sequence leading to it, which
