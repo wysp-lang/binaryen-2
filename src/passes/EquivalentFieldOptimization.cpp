@@ -211,7 +211,7 @@ struct Finder : public PostWalker<Finder> {
       // which ends with index i.
       currSequence.back() = i;
 
-      scanChild(curr->operands[i], currSequence, entry);
+      processChild(curr->operands[i], currSequence, entry);
     }
   }
 
@@ -220,13 +220,13 @@ struct Finder : public PostWalker<Finder> {
     // a cast.
     auto currSequence = prefix;
     currSequence.push_back(CastIndex);
-    scanChild(curr->ref, currSequence, entry);
+    processChild(curr->ref, currSequence, entry);
   }
 
-  // Note that unlike scanStructNew and scanChild, this is given the current
+  // Note that unlike scanStructNew and scanCast, this is given the current
   // sequence, which also encodes the current expression (the other two are
   // given a prefix that they append to).
-  void scanChild(Expression* curr, const Sequence& currSequence, ValueMap& entry) {
+  void processChild(Expression* curr, const Sequence& currSequence, ValueMap& entry) {
     if (auto* subNew = curr->dynCast<StructNew>()) {
       // Look into this struct.new recursively.
       scanNew(subNew, currSequence, entry);
