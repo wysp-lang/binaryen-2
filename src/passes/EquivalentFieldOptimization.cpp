@@ -239,7 +239,7 @@ struct Finder : public PostWalker<Finder> {
     // We will recurse as we look through accesses. We start with an empty
     // sequence as our prefix, which will get built up during the recursion.
     ValueMap valueMap;
-    scanNew(curr, Sequence(), valueMap);
+    scanNew(curr, Sequence(), valueMap, curr->type);
 
     // Add an entry for every (reachable) struct.new. We need an entry even if
     // we find no equivalences, because that rules out optimizations later - for
@@ -267,13 +267,22 @@ struct Finder : public PostWalker<Finder> {
   // anything we find into the given entry. For example, if the prefix is [1,2]
   // and we find (ref.func $foo) at index #3 then we can add a note to the entry
   // that [1,2,3] arrives at value $foo.
-  void scanNew(StructNew* curr, const Sequence& prefix, ValueMap& entry) {
+  //
+  // We also receive the "storage type" - the type of the location this data is
+  // stored in. If it is stored in a less-refined location then we will need a
+  // cast to read from it.
+  void scanNew(StructNew* curr, const Sequence& prefix, ValueMap& entry, Type storageType) {
     // We'll only look at immutable fields.
     auto& fields = curr->type.getHeapType().getStruct().fields;
 
-    // The current sequence will be the given prefix, plus the current index.
+    // The current sequence will be the given prefix, plus a possible cast, then
+    // plus the current index.
     auto currSequence = prefix;
-    currSequence.push_back(0);
+    if (storageType != curr->type) {
+      // TODO Type and not HeapType? We care about ref.as_non_null casts too.
+      currSequence.push_back(Item(curr->type.getHeapType()));
+    }
+    currSequence.push_back(Item(0));
 
     for (Index i = 0; i < fields.size(); i++) {
       auto& field = fields[i];
@@ -287,7 +296,7 @@ struct Finder : public PostWalker<Finder> {
       // which ends with index i.
       currSequence.back() = i;
 
-      processChild(curr->operands[i], currSequence, entry);
+      processChild(curr->operands[i], currSequence, entry, field.type);
     }
   }
 
@@ -303,10 +312,10 @@ struct Finder : public PostWalker<Finder> {
   // Note that unlike scanStructNew and scanCast, this is given the current
   // sequence, which also encodes the current expression (the other two are
   // given a prefix that they append to).
-  void processChild(Expression* curr, const Sequence& currSequence, ValueMap& entry) {
+  void processChild(Expression* curr, const Sequence& currSequence, ValueMap& entry, Type storageType) {
     if (auto* subNew = curr->dynCast<StructNew>()) {
       // Look into this struct.new recursively.
-      scanNew(subNew, currSequence, entry);
+      scanNew(subNew, currSequence, entry, storageType);
       return;
     }
 
@@ -338,7 +347,7 @@ struct Finder : public PostWalker<Finder> {
         assert(!global->mutable_);
         if (!global->imported()) {
           if (auto* subNew = global->init->dynCast<StructNew>()) {
-            scanNew(subNew, currSequence, entry);
+            scanNew(subNew, currSequence, entry, storageType);
           }
         }
       }
