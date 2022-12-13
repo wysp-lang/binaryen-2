@@ -300,13 +300,13 @@ struct Finder : public PostWalker<Finder> {
     }
   }
 
-  void scanCast(RefCast* curr, const Sequence& prefix, ValueMap& entry) {
+  void scanCast(RefCast* curr, const Sequence& prefix, ValueMap& entry, Type storageType) { // XXX remove this entire func? Or at least storageType
     // The current sequence will be the given prefix, plus an index representing
     // a cast.
     // TODO: avoid these copies?
     auto currSequence = prefix;
     currSequence.push_back(Item(curr->intendedType));
-    processChild(curr->ref, currSequence, entry);
+    processChild(curr->ref, currSequence, entry, storageType);
   }
 
   // Note that unlike scanStructNew and scanCast, this is given the current
@@ -320,7 +320,7 @@ struct Finder : public PostWalker<Finder> {
     }
 
     if (auto* cast = curr->dynCast<RefCast>()) {
-      scanCast(cast, currSequence, entry);
+      scanCast(cast, currSequence, entry, storageType);
       return;
     }
 

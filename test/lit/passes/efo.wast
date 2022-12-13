@@ -1702,7 +1702,7 @@
 )
 
 ;; A sequence with a cast.
-(module
+(;;module
   (type $A (struct (field (ref $B)) (field (ref data))))
   (type $B (struct (field i32) (field (ref $C))))
 
@@ -1744,4 +1744,4 @@
       )
     )
   )
-)
+;;)
