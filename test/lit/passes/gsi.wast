@@ -1268,3 +1268,38 @@
     )
   )
 )
+
+;; The single possible global's field is mutable. We can still optimize here
+;; since we don't need the value - we just turn the struct.get's reference into
+;; a global.get (and rely on other optimizations to do anything further).
+(module
+  ;; CHECK:      (type $A (struct (field (mut i32))))
+  (type $A (struct (field (mut i32))))
+
+  ;; CHECK:      (type $ref?|$A|_=>_i32 (func (param (ref null $A)) (result i32)))
+
+  ;; CHECK:      (global $A (ref $A) (struct.new $A
+  ;; CHECK-NEXT:  (i32.const 1337)
+  ;; CHECK-NEXT: ))
+  (global $A (ref $A) (struct.new $A
+    (i32.const 1337)
+  ))
+
+  ;; CHECK:      (func $func (type $ref?|$A|_=>_i32) (param $ref (ref null $A)) (result i32)
+  ;; CHECK-NEXT:  (struct.get $A 0
+  ;; CHECK-NEXT:   (block (result (ref $A))
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (ref.as_non_null
+  ;; CHECK-NEXT:      (local.get $ref)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (global.get $A)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $func (param $ref (ref null $A)) (result i32)
+    (struct.get $A 0
+      (local.get $ref)
+    )
+  )
+)

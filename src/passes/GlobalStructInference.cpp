@@ -207,9 +207,6 @@ struct GlobalStructInference : public Pass {
           return;
         }
 
-        // We must ignore the case of a non-struct heap type, that is, a bottom
-        // type (which is all that is left after we've already ruled out
-        // unreachable).
         auto heapType = type.getHeapType();
         auto iter = parent.typeGlobals.find(heapType);
         if (iter == parent.typeGlobals.end()) {
@@ -345,6 +342,44 @@ struct GlobalStructInference : public Pass {
           builder.makeConstantExpression(values[0]),
           builder.makeConstantExpression(values[1])));
       }
+
+      void visitRefCast(RefCast* curr) {
+        auto type = curr->ref->type;
+        if (type == Type::unreachable) {
+          return;
+        }
+
+        auto heapType = type.intendedType;
+        auto iter = parent.typeGlobals.find(heapType);
+        if (iter == parent.typeGlobals.end()) {
+          return;
+        }
+
+        const auto& globals = iter->second;
+        if (globals.size() != 1) {
+          return;
+        }
+
+        // There is a single global of the relevant heap type, so rather than
+        // cast to it we can simply compare to the global.
+        //
+        // For now only do this on non-nullable inputs. The nullable case
+        // requires an additional check for now, but will become trivial once we
+        // implement ref.cast null. TODO
+        auto global = globals[0];
+        auto globalType = getModule()->getGlobal(global)->type;
+        Builder builder(*getModule());
+
+        replaceCurrent(builder.makeIf(
+          builder.makeRefEq(
+            curr->ref,
+            builder.makeGlobalGet(global, globalType)
+          ),
+          builder.makeGlobalGet(global, globalType),
+          builder.makeUnreachable()
+        ));
+      }
+    }
 
     private:
       GlobalStructInference& parent;
