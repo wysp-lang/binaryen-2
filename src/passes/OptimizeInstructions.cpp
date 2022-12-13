@@ -1582,6 +1582,34 @@ struct OptimizeInstructions
   void visitStructGet(StructGet* curr) {
     skipNonNullCast(curr->ref);
     trapOnNull(curr, curr->ref);
+
+    // If our reference is a cast, perhaps the cast is unneeded and the earlier
+    // type is good enough. That is the case if that type has the field we are
+    // getting, and it has the same refinement of it (we do not want to un-
+    // refine the type of this expression). Note that we can only do this if
+    // traps-never-happen as otherwise we need to keep the cast for the
+    // possible trap. We also only want to do this at the very end of the
+    // optimization pipeline, as it makes us appear to write a value to a
+    // supertype, which can make other passes less precise.
+    if (getPassOptions().trapsNeverHappen) {
+      if (auto* cast = curr->ref->dynCast<RefCast>()) {
+        // Compare the old type before the cast to the new type after the cast.
+        auto oldType = cast->ref->type;
+        if (oldType.isRef()) {
+          auto oldHeapType = oldType.getHeapType();
+          if (oldHeapType.isStruct()) {
+            auto newHeapType = cast->type.getHeapType();
+            auto& oldFields = oldHeapType.getStruct().fields;
+            auto& newFields = newHeapType.getStruct().fields;
+            auto index = curr->index;
+            if (index < oldFields.size() &&
+                oldFields[index] == newFields[index]) {
+              curr->ref = cast->ref;
+            }
+          }
+        }
+      }
+    }
   }
 
   void visitStructSet(StructSet* curr) {
@@ -1593,6 +1621,27 @@ struct OptimizeInstructions
     if (curr->ref->type != Type::unreachable && curr->value->type.isInteger()) {
       const auto& fields = curr->ref->type.getHeapType().getStruct().fields;
       optimizeStoredValue(curr->value, fields[curr->index].getByteSize());
+    }
+
+    // If our reference is a cast, perhaps the cast is unneeded and the earlier
+    // type is good enough. See the comment above for StructGet (the only
+    // difference is that here we don't need to care about refinement, since we
+    // are writing and not reading; there is no output type from this
+    // expression).
+    if (getPassOptions().trapsNeverHappen) {
+      if (auto* cast = curr->ref->dynCast<RefCast>()) {
+        // Compare the old type before the cast to the new type after the cast.
+        auto oldType = cast->ref->type;
+        if (oldType.isRef()) {
+          auto oldHeapType = oldType.getHeapType();
+          if (oldHeapType.isStruct()) {
+            auto& oldFields = oldHeapType.getStruct().fields;
+            if (curr->index < oldFields.size()) {
+              curr->ref = cast->ref;
+            }
+          }
+        }
+      }
     }
 
     // If our reference is a tee of a struct.new, we may be able to fold the
