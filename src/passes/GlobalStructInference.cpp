@@ -343,22 +343,52 @@ struct GlobalStructInference : public Pass {
           builder.makeConstantExpression(values[1])));
       }
 
-      void visitRefCast(RefCast* curr) {
-        auto type = curr->ref->type;
-        if (type == Type::unreachable) {
-          return;
+      // Information regarding an expression that might be equal to a global.
+      struct SingletonGlobalInfo {
+        // If set, this is the name of a global that the expression must be
+        // equal to (or possibly null, see below).
+        std::optional<Name> global;
+
+        // Whether this can be null or not.
+        bool null;
+
+        SingletonGlobalInfo(Type type) : null(type.isNullable()) {}
+      };
+
+      SingletonGlobalInfo getSingletonGlobalInfo(Type type) {
+        SingletonGlobalInfo info(type);
+
+        if (!type.isRef()) {
+          return info;
         }
 
-        auto heapType = curr->intendedType;
+        auto heapType = type.getHeapType();
         auto iter = parent.typeGlobals.find(heapType);
         if (iter == parent.typeGlobals.end()) {
-          return;
+          return info;
         }
 
         const auto& globals = iter->second;
         if (globals.size() != 1) {
-          return;
+          return info;
         }
+
+        info.global = globals[0];
+        return info;
+      }
+
+      SingletonGlobalInfo getSingletonGlobalInfo(Expression* curr) {
+        return getSingletonGlobalInfo(curr->type);
+      }
+
+      void visitRefCast(RefCast* curr) {
+        // Whether there is a global that the cast must find.
+        auto intendedGlobal = getSingletonGlobalInfo(curr->type);
+
+        // Whether the ref input must contain a global.
+        auto refGlobal = getSingletonGlobalInfo(curr->ref);
+
+[..]
 
         // There is a single global of the relevant heap type and we can use
         // that fact to optimize here.
@@ -402,41 +432,6 @@ struct GlobalStructInference : public Pass {
           // VM do it, so ignore that. TODO this is rare in practice, but might
           // be worth measuring speed
         }
-      }
-
-      // Information regarding an expression that might be equal to a global.
-      struct SingletonGlobalInfo {
-        // If set, this is the name of a global that the expression must be
-        // equal to (or possibly null, see below).
-        std::optional<Name> global;
-
-        // Whether this can be null or not.
-        bool null;
-
-        SingletonGlobalInfo(Expression* curr) : null(curr->type.isNullable()) {}
-      };
-
-      SingletonGlobalInfo getSingletonGlobalInfo(Expression* curr) {
-        SingletonGlobalInfo info(curr);
-
-        auto type = curr->type;
-        if (!type.isRef()) {
-          return info;
-        }
-
-        auto heapType = type.getHeapType();
-        auto iter = parent.typeGlobals.find(heapType);
-        if (iter == parent.typeGlobals.end()) {
-          return info;
-        }
-
-        const auto& globals = iter->second;
-        if (globals.size() != 1) {
-          return info;
-        }
-
-        info.global = globals[0];
-        return info;
       }
 
       void visitRefEq(RefEq* curr) {
