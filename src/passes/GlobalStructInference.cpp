@@ -372,7 +372,8 @@ struct GlobalStructInference : public Pass {
             // so it is exactly the global.
             replaceCurrent(builder.makeGlobalGet(global, globalType));
             return;
-          } else if (HeapType::isSubType(curr->ref->type.getHeapType(), HeapType::eq)) {
+          } else if (HeapType::isSubType(curr->ref->type.getHeapType(),
+                                         HeapType::eq)) {
             // This cannot be null, but it might be something of another type.
             // Compare to the global - it's either equal to that, or the cast
             // fails.
