@@ -1622,7 +1622,8 @@
   )
 )
 
-;; As above, but now $A has two globals, so we cannot optimize.
+;; As above, but now $A has two globals, so we cannot optimize $A at all (but $B
+;; can be optimized as before).
 (module
   ;; CHECK:      (type $A (struct (field i32)))
   (type $A (struct (field i32)))
@@ -1639,6 +1640,9 @@
     (i32.const 1337)
   ))
 
+  ;; CHECK:      (global $A-other (ref $A) (struct.new $A
+  ;; CHECK-NEXT:  (i32.const 13370)
+  ;; CHECK-NEXT: ))
   (global $A-other (ref $A) (struct.new $A
     (i32.const 13370)
   ))
@@ -1650,6 +1654,37 @@
     (i32.const 99999)
   ))
 
+  ;; CHECK:      (func $func-1 (type $ref|$A|_ref?|$A|_ref|$B|_ref?|$B|_=>_none) (param $A (ref $A)) (param $A-null (ref null $A)) (param $B (ref $B)) (param $B-null (ref null $B))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (local.get $A)
+  ;; CHECK-NEXT:    (local.get $A)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (local.get $A)
+  ;; CHECK-NEXT:    (local.get $A-null)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (local.get $A)
+  ;; CHECK-NEXT:    (block (result (ref $B))
+  ;; CHECK-NEXT:     (drop
+  ;; CHECK-NEXT:      (local.get $B)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (global.get $B)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.eq
+  ;; CHECK-NEXT:    (local.get $A)
+  ;; CHECK-NEXT:    (local.get $B-null)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
   (func $func-1
     (param $A (ref $A))
     (param $A-null (ref null $A))
