@@ -447,7 +447,7 @@ struct GlobalStructInference : public Pass {
         maybeReplaceWithGlobal(right, curr->right);
 
         if (left.global && right.global && left.global != right.global &&
-            (!left.null ^ !right.null)) {
+            (left.null ^ right.null)) {
           // We have two different globals, and exactly one of them can also be
           // null. These cannot be equal: if the nullable side is null then the
           // other is different; and if the nullable side is not null then we

@@ -1269,4 +1269,141 @@
   )
 )
 
-;; TODO test ref.eq
+;; RefEq tests
+(module
+  (type $A (struct (field i32)))
+
+  (type $B (struct (field i32)))
+
+  (global $A (ref $A) (struct.new $A
+    (i32.const 1337)
+  ))
+
+  (global $B (ref $B) (struct.new $B
+    (i32.const 99999)
+  ))
+
+  (func $func-1
+    (param $A (ref $A))
+    (param $A-null (ref null $A))
+    (param $B (ref $B))
+    (param $B-null (ref null $B))
+    (drop
+      (ref.eq
+        (local.get $A)
+        (local.get $A)
+      )
+    )
+    (drop
+      (ref.eq
+        (local.get $A)
+        (local.get $A-null)
+      )
+    )
+    (drop
+      (ref.eq
+        (local.get $A)
+        (local.get $B)
+      )
+    )
+    (drop
+      (ref.eq
+        (local.get $A)
+        (local.get $B-null)
+      )
+    )
+  )
+
+  (func $func-2
+    (param $A (ref $A))
+    (param $A-null (ref null $A))
+    (param $B (ref $B))
+    (param $B-null (ref null $B))
+    (drop
+      (ref.eq
+        (local.get $A-null)
+        (local.get $A)
+      )
+    )
+    (drop
+      (ref.eq
+        (local.get $A-null)
+        (local.get $A-null)
+      )
+    )
+    (drop
+      (ref.eq
+        (local.get $A-null)
+        (local.get $B)
+      )
+    )
+    (drop
+      (ref.eq
+        (local.get $A-null)
+        (local.get $B-null)
+      )
+    )
+  )
+
+  (func $func-3
+    (param $A (ref $A))
+    (param $A-null (ref null $A))
+    (param $B (ref $B))
+    (param $B-null (ref null $B))
+    (drop
+      (ref.eq
+        (local.get $B)
+        (local.get $A)
+      )
+    )
+    (drop
+      (ref.eq
+        (local.get $B)
+        (local.get $A-null)
+      )
+    )
+    (drop
+      (ref.eq
+        (local.get $B)
+        (local.get $B)
+      )
+    )
+    (drop
+      (ref.eq
+        (local.get $B)
+        (local.get $B-null)
+      )
+    )
+  )
+
+  (func $func-4
+    (param $A (ref $A))
+    (param $A-null (ref null $A))
+    (param $B (ref $B))
+    (param $B-null (ref null $B))
+    (drop
+      (ref.eq
+        (local.get $B-null)
+        (local.get $A)
+      )
+    )
+    (drop
+      (ref.eq
+        (local.get $B-null)
+        (local.get $A-null)
+      )
+    )
+    (drop
+      (ref.eq
+        (local.get $B-null)
+        (local.get $B)
+      )
+    )
+    (drop
+      (ref.eq
+        (local.get $B-null)
+        (local.get $B-null)
+      )
+    )
+  )
+)

@@ -136,3 +136,129 @@
     )
   )
 )
+
+;; As above, but now there are 2 globals, so we cannot optimize in any mode.
+(module
+  ;; CHECK:      (type $A (struct (field (mut i32))))
+  ;; TNHPN:      (type $A (struct (field (mut i32))))
+  (type $A (struct (field (mut i32))))
+
+  ;; CHECK:      (type $ref|$A|_ref?|$A|_ref|any|_anyref_ref|eq|_eqref_=>_none (func (param (ref $A) (ref null $A) (ref any) anyref (ref eq) eqref)))
+
+  ;; CHECK:      (global $A (ref $A) (struct.new $A
+  ;; CHECK-NEXT:  (i32.const 1337)
+  ;; CHECK-NEXT: ))
+  ;; TNHPN:      (type $ref|$A|_ref?|$A|_ref|any|_anyref_ref|eq|_eqref_=>_none (func (param (ref $A) (ref null $A) (ref any) anyref (ref eq) eqref)))
+
+  ;; TNHPN:      (global $A (ref $A) (struct.new $A
+  ;; TNHPN-NEXT:  (i32.const 1337)
+  ;; TNHPN-NEXT: ))
+  (global $A (ref $A) (struct.new $A
+    (i32.const 1337)
+  ))
+
+  (global $A-other (ref $A) (struct.new $A
+    (i32.const 99999)
+  ))
+
+  ;; CHECK:      (func $func (type $ref|$A|_ref?|$A|_ref|any|_anyref_ref|eq|_eqref_=>_none) (param $A (ref $A)) (param $A-null (ref null $A)) (param $any (ref any)) (param $any-null anyref) (param $eq (ref eq)) (param $eq-null eqref)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.cast $A
+  ;; CHECK-NEXT:    (local.get $A)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.cast null $A
+  ;; CHECK-NEXT:    (local.get $A-null)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.cast $A
+  ;; CHECK-NEXT:    (local.get $any)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.cast null $A
+  ;; CHECK-NEXT:    (local.get $any-null)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.cast $A
+  ;; CHECK-NEXT:    (local.get $eq)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (ref.cast null $A
+  ;; CHECK-NEXT:    (local.get $eq-null)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; TNHPN:      (func $func (type $ref|$A|_ref?|$A|_ref|any|_anyref_ref|eq|_eqref_=>_none) (param $A (ref $A)) (param $A-null (ref null $A)) (param $any (ref any)) (param $any-null anyref) (param $eq (ref eq)) (param $eq-null eqref)
+  ;; TNHPN-NEXT:  (drop
+  ;; TNHPN-NEXT:   (ref.cast $A
+  ;; TNHPN-NEXT:    (local.get $A)
+  ;; TNHPN-NEXT:   )
+  ;; TNHPN-NEXT:  )
+  ;; TNHPN-NEXT:  (drop
+  ;; TNHPN-NEXT:   (ref.cast null $A
+  ;; TNHPN-NEXT:    (local.get $A-null)
+  ;; TNHPN-NEXT:   )
+  ;; TNHPN-NEXT:  )
+  ;; TNHPN-NEXT:  (drop
+  ;; TNHPN-NEXT:   (ref.cast $A
+  ;; TNHPN-NEXT:    (local.get $any)
+  ;; TNHPN-NEXT:   )
+  ;; TNHPN-NEXT:  )
+  ;; TNHPN-NEXT:  (drop
+  ;; TNHPN-NEXT:   (ref.cast null $A
+  ;; TNHPN-NEXT:    (local.get $any-null)
+  ;; TNHPN-NEXT:   )
+  ;; TNHPN-NEXT:  )
+  ;; TNHPN-NEXT:  (drop
+  ;; TNHPN-NEXT:   (ref.cast $A
+  ;; TNHPN-NEXT:    (local.get $eq)
+  ;; TNHPN-NEXT:   )
+  ;; TNHPN-NEXT:  )
+  ;; TNHPN-NEXT:  (drop
+  ;; TNHPN-NEXT:   (ref.cast null $A
+  ;; TNHPN-NEXT:    (local.get $eq-null)
+  ;; TNHPN-NEXT:   )
+  ;; TNHPN-NEXT:  )
+  ;; TNHPN-NEXT: )
+  (func $func
+    (param $A (ref $A)) (param $A-null (ref null $A))
+    (param $any (ref any)) (param $any-null (ref null any))
+    (param $eq (ref eq)) (param $eq-null (ref null eq))
+
+    (drop
+      (ref.cast_static $A
+        (local.get $A)
+      )
+    )
+    (drop
+      (ref.cast_static $A
+        (local.get $A-null)
+      )
+    )
+    (drop
+      (ref.cast_static $A
+        (local.get $any)
+      )
+    )
+    (drop
+      (ref.cast_static $A
+        (local.get $any-null)
+      )
+    )
+    (drop
+      (ref.cast_static $A
+        (local.get $eq)
+      )
+    )
+    (drop
+      (ref.cast_static $A
+        (local.get $eq-null)
+      )
+    )
+  )
+)
