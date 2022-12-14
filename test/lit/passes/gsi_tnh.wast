@@ -4,6 +4,7 @@
 
 (module
   ;; CHECK:      (type $A (struct (field (mut i32))))
+  ;; TNHPN:      (type $A (struct (field (mut i32))))
   (type $A (struct (field (mut i32))))
 
   ;; CHECK:      (type $ref|$A|_ref?|$A|_ref|any|_anyref_ref|eq|_eqref_=>_none (func (param (ref $A) (ref null $A) (ref any) anyref (ref eq) eqref)))
@@ -11,21 +12,24 @@
   ;; CHECK:      (global $A (ref $A) (struct.new $A
   ;; CHECK-NEXT:  (i32.const 1337)
   ;; CHECK-NEXT: ))
+  ;; TNHPN:      (type $ref|$A|_ref?|$A|_ref|any|_anyref_ref|eq|_eqref_=>_none (func (param (ref $A) (ref null $A) (ref any) anyref (ref eq) eqref)))
+
+  ;; TNHPN:      (global $A (ref $A) (struct.new $A
+  ;; TNHPN-NEXT:  (i32.const 1337)
+  ;; TNHPN-NEXT: ))
   (global $A (ref $A) (struct.new $A
     (i32.const 1337)
   ))
 
   ;; CHECK:      (func $func (type $ref|$A|_ref?|$A|_ref|any|_anyref_ref|eq|_eqref_=>_none) (param $A (ref $A)) (param $A-null (ref null $A)) (param $any (ref any)) (param $any-null anyref) (param $eq (ref eq)) (param $eq-null eqref)
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (global.get $A)
+  ;; CHECK-NEXT:   (ref.cast $A
+  ;; CHECK-NEXT:    (local.get $A)
+  ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (select (result (ref null $A))
-  ;; CHECK-NEXT:    (ref.null none)
-  ;; CHECK-NEXT:    (global.get $A)
-  ;; CHECK-NEXT:    (ref.is_null
-  ;; CHECK-NEXT:     (local.get $A-null)
-  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   (ref.cast null $A
+  ;; CHECK-NEXT:    (local.get $A-null)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
@@ -39,13 +43,8 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (if (result (ref $A))
-  ;; CHECK-NEXT:    (ref.eq
-  ;; CHECK-NEXT:     (local.get $eq)
-  ;; CHECK-NEXT:     (global.get $A)
-  ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (global.get $A)
-  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   (ref.cast $A
+  ;; CHECK-NEXT:    (local.get $eq)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
@@ -54,6 +53,38 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
+  ;; TNHPN:      (func $func (type $ref|$A|_ref?|$A|_ref|any|_anyref_ref|eq|_eqref_=>_none) (param $A (ref $A)) (param $A-null (ref null $A)) (param $any (ref any)) (param $any-null anyref) (param $eq (ref eq)) (param $eq-null eqref)
+  ;; TNHPN-NEXT:  (drop
+  ;; TNHPN-NEXT:   (ref.cast $A
+  ;; TNHPN-NEXT:    (local.get $A)
+  ;; TNHPN-NEXT:   )
+  ;; TNHPN-NEXT:  )
+  ;; TNHPN-NEXT:  (drop
+  ;; TNHPN-NEXT:   (ref.cast null $A
+  ;; TNHPN-NEXT:    (local.get $A-null)
+  ;; TNHPN-NEXT:   )
+  ;; TNHPN-NEXT:  )
+  ;; TNHPN-NEXT:  (drop
+  ;; TNHPN-NEXT:   (ref.cast $A
+  ;; TNHPN-NEXT:    (local.get $any)
+  ;; TNHPN-NEXT:   )
+  ;; TNHPN-NEXT:  )
+  ;; TNHPN-NEXT:  (drop
+  ;; TNHPN-NEXT:   (ref.cast null $A
+  ;; TNHPN-NEXT:    (local.get $any-null)
+  ;; TNHPN-NEXT:   )
+  ;; TNHPN-NEXT:  )
+  ;; TNHPN-NEXT:  (drop
+  ;; TNHPN-NEXT:   (ref.cast $A
+  ;; TNHPN-NEXT:    (local.get $eq)
+  ;; TNHPN-NEXT:   )
+  ;; TNHPN-NEXT:  )
+  ;; TNHPN-NEXT:  (drop
+  ;; TNHPN-NEXT:   (ref.cast null $A
+  ;; TNHPN-NEXT:    (local.get $eq-null)
+  ;; TNHPN-NEXT:   )
+  ;; TNHPN-NEXT:  )
+  ;; TNHPN-NEXT: )
   (func $func
     (param $A (ref $A)) (param $A-null (ref null $A))
     (param $any (ref any)) (param $any-null (ref null any))
@@ -63,19 +94,23 @@
     ;; to simplify some of these operations.
 
     ;; Input isn't null, and is of type $A, so it must be the global.
+    ;; Atm we don't optimize this without trapsNeverHappen, but we could (the
+    ;; same in the others as well below).
     (drop
       (ref.cast_static $A
         (local.get $A)
       )
     )
-    ;; Input is either null or the global.    
+    ;; Input is either null or the global.
     (drop
       (ref.cast_static $A
         (local.get $A-null)
       )
     )
 
-    ;; Input is of type any, not even eq, so we can't do anything to these two.
+    ;; Input is of type any, not even eq, so we can't do comparisons on these.
+    ;; But we can infer in tnh that it must be the global, when no null is
+    ;; possible (and when a null is possible, we can just check if it is null).
     (drop
       (ref.cast_static $A
         (local.get $any)
@@ -87,14 +122,13 @@
       )
     )
 
-    ;; Input is of type eq, so we can compare it to the global at least.
+    ;; Input is of type eq, so we can compare it to the global if we need to
+    ;; (but in tnh we don't need to, and do the same as for |any|, above).
     (drop
       (ref.cast_static $A
         (local.get $eq)
       )
     )
-    ;; Atm we do not optimize the case that needs both a type check and a null
-    ;; check.
     (drop
       (ref.cast_static $A
         (local.get $eq-null)
@@ -102,3 +136,5 @@
     )
   )
 )
+
+;; TODO ref.eq, or is that in the other file?
