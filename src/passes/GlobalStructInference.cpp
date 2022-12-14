@@ -367,12 +367,10 @@ struct GlobalStructInference : public Pass {
         Builder builder(*getModule());
 
         if (curr->ref->type.isNonNullable()) {
-          if (Type::isSubType(curr->ref->type, Type(heapType, NonNullable)) {
+          if (Type::isSubType(curr->ref->type, Type(heapType, NonNullable))) {
             // This cannot be null, and nothing else is possible of that type,
             // so it is exactly the global.
-            replaceCurrent(
-              builder.makeGlobalGet(global, globalType)
-            );
+            replaceCurrent(builder.makeGlobalGet(global, globalType));
           } else {
             // This cannot be null, but it might be something of another type.
             // Compare to the global - it's either equal to that, or the cast
@@ -386,14 +384,13 @@ struct GlobalStructInference : public Pass {
           return;
         } else {
           // The type is nullable.
-          if (Type::isSubType(curr->ref->type, Type(heapType, Nullable)) {
+          if (Type::isSubType(curr->ref->type, Type(heapType, Nullable))) {
             // This is either null, or it is the global, because it can't be
             // anything else.
-            replaceCurrent(builder.makeSelect(
-              builder.makeRefIs(RefIsNull,
-                                curr->ref),
-              builder.makeRefNull(curr->type),
-              builder.makeGlobalGet(global, globalType)));
+            replaceCurrent(
+              builder.makeSelect(builder.makeRefIs(RefIsNull, curr->ref),
+                                 builder.makeRefNull(curr->type),
+                                 builder.makeGlobalGet(global, globalType)));
             return;
           }
           // We could also handle the case that needs both a null check and an
