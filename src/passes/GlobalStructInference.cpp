@@ -408,7 +408,7 @@ struct GlobalStructInference : public Pass {
       struct SingletonGlobalInfo {
         // If set, this is the name of a global that the expression must be
         // equal to (or possibly null, see below).
-        std::optional<name> global;
+        std::optional<Name> global;
 
         // Whether this can be null or not.
         bool null;
@@ -443,6 +443,8 @@ struct GlobalStructInference : public Pass {
         auto left = getSingletonGlobalInfo(curr->left);
         auto right = getSingletonGlobalInfo(curr->right);
 
+        Builder builder(*getModule());
+
         // If an arm is equal to a singleton global, replace it with that.
         auto maybeReplaceWithGlobal = [&](const SingletonGlobalInfo& info,
                                           Expression*& arm) {
@@ -464,8 +466,8 @@ struct GlobalStructInference : public Pass {
         // One or both of the sides may be equal to a known singleton global.
         // Replace them if so. Later optimizations can then do things like turn
         // globalA == globalB into a constant 0 or 1.
-        maybeReplaceWithGlobal(curr->left);
-        maybeReplaceWithGlobal(curr->right);
+        maybeReplaceWithGlobal(left, curr->left);
+        maybeReplaceWithGlobal(right, curr->right);
 
         if (left.global && right.global && left.global != right.global &&
             (!left.null ^ !right.null)) {
@@ -477,7 +479,7 @@ struct GlobalStructInference : public Pass {
             builder.makeDrop(curr->left),
             builder.makeDrop(curr->right),
             builder.makeConst(int32_t(0))
-          });
+          }));
           return;
         }
 
