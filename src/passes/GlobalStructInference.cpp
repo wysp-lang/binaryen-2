@@ -411,11 +411,8 @@ struct GlobalStructInference : public Pass {
                                builder.makeGlobalGet(global, globalType)));
         } else {
           replaceCurrent(
-            builder.makeSequence(
-              builder.makeDrop(curr->ref),
-              builder.makeGlobalGet(global, globalType)
-            )
-          );
+            builder.makeSequence(builder.makeDrop(curr->ref),
+                                 builder.makeGlobalGet(global, globalType)));
         }
       }
 
@@ -455,11 +452,9 @@ struct GlobalStructInference : public Pass {
           // null. These cannot be equal: if the nullable side is null then the
           // other is different; and if the nullable side is not null then we
           // have different globals on each sides.
-          replaceCurrent(builder.makeBlock({
-            builder.makeDrop(curr->left),
-            builder.makeDrop(curr->right),
-            builder.makeConst(int32_t(0))
-          }));
+          replaceCurrent(builder.makeBlock({builder.makeDrop(curr->left),
+                                            builder.makeDrop(curr->right),
+                                            builder.makeConst(int32_t(0))}));
           return;
         }
 
