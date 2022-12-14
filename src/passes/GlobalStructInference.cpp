@@ -444,7 +444,8 @@ struct GlobalStructInference : public Pass {
         auto right = getSingletonGlobalInfo(curr->right);
 
         // If an arm is equal to a singleton global, replace it with that.
-        auto maybeReplaceWithGlobal = [&](const SingletonGlobalInfo& info, Expression*& arm) {
+        auto maybeReplaceWithGlobal = [&](const SingletonGlobalInfo& info,
+                                          Expression*& arm) {
           if (arm->is<GlobalGet>()) {
             // Don't repeat work: our output here is a global.get, so if we are
             // already in that form, do nothing.
@@ -454,8 +455,8 @@ struct GlobalStructInference : public Pass {
             auto global = *info.global;
             arm = builder.makeSequence(
               builder.makeDrop(arm),
-              builder.makeGlobalGet(global, getModule()->getGlobal(global)->type)
-            );
+              builder.makeGlobalGet(global,
+                                    getModule()->getGlobal(global)->type));
             return;
           }
         };
