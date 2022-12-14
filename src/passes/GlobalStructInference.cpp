@@ -395,15 +395,98 @@ struct GlobalStructInference : public Pass {
                                  builder.makeGlobalGet(global, globalType)));
             return;
           }
+
           // We could also handle the case that needs both a null check and an
           // identity check, but with two checks the size is significantly
           // larger than the original and it may not be faster than letting the
-          // VM do it, so ignore that. TODO measure
-          // How common is that?
+          // VM do it, so ignore that. TODO this is rare in practice, but might
+          // be worth measuring speed
         }
       }
 
-      // visitRefEq
+      // Information regarding an expression that might be equal to a global.
+      struct SingletonGlobalInfo {
+        // If set, this is the name of a global that the expression must be
+        // equal to (or possibly null, see below).
+        std::optional<name> global;
+
+        // Whether this can be null or not.
+        bool null;
+
+        SingletonGlobalInfo(Expression* curr) : null(curr->type.isNullable()) {}
+      };
+
+      SingletonGlobalInfo getSingletonGlobalInfo(Expression* curr) {
+        SingletonGlobalInfo info(curr);
+
+        auto type = curr->type;
+        if (!type.isRef()) {
+          return info;
+        }
+
+        auto heapType = type.getHeapType();
+        auto iter = parent.typeGlobals.find(heapType);
+        if (iter == parent.typeGlobals.end()) {
+          return info;
+        }
+
+        const auto& globals = iter->second;
+        if (globals.size() != 1) {
+          return info;
+        }
+
+        info.global = globals[0];
+        return info;
+      }
+
+      void visitRefEq(RefEq* curr) {
+        auto left = getSingletonGlobalInfo(curr->left);
+        auto right = getSingletonGlobalInfo(curr->right);
+
+        // If an arm is equal to a singleton global, replace it with that.
+        auto maybeReplaceWithGlobal = [&](const SingletonGlobalInfo& info, Expression*& arm) {
+          if (arm->is<GlobalGet>()) {
+            // Don't repeat work: our output here is a global.get, so if we are
+            // already in that form, do nothing.
+            return;
+          }
+          if (info.global && !info.null) {
+            auto global = *info.global;
+            arm = builder.makeSequence(
+              builder.makeDrop(arm),
+              builder.makeGlobalGet(global, getModule()->getGlobal(global)->type)
+            );
+            return;
+          }
+        };
+
+        // One or both of the sides may be equal to a known singleton global.
+        // Replace them if so. Later optimizations can then do things like turn
+        // globalA == globalB into a constant 0 or 1.
+        maybeReplaceWithGlobal(curr->left);
+        maybeReplaceWithGlobal(curr->right);
+
+        if (left.global && right.global && left.global != right.global &&
+            (!left.null ^ !right.null)) {
+          // We have two different globals, and exactly one of them can also be
+          // null. These cannot be equal: if the nullable side is null then the
+          // other is different; and if the nullable side is not null then we
+          // have different globals on each sides.
+          replaceCurrent(builder.makeBlock({
+            builder.makeDrop(curr->left),
+            builder.makeDrop(curr->right),
+            builder.makeConst(int32_t(0))
+          });
+          return;
+        }
+
+        // We could also optimize the case of the same global on both sides,
+        // plus a possible null on one side. In that case we can just check if
+        // the nullable side is not a null (if it isn't, they are equal).
+        // However, it's not clear that is beneficial: we'd need to replace a
+        // single RefEq with a RefIsNull + EqZ, which is two operations, so
+        // ignore that case.
+      }
 
     private:
       GlobalStructInference& parent;
