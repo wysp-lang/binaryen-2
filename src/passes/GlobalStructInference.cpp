@@ -349,7 +349,7 @@ struct GlobalStructInference : public Pass {
           return;
         }
 
-        auto heapType = type.intendedType;
+        auto heapType = curr->intendedType;
         auto iter = parent.typeGlobals.find(heapType);
         if (iter == parent.typeGlobals.end()) {
           return;
@@ -360,26 +360,51 @@ struct GlobalStructInference : public Pass {
           return;
         }
 
-        // There is a single global of the relevant heap type, so rather than
-        // cast to it we can simply compare to the global.
-        //
-        // For now only do this on non-nullable inputs. The nullable case
-        // requires an additional check for now, but will become trivial once we
-        // implement ref.cast null. TODO
+        // There is a single global of the relevant heap type and we can use
+        // that fact to optimize here.
         auto global = globals[0];
         auto globalType = getModule()->getGlobal(global)->type;
         Builder builder(*getModule());
 
-        replaceCurrent(builder.makeIf(
-          builder.makeRefEq(
-            curr->ref,
-            builder.makeGlobalGet(global, globalType)
-          ),
-          builder.makeGlobalGet(global, globalType),
-          builder.makeUnreachable()
-        ));
+        if (curr->ref->type.isNonNullable()) {
+          if (Type::isSubType(curr->ref->type, Type(heapType, NonNullable)) {
+            // This cannot be null, and nothing else is possible of that type,
+            // so it is exactly the global.
+            replaceCurrent(
+              builder.makeGlobalGet(global, globalType)
+            );
+          } else {
+            // This cannot be null, but it might be something of another type.
+            // Compare to the global - it's either equal to that, or the cast
+            // fails.
+            replaceCurrent(builder.makeIf(
+              builder.makeRefEq(curr->ref,
+                                builder.makeGlobalGet(global, globalType)),
+              builder.makeGlobalGet(global, globalType),
+              builder.makeUnreachable()));
+          }
+          return;
+        } else {
+          // The type is nullable.
+          if (Type::isSubType(curr->ref->type, Type(heapType, Nullable)) {
+            // This is either null, or it is the global, because it can't be
+            // anything else.
+            replaceCurrent(builder.makeSelect(
+              builder.makeRefIs(RefIsNull,
+                                curr->ref),
+              builder.makeRefNull(curr->type),
+              builder.makeGlobalGet(global, globalType)));
+            return;
+          }
+          // We could also handle the case that needs both a null check and an
+          // identity check, but with two checks the size is significantly
+          // larger than the original and it may not be faster than letting the
+          // VM do it, so ignore that. TODO measure
+          // How common is that?
+        }
       }
-    }
+
+      // visitRefEq
 
     private:
       GlobalStructInference& parent;
