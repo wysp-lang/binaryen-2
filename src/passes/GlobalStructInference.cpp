@@ -371,7 +371,8 @@ struct GlobalStructInference : public Pass {
             // This cannot be null, and nothing else is possible of that type,
             // so it is exactly the global.
             replaceCurrent(builder.makeGlobalGet(global, globalType));
-          } else {
+            return;
+          } else if (HeapType::isSubType(curr->ref->type.getHeapType(), HeapType::eq)) {
             // This cannot be null, but it might be something of another type.
             // Compare to the global - it's either equal to that, or the cast
             // fails.
@@ -380,8 +381,8 @@ struct GlobalStructInference : public Pass {
                                 builder.makeGlobalGet(global, globalType)),
               builder.makeGlobalGet(global, globalType),
               builder.makeUnreachable()));
+            return;
           }
-          return;
         } else {
           // The type is nullable.
           if (Type::isSubType(curr->ref->type, Type(heapType, Nullable))) {
@@ -389,7 +390,7 @@ struct GlobalStructInference : public Pass {
             // anything else.
             replaceCurrent(
               builder.makeSelect(builder.makeRefIs(RefIsNull, curr->ref),
-                                 builder.makeRefNull(curr->type),
+                                 builder.makeRefNull(heapType),
                                  builder.makeGlobalGet(global, globalType)));
             return;
           }
