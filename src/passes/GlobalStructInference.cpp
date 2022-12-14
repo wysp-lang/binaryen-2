@@ -382,55 +382,40 @@ struct GlobalStructInference : public Pass {
       }
 
       void visitRefCast(RefCast* curr) {
-        // Whether there is a global that the cast must find.
-        auto intendedGlobal = getSingletonGlobalInfo(curr->type);
+        if (!getPassOptions().trapsNeverHappen) {
+          // TODO: Optimize without this assumption (which is less efficient/
+          //       simple).
+          return;
+        }
 
-        // Whether the ref input must contain a global.
-        auto refGlobal = getSingletonGlobalInfo(curr->ref);
+        // Find information about whether the intended type has only a single
+        // relevant global that fits that type.
+        auto info = getSingletonGlobalInfo(curr->type);
 
-[..]
+        if (!info.global) {
+          // This cast does not refer to a single global.
+          return;
+        }
 
-        // There is a single global of the relevant heap type and we can use
-        // that fact to optimize here.
-        auto global = globals[0];
+        auto global = *info.global;
         auto globalType = getModule()->getGlobal(global)->type;
+
         Builder builder(*getModule());
 
-        if (curr->ref->type.isNonNullable()) {
-          if (Type::isSubType(curr->ref->type, Type(heapType, NonNullable))) {
-            // This cannot be null, and nothing else is possible of that type,
-            // so it is exactly the global.
-            replaceCurrent(builder.makeGlobalGet(global, globalType));
-            return;
-          } else if (HeapType::isSubType(curr->ref->type.getHeapType(),
-                                         HeapType::eq)) {
-            // This cannot be null, but it might be something of another type.
-            // Compare to the global - it's either equal to that, or the cast
-            // fails.
-            replaceCurrent(builder.makeIf(
-              builder.makeRefEq(curr->ref,
-                                builder.makeGlobalGet(global, globalType)),
-              builder.makeGlobalGet(global, globalType),
-              builder.makeUnreachable()));
-            return;
-          }
+        // As we assume traps never happen, we know that we flow out either a
+        // null or the singleton possible global.
+        if (curr->ref->type.isNullable()) {
+          replaceCurrent(
+            builder.makeSelect(builder.makeRefIs(RefIsNull, curr->ref),
+                               builder.makeRefNull(curr->intendedType),
+                               builder.makeGlobalGet(global, globalType)));
         } else {
-          // The type is nullable.
-          if (Type::isSubType(curr->ref->type, Type(heapType, Nullable))) {
-            // This is either null, or it is the global, because it can't be
-            // anything else.
-            replaceCurrent(
-              builder.makeSelect(builder.makeRefIs(RefIsNull, curr->ref),
-                                 builder.makeRefNull(heapType),
-                                 builder.makeGlobalGet(global, globalType)));
-            return;
-          }
-
-          // We could also handle the case that needs both a null check and an
-          // identity check, but with two checks the size is significantly
-          // larger than the original and it may not be faster than letting the
-          // VM do it, so ignore that. TODO this is rare in practice, but might
-          // be worth measuring speed
+          replaceCurrent(
+            builder.makeSequence(
+              builder.makeDrop(curr->ref),
+              builder.makeGlobalGet(global, globalType)
+            )
+          );
         }
       }
 
