@@ -55,33 +55,54 @@
   ;; CHECK-NEXT: )
   ;; TNHPN:      (func $func (type $ref|$A|_ref?|$A|_ref|any|_anyref_ref|eq|_eqref_=>_none) (param $A (ref $A)) (param $A-null (ref null $A)) (param $any (ref any)) (param $any-null anyref) (param $eq (ref eq)) (param $eq-null eqref)
   ;; TNHPN-NEXT:  (drop
-  ;; TNHPN-NEXT:   (ref.cast $A
-  ;; TNHPN-NEXT:    (local.get $A)
+  ;; TNHPN-NEXT:   (block (result (ref $A))
+  ;; TNHPN-NEXT:    (drop
+  ;; TNHPN-NEXT:     (local.get $A)
+  ;; TNHPN-NEXT:    )
+  ;; TNHPN-NEXT:    (global.get $A)
   ;; TNHPN-NEXT:   )
   ;; TNHPN-NEXT:  )
   ;; TNHPN-NEXT:  (drop
-  ;; TNHPN-NEXT:   (ref.cast null $A
-  ;; TNHPN-NEXT:    (local.get $A-null)
+  ;; TNHPN-NEXT:   (select (result (ref null $A))
+  ;; TNHPN-NEXT:    (ref.null none)
+  ;; TNHPN-NEXT:    (global.get $A)
+  ;; TNHPN-NEXT:    (ref.is_null
+  ;; TNHPN-NEXT:     (local.get $A-null)
+  ;; TNHPN-NEXT:    )
   ;; TNHPN-NEXT:   )
   ;; TNHPN-NEXT:  )
   ;; TNHPN-NEXT:  (drop
-  ;; TNHPN-NEXT:   (ref.cast $A
-  ;; TNHPN-NEXT:    (local.get $any)
+  ;; TNHPN-NEXT:   (block (result (ref $A))
+  ;; TNHPN-NEXT:    (drop
+  ;; TNHPN-NEXT:     (local.get $any)
+  ;; TNHPN-NEXT:    )
+  ;; TNHPN-NEXT:    (global.get $A)
   ;; TNHPN-NEXT:   )
   ;; TNHPN-NEXT:  )
   ;; TNHPN-NEXT:  (drop
-  ;; TNHPN-NEXT:   (ref.cast null $A
-  ;; TNHPN-NEXT:    (local.get $any-null)
+  ;; TNHPN-NEXT:   (select (result (ref null $A))
+  ;; TNHPN-NEXT:    (ref.null none)
+  ;; TNHPN-NEXT:    (global.get $A)
+  ;; TNHPN-NEXT:    (ref.is_null
+  ;; TNHPN-NEXT:     (local.get $any-null)
+  ;; TNHPN-NEXT:    )
   ;; TNHPN-NEXT:   )
   ;; TNHPN-NEXT:  )
   ;; TNHPN-NEXT:  (drop
-  ;; TNHPN-NEXT:   (ref.cast $A
-  ;; TNHPN-NEXT:    (local.get $eq)
+  ;; TNHPN-NEXT:   (block (result (ref $A))
+  ;; TNHPN-NEXT:    (drop
+  ;; TNHPN-NEXT:     (local.get $eq)
+  ;; TNHPN-NEXT:    )
+  ;; TNHPN-NEXT:    (global.get $A)
   ;; TNHPN-NEXT:   )
   ;; TNHPN-NEXT:  )
   ;; TNHPN-NEXT:  (drop
-  ;; TNHPN-NEXT:   (ref.cast null $A
-  ;; TNHPN-NEXT:    (local.get $eq-null)
+  ;; TNHPN-NEXT:   (select (result (ref null $A))
+  ;; TNHPN-NEXT:    (ref.null none)
+  ;; TNHPN-NEXT:    (global.get $A)
+  ;; TNHPN-NEXT:    (ref.is_null
+  ;; TNHPN-NEXT:     (local.get $eq-null)
+  ;; TNHPN-NEXT:    )
   ;; TNHPN-NEXT:   )
   ;; TNHPN-NEXT:  )
   ;; TNHPN-NEXT: )
@@ -101,7 +122,7 @@
         (local.get $A)
       )
     )
-    ;; Input is either null or the global.
+    ;; Input is either null or the global, which we can pick between.
     (drop
       (ref.cast_static $A
         (local.get $A-null)
@@ -157,6 +178,12 @@
     (i32.const 1337)
   ))
 
+  ;; CHECK:      (global $A-other (ref $A) (struct.new $A
+  ;; CHECK-NEXT:  (i32.const 99999)
+  ;; CHECK-NEXT: ))
+  ;; TNHPN:      (global $A-other (ref $A) (struct.new $A
+  ;; TNHPN-NEXT:  (i32.const 99999)
+  ;; TNHPN-NEXT: ))
   (global $A-other (ref $A) (struct.new $A
     (i32.const 99999)
   ))
