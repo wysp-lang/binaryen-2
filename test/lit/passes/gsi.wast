@@ -1295,19 +1295,14 @@
 
   ;; CHECK:      (func $func-1 (type $ref|$A|_ref?|$A|_ref|$B|_ref?|$B|_=>_none) (param $A (ref $A)) (param $A-null (ref null $A)) (param $B (ref $B)) (param $B-null (ref null $B))
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (ref.eq
-  ;; CHECK-NEXT:    (block (result (ref $A))
-  ;; CHECK-NEXT:     (drop
-  ;; CHECK-NEXT:      (local.get $A)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (global.get $A)
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (local.get $A)
   ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (block (result (ref $A))
-  ;; CHECK-NEXT:     (drop
-  ;; CHECK-NEXT:      (local.get $A)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (global.get $A)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (local.get $A)
   ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 1)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
@@ -1501,19 +1496,14 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (ref.eq
-  ;; CHECK-NEXT:    (block (result (ref $B))
-  ;; CHECK-NEXT:     (drop
-  ;; CHECK-NEXT:      (local.get $B)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (global.get $B)
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (local.get $B)
   ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (block (result (ref $B))
-  ;; CHECK-NEXT:     (drop
-  ;; CHECK-NEXT:      (local.get $B)
-  ;; CHECK-NEXT:     )
-  ;; CHECK-NEXT:     (global.get $B)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (local.get $B)
   ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 1)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
