@@ -422,6 +422,7 @@ struct GlobalStructInference : public Pass {
 
         Builder builder(*getModule());
 
+
         // If an arm is equal to a singleton global, replace it with that.
         auto maybeReplaceWithGlobal = [&](const SingletonGlobalInfo& info,
                                           Expression*& arm) {
@@ -447,11 +448,10 @@ struct GlobalStructInference : public Pass {
         maybeReplaceWithGlobal(right, curr->right);
 
         if (left.global && right.global && left.global != right.global &&
-            (left.null ^ right.null)) {
-          // We have two different globals, and exactly one of them can also be
-          // null. These cannot be equal: if the nullable side is null then the
-          // other is different; and if the nullable side is not null then we
-          // have different globals on each sides.
+            !(left.null && right.null)) {
+          // We have two different globals, and both cannot be null. These
+          // cannot be equal: both cannot be null, and the only non-null
+          // possible values differ on each side.
           replaceCurrent(builder.makeBlock({builder.makeDrop(curr->left),
                                             builder.makeDrop(curr->right),
                                             builder.makeConst(int32_t(0))}));
