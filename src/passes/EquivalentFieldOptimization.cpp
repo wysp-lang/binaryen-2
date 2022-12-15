@@ -257,6 +257,7 @@ struct Finder : public PostWalker<Finder> {
         for (size_t i = 0; i < num; i++) {
           for (size_t j = i + 1; j < num; j++) {
             entry.add(sequences[i], sequences[j]);
+            // TODO also add sequences with casts removed, if it would validate that way.
           }
         }
       }
@@ -473,6 +474,10 @@ struct EquivalentFieldOptimization : public Pass {
         mergeIntoUnifiedMap(type, unifiedMap[subType]);
       }
     }
+
+    // TODO we also need to go to supers. We may only have struct.news of
+    // concrete subtypes, but the FunctionOptimizer below will only encounter
+    // uses of the abstract super. Or does the above do just that..?
 
     // We may have filtered out all the possible work, so check again.
     if (!foundWork()) {
