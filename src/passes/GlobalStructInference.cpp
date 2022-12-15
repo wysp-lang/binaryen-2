@@ -445,6 +445,7 @@ struct GlobalStructInference : public Pass {
         // Otherwise, perhaps at least one arm can be replaced with a global.
         // TODO: We could in principle do this for any expression, like a
         //       local.get.
+        // explain why we still need ref.cast and ref.eq in this file
         auto maybeReplaceWithGlobal = [&](const SingletonGlobalInfo& info,
                                           Expression*& arm) {
           if (arm->is<GlobalGet>()) {
