@@ -422,6 +422,14 @@ struct GlobalStructInference : public Pass {
 
         Builder builder(*getModule());
 
+        if (left.global && right.global && left.global == right.global &&
+            !left.null && !right.null) {
+          // The same global appears on both sides.
+          replaceCurrent(builder.makeBlock({builder.makeDrop(curr->left),
+                                            builder.makeDrop(curr->right),
+                                            builder.makeConst(int32_t(1))}));
+          return;
+        }
 
         // If an arm is equal to a singleton global, replace it with that.
         auto maybeReplaceWithGlobal = [&](const SingletonGlobalInfo& info,
