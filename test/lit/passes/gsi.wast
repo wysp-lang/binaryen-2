@@ -1319,20 +1319,10 @@
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (block (result i32)
   ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (block (result (ref $A))
-  ;; CHECK-NEXT:      (drop
-  ;; CHECK-NEXT:       (local.get $A)
-  ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (global.get $A)
-  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (local.get $A)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (block (result (ref $B))
-  ;; CHECK-NEXT:      (drop
-  ;; CHECK-NEXT:       (local.get $B)
-  ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (global.get $B)
-  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (local.get $B)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (i32.const 0)
   ;; CHECK-NEXT:   )
@@ -1340,12 +1330,7 @@
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (block (result i32)
   ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (block (result (ref $A))
-  ;; CHECK-NEXT:      (drop
-  ;; CHECK-NEXT:       (local.get $A)
-  ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (global.get $A)
-  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (local.get $A)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (drop
   ;; CHECK-NEXT:     (local.get $B-null)
@@ -1409,12 +1394,7 @@
   ;; CHECK-NEXT:     (local.get $A-null)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (block (result (ref $B))
-  ;; CHECK-NEXT:      (drop
-  ;; CHECK-NEXT:       (local.get $B)
-  ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (global.get $B)
-  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (local.get $B)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (i32.const 0)
   ;; CHECK-NEXT:   )
@@ -1461,20 +1441,10 @@
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (block (result i32)
   ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (block (result (ref $B))
-  ;; CHECK-NEXT:      (drop
-  ;; CHECK-NEXT:       (local.get $B)
-  ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (global.get $B)
-  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (local.get $B)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (block (result (ref $A))
-  ;; CHECK-NEXT:      (drop
-  ;; CHECK-NEXT:       (local.get $A)
-  ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (global.get $A)
-  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (local.get $A)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (i32.const 0)
   ;; CHECK-NEXT:   )
@@ -1482,12 +1452,7 @@
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (block (result i32)
   ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (block (result (ref $B))
-  ;; CHECK-NEXT:      (drop
-  ;; CHECK-NEXT:       (local.get $B)
-  ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (global.get $B)
-  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (local.get $B)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (drop
   ;; CHECK-NEXT:     (local.get $A-null)
@@ -1556,12 +1521,7 @@
   ;; CHECK-NEXT:     (local.get $B-null)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (drop
-  ;; CHECK-NEXT:     (block (result (ref $A))
-  ;; CHECK-NEXT:      (drop
-  ;; CHECK-NEXT:       (local.get $A)
-  ;; CHECK-NEXT:      )
-  ;; CHECK-NEXT:      (global.get $A)
-  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (local.get $A)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (i32.const 0)
   ;; CHECK-NEXT:   )

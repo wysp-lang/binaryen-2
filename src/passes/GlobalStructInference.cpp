@@ -431,7 +431,20 @@ struct GlobalStructInference : public Pass {
           return;
         }
 
-        // If an arm is equal to a singleton global, replace it with that.
+        if (left.global && right.global && left.global != right.global &&
+            !(left.null && right.null)) {
+          // We have two different globals, and both cannot be null. These
+          // cannot be equal: both cannot be null, and the only non-null
+          // possible values differ on each side.
+          replaceCurrent(builder.makeBlock({builder.makeDrop(curr->left),
+                                            builder.makeDrop(curr->right),
+                                            builder.makeConst(int32_t(0))}));
+          return;
+        }
+
+        // Otherwise, perhaps at least one arm can be replaced with a global.
+        // TODO: We could in principle do this for any expression, like a
+        //       local.get.
         auto maybeReplaceWithGlobal = [&](const SingletonGlobalInfo& info,
                                           Expression*& arm) {
           if (arm->is<GlobalGet>()) {
@@ -449,22 +462,8 @@ struct GlobalStructInference : public Pass {
           }
         };
 
-        // One or both of the sides may be equal to a known singleton global.
-        // Replace them if so. Later optimizations can then do things like turn
-        // globalA == globalB into a constant 0 or 1.
         maybeReplaceWithGlobal(left, curr->left);
         maybeReplaceWithGlobal(right, curr->right);
-
-        if (left.global && right.global && left.global != right.global &&
-            !(left.null && right.null)) {
-          // We have two different globals, and both cannot be null. These
-          // cannot be equal: both cannot be null, and the only non-null
-          // possible values differ on each side.
-          replaceCurrent(builder.makeBlock({builder.makeDrop(curr->left),
-                                            builder.makeDrop(curr->right),
-                                            builder.makeConst(int32_t(0))}));
-          return;
-        }
 
         // We could also optimize the case of the same global on both sides,
         // plus a possible null on one side. In that case we can just check if
