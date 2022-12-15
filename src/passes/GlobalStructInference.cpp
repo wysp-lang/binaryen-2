@@ -192,7 +192,7 @@ struct GlobalStructInference : public Pass {
 
     // Optimize based on the above.
     struct FunctionOptimizer
-      : public WalkerPass<PostWalker<FunctionOptimizer>> {
+      : public WalkerPass<PostWalker<FunctionOptimizer, UnifiedExpressionVisitor<FunctionOptimizer>>> {
       bool isFunctionParallel() override { return true; }
 
       std::unique_ptr<Pass> create() override {
@@ -201,7 +201,91 @@ struct GlobalStructInference : public Pass {
 
       FunctionOptimizer(GlobalStructInference& parent) : parent(parent) {}
 
+      // Information regarding an expression that might be equal to a global.
+      struct SingletonGlobalInfo {
+        // If set, this is the name of a global that the expression must be
+        // equal to (or possibly null, see below).
+        std::optional<Name> global;
+
+        // Whether this can be null or not.
+        bool null;
+
+        SingletonGlobalInfo(Type type) : null(type.isNullable()) {}
+      };
+
+      SingletonGlobalInfo getSingletonGlobalInfo(Type type) {
+        SingletonGlobalInfo info(type);
+
+        if (!type.isRef()) {
+          return info;
+        }
+
+        auto heapType = type.getHeapType();
+        auto iter = parent.typeGlobals.find(heapType);
+        if (iter == parent.typeGlobals.end()) {
+          return info;
+        }
+
+        const auto& globals = iter->second;
+        if (globals.size() != 1) {
+          return info;
+        }
+
+        info.global = globals[0];
+        return info;
+      }
+
+      SingletonGlobalInfo getSingletonGlobalInfo(Expression* curr) {
+        return getSingletonGlobalInfo(curr->type);
+      }
+
+      GlobalGet* makeGlobalGet(const SingletonGlobalInfo& info) {
+        auto global = *info.global;
+        auto globalType = getModule()->getGlobal(global)->type;
+        return Builder(*getModule()).makeGlobalGet(global, globalType);
+      }
+
+      // If the type of this expression proves it must be a particular global,
+      // replace it with a global.get of that global. Return true if we did so.
+      bool maybeReplaceWithGlobalGet(Expression* curr) {
+        // Find information about whether the intended type has only a single
+        // relevant global that fits that type.
+        auto info = getSingletonGlobalInfo(curr->type);
+
+        if (!info.global) {
+          return false;
+        }
+
+        Builder builder(*getModule());
+
+        // As we assume traps never happen, we know that we flow out either a
+        // null or the singleton possible global.
+        if (curr->type.isNullable()) {
+          replaceCurrent(
+            builder.makeSelect(builder.makeRefIs(RefIsNull, curr),
+                               builder.makeRefNull(curr->type.getHeapType()),
+                               makeGlobalGet(info)));
+          return true;
+        } else {
+          replaceCurrent(
+            builder.makeSequence(builder.makeDrop(curr),
+                                 makeGlobalGet(info)));
+          return true;
+        }
+        return false;
+      }
+
+      void visitExpression(Expression* curr) {
+        maybeReplaceWithGlobalGet(curr);
+      }
+
       void visitStructGet(StructGet* curr) {
+        if (maybeReplaceWithGlobalGet(curr)) {
+          // We've simplifies this down to a global.get, no need to look
+          // further.
+          return;
+        }
+
         auto type = curr->ref->type;
         if (type == Type::unreachable) {
           return;
@@ -231,18 +315,6 @@ struct GlobalStructInference : public Pass {
 
         auto& wasm = *getModule();
         Builder builder(wasm);
-
-        if (globals.size() == 1) {
-          // Leave it to other passes to infer the constant value of the field,
-          // if there is one: just change the reference to the global, which
-          // will unlock those other optimizations. Note we must trap if the ref
-          // is null, so add RefAsNonNull here.
-          auto global = globals[0];
-          curr->ref = builder.makeSequence(
-            builder.makeDrop(builder.makeRefAs(RefAsNonNull, curr->ref)),
-            builder.makeGlobalGet(global, wasm.getGlobal(globals[0])->type));
-          return;
-        }
 
         // We are looking for the case where we can pick between two values
         // using a single comparison. More than two values, or more than a
@@ -343,79 +415,6 @@ struct GlobalStructInference : public Pass {
           builder.makeConstantExpression(values[1])));
       }
 
-      // Information regarding an expression that might be equal to a global.
-      struct SingletonGlobalInfo {
-        // If set, this is the name of a global that the expression must be
-        // equal to (or possibly null, see below).
-        std::optional<Name> global;
-
-        // Whether this can be null or not.
-        bool null;
-
-        SingletonGlobalInfo(Type type) : null(type.isNullable()) {}
-      };
-
-      SingletonGlobalInfo getSingletonGlobalInfo(Type type) {
-        SingletonGlobalInfo info(type);
-
-        if (!type.isRef()) {
-          return info;
-        }
-
-        auto heapType = type.getHeapType();
-        auto iter = parent.typeGlobals.find(heapType);
-        if (iter == parent.typeGlobals.end()) {
-          return info;
-        }
-
-        const auto& globals = iter->second;
-        if (globals.size() != 1) {
-          return info;
-        }
-
-        info.global = globals[0];
-        return info;
-      }
-
-      SingletonGlobalInfo getSingletonGlobalInfo(Expression* curr) {
-        return getSingletonGlobalInfo(curr->type);
-      }
-
-      void visitRefCast(RefCast* curr) {
-        if (!getPassOptions().trapsNeverHappen) {
-          // TODO: Optimize without this assumption (which is less efficient/
-          //       simple).
-          return;
-        }
-
-        // Find information about whether the intended type has only a single
-        // relevant global that fits that type.
-        auto info = getSingletonGlobalInfo(curr->type);
-
-        if (!info.global) {
-          // This cast does not refer to a single global.
-          return;
-        }
-
-        auto global = *info.global;
-        auto globalType = getModule()->getGlobal(global)->type;
-
-        Builder builder(*getModule());
-
-        // As we assume traps never happen, we know that we flow out either a
-        // null or the singleton possible global.
-        if (curr->ref->type.isNullable()) {
-          replaceCurrent(
-            builder.makeSelect(builder.makeRefIs(RefIsNull, curr->ref),
-                               builder.makeRefNull(curr->intendedType),
-                               builder.makeGlobalGet(global, globalType)));
-        } else {
-          replaceCurrent(
-            builder.makeSequence(builder.makeDrop(curr->ref),
-                                 builder.makeGlobalGet(global, globalType)));
-        }
-      }
-
       void visitRefEq(RefEq* curr) {
         auto left = getSingletonGlobalInfo(curr->left);
         auto right = getSingletonGlobalInfo(curr->right);
@@ -441,30 +440,6 @@ struct GlobalStructInference : public Pass {
                                             builder.makeConst(int32_t(0))}));
           return;
         }
-
-        // Otherwise, perhaps at least one arm can be replaced with a global.
-        // TODO: We could in principle do this for any expression, like a
-        //       local.get.
-        // explain why we still need ref.cast and ref.eq in this file
-        auto maybeReplaceWithGlobal = [&](const SingletonGlobalInfo& info,
-                                          Expression*& arm) {
-          if (arm->is<GlobalGet>()) {
-            // Don't repeat work: our output here is a global.get, so if we are
-            // already in that form, do nothing.
-            return;
-          }
-          if (info.global && !info.null) {
-            auto global = *info.global;
-            arm = builder.makeSequence(
-              builder.makeDrop(arm),
-              builder.makeGlobalGet(global,
-                                    getModule()->getGlobal(global)->type));
-            return;
-          }
-        };
-
-        maybeReplaceWithGlobal(left, curr->left);
-        maybeReplaceWithGlobal(right, curr->right);
 
         // We could also optimize the case of the same global on both sides,
         // plus a possible null on one side. In that case we can just check if
