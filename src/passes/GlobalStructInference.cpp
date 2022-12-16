@@ -261,6 +261,7 @@ struct GlobalStructInference : public Pass {
         // As we assume traps never happen, we know that we flow out either a
         // null or the singleton possible global.
         if (curr->type.isNullable()) {
+          // XXX code size. instead, do this on arms of things? struct.get for example, then in tnh we can remove the null arm.
           replaceCurrent(
             builder.makeSelect(builder.makeRefIs(RefIsNull, curr),
                                builder.makeRefNull(curr->type.getHeapType()),
