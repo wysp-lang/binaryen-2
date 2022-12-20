@@ -369,6 +369,9 @@ void PassRegistry::registerPasses() {
   registerPass("remove-unused-names",
                "removes names from locations that are never branched to",
                createRemoveUnusedNamesPass);
+  registerPass("remove-unused-types",
+               "remove unused private GC types",
+               createRemoveUnusedTypesPass);
   registerPass("reorder-functions",
                "sorts functions by access frequency",
                createReorderFunctionsPass);
@@ -620,6 +623,7 @@ void PassRunner::addDefaultGlobalOptimizationPrePasses() {
     }
     addIfNoDWARFIssues("remove-unused-module-elements");
     if (options.closedWorld) {
+      addIfNoDWARFIssues("remove-unused-types");
       addIfNoDWARFIssues("cfp");
       addIfNoDWARFIssues("gsi");
     }
@@ -698,10 +702,6 @@ void PassRunner::run() {
     // for debug logging purposes, run each pass in full before running the
     // other
     auto totalTime = std::chrono::duration<double>(0);
-    WasmValidator::Flags validationFlags = WasmValidator::Minimal;
-    if (options.validateGlobally) {
-      validationFlags = validationFlags | WasmValidator::Globally;
-    }
     auto what = isNested ? "nested passes" : "passes";
     std::cerr << "[PassRunner] running " << what << std::endl;
     size_t padding = 0;
@@ -738,7 +738,7 @@ void PassRunner::run() {
       if (options.validate && !isNested) {
         // validate, ignoring the time
         std::cerr << "[PassRunner]   (validating)\n";
-        if (!WasmValidator().validate(*wasm, validationFlags)) {
+        if (!WasmValidator().validate(*wasm, options)) {
           std::cout << *wasm << '\n';
           if (passDebug >= 2) {
             Fatal() << "Last pass (" << pass->name
@@ -760,7 +760,7 @@ void PassRunner::run() {
               << " seconds." << std::endl;
     if (options.validate && !isNested) {
       std::cerr << "[PassRunner] (final validation)\n";
-      if (!WasmValidator().validate(*wasm, validationFlags)) {
+      if (!WasmValidator().validate(*wasm, options)) {
         std::cout << *wasm << '\n';
         Fatal() << "final module does not validate\n";
       }

@@ -1513,10 +1513,75 @@ struct OptimizeInstructions
     return getDroppedChildrenAndAppend(curr, result);
   }
 
-  bool trapOnNull(Expression* curr, Expression* ref) {
+  Expression* getResultOfFirst(Expression* first, Expression* second) {
+    return wasm::getResultOfFirst(
+      first, second, getFunction(), getModule(), getPassOptions());
+  }
+
+  // Optimize an instruction and the reference it operates on, under the
+  // assumption that if the reference is a null then we will trap. Returns true
+  // if we replaced the expression with something simpler. Returns false if we
+  // found nothing to optimize, or if we just modified or replaced the ref (but
+  // not the expression itself).
+  bool trapOnNull(Expression* curr, Expression*& ref) {
+    Builder builder(*getModule());
+
+    if (getPassOptions().trapsNeverHappen) {
+      // We can ignore the possibility of the reference being an input, so
+      //
+      //    (if
+      //      (condition)
+      //      (null)
+      //      (other))
+      // =>
+      //    (drop
+      //      (condition))
+      //    (other)
+      //
+      // That is, we will by assumption not read from the null, so remove that
+      // arm.
+      //
+      // TODO We could recurse here.
+      // TODO We could do similar things for casts (rule out an impossible arm).
+      // TODO Worth thinking about an 'assume' instrinsic of some form that
+      //      annotates knowledge about a value, or another mechanism to allow
+      //      that information to be passed around.
+      if (auto* iff = ref->dynCast<If>()) {
+        if (iff->ifFalse) {
+          if (iff->ifTrue->type.isNull()) {
+            ref = builder.makeSequence(builder.makeDrop(iff->condition),
+                                       iff->ifFalse);
+            return false;
+          }
+          if (iff->ifFalse->type.isNull()) {
+            ref = builder.makeSequence(builder.makeDrop(iff->condition),
+                                       iff->ifTrue);
+            return false;
+          }
+        }
+      }
+
+      if (auto* select = ref->dynCast<Select>()) {
+        if (select->ifTrue->type.isNull()) {
+          ref = builder.makeSequence(
+            builder.makeDrop(select->ifTrue),
+            getResultOfFirst(select->ifFalse,
+                             builder.makeDrop(select->condition)));
+          return false;
+        }
+        if (select->ifFalse->type.isNull()) {
+          ref = getResultOfFirst(
+            select->ifTrue,
+            builder.makeSequence(builder.makeDrop(select->ifFalse),
+                                 builder.makeDrop(select->condition)));
+          return false;
+        }
+      }
+    }
+
     if (ref->type.isNull()) {
-      replaceCurrent(getDroppedChildrenAndAppend(
-        curr, Builder(*getModule()).makeUnreachable()));
+      replaceCurrent(
+        getDroppedChildrenAndAppend(curr, builder.makeUnreachable()));
       // Propagate the unreachability.
       refinalize = true;
       return true;
@@ -1591,8 +1656,12 @@ struct OptimizeInstructions
     }
 
     if (curr->ref->type != Type::unreachable && curr->value->type.isInteger()) {
-      const auto& fields = curr->ref->type.getHeapType().getStruct().fields;
-      optimizeStoredValue(curr->value, fields[curr->index].getByteSize());
+      // We must avoid the case of a null type.
+      auto heapType = curr->ref->type.getHeapType();
+      if (heapType.isStruct()) {
+        const auto& fields = heapType.getStruct().fields;
+        optimizeStoredValue(curr->value, fields[curr->index].getByteSize());
+      }
     }
 
     // If our reference is a tee of a struct.new, we may be able to fold the
@@ -1785,7 +1854,7 @@ struct OptimizeInstructions
     auto fallthrough =
       Properties::getFallthrough(curr->ref, getPassOptions(), *getModule());
 
-    auto intendedType = curr->intendedType;
+    auto intendedType = curr->type.getHeapType();
 
     // If the value is a null, it will just flow through, and we do not need
     // the cast. However, if that would change the type, then things are less
@@ -1873,7 +1942,7 @@ struct OptimizeInstructions
     if (auto* child = ref->dynCast<RefCast>()) {
       // Repeated casts can be removed, leaving just the most demanding of
       // them.
-      auto childIntendedType = child->intendedType;
+      auto childIntendedType = child->type.getHeapType();
       if (HeapType::isSubType(intendedType, childIntendedType)) {
         // Skip the child.
         if (curr->ref == child) {
@@ -1931,6 +2000,11 @@ struct OptimizeInstructions
     if (auto* as = curr->ref->dynCast<RefAs>()) {
       if (as->op == RefAsNonNull) {
         curr->ref = as->value;
+        // Match the nullability of the new child.
+        // TODO: Combine the ref.as_non_null into the cast once we allow that.
+        if (curr->ref->type.isNullable()) {
+          curr->type = Type(curr->type.getHeapType(), Nullable);
+        }
         curr->finalize();
         as->value = curr;
         as->finalize();
