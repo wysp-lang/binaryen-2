@@ -192,7 +192,7 @@ struct GlobalStructInference : public Pass {
 
     // Optimize based on the above.
     struct FunctionOptimizer
-      : public WalkerPass<PostWalker<FunctionOptimizer, UnifiedExpressionVisitor<FunctionOptimizer>>> {
+      : public WalkerPass<PostWalker<FunctionOptimizer>> {
       bool isFunctionParallel() override { return true; }
 
       std::unique_ptr<Pass> create() override {
@@ -245,14 +245,19 @@ struct GlobalStructInference : public Pass {
         return Builder(*getModule()).makeGlobalGet(global, globalType);
       }
 
-      // If the type of this expression proves it must be a particular global,
-      // replace it with a global.get of that global. We can also replace a
-      // nullable reference with a select between a global.get or a null. Return
-      // true if we replaced.
-      bool maybeReplaceWithGlobalGet(Expression* curr) {
+      // Given the reference child of an expression, such as the reference of
+      // a struct.get or struct.set, check if we can infer what that reference
+      // is. If we can, replace the reference with a global.get and return true.
+      //
+      // Note that we can do this on any expression, in theory, and not just
+      // reference children. However, we don't want to replace every local.get
+      // with a global.get (which is larger and not necessarily faster). So
+      // instead we focus on the important places that can benefit from applying
+      // a global there.
+      bool maybeReplaceRefWithGlobalGet(Expression*& ref) {
         // Find information about whether the intended type has only a single
         // relevant global that fits that type.
-        auto info = getSingletonGlobalInfo(curr->type);
+        auto info = getSingletonGlobalInfo(ref->type);
 
         if (!info.global) {
           return false;
@@ -260,53 +265,29 @@ struct GlobalStructInference : public Pass {
 
         Builder builder(*getModule());
 
-        // As we assume traps never happen, we know that we flow out either a
-        // null or the singleton possible global.
-        if (curr->type.isNullable()) {
+        if (ref->type.isNonNullable()) {
+          ref = builder.makeSequence(builder.makeDrop(ref),
+                                     makeGlobalGet(info));
+        } else { XXX
           // We can replace this with a check that returns either a null or the
           // global. This may increase code size, however, so avoid it when
           // focusing on size.
           if (getPassOptions().shrinkLevel == 0) {
             replaceCurrent(
-              builder.makeSelect(builder.makeRefIs(RefIsNull, curr),
-                                 builder.makeRefNull(curr->type.getHeapType()),
+              builder.makeSelect(builder.makeRefIs(RefIsNull, ref),
+                                 builder.makeRefNull(ref->type.getHeapType()),
                                  makeGlobalGet(info)));
             return true;
           }
         } else {
           replaceCurrent(
-            builder.makeSequence(builder.makeDrop(curr),
-                                 makeGlobalGet(info)));
           return true;
         }
         return false;
       }
 
-      void visitExpression(Expression* curr) {
-        // Note that we can do this on any expression, in theory, just by
-        // looking at the type. However, that would mean we turn e.g. a
-        // local.get into something larger and potentially more costly.
-        // Therefore we try to only do so on places where it is likely to help.
-        // We avoid things like local operations and look for:
-        //
-        //  1. Calls. This fetches new data into this function, so we'd like to
-        //     represent it well (other passes can then propagate information
-        //     inside the function using locals).
-        //  2. Traps. A trap is a hint to some non-trivial work being done here,
-        //     like a load from a potentially null reference. As there is
-        //     already some work + a check, adding a manual null check as
-        //     maybeReplaceWithGlobalGet() might do is acceptable.
-        //
-        ShallowEffectAnalyzer effects(getPassOptions(), *getModule(), curr);
-        if (curr.calls || curr.trap) {
-          maybeReplaceWithGlobalGet(curr);
-        }
-      }
-
       void visitStructGet(StructGet* curr) {
-        if (maybeReplaceWithGlobalGet(curr)) {
-          // We've simplifies this down to a global.get, no need to look
-          // further.
+        if (maybeReplaceRefWithGlobalGet(curr->ref)) {
           return;
         }
 
@@ -439,12 +420,17 @@ struct GlobalStructInference : public Pass {
           builder.makeConstantExpression(values[1])));
       }
 
-      void visitRefCast(RefCast* curr) {
-        // This doesn't fall under the things we check in visitExpression, but
-        // it is still quite useful to replace it since casts are expensive.
-        maybeReplaceWithGlobalGet(curr);
+      void visitStructSet(StructSet* curr) {
+        if (maybeReplaceRefWithGlobalGet(curr->ref)) {
+          return;
+        }
       }
 
+      void visitRefCast(RefCast* curr) { // TODO cast and br-on: when is this actually useful? maybe just when type gets more refined? but other cases like that, like a call param.
+        maybeReplaceRefWithGlobalGet(curr->ref);
+      }
+
+#if 0
       void visitRefEq(RefEq* curr) {
         // Using information about the identity of references, which we infer
         // just from the type, we can do better than other passes.
@@ -480,6 +466,7 @@ struct GlobalStructInference : public Pass {
         // single RefEq with a RefIsNull + EqZ, which is two operations, so
         // ignore that case.
       }
+#endif
 
     private:
       GlobalStructInference& parent;
