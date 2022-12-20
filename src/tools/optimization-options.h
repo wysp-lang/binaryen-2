@@ -40,6 +40,20 @@ struct OptimizationOptions : public ToolOptions {
     std::optional<int> optimizeLevel;
     std::optional<int> shrinkLevel;
 
+    // An argument passed to this pass directly, in the form of
+    //
+    //  --pass=argument
+    //
+    // If such an argument exists, it takes precedent over arguments passed in
+    // the more verbose manner of
+    //
+    //  --pass-arg=pass@argument
+    //
+    // That is, the former applies a pass to a particular execution of a pass,
+    // while the latter applies to all executions of passes of that name (unless
+    // they have an argument specifically on them, which would take precedence).
+    std::optional<std::string> argument;
+
     PassInfo(std::string name) : name(name) {}
     PassInfo(const char* name) : name(name) {}
     PassInfo(std::string name, int optimizeLevel, int shrinkLevel)
@@ -298,23 +312,30 @@ struct OptimizationOptions : public ToolOptions {
         "",
         PassRegistry::get()->getPassDescription(p),
         "Optimization passes",
-        // Allow an optional parameter to a pass. If provided, it is
-        // the same as if using --pass-arg, that is,
+        // Allow an optional parameter to a pass. If provided, it used when
+        // running this execution of the pass (but not others, if the pass were
+        // specified more than once). That is,
         //
         //   --foo=ARG
         //
         // is the same as
         //
         //   --foo --pass-arg=foo@ARG
+        //
+        // if we only run that pass once. But if we run it multiple times, like
+        // this:
+        //
+        //   --foo=ARG1 --foo=ARG2 --pass-arg=foo@ARG3 --foo --foo
+        //
+        // then the first is run with ARG1, the second with ARG2, and the last
+        // two with the global argument, ARG3.
         Options::Arguments::Optional,
         [this, p](Options*, const std::string& arg) {
-          if (!arg.empty()) {
-            if (passOptions.arguments.count(p)) {
-              Fatal() << "Cannot pass multiple pass arguments to " << p;
-            }
-            passOptions.arguments[p] = arg;
-          }
           passes.push_back(p);
+          if (!arg.empty()) {
+            auto& passInfo = passes.back();
+            passInfo.argument = arg;
+          }
         },
         PassRegistry::get()->isPassHidden(p));
     }
@@ -347,10 +368,28 @@ struct OptimizationOptions : public ToolOptions {
         passRunner.options.shrinkLevel = *pass.shrinkLevel;
       }
 
+      // We apply the pass's intended argument, if any.
+      std::optional<std::string> oldArgument;
+      if (pass.argument) {
+        if (passRunner.options.arguments.count(pass.name)) {
+          oldArgument = passRunner.options.arguments[pass.name];
+        }
+        passRunner.options.arguments[pass.name] = *pass.argument;
+      }
+
       if (pass.name == DEFAULT_OPT_PASSES) {
         passRunner.addDefaultOptimizationPasses();
       } else {
         passRunner.add(pass.name);
+      }
+
+      // Revert back to the default argument, if we changed it.
+      if (pass.argument) {
+        if (oldArgument) {
+          passRunner.options.arguments[pass.name] = *oldArgument;
+        } else {
+          passRunner.options.arguments.erase(pass.name);
+        }
       }
 
       // Revert back to the default levels, if we changed them.

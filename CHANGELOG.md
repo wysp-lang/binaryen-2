@@ -15,6 +15,11 @@ full changeset diff at the end of each section.
 Current Trunk
 -------------
 
+- Optimization passes taking a single argument, like `--extract-function=foo`,
+  now store that argument on a per-pass basis, allowing multiple executions of
+  the same pass to use a different argument, e.g
+  `--extract-function=foo --extract-function=bar` will extract `foo` and then
+  `bar`.
 - Optimization sequences like `-O3 -Os` now do the expected thing and run `-O3`
   followed by `-Os`. Previously the last of them set the defaults that were used
   by all executions, so `-O3 -Os` was equivalent to `-Os -Os`. (There is no
