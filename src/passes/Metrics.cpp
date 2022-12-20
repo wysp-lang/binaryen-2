@@ -45,6 +45,14 @@ struct Metrics
   }
 
   void doWalkModule(Module* module) {
+    std::string argument =
+      getPassOptions().getArgumentOrDefault("metrics", "");
+    if (argument.size()) {
+      std::cout << "[Metrics: " << argument << "]\n";
+    } else {
+      std::cout << "[Metrics]\n";
+    }
+
     ImportInfo imports(*module);
 
     // global things
