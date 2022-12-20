@@ -192,7 +192,7 @@ struct GlobalStructInference : public Pass {
 
     // Optimize based on the above.
     struct FunctionOptimizer
-      : public WalkerPass<PostWalker<FunctionOptimizer>> {
+      : public WalkerPass<PostWalker<FunctionOptimizer, UnifiedExpressionVisitor<FunctionOptimizer>>> {
       bool isFunctionParallel() override { return true; }
 
       std::unique_ptr<Pass> create() override {
@@ -239,55 +239,89 @@ struct GlobalStructInference : public Pass {
         return getSingletonGlobalInfo(curr->type);
       }
 
+      Type getGlobalType(const SingletonGlobalInfo& info) {
+        return getModule()->getGlobal(global)->type;
+      }
+
       GlobalGet* makeGlobalGet(const SingletonGlobalInfo& info) {
-        auto global = *info.global;
-        auto globalType = getModule()->getGlobal(global)->type;
-        return Builder(*getModule()).makeGlobalGet(global, globalType);
+        auto globalType = getGlobalType(info);
+        return Builder(*getModule()).makeGlobalGet(*info.global, globalType);
       }
 
       // Given the reference child of an expression, such as the reference of
       // a struct.get or struct.set, check if we can infer what that reference
-      // is. If we can, replace the reference with a global.get and return true.
+      // is. If we can, replace the reference with a global.get.
+      //
+      // Returns the replacement, or null if we have no changes to make.
       //
       // Note that we can do this on any expression, in theory, and not just
       // reference children. However, we don't want to replace every local.get
       // with a global.get (which is larger and not necessarily faster). So
       // instead we focus on the important places that can benefit from applying
       // a global there.
-      bool maybeReplaceRefWithGlobalGet(Expression*& ref) {
+      enum ReplaceMode {
+        Always,
+        OnlyWhenBeneficial
+      };
+      Expression* maybeReplaceRefWithGlobalGet(Expression*& curr, ReplaceMode mode) {
+        if (curr->is<GlobalGet>() || curr->is<Select>() || Properties::isControlFlowStructure(curr)) {
+          // This is already in the form we would be optimizing into, or it is
+          // a control flow operation (for which we'd rather optimize the value
+          // falling through, and not both that value and the outer control flow
+          // structure as well).
+          return nullptr;
+        }
+
         // Find information about whether the intended type has only a single
         // relevant global that fits that type.
-        auto info = getSingletonGlobalInfo(ref->type);
+        auto info = getSingletonGlobalInfo(curr->type);
 
         if (!info.global) {
-          return false;
+          return nullptr;
         }
 
         Builder builder(*getModule());
 
-        if (ref->type.isNonNullable()) {
-          ref = builder.makeSequence(builder.makeDrop(ref),
+        if (curr->type.isNonNullable()) {
+          // Replace this with a global.get.
+          return builder.makeSequence(builder.makeDrop(curr),
                                      makeGlobalGet(info));
-        } else { XXX
-          // We can replace this with a check that returns either a null or the
-          // global. This may increase code size, however, so avoid it when
-          // focusing on size.
-          if (getPassOptions().shrinkLevel == 0) {
-            replaceCurrent(
-              builder.makeSelect(builder.makeRefIs(RefIsNull, ref),
-                                 builder.makeRefNull(ref->type.getHeapType()),
-                                 makeGlobalGet(info)));
-            return true;
-          }
-        } else {
-          replaceCurrent(
-          return true;
         }
-        return false;
+
+        // This is either a particular global, or a null. In this case the
+        // benefit is less obvious and we need to be careful.
+        if (getGlobalType(info) != curr->type && getPassOptions().shrinkLevel == 0) {
+          // This refines the type, which can have useful results that might be
+          // justified by an increase in code size. Replace this with a check
+          // that returns either a null or the global, at least when not focused
+          // on size.
+          return
+            builder.makeSelect(builder.makeRefIs(RefIsNull, curr),
+                               builder.makeRefNull(curr->type.getHeapType()),
+                               makeGlobalGet(info));
+        }
+
+        return nullptr;
+      }
+
+      void visitExpression(Expression* curr) {
+        // If the type of this expression proves it must be a known singleton
+        // global, we can apply it here. Only do so if we actually improve
+        // something.
+        if (auto* rep = maybeReplaceRefWithGlobalGet(curr->ref, OnlyWhenBeneficial)) {
+          replaceCurrent(ret);
+          // TODO: Refinalize if this has a more refined type.
+        }
       }
 
       void visitStructGet(StructGet* curr) {
-        if (maybeReplaceRefWithGlobalGet(curr->ref)) {
+        // Always replace here, even if it may increase code size, as the
+        // reference flows into a struct.get where it will be used, and various
+        // optimizations may be able to make it worthwhile even if we do add
+        // some code size. TODO or maybe only in TNH? maybe Always exactly when
+        // TNH.
+        if (auto* rep = maybeReplaceRefWithGlobalGet(curr->ref, Always)) {
+          curr->ref = rep;
           return;
         }
 
@@ -420,15 +454,8 @@ struct GlobalStructInference : public Pass {
           builder.makeConstantExpression(values[1])));
       }
 
-      void visitStructSet(StructSet* curr) {
-        if (maybeReplaceRefWithGlobalGet(curr->ref)) {
-          return;
-        }
-      }
-
-      void visitRefCast(RefCast* curr) { // TODO cast and br-on: when is this actually useful? maybe just when type gets more refined? but other cases like that, like a call param.
-        maybeReplaceRefWithGlobalGet(curr->ref);
-      }
+      // TODO: StructSet as well? No optimization atm would benefit from that,
+      //       however.
 
 #if 0
       void visitRefEq(RefEq* curr) {
