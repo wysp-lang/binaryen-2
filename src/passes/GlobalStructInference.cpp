@@ -295,6 +295,7 @@ struct GlobalStructInference : public Pass {
           // justified by an increase in code size. Replace this with a check
           // that returns either a null or the global, at least when not focused
           // on size.
+          // XXX but this adds work... bad idea
           return
             builder.makeSelect(builder.makeRefIs(RefIsNull, curr),
                                builder.makeRefNull(curr->type.getHeapType()),
