@@ -375,6 +375,8 @@ struct OptimizationOptions : public ToolOptions {
           oldArgument = passRunner.options.arguments[pass.name];
         }
         passRunner.options.arguments[pass.name] = *pass.argument;
+        // XXX this does not work, as it just applies around the passRunner.add
+        //     call. we need it when the pass *runs*.
       }
 
       if (pass.name == DEFAULT_OPT_PASSES) {
