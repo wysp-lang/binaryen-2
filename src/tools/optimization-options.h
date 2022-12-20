@@ -377,6 +377,7 @@ struct OptimizationOptions : public ToolOptions {
         passRunner.options.arguments[pass.name] = *pass.argument;
         // XXX this does not work, as it just applies around the passRunner.add
         //     call. we need it when the pass *runs*.
+        //     TODO add argument alongside name to Pass class?
       }
 
       if (pass.name == DEFAULT_OPT_PASSES) {
