@@ -1701,22 +1701,29 @@
   )
 )
 
-;; A sequence with a cast.
-(;;module
+;; A sequence that requires a cast.
+;;
+;; The global $C is written into both $A and $B. We can pick a shorter sequence
+;; without a cast.
+(module
   (type $A (struct (field (ref $B)) (field (ref data))))
-  (type $B (struct (field i32) (field (ref $C))))
 
-  (type $C (struct))
+  (type $B (struct (field (ref $C))))
+
+  (type $C (struct (field i32)))
+
+  (global $C (ref $C) (struct.new $C
+    (i32.const 0)
+  ))
 
   (func $A
     (local $ref (ref null $A))
     (local.set $ref
       (struct.new $A
         (struct.new $B
-          (i32.const 10)
-          (i32.const 20) ;; This field of $B is the same as one of $A.
+          (global.get $C)
         )
-        (i32.const 20)
+        (global.get $C)
       )
     )
     (drop
@@ -1725,14 +1732,7 @@
       )
     )
     (drop
-      (struct.get $B 0
-        (struct.get $A 0
-          (local.get $ref)
-        )
-      )
-    )
-    (drop
-      (struct.get $B 1     ;; This can read from $A.1 instead of $A.B.1.
+      (struct.get $B 0     ;; This can read from $A.1 instead of $A.B.0.
         (struct.get $A 0
           (local.get $ref)
         )
@@ -1744,4 +1744,4 @@
       )
     )
   )
-;;)
+)
