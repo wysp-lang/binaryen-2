@@ -251,7 +251,14 @@ struct Finder : public PostWalker<Finder> {
     auto type = Type(startType, Nullable);
     for (auto i : s) { // XXX reversed later down, so reverse iteration here?
       // Check if we can do the current lookup using the current type.
-      auto& fields = type.getHeapType().getStruct().fields;
+      auto heapType = type.getHeapType();
+      if (!heapType.isStruct()) {
+        // This is not even a struct, so it is something like data or eq. A cast
+        // is definitely necessary here.
+        return true;
+      }
+
+      auto& fields = heapType.getStruct().fields;
       if (i >= fields.size()) {
         // This field does not exist in this type - it is added in a subtype. So
         // a cast is necessary.
