@@ -93,6 +93,12 @@ template<typename T> struct hash<vector<T>> {
 
 namespace wasm {
 
+template<typename T>
+void dump(const T& t) {
+  for (auto x : t) std::cerr << x << ' ';
+  std::cerr << '\n';
+}
+
 namespace {
 
 // We will be comparing sequences of accesses. For example,
@@ -203,29 +209,41 @@ struct Finder : public PostWalker<Finder> {
 
   // Add (A, B) (an improvement from A to B) if it is indeed an improvement.
   // Return true if so.
-  bool addIfImprovement(const Sequence& a, const Sequence& b, Improvements& improvements, HeapType startType, Type finalType) {
+  bool addIfImprovement(const Sequence& a, const Sequence& b, Improvements& improvements, HeapType startType, Type finalType /* XXX */) {
+std::cerr << "addIf " << getModule()->typeNames[startType].name << "\n";
+dump(a);
+dump(b);
+
+    // If B is larger, give up.
+    // TODO Perhaps if B has no casts but A does, it is worth it?
     auto aSize = a.size();
     auto bSize = b.size();
     if (bSize > aSize) {
-      // B is larger, so give up.
-      // TODO Perhaps if B has no casts but A does, it is worth it?
+std::cerr << "  nope0\n";
       return false;
     }
 
-    // B is smaller or of equal size. Casts will determine what we do here.
-
-    if (requiresCast(b, startType, finalType)) {
-      // We never optimize to something with a cast.
-      // TODO: Perhaps if both have casts, we should still optimize?
+    // The final types of both sequences must be the same, that is, they must
+    // both lead to the same type. If, say, one leads to a nullable verson of
+    // the other then that could cause validation issues, even if the value in
+    // the field is identical in both cases.
+    //
+    // We also give up if B requires a cast at some point in the sequence. That
+    // prevents us from computing the final type, and it would also prevent us
+    // from emitting a proper replacement sequence when we try to optimize.
+    auto aFinalType = getFinalType(a, startType);
+    auto bFinalType = getFinalType(b, startType);
+    if (aFinalType != bFinalType || !bFinalType) {
+std::cerr << "  nope1\n";
       return false;
     }
-
+    
     // We would like to use this as an improvement if one of the following
     // holds:
+    //   - A has a cast (B does not, so we are removing one)
     //   - we reduce the length of the sequence
     //   - we are the same length, but use lower indexes
-    //   - A has a cast (B does not, so we are removing one)
-    if (bSize < aSize || b < a || requiresCast(a, startType, finalType)) {
+    if (!aFinalType || bSize < aSize || b < a) {
       // We insert the reversed sequence, as that is how we will be using it
       // later TODO explain with example
       auto reverseA = a;
@@ -237,16 +255,20 @@ struct Finder : public PostWalker<Finder> {
 //std::cerr << '\n';
 
       improvements.insert({reverseA, reverseB});
+std::cerr << "adddd\n";
       return true;
     }
 
+std::cerr << "  nope2\n";
     return false;
   }
 
-  // Given a sequence of field lookups starting from a particular type, see if
-  // we require a cast to perform its field lookups lookings, when going from
-  // the start type all the way to the final type we expect at the end.
-  bool requiresCast(const Sequence& s, HeapType startType, Type finalType) {
+  // Given a sequence of field lookups starting from a particular type, go
+  // through those operations and return the last type at the end.
+  //
+  // If we cannot get there, then that means a cast is needed somewhere in the
+  // middle, and we return {}.
+  std::optional<Type> getFinalType(const Sequence& s, HeapType startType) {
     // Track the current type as we go. Nullability does not matter here, but we
     // do need to handle the case of a non-heap type, as the final type may be
     // such.
@@ -257,23 +279,24 @@ struct Finder : public PostWalker<Finder> {
       if (!heapType.isStruct()) {
         // This is not even a struct, so it is something like data or eq. A cast
         // is definitely necessary here.
-        return true;
+std::cerr << "  cast1\n";
+        return {};
       }
 
       auto& fields = heapType.getStruct().fields;
       if (i >= fields.size()) {
         // This field does not exist in this type - it is added in a subtype. So
         // a cast is necessary.
-        return true;
+std::cerr << "  cast2\n";
+        return {};
       }
 
       // Continue onwards.
       type = fields[i].type;
     }
 
-    // We must have arrived at the proper final type, or else we need a cast
-    // there.
-    return type != finalType;
+    // We made it! Return the type we are left with at the end.
+    return type;
   }
 
   // Given a struct.new and a sequence prefix, look into this struct.new and add
@@ -451,6 +474,7 @@ struct EquivalentFieldOptimization : public Pass {
       return false;
     };
     if (!foundWork()) {
+std::cerr << "nada\n";
       return;
     }
 
@@ -491,6 +515,7 @@ struct EquivalentFieldOptimization : public Pass {
 
     // We may have just filtered out all the possible work, so check again.
     if (!foundWork()) {
+std::cerr << "nada2\n";
       return;
     }
 
@@ -531,10 +556,10 @@ struct EquivalentFieldOptimization : public Pass {
       // The start of the sequence - the reference that the sequence of field
       // accesses begins with.
       Expression* currStart = curr;
-//std::cerr << "\noptimizeSequence in visit: " << *curr << '\n';
+std::cerr << "\noptimizeSequence in visit: " << *curr << '\n';
       while (1) {
 
-//std::cerr << "inspect sequence for " << *currStart << "\n";
+std::cerr << "loop inspect sequence for " << *currStart << "\n";
 
         // Apply the current value to the sequence, and point currStart to the
         // item we are reading from right now (which will be the next item
@@ -553,13 +578,14 @@ struct EquivalentFieldOptimization : public Pass {
           break;
         }
 
-//for (auto x : currSequence) std::cerr << x << ' ';
-//std::cerr << '\n';
+for (auto x : currSequence) std::cerr << x << ' ';
+std::cerr << '\n';
 
         // See if a sequence starting here has anything we can optimize with.
         // TODO: we could also look at our supertypes
         auto iter = unifiedMap.find(currStart->type.getHeapType());
         if (iter == unifiedMap.end()) {
+std::cerr << "  sad1\n";
           continue;
         }
 
@@ -574,6 +600,7 @@ struct EquivalentFieldOptimization : public Pass {
           replaceCurrent(buildSequence(newSequence, currStart));
           return;
         }
+std::cerr << "  sad2\n";
       }
     }
 
