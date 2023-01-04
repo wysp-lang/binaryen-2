@@ -558,7 +558,7 @@ struct EquivalentFieldOptimization : public Pass {
           // TODO Rather than use this immediately, we could consider longer
           //      sequences first, and pick the best.
           auto newSequence = iter2->second;
-          replaceCurrent(newSequence, currStart);
+          replaceCurrent(buildSequence(newSequence, currStart));
           return;
         }
       }
@@ -579,7 +579,7 @@ struct EquivalentFieldOptimization : public Pass {
         // no casts, and we should have ignored casting sequences before.
         assert(index < fields.size());
         auto type = fields[index].type;
-        result = builder.makeStructGet(index, result, type);
+        result = Builder(*getModule()).makeStructGet(index, result, type);
       }
 
       return result;
