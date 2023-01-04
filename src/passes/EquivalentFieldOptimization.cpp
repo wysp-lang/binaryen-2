@@ -416,7 +416,7 @@ struct EquivalentFieldOptimization : public Pass {
 
     for (const auto& [_, map] : analysis.map) {
       for (const auto& [curr, equivalences] : map) {
-        mergeIntoUnifiedMap(curr->type.getHeapType(), equivalences);
+        mergeMapIntoUnifiedMap(curr->type.getHeapType(), equivalences);
       }
     }
     for (const auto& [curr, equivalences] : moduleFinder.map) {
