@@ -220,10 +220,12 @@ struct Finder : public PostWalker<Finder> {
       return false;
     }
 
-    if (requiresCast(a, startType, finalType) || bSize < aSize) {
-      // We are either getting rid of a cast, or neither have casts but B is
-      // shorter, so it is a valid improvement.
-      //
+    // We would like to use this as an improvement if one of the following
+    // holds:
+    //   - we reduce the length of the sequence
+    //   - we are the same length, but use lower indexes
+    //   - A has a cast (B does not, so we are removing one)
+    if (bSize < aSize || b < a || requiresCast(a, startType, finalType)) {
       // We insert the reversed sequence, as that is how we will be using it
       // later TODO explain with example
       auto reverseA = a;
@@ -398,10 +400,11 @@ struct EquivalentFieldOptimization : public Pass {
         // improvable must also be improvable in this new info, or else it must
         // not be optimized.
 
-        // Iterate on a copy to avoid invalidation. TODO optimize
+        // Accumulate keys to erase to avoid invalidation.
+        std::vector<Sequence> toErase;
+        
         auto& typeImprovements = iter->second;
-        auto copy = typeImprovements;
-        for (auto& improvement : typeImprovements) {
+        for (const auto& improvement : typeImprovements) {
           auto iter = currImprovements.find(improvement.first);
           if (iter == currImprovements.end() ||
               iter->second != improvement.second) {
@@ -410,8 +413,11 @@ struct EquivalentFieldOptimization : public Pass {
             // consistency we are looking for.
             // TODO: Perhaps if there is something different, we can find the
             //       intersection.
-            typeImprovements.erase(iter);
+            toErase.push_back(improvement.first);
           }
+        }
+        for (const auto& sequence : toErase) {
+          typeImprovements.erase(sequence);
         }
       }
     };
