@@ -472,11 +472,7 @@ struct EquivalentFieldOptimization : public Pass {
       }
     }
 
-    // TODO we also need to go to supers. We may only have struct.news of
-    // concrete subtypes, but the FunctionOptimizer below will only encounter
-    // uses of the abstract super. Or does the above do just that..?
-
-    // We may have filtered out all the possible work, so check again.
+    // We may have just filtered out all the possible work, so check again.
     if (!foundWork()) {
       return;
     }
