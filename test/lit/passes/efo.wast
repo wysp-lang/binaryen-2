@@ -552,7 +552,11 @@
   )
 )
 
-;; Four fields, now with optimizability.
+;; Four fields, now with potential optimizability, but it is not realized. One
+;; struct.new suggests we optimize field 3 to 2, and another 3 to 1. The latter
+;; also allows 3 to 2, but as 1 is a lower index we look at that first, and we
+;; do not intersect the set of all possible improvements atm, so this is a
+;; missed opportunity for now. TODO
 (module
   ;; CHECK:      (type $A (struct (field i32) (field i32) (field i32) (field i32)))
   (type $A (struct (field i32) (field i32) (field i32) (field i32)))
@@ -594,7 +598,7 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $A 2
+  ;; CHECK-NEXT:   (struct.get $A 3
   ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
@@ -616,6 +620,98 @@
           (i32.const 10)
           (i32.const 20) ;; Now the last three are equivalent. Combining with
           (i32.const 20) ;; the previous new, the last two remain equivalent.
+          (i32.const 20)
+        )
+      )
+    )
+    (drop
+      (struct.get $A 0
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $A 1
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $A 2
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $A 3
+        (local.get $ref)
+      )
+    )
+  )
+)
+
+;; As above, but now in both struct.news we have the same intended optimization,
+;; so we succeed.
+(module
+  ;; CHECK:      (type $A (struct (field i32) (field i32) (field i32) (field i32)))
+  (type $A (struct (field i32) (field i32) (field i32) (field i32)))
+
+  ;; CHECK:      (func $A (type $i32_=>_none) (param $x i32)
+  ;; CHECK-NEXT:  (local $ref (ref null $A))
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:   (local.set $ref
+  ;; CHECK-NEXT:    (struct.new $A
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:     (i32.const 20)
+  ;; CHECK-NEXT:     (i32.const 20)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $ref
+  ;; CHECK-NEXT:    (struct.new $A
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:     (i32.const 15)
+  ;; CHECK-NEXT:     (i32.const 20)
+  ;; CHECK-NEXT:     (i32.const 20)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 0
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 1
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 2
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 2
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $A (param $x i32)
+    (local $ref (ref null $A))
+    (if
+      (local.get $x)
+      (local.set $ref
+        (struct.new $A
+          (i32.const 10)
+          (i32.const 10)
+          (i32.const 20)
+          (i32.const 20)
+        )
+      )
+      (local.set $ref
+        (struct.new $A
+          (i32.const 10)
+          (i32.const 15) ;; This changed. Now we'd like to improve 3 to 2 in
+          (i32.const 20) ;; both struct.news, and will do so.
           (i32.const 20)
         )
       )
@@ -1662,7 +1758,7 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $vtable $op1
+  ;; CHECK-NEXT:   (struct.get $vtable $op2
   ;; CHECK-NEXT:    (struct.get $A $vtable
   ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
@@ -1692,7 +1788,7 @@
       )
     )
     (drop
-      (struct.get $vtable $op2 ;; This can be switched to op2.
+      (struct.get $vtable $op2 ;; This can be switched to op1. FIXME why doesn't it?
         (struct.get $A $vtable
           (local.get $ref)
         )
@@ -1706,16 +1802,51 @@
 ;; The global $C is written into both $A and $B. We can pick a shorter sequence
 ;; without a cast.
 (module
+  ;; CHECK:      (type $A (struct (field (ref $B)) (field (ref data))))
   (type $A (struct (field (ref $B)) (field (ref data))))
 
+  ;; CHECK:      (type $C (struct (field i32)))
+
+  ;; CHECK:      (type $B (struct (field (ref $C))))
   (type $B (struct (field (ref $C))))
 
   (type $C (struct (field i32)))
 
+  ;; CHECK:      (global $C (ref $C) (struct.new $C
+  ;; CHECK-NEXT:  (i32.const 0)
+  ;; CHECK-NEXT: ))
   (global $C (ref $C) (struct.new $C
     (i32.const 0)
   ))
 
+  ;; CHECK:      (func $A (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $ref (ref null $A))
+  ;; CHECK-NEXT:  (local.set $ref
+  ;; CHECK-NEXT:   (struct.new $A
+  ;; CHECK-NEXT:    (struct.new $B
+  ;; CHECK-NEXT:     (global.get $C)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (global.get $C)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 0
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $B 0
+  ;; CHECK-NEXT:    (struct.get $A 0
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 1
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
   (func $A
     (local $ref (ref null $A))
     (local.set $ref
@@ -1732,7 +1863,7 @@
       )
     )
     (drop
-      (struct.get $B 0     ;; This can read from $A.1 instead of $A.B.0.
+      (struct.get $B 0     ;; This can read from $A.1 instead of $A.B.0. FIXME why not work?
         (struct.get $A 0
           (local.get $ref)
         )
