@@ -157,6 +157,17 @@ public:
     return std::get<Name>(value);
   }
 
+  // Return the relevant type here.
+  Type getType(Module& wasm) const {
+    if (auto* literal = std::get_if<Literal>(&value)) {
+      return literal->type;
+    } else if (auto* globalName = std::get_if<Name>(&value)) {
+      return wasm.getGlobal(*globalName)->type;
+    } else {
+      WASM_UNREACHABLE("bad value");
+    }
+  }
+
   // Assuming we have a single value, make an expression containing that value.
   Expression* makeExpression(Module& wasm) {
     Builder builder(wasm);

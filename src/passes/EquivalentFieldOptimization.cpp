@@ -170,7 +170,7 @@ struct Finder : public PostWalker<Finder> {
     // We will recurse as we look through accesses. We start with an empty
     // sequence as our prefix, which will get built up during the recursion.
     ValueMap valueMap;
-    scanNew(curr, Sequence(), valueMap, curr->type);
+    scanNew(curr, Sequence(), valueMap);
 
     // We now have a map of values to the sequences that get to them, which
     // means we know which sequences are equivalent in this struct.new, and can
@@ -182,7 +182,7 @@ struct Finder : public PostWalker<Finder> {
 
     for (auto& [value, sequences] : valueMap) {
       // The final type each sequence arrives at is the known value.
-      auto finalType = value.getType();
+      auto finalType = value.getType(*getModule());
 
       auto num = sequences.size();
       if (num > 1) {
@@ -214,13 +214,13 @@ struct Finder : public PostWalker<Finder> {
 
     // B is smaller or of equal size. Casts will determine what we do here.
 
-    if (requiresCast(b, startType)) {
+    if (requiresCast(b, startType, finalType)) {
       // We never optimize to something with a cast.
       // TODO: Perhaps if both have casts, we should still optimize?
       return false;
     }
 
-    if (requiresCast(a, startType) || bSize < aSize) {
+    if (requiresCast(a, startType, finalType) || bSize < aSize) {
       // We are either getting rid of a cast, or neither have casts but B is
       // shorter, so it is a valid improvement.
       improvements.insert({a, b});
@@ -231,7 +231,8 @@ struct Finder : public PostWalker<Finder> {
   }
 
   // Given a sequence of field lookups starting from a particular type, see if
-  // we require a cast to perform its field lookups to the end of the sequence.
+  // we require a cast to perform its field lookups lookings, when going from
+  // the start type all the way to the final type we expect at the end.
   bool requiresCast(const Sequence& s, HeapType startType, Type finalType) {
     // Track the current type as we go. Nullability does not matter here, but we
     // do need to handle the case of a non-heap type, as the final type may be
@@ -270,6 +271,7 @@ struct Finder : public PostWalker<Finder> {
     // The current sequence will be the given prefix, plus a possible cast, then
     // plus the current index. Add a 0 for the current index, which we will then
     // increment as we go.
+    auto currSequence = prefix;
     currSequence.push_back(Item(0));
 
     for (Index i = 0; i < fields.size(); i++) {
@@ -284,7 +286,7 @@ struct Finder : public PostWalker<Finder> {
       // added.
       currSequence.back() = i;
 
-      processChild(curr->operands[i], currSequence, valueMap, field.type);
+      processChild(curr->operands[i], currSequence, valueMap);
     }
   }
 
@@ -333,7 +335,11 @@ struct Finder : public PostWalker<Finder> {
   }
 };
 
-using TypeEquivalencesMap = std::unordered_map<HeapType, Equivalences>;
+// As we optimize, we will find the current sequence used in a particular spot,
+// and will check in a map of possible improvements whether that sequence has an
+// improvement in fact.
+using ImprovementMap =  std::unordered_map<Sequence, Sequence>;
+using TypeImprovementMap = std::unordered_map<HeapType, ImprovementMap>;
 
 struct EquivalentFieldOptimization : public Pass {
   // Only modifies types.
@@ -364,7 +370,7 @@ struct EquivalentFieldOptimization : public Pass {
     // equivalent, that is, lead to the same value. For two sequences to be
     // equal they must be equal in every single struct.new for that type (and
     // subtypes, see below).
-    TypeEquivalencesMap unifiedMap;
+    TypeImprovements unifiedMap;
 
     // Given a type and equivalences we found for it somewhere, merge that into
     // the main unified map.
@@ -471,7 +477,7 @@ struct EquivalentFieldOptimization : public Pass {
       return std::make_unique<FunctionOptimizer>(unifiedMap);
     }
 
-    FunctionOptimizer(TypeEquivalencesMap& unifiedMap)
+    FunctionOptimizer(TypeImprovements& unifiedMap)
       : unifiedMap(unifiedMap) {}
 
     void visitStructGet(StructGet* curr) {
@@ -625,7 +631,7 @@ struct EquivalentFieldOptimization : public Pass {
     }
 
   private:
-    TypeEquivalencesMap& unifiedMap;
+    TypeImprovements& unifiedMap;
   };
 };
 
