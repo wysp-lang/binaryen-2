@@ -105,9 +105,15 @@ namespace {
 // can infer the type as we go, so there is no need to store that as well.) Thus
 // the items in our sequences are simply indexes.
 using Item = Index;
+using Sequence = std::vector<Item>;
+using Sequences = std::vector<Sequence>;
 
-// A sequence of items. In addition to the items, we also note if the sequence
-// requires a cast at any point. That is, if we reach a point that we load
+// An improvement is a sequence that we want to turn into another sequence,
+// because the latter sequence is better.
+using Improvement = std::pair<Sequence, Sequence>;
+using Improvements = std::vector<Improvement>;
+
+// That is, if we reach a point that we load
 // something with a type that is not refined enough for us to perform the load
 // after it (say, if a field were anyref then that would be the case). We don't
 // need to track more specifically than that, as we'll follow the simple rule of
@@ -117,45 +123,14 @@ using Item = Index;
 // TODO Consider other situations with multiple casts and where it is worthwhile
 //      to leave a cast or even add one.
 // TODO: small 3
-struct Sequence : public std::vector<Item> {
-  bool needsCast = false;
-};
-
-// Use a small set of size 1 here since the common case is to not have anything
-// to optimize, that is, each value has a single sequence leading to it, which
-// means just a single sequence.
-// TODO: small 1
-using Sequences = std::vector<Sequence>;
-
-// Stores pairs of equivalent sequences, allowing us to check if two sequences
-// are equal, and also to iterate on all equivalent sequences.
-//
-// TODO: We could save memory by storing shared references to immutable
-//       sequences.
-struct Equivalences {
-  // We store each pair once to save memory. So checking for existence etc.
-  // requires two operations, see below.
-  std::unordered_set<std::pair<Sequence, Sequence>> pairs;
-
-  void add(const Sequence& a, const Sequence& b) { pairs.insert({a, b}); }
-
-  bool has(const Sequence& a, const Sequence& b) const {
-    return pairs.count({a, b}) || pairs.count({b, a});
-  }
-
-  void erase(const Sequence& a, const Sequence& b) {
-    pairs.erase({a, b});
-    pairs.erase({b, a});
-  }
-
-  bool empty() const { return pairs.empty(); }
-};
 
 // In our first phase we will find equivalent sequences in each struct.new in
-// the entire program. For simplicity we'll gather them in a map whose key is
-// the struct.new they derive from. The Finder class will build up that map.
+// the entire program, and then which are useful improvements. For simplicity
+// we'll gather them in a map whose key is the struct.new they derive from, in
+// the Finder class. Later we'll merge all that together: an improvement is
+// valid if it is present in all struct.news in the entire program.
 
-using NewEquivalencesMap = std::unordered_map<StructNew*, Equivalences>;
+using NewEquivalencesMap = std::unordered_map<StructNew*, Improvements>;
 
 struct Finder : public PostWalker<Finder> {
   PassOptions& options;
@@ -194,11 +169,12 @@ struct Finder : public PostWalker<Finder> {
     ValueMap valueMap;
     scanNew(curr, Sequence(), valueMap, curr->type);
 
-    // Add an entry for every (reachable) struct.new. We need an entry even if
-    // we find no equivalences, because that rules out optimizations later - for
-    // two sequences to be equivalent, they must be equivalent in every single
-    // struct.new).
-    auto& entry = map[curr];
+    // We now have a map of values to the sequences that get to them, which
+    // means we know which sequences are equivalent in this struct.new, and can
+    // start to build an entry for it in the global map. Note we need an entry
+    // even if we find no equivalences, because that means there are no
+    // equivalences at all (which will prevent optimizations later).
+    auto& improvements = map[curr];
 //std::cerr << "apply in " << getModule()->typeNames[curr->type.getHeapType()].name << '\n';
 
     // Fill in the entry with equivalent pairs: all sequences for the same value
@@ -206,15 +182,48 @@ struct Finder : public PostWalker<Finder> {
     for (auto& [_, sequences] : valueMap) {
       auto num = sequences.size();
       if (num > 1) {
-        // Great, there are equivalent sequences for this value: all pairs here.
+        // Great, there are equivalent sequences for this value. All the pairs
+        // here are potential improvements. Find the actual ones and add them.
         for (size_t i = 0; i < num; i++) {
           for (size_t j = i + 1; j < num; j++) {
-            entry.add(sequences[i], sequences[j]);
-            // TODO also add sequences with casts removed, if it would validate that way.
+            // Given a pair (A, B), A may be an improvement on B, or B on A, but
+            // never both ways.
+            // TODO cache the cast checks and other operations here
+            addIfImprovement(sequences[i], sequences[j], improvements) ||
+              addIfImprovement(sequences[j], sequences[i], improvements);
           }
         }
       }
     }
+  }
+
+  // Add (A, B) (an improvement from A to B) if it is indeed an improvement.
+  // Return true if so.
+  bool addIfImprovement(const Sequence& a, const Sequence& b, Improvements& improvements) {
+    auto aSize = a.size();
+    auto bSize = b.size();
+    if (bSize > aSize) {
+      // B is larger, so give up.
+      // TODO Perhaps if B has no casts but A does, it is worth it?
+      return false;
+    }
+
+    // B is smaller or of equal size. Casts will determine what we do here.
+
+    if (requiresCast(b)) {
+      // We never optimize to something with a cast.
+      // TODO: Perhaps if both have casts, we should still optimize?
+      return false;
+    }
+
+    if (requiresCast(a) || bSize < aSize) {
+      // We are either getting rid of a cast, or neither have casts but B is
+      // shorter, so it is a valid improvement.
+      improvements.push_back({a, b});
+      return true;
+    }
+
+    return false;
   }
 
   // Given a struct.new and a sequence prefix, look into this struct.new and add
