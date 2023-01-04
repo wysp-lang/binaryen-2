@@ -163,6 +163,9 @@ struct Finder : public PostWalker<Finder> {
       return;
     }
 
+    // All sequences will begin with the type we are creating right here.
+    auto startType = curr->type.getHeapType();
+
     // Scan this struct.new, finding values and the sequences that lead to them.
     // We will recurse as we look through accesses. We start with an empty
     // sequence as our prefix, which will get built up during the recursion.
@@ -179,7 +182,10 @@ struct Finder : public PostWalker<Finder> {
 
     // Fill in the entry with equivalent pairs: all sequences for the same value
     // are equivalent (the value itself no longer matters from here).
-    for (auto& [_, sequences] : valueMap) {
+    for (auto& [value, sequences] : valueMap) {
+      // The final type each sequence arrives at is the known value.
+      auto finalType = value.getType();
+
       auto num = sequences.size();
       if (num > 1) {
         // Great, there are equivalent sequences for this value. All the pairs
@@ -189,8 +195,8 @@ struct Finder : public PostWalker<Finder> {
             // Given a pair (A, B), A may be an improvement on B, or B on A, but
             // never both ways.
             // TODO cache the cast checks and other operations here
-            addIfImprovement(sequences[i], sequences[j], improvements) ||
-              addIfImprovement(sequences[j], sequences[i], improvements);
+            addIfImprovement(sequences[i], sequences[j], improvements, startType, finalType) ||
+              addIfImprovement(sequences[j], sequences[i], improvements, startType, finalType);
           }
         }
       }
@@ -199,7 +205,7 @@ struct Finder : public PostWalker<Finder> {
 
   // Add (A, B) (an improvement from A to B) if it is indeed an improvement.
   // Return true if so.
-  bool addIfImprovement(const Sequence& a, const Sequence& b, Improvements& improvements) {
+  bool addIfImprovement(const Sequence& a, const Sequence& b, Improvements& improvements, HeapType startType, Type finalType) {
     auto aSize = a.size();
     auto bSize = b.size();
     if (bSize > aSize) {
@@ -210,13 +216,13 @@ struct Finder : public PostWalker<Finder> {
 
     // B is smaller or of equal size. Casts will determine what we do here.
 
-    if (requiresCast(b)) {
+    if (requiresCast(b, startType)) {
       // We never optimize to something with a cast.
       // TODO: Perhaps if both have casts, we should still optimize?
       return false;
     }
 
-    if (requiresCast(a) || bSize < aSize) {
+    if (requiresCast(a, startType) || bSize < aSize) {
       // We are either getting rid of a cast, or neither have casts but B is
       // shorter, so it is a valid improvement.
       improvements.push_back({a, b});
@@ -224,6 +230,31 @@ struct Finder : public PostWalker<Finder> {
     }
 
     return false;
+  }
+
+  // Given a sequence of field lookups starting from a particular type, see if
+  // we require a cast to perform its field lookups to the end of the sequence.
+  bool requiresCast(const Sequence& s, HeapType startType, Type finalType) {
+    // Track the current type as we go. Nullability does not matter here, but we
+    // do need to handle the case of a non-heap type, as the final type may be
+    // such.
+    auto type = Type(startType, Nullable);
+    for (auto i : s) {
+      // Check if we can do the current lookup using the current type.
+      auto& fields = type.getHeapType().getStruct().fields;
+      if (i >= fields.size()) {
+        // This field does not exist in this type - it is added in a subtype. So
+        // a cast is necessary.
+        return true;
+      }
+
+      // Continue onwards.
+      type = fields[i].type;
+    }
+
+    // We must have arrived at the proper final type, or else we need a cast
+    // there.
+    return type == finalType;
   }
 
   // Given a struct.new and a sequence prefix, look into this struct.new and add
