@@ -263,7 +263,7 @@ struct Finder : public PostWalker<Finder> {
   // We also receive the "storage type" - the type of the location this data is
   // stored in. If it is stored in a less-refined location then we will need a
   // cast to read from it.
-  void scanNew(StructNew* curr, const Sequence& prefix, ValueMap& valueMap, Type storageType /* XXX? */) {
+  void scanNew(StructNew* curr, const Sequence& prefix, ValueMap& valueMap) {
     // We'll only look at immutable fields.
     auto& fields = curr->type.getHeapType().getStruct().fields;
 
@@ -291,10 +291,10 @@ struct Finder : public PostWalker<Finder> {
   // Note that unlike scanStructNew, this is given the current
   // sequence, which also encodes the current expression (the other two are
   // given a prefix that they append to).
-  void processChild(Expression* curr, const Sequence& currSequence, ValueMap& valueMap, Type storageType) {
+  void processChild(Expression* curr, const Sequence& currSequence, ValueMap& valueMap) {
     if (auto* subNew = curr->dynCast<StructNew>()) {
       // Look into this struct.new recursively.
-      scanNew(subNew, currSequence, valueMap, storageType);
+      scanNew(subNew, currSequence, valueMap);
       return;
     }
 
@@ -321,7 +321,7 @@ struct Finder : public PostWalker<Finder> {
         assert(!global->mutable_);
         if (!global->imported()) {
           if (auto* subNew = global->init->dynCast<StructNew>()) {
-            scanNew(subNew, currSequence, valueMap, storageType);
+            scanNew(subNew, currSequence, valueMap);
           }
         }
       }
