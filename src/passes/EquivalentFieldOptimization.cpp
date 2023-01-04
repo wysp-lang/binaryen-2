@@ -255,7 +255,7 @@ struct Finder : public PostWalker<Finder> {
     return type != finalType;
   }
 
-  // Given a struct.new and a sequence, look into this struct.new and add
+  // Given a struct.new and a sequence prefix, look into this struct.new and add
   // anything we find into the given valueMap. For example, if the prefix is [1,2]
   // and we find (ref.func $foo) at index #3 then we can add a note to the valueMap
   // that [1,2,3] arrives at value $foo.
@@ -263,17 +263,13 @@ struct Finder : public PostWalker<Finder> {
   // We also receive the "storage type" - the type of the location this data is
   // stored in. If it is stored in a less-refined location then we will need a
   // cast to read from it.
-  void scanNew(StructNew* curr, const Sequence& prefix, ValueMap& valueMap, Type storageType) {
+  void scanNew(StructNew* curr, const Sequence& prefix, ValueMap& valueMap, Type storageType /* XXX? */) {
     // We'll only look at immutable fields.
     auto& fields = curr->type.getHeapType().getStruct().fields;
 
     // The current sequence will be the given prefix, plus a possible cast, then
-    // plus the current index.
-    auto currSequence = prefix;
-    if (storageType != curr->type) {
-      // TODO Type and not HeapType? We care about ref.as_non_null casts too.
-      currSequence.push_back(Item(curr->type.getHeapType()));
-    }
+    // plus the current index. Add a 0 for the current index, which we will then
+    // increment as we go.
     currSequence.push_back(Item(0));
 
     for (Index i = 0; i < fields.size(); i++) {
@@ -284,35 +280,21 @@ struct Finder : public PostWalker<Finder> {
 
       // TODO: disallow packed fields for now, we need to encode that.
 
-      // Excellent, this is immutable, so we can look into the current sequence,
-      // which ends with index i.
+      // This is a field we can work with, so we can keep going, with this index
+      // added.
       currSequence.back() = i;
 
       processChild(curr->operands[i], currSequence, valueMap, field.type);
     }
   }
 
-  void scanCast(RefCast* curr, const Sequence& prefix, ValueMap& valueMap, Type storageType) { // XXX remove this entire func? Or at least storageType
-    // The current sequence will be the given prefix, plus an index representing
-    // a cast.
-    // TODO: avoid these copies?
-    auto currSequence = prefix;
-    currSequence.push_back(Item(curr->intendedType));
-    processChild(curr->ref, currSequence, valueMap, storageType);
-  }
-
-  // Note that unlike scanStructNew and scanCast, this is given the current
+  // Note that unlike scanStructNew, this is given the current
   // sequence, which also encodes the current expression (the other two are
   // given a prefix that they append to).
   void processChild(Expression* curr, const Sequence& currSequence, ValueMap& valueMap, Type storageType) {
     if (auto* subNew = curr->dynCast<StructNew>()) {
       // Look into this struct.new recursively.
       scanNew(subNew, currSequence, valueMap, storageType);
-      return;
-    }
-
-    if (auto* cast = curr->dynCast<RefCast>()) {
-      scanCast(cast, currSequence, valueMap, storageType);
       return;
     }
 
@@ -323,7 +305,7 @@ struct Finder : public PostWalker<Finder> {
       // Great, this is something we can track.
 
       // Reverse the sequence so it matches the order of reads (which is what
-      // we'll be doing all the computation on later).
+      // we'll be doing all the computation on later). TODO comments above
       auto reverse = currSequence;
       std::reverse(reverse.begin(), reverse.end());
 //std::cerr << "add sequence for " << value << " : ";
