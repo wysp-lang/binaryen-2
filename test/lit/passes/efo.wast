@@ -1758,7 +1758,7 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $vtable $op2
+  ;; CHECK-NEXT:   (struct.get $vtable $op1
   ;; CHECK-NEXT:    (struct.get $A $vtable
   ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
@@ -1788,7 +1788,7 @@
       )
     )
     (drop
-      (struct.get $vtable $op2 ;; This can be switched to op1. FIXME why doesn't it?
+      (struct.get $vtable $op2 ;; This will be switched to op1.
         (struct.get $A $vtable
           (local.get $ref)
         )
