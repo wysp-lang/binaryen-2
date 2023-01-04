@@ -405,7 +405,7 @@ struct EquivalentFieldOptimization : public Pass {
       }
     };
 
-    auto mergeIntoUnifiedMap = [&](HeapType type,
+    auto mergeMapIntoUnifiedMap = [&](HeapType type,
                                    const Improvements& currImprovements) {
       ImprovementMap currImprovementMap;
       for (const auto& improvement : currImprovements) {
@@ -420,7 +420,7 @@ struct EquivalentFieldOptimization : public Pass {
       }
     }
     for (const auto& [curr, equivalences] : moduleFinder.map) {
-      mergeIntoUnifiedMap(curr->type.getHeapType(), equivalences);
+      mergeMapIntoUnifiedMap(curr->type.getHeapType(), equivalences);
     }
 
     // Check if we found anything to work with.
