@@ -350,7 +350,7 @@ struct EquivalentFieldOptimization : public Pass {
       return;
     }
 
-    // First, find all the relevant sequences inside each function.
+    // First, find all the relevant improvements inside each function.
     ModuleUtils::ParallelFunctionAnalysis<NewImprovementsMap> analysis(
       *module, [&](Function* func, NewImprovementsMap& map) {
         if (func->imported()) {
@@ -366,32 +366,43 @@ struct EquivalentFieldOptimization : public Pass {
     Finder moduleFinder(getPassOptions());
     moduleFinder.walkModuleCode(module);
 
-    // Combine all the info. The property we seek is which sequences are
-    // equivalent, that is, lead to the same value. For two sequences to be
-    // equal they must be equal in every single struct.new for that type (and
-    // subtypes, see below).
+    // Combine all the info. The property we seek is an improvement which is
+    // valid in all the struct.news of a particular type. When that is the case
+    // we can apply the improvement in any position in the module. To find that,
+    // we'll merge information into a unified map.
     TypeImprovements unifiedMap;
 
-    // Given a type and equivalences we found for it somewhere, merge that into
+    // Given a type and some improvements we found for it somewhere, merge that into
     // the main unified map.
     auto mergeIntoUnifiedMap = [&](HeapType type,
-                                   const Equivalences& currEquivalences) {
+                                   const Improvements& currImprovements) {
       auto iter = unifiedMap.find(type);
       if (iter == unifiedMap.end()) {
         // This is the first time we see this type. Just copy the data, there is
         // nothing to compare it to yet.
-        unifiedMap[type] = currEquivalences;
+        auto& typeImprovements = unifiedMap[type];
+        for (const auto& improvement : currImprovements) {
+          typeImprovements[improvement.first] = second;
+        }
       } else {
         // This is not the first time, so we must filter what we've seen so far
-        // with the current data: anything we thought was equivalent before, but
-        // is not so in the new data, is not globally equivalent.
+        // with the current data: anything we've seen so far as consistently
+        // improvable must also be improvable in this new info, or else it must
+        // not be optimized.
         //
         // Iterate on a copy to avoid invalidation. TODO optimize
-        auto& unifiedEquivalences = iter->second;
-        auto copy = unifiedEquivalences;
-        for (auto& pair : copy.pairs) {
-          if (!currEquivalences.has(pair.first, pair.second)) {
-            unifiedEquivalences.erase(pair.first, pair.second);
+        auto& typeImprovements = iter->second;
+        auto copy = typeImprovements;
+        for (auto& improvement : typeImprovements) {
+          auto iter = currImprovements.find(improvement.first);
+          if (iter == currImprovements.end() ||
+              iter->second != improvement.second) {
+            // Either this existing improvement is not present in the current
+            // set, or there is something else there, so we do not see the
+            // consistency we are looking for.
+            // TODO: Perhaps if there is something different, we can find the
+            //       intersection.
+            typeImprovements.erase(iter);
           }
         }
       }
