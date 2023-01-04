@@ -370,26 +370,23 @@ struct EquivalentFieldOptimization : public Pass {
     // valid in all the struct.news of a particular type. When that is the case
     // we can apply the improvement in any position in the module. To find that,
     // we'll merge information into a unified map.
-    TypeImprovements unifiedMap;
+    TypeImprovementMap unifiedMap;
 
     // Given a type and some improvements we found for it somewhere, merge that into
     // the main unified map.
     auto mergeIntoUnifiedMap = [&](HeapType type,
-                                   const Improvements& currImprovements) {
+                                   const ImprovementMap& currImprovements) {
       auto iter = unifiedMap.find(type);
       if (iter == unifiedMap.end()) {
         // This is the first time we see this type. Just copy the data, there is
         // nothing to compare it to yet.
-        auto& typeImprovements = unifiedMap[type];
-        for (const auto& improvement : currImprovements) {
-          typeImprovements[improvement.first] = second;
-        }
+        unifiedMap[type] = currImprovements;
       } else {
         // This is not the first time, so we must filter what we've seen so far
         // with the current data: anything we've seen so far as consistently
         // improvable must also be improvable in this new info, or else it must
         // not be optimized.
-        //
+
         // Iterate on a copy to avoid invalidation. TODO optimize
         auto& typeImprovements = iter->second;
         auto copy = typeImprovements;
@@ -406,6 +403,15 @@ struct EquivalentFieldOptimization : public Pass {
           }
         }
       }
+    };
+
+    auto mergeIntoUnifiedMap = [&](HeapType type,
+                                   const Improvements& currImprovements) {
+      ImprovementMap currImprovementMap;
+      for (const auto& improvement : currImprovements) {
+        currImprovementMap[improvement.first] = improvement.second;
+      }
+      mergeIntoUnifiedMap(type, currImprovementMap);
     };
 
     for (const auto& [_, map] : analysis.map) {
@@ -488,7 +494,7 @@ struct EquivalentFieldOptimization : public Pass {
       return std::make_unique<FunctionOptimizer>(unifiedMap);
     }
 
-    FunctionOptimizer(TypeImprovements& unifiedMap)
+    FunctionOptimizer(TypeImprovementMap& unifiedMap)
       : unifiedMap(unifiedMap) {}
 
     void visitStructGet(StructGet* curr) {
@@ -642,7 +648,7 @@ struct EquivalentFieldOptimization : public Pass {
     }
 
   private:
-    TypeImprovements& unifiedMap;
+    TypeImprovementMap& unifiedMap;
   };
 };
 
