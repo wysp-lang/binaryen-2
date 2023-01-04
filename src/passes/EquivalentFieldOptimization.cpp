@@ -223,7 +223,18 @@ struct Finder : public PostWalker<Finder> {
     if (requiresCast(a, startType, finalType) || bSize < aSize) {
       // We are either getting rid of a cast, or neither have casts but B is
       // shorter, so it is a valid improvement.
-      improvements.insert({a, b});
+      //
+      // We insert the reversed sequence, as that is how we will be using it
+      // later TODO explain with example
+      auto reverseA = a;
+      auto reverseB = b;
+      std::reverse(reverseA.begin(), reverseA.end());
+      std::reverse(reverseB.begin(), reverseB.end());
+//std::cerr << "add sequence for " << value << " : ";
+//for (auto x : reverse) std::cerr << x << ' ';
+//std::cerr << '\n';
+
+      improvements.insert({reverseA, reverseB});
       return true;
     }
 
@@ -306,14 +317,7 @@ struct Finder : public PostWalker<Finder> {
     if (value.isConstantLiteral() || value.isConstantGlobal()) {
       // Great, this is something we can track.
 
-      // Reverse the sequence so it matches the order of reads (which is what
-      // we'll be doing all the computation on later). TODO comments above
-      auto reverse = currSequence;
-      std::reverse(reverse.begin(), reverse.end());
-//std::cerr << "add sequence for " << value << " : ";
-//for (auto x : reverse) std::cerr << x << ' ';
-//std::cerr << '\n';
-      valueMap[value].push_back(reverse);
+      valueMap[value].push_back(currSequence);
 
       if (value.isConstantGlobal()) {
         // Not only can we track the global itself, but we may be able to look
@@ -507,8 +511,8 @@ struct EquivalentFieldOptimization : public Pass {
         return;
       }
 
-      Expression* currValue = curr;
       Sequence currSequence;
+      Expression* currValue = curr;
 //std::cerr << "\noptimizeSequence in visit: " << *curr << '\n';
       while (1) {
 
@@ -519,11 +523,13 @@ struct EquivalentFieldOptimization : public Pass {
         // later, and is also the reference from which the entire sequence
         // begins).
         if (auto* get = currValue->dynCast<StructGet>()) {
-          currSequence.push_back(Item(get->index));
           currValue = get->ref;
+          currSequence.push_back(Item(get->index));
         } else if (auto* cast = currValue->dynCast<RefCast>()) {
-          currSequence.push_back(Item(cast->intendedType));
           currValue = cast->ref;
+          // Nothing to add to the sequence, as it contains only field lookups.
+          // If we actually optimize, it will be to a sequence with no casts, so
+          // the cast will end up optimized out anyhow.
         } else {
           // The sequence ended.
           break;
