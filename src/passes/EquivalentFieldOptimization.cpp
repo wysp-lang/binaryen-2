@@ -130,14 +130,14 @@ using Improvements = std::unordered_set<Improvement>;
 // the Finder class. Later we'll merge all that together: an improvement is
 // valid if it is present in all struct.news in the entire program.
 
-using NewEquivalencesMap = std::unordered_map<StructNew*, Improvements>;
+using NewImprovementsMap = std::unordered_map<StructNew*, Improvements>;
 
 struct Finder : public PostWalker<Finder> {
   PassOptions& options;
 
   Finder(PassOptions& options) : options(options) {}
 
-  NewEquivalencesMap map;
+  NewImprovementsMap map;
 
   // A map of values to the sequences that lead to those values. For example, if
   // we have
@@ -351,8 +351,8 @@ struct EquivalentFieldOptimization : public Pass {
     }
 
     // First, find all the relevant sequences inside each function.
-    ModuleUtils::ParallelFunctionAnalysis<NewEquivalencesMap> analysis(
-      *module, [&](Function* func, NewEquivalencesMap& map) {
+    ModuleUtils::ParallelFunctionAnalysis<NewImprovementsMap> analysis(
+      *module, [&](Function* func, NewImprovementsMap& map) {
         if (func->imported()) {
           return;
         }
