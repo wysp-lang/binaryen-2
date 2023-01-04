@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 WebAssembly Community Group participants
+ * Copyright 2023 WebAssembly Community Group participants
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,27 +28,27 @@
 //   y.b  =>  y.a
 //
 // By always reading from the earlier field we increase the chance for the later
-// field to be pruned as unused. A concrete use case this can help with is to
+// field to be pruned as unused. An example use case this can help with is to
 // allow pruning repeated entries in a vtable.
 //
 // A particular case where this is useful is with sequences of accesses, such as
-// with Java class and interface dispatch. In Java a class may implement an
+// with Java class and interface dispatch. In J2Wasm a class may implement an
 // interface, which means the method appears like this:
 //
-//    object.itable.interface-vtable.slot_K
+//    object.itable.interface_vtable_M.slot_K
 //
 // That is, we get the itable, then get the interface vtable for a particular
 // interface (say, "Hashable"), then get a particular slot in that vtable (say,
 // "getHash()"). In general all such interface methods also appear in the class
 // vtable as well, like this:
 //
-//    object.vtable.slot_N
+//    object.vtable.slot_R
 //
 // That is, we get the class vtable, then one of the slots there. We need a
 // shorter sequence of operations to get to the function through the class
-// vtable, so we want to do
+// vtable, so we want to do this optimization:
 //
-//    object.itable.interface-vtable.slot_K  =>  object.vtable.slot_N
+//    object.itable.interface_vtable_M.slot_K  =>  object.vtable.slot_R
 //
 // This happens in practice if a particular callsite can only have a particular
 // class or any of its subclasses. In that case we don't need to use the more
@@ -59,10 +59,10 @@
 // they do not then other passes would completely devirtualize here, as they'd
 // infer that only a single thing can be read from the itable.)
 //
-// To handle situations like this, we look not just at immediate field accesses
-// like x.b but also sequences of them, x.b.g.i etc., and we look through reads
-// of immutable globals while doing so (this works with Java since all the
-// itables and vtables are defined in immutable globals).
+// We can also remove casts in some cases. The interface pattern above in fact
+// requires a cast in J2Wasm when we go from the very general itable, which has
+// generic fields, to a specific interface vtable. Class-based dispatch is both
+// shorter, and avoids that cast.
 //
 
 #include <algorithm>
@@ -95,92 +95,31 @@ namespace wasm {
 
 namespace {
 
-// An item in a sequence this is either a struct.get or a ref.cast.
-struct Item {
-  // Our contents are either the index of a struct.get, or the cast type of a
-  // cast.
-  using GetIndex = Index;
-  using CastType = HeapType;
+// We will be comparing sequences of accesses. For example,
+//
+//    object.itable.interface_vtable_M.slot_K
+//
+// has three accesess, first we load the itable, then one of its fields, then
+// one of the fields of that interface vtable. For simplicity we denote each
+// access by the index of the field that is loaded from the relevant struct. (We
+// can infer the type as we go, so there is no need to store that as well.) Thus
+// the items in our sequences are simply indexes.
+using Item = Index;
 
-  using Variant = std::variant<GetIndex, CastType>;
-  Variant value;
-
-  Item() : value(GetIndex(0)) {}
-  Item(Index index) : value(GetIndex(index)) {}
-  Item(HeapType type) : value(CastType(type)) {}
-
-  bool isGetIndex() {
-    return std::get_if<GetIndex>(&value);
-  }
-  bool isCastType() {
-    return std::get_if<CastType>(&value);
-  }
-  Index getGetIndex() {
-    assert(isGetIndex());
-    return *std::get_if<GetIndex>(&value);
-  }
-  HeapType getCastType() {
-    assert(isCastType());
-    return *std::get_if<CastType>(&value);
-  }
-
-  Item& operator=(const Item& other) = default;
-
-  bool operator==(const Item& other) const {
-    return value == other.value;
-  }
-
-  bool operator!=(const Item& other) const {
-    return !(*this == other);
-  }
-
-  bool operator<(const Item& other) const {
-    // We use a simple order on get indexes.
-    if (auto* getIndex = std::get_if<GetIndex>(&value)) {
-      if (auto* otherGetIndex = std::get_if<GetIndex>(&other.value)) {
-        return *getIndex < *otherGetIndex;
-      }
-    }
-
-    // Consider everything else equal - the order does not matter there to us.
-    return false;
-  }
-
-  size_t hash() const {
-    // First hash the index of the variant, then add the internals for each.
-    size_t ret = std::hash<size_t>()(value.index());
-    if (auto* getIndex = std::get_if<GetIndex>(&value)) {
-      rehash(ret, *getIndex);
-    } else if (auto* castType = std::get_if<CastType>(&value)) {
-      rehash(ret, *castType);
-    } else {
-      WASM_UNREACHABLE("bad variant");
-    }
-    return ret;
-  }
-};
-
-} // anonymous namespace
-
-} // namespace wasm
-
-namespace std {
-
-template<> struct hash<wasm::Item> {
-  size_t operator()(const wasm::Item& contents) const {
-    return contents.hash();
-  }
-};
-
-} // namespace std
-
-namespace wasm {
-
-namespace {
-
-// A sequence of items.
+// A sequence of items. In addition to the items, we also note if the sequence
+// requires a cast at any point. That is, if we reach a point that we load
+// something with a type that is not refined enough for us to perform the load
+// after it (say, if a field were anyref then that would be the case). We don't
+// need to track more specifically than that, as we'll follow the simple rule of
+// never optimizing anything to a sequence that requires a cast - we only want
+// to generate new code with no casts, either if it had no casts before, or if
+// we can remove a cast. This is sufficient at least for J2Wasm
+// TODO Consider other situations with multiple casts and where it is worthwhile
+//      to leave a cast or even add one.
 // TODO: small 3
-using Sequence = std::vector<Item>;
+struct Sequence : public std::vector<Item> {
+  bool needsCast = false;
+};
 
 // Use a small set of size 1 here since the common case is to not have anything
 // to optimize, that is, each value has a single sequence leading to it, which
@@ -188,7 +127,8 @@ using Sequence = std::vector<Item>;
 // TODO: small 1
 using Sequences = std::vector<Sequence>;
 
-// Stores pairs of equivalent sequences.
+// Stores pairs of equivalent sequences, allowing us to check if two sequences
+// are equal, and also to iterate on all equivalent sequences.
 //
 // TODO: We could save memory by storing shared references to immutable
 //       sequences.
@@ -211,7 +151,10 @@ struct Equivalences {
   bool empty() const { return pairs.empty(); }
 };
 
-// First, find equivalent sequences in each struct.new.
+// In our first phase we will find equivalent sequences in each struct.new in
+// the entire program. For simplicity we'll gather them in a map whose key is
+// the struct.new they derive from. The Finder class will build up that map.
+
 using NewEquivalencesMap = std::unordered_map<StructNew*, Equivalences>;
 
 struct Finder : public PostWalker<Finder> {
@@ -228,6 +171,16 @@ struct Finder : public PostWalker<Finder> {
   //
   // then that means that object.field0 == object.field2.field3 == $foo. In that
   // case we want to optimize the longer sequence to the shorter one.
+  //
+  // Going back to the example in the top of this file, we would find that the
+  // first struct.new has [0] and [1] for value 5, and the second struct.new has
+  // the same but for value 7. [0] and [1] are equivalent in both cases, which
+  // will allow optimization later, when we just remember the equivalences and
+  // not the particular values in each struct.new.
+  //
+  // Note that we use a PossibleConstantValues here as we want to handle not
+  // just Literals but also GlobalGets of immutable things, which is how itables
+  // and vtables are declared.
   using ValueMap = std::unordered_map<PossibleConstantValues, Sequences>;
 
   void visitStructNew(StructNew* curr) {
