@@ -511,22 +511,27 @@ struct EquivalentFieldOptimization : public Pass {
         return;
       }
 
+      // The current sequence of operations. We'll go deeper and build up the
+      // sequence as we go, looking for improvements as we go.
       Sequence currSequence;
-      Expression* currValue = curr;
+
+      // The start of the sequence - the reference that the sequence of field
+      // accesses begins with.
+      Expression* currStart = curr;
 //std::cerr << "\noptimizeSequence in visit: " << *curr << '\n';
       while (1) {
 
-//std::cerr << "inspect sequence for " << *currValue << "\n";
+//std::cerr << "inspect sequence for " << *currStart << "\n";
 
-        // Apply the current value to the sequence, and point currValue to the
+        // Apply the current value to the sequence, and point currStart to the
         // item we are reading from right now (which will be the next item
         // later, and is also the reference from which the entire sequence
         // begins).
-        if (auto* get = currValue->dynCast<StructGet>()) {
-          currValue = get->ref;
+        if (auto* get = currStart->dynCast<StructGet>()) {
+          currStart = get->ref;
           currSequence.push_back(Item(get->index));
-        } else if (auto* cast = currValue->dynCast<RefCast>()) {
-          currValue = cast->ref;
+        } else if (auto* cast = currStart->dynCast<RefCast>()) {
+          currStart = cast->ref;
           // Nothing to add to the sequence, as it contains only field lookups.
           // If we actually optimize, it will be to a sequence with no casts, so
           // the cast will end up optimized out anyhow.
@@ -540,114 +545,44 @@ struct EquivalentFieldOptimization : public Pass {
 
         // See if a sequence starting here has anything we can optimize with.
         // TODO: we could also look at our supertypes
-        auto iter = unifiedMap.find(currValue->type.getHeapType());
+        auto iter = unifiedMap.find(currStart->type.getHeapType());
         if (iter == unifiedMap.end()) {
           continue;
         }
+
         auto& improvements = iter->second;
-//std::cerr << "seek in " << getModule()->typeNames[currValue->type.getHeapType()].name << '\n';
-
-        // Look at everything equivalent to this sequence.
-        //
-        // TODO: Make this more efficient than a brute-force search to find the
-        //       improvements and then on those improvements. However, there are
-        //       usually not that many improvements anyhow.
-
-        // If we find a sequence better than currSequence, we'll set it here.
-        std::optional<Sequence> best;
-
-        auto maybeUse = [&](const Sequence& s) {
-//std::cerr << "mayyyyyyyyybe\n";
-//for (auto x : s) std::cerr << x << ' ';
-//std::cerr << '\n';
-
-//std::cerr << "waka " << s.size() << " : " << best->size() << " : " << currSequence.size() << " : " << (s < *best) << '\n';//) {
-          if (isBetter(s, currSequence)) {
-            if (!best || isBetter(s, *best)) {
-              best = s;
-            }
-          }
-        };
-
-        for (auto& [a, b] : improvements.pairs) {
-          if (a == currSequence) {
-            maybeUse(b);
-          } else if (b == currSequence) {
-            maybeUse(a);
-          }
-        }
-
-        if (best) {
-//std::cerr << "  yes\n";
-          // We found a better sequence! Apply it, going step by step through
-          // the sequence.
-
-          Builder builder(*getModule());
-
-          // |currValue| is where we stopped going up the chain earlier. It is
-          // the point at which the chain of gets begins, the reference that
-          // starts everything. In the new sequence we generate we need to keep
-          // it at the top.
-          auto* result = currValue;
-
-          // Starting from the top, build up the new stack of instructions.
-          for (Index i = 0; i < best->size(); i++) {
-            auto item = (*best)[best->size() - i - 1];
-
-            if (item.isGetIndex()) {
-              auto index = item.getGetIndex();
-              auto type = result->type.getHeapType().getStruct().fields[index].type;
-              result = builder.makeStructGet(index, result, type);
-            } else {
-              assert(item.isCastType());
-              result = builder.makeRefCast(result, item.getCastType(), RefCast::Safe);
-            }
-          }
-
-          replaceCurrent(result);
-
-          // TODO: We currently stop if we find an improvement at any sequence
-          //       length. However, we could find how much we improve at different
-          //       lengths - perhaps at a longer length we can remove more.
+        auto iter2 = improvements.find(currSequence);
+        if (iter2 != improvements.end()) {
+          // Wonderful, we can optimize here! Replace the current sequence of
+          // operations with the new ones of the new and better sequence.
+          // TODO Rather than use this immediately, we could consider longer
+          //      sequences first, and pick the best.
+          auto newSequence = iter2->second;
+          replaceCurrent(newSequence, currStart);
           return;
         }
       }
     }
 
-    // A better sequence is either shorter, or it uses lower indexes. We also do
-    // not want to ever add a cast (a cast involves at least a few memory
-    // accesses and branching, unlike a plain load).
-    bool isBetter(const Sequence& a, const Sequence& b) {
-      if (a.size() < b.size()) {
-        return true;
-      }
-      if (a.size() > b.size()) {
-        return false;
+    // Given a sequence of field accesses, and a starting reference from which
+    // to begin applying them, build struct.gets for that sequence and return
+    // them.
+    Expression* buildSequence(const Sequence& s, Expression* start) {
+      auto* result = start;
+
+      // Starting from the top, build up the new stack of instructions.
+      for (Index i = 0; i < s.size(); i++) {
+        auto index = s[s.size() - i - 1];
+        auto fields = result->type.getHeapType().getStruct().fields;
+        // We must be able to read the field here. A possible bug here is if a
+        // cast is needed, but we are only aiming to optimize to sequences with
+        // no casts, and we should have ignored casting sequences before.
+        assert(index < fields.size());
+        auto type = fields[index].type;
+        result = builder.makeStructGet(index, result, type);
       }
 
-      // The size is equal, so consider the contents: Fewer casts is better.
-      // TODO: Maybe allow adding a cast if it removes several other operations?
-      auto aCasts = getNumCasts(a);
-      auto bCasts = getNumCasts(b);
-      if (aCasts < bCasts) {
-        return true;
-      }
-      if (aCasts > bCasts) {
-        return false;
-      }
-
-      // Same size and same casts, so prefer lower indexes.
-      return a < b;
-    }
-
-    Index getNumCasts(const Sequence& s) {
-      Index ret = 0;
-      for (auto x : s) {
-        if (x.isCastType()) {
-          ret++;
-        }
-      }
-      return ret;
+      return result;
     }
 
   private:
