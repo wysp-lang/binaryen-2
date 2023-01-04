@@ -945,10 +945,11 @@ void RefTest::finalize() {
 void RefCast::finalize() {
   if (ref->type == Type::unreachable) {
     type = Type::unreachable;
-  } else {
-    // The output of ref.cast may be null if the input is null (in that case the
-    // null is passed through).
-    type = Type(intendedType, ref->type.getNullability());
+    return;
+  }
+  // Do not unnecessarily lose non-nullability information.
+  if (ref->type.isNonNullable() && type.isNullable()) {
+    type = Type(type.getHeapType(), NonNullable);
   }
 }
 

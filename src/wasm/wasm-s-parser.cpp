@@ -2775,40 +2775,61 @@ Expression* SExpressionWasmBuilder::makeI31Get(Element& s, bool signed_) {
   return ret;
 }
 
-Expression* SExpressionWasmBuilder::makeRefTestStatic(Element& s) {
-  auto heapType = parseHeapType(*s[1]);
-  auto* ref = parseExpression(*s[2]);
-  return Builder(wasm).makeRefTest(ref, heapType);
+Expression* SExpressionWasmBuilder::makeRefTest(Element& s) {
+  int i = 1;
+  auto nullability = NonNullable;
+  if (s[0]->str().str != "ref.test_static" && s[1]->str().str == "null") {
+    nullability = Nullable;
+    ++i;
+  }
+  auto heapType = parseHeapType(*s[i++]);
+  auto* ref = parseExpression(*s[i++]);
+  return Builder(wasm).makeRefTest(ref, Type(heapType, nullability));
 }
 
-Expression* SExpressionWasmBuilder::makeRefCastStatic(Element& s) {
-  auto heapType = parseHeapType(*s[1]);
-  auto* ref = parseExpression(*s[2]);
-  return Builder(wasm).makeRefCast(ref, heapType, RefCast::Safe);
+Expression* SExpressionWasmBuilder::makeRefCast(Element& s) {
+  int i = 1;
+  Nullability nullability;
+  bool legacy = false;
+  if (s[0]->str().str == "ref.cast_static") {
+    legacy = true;
+  } else {
+    nullability = NonNullable;
+    if (s[i]->str().str == "null") {
+      nullability = Nullable;
+      ++i;
+    }
+  }
+  auto heapType = parseHeapType(*s[i++]);
+  auto* ref = parseExpression(*s[i++]);
+  if (legacy) {
+    // Legacy polymorphic behavior.
+    nullability = ref->type.getNullability();
+  }
+  auto type = Type(heapType, nullability);
+  return Builder(wasm).makeRefCast(ref, type, RefCast::Safe);
 }
 
-Expression* SExpressionWasmBuilder::makeRefCastNopStatic(Element& s) {
+Expression* SExpressionWasmBuilder::makeRefCastNop(Element& s) {
   auto heapType = parseHeapType(*s[1]);
   auto* ref = parseExpression(*s[2]);
-  return Builder(wasm).makeRefCast(ref, heapType, RefCast::Unsafe);
+  // Legacy polymorphic behavior.
+  auto type = Type(heapType, ref->type.getNullability());
+  return Builder(wasm).makeRefCast(ref, type, RefCast::Unsafe);
 }
 
 Expression* SExpressionWasmBuilder::makeBrOn(Element& s, BrOnOp op) {
-  auto name = getLabel(*s[1]);
-  auto* ref = parseExpression(*s[2]);
-  return ValidatingBuilder(wasm, s.line, s.col)
-    .validateAndMakeBrOn(op, name, ref);
-}
-
-Expression* SExpressionWasmBuilder::makeBrOnStatic(Element& s, BrOnOp op) {
-  auto name = getLabel(*s[1]);
-  auto heapType = parseHeapType(*s[2]);
-  auto* ref = parseExpression(*s[3]);
+  int i = 1;
+  auto name = getLabel(*s[i++]);
+  HeapType heapType;
+  if (op == BrOnCast || op == BrOnCastFail) {
+    heapType = parseHeapType(*s[i++]);
+  }
+  auto* ref = parseExpression(*s[i]);
   return Builder(wasm).makeBrOn(op, name, ref, heapType);
 }
 
-Expression* SExpressionWasmBuilder::makeStructNewStatic(Element& s,
-                                                        bool default_) {
+Expression* SExpressionWasmBuilder::makeStructNew(Element& s, bool default_) {
   auto heapType = parseHeapType(*s[1]);
   auto numOperands = s.size() - 2;
   if (default_ && numOperands > 0) {
@@ -2865,8 +2886,7 @@ Expression* SExpressionWasmBuilder::makeStructSet(Element& s) {
   return Builder(wasm).makeStructSet(index, ref, value);
 }
 
-Expression* SExpressionWasmBuilder::makeArrayNewStatic(Element& s,
-                                                       bool default_) {
+Expression* SExpressionWasmBuilder::makeArrayNew(Element& s, bool default_) {
   auto heapType = parseHeapType(*s[1]);
   Expression* init = nullptr;
   size_t i = 2;
@@ -2944,7 +2964,11 @@ Expression* SExpressionWasmBuilder::makeArrayCopy(Element& s) {
 }
 
 Expression* SExpressionWasmBuilder::makeRefAs(Element& s, RefAsOp op) {
-  return Builder(wasm).makeRefAs(op, parseExpression(s[1]));
+  auto* value = parseExpression(s[1]);
+  if (!value->type.isRef() && value->type != Type::unreachable) {
+    throw ParseException("ref.as child must be a ref", s.line, s.col);
+  }
+  return Builder(wasm).makeRefAs(op, value);
 }
 
 Expression* SExpressionWasmBuilder::makeStringNew(Element& s, StringNewOp op) {

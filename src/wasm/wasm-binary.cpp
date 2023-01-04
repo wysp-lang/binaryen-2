@@ -6893,23 +6893,37 @@ bool WasmBinaryBuilder::maybeVisitI31Get(Expression*& out, uint32_t code) {
 }
 
 bool WasmBinaryBuilder::maybeVisitRefTest(Expression*& out, uint32_t code) {
-  if (code == BinaryConsts::RefTestStatic) {
-    auto intendedType = getIndexedHeapType();
+  if (code == BinaryConsts::RefTestStatic || code == BinaryConsts::RefTest ||
+      code == BinaryConsts::RefTestNull) {
+    bool legacy = code == BinaryConsts::RefTestStatic;
+    auto castType = legacy ? getIndexedHeapType() : getHeapType();
+    auto nullability =
+      (code == BinaryConsts::RefTestNull) ? Nullable : NonNullable;
     auto* ref = popNonVoidExpression();
-    out = Builder(wasm).makeRefTest(ref, intendedType);
+    out = Builder(wasm).makeRefTest(ref, Type(castType, nullability));
     return true;
   }
   return false;
 }
 
 bool WasmBinaryBuilder::maybeVisitRefCast(Expression*& out, uint32_t code) {
-  if (code == BinaryConsts::RefCastStatic ||
-      code == BinaryConsts::RefCastNopStatic) {
-    auto intendedType = getIndexedHeapType();
+  if (code == BinaryConsts::RefCastStatic || code == BinaryConsts::RefCast ||
+      code == BinaryConsts::RefCastNull || code == BinaryConsts::RefCastNop) {
+    bool legacy =
+      code == BinaryConsts::RefCastStatic || code == BinaryConsts::RefCastNop;
+    auto heapType = legacy ? getIndexedHeapType() : getHeapType();
     auto* ref = popNonVoidExpression();
+    Nullability nullability;
+    if (legacy) {
+      // Legacy polymorphic behavior.
+      nullability = ref->type.getNullability();
+    } else {
+      nullability = code == BinaryConsts::RefCast ? NonNullable : Nullable;
+    }
     auto safety =
-      code == BinaryConsts::RefCastNopStatic ? RefCast::Unsafe : RefCast::Safe;
-    out = Builder(wasm).makeRefCast(ref, intendedType, safety);
+      code == BinaryConsts::RefCastNop ? RefCast::Unsafe : RefCast::Safe;
+    auto type = Type(heapType, nullability);
+    out = Builder(wasm).makeRefCast(ref, type, safety);
     return true;
   }
   return false;
@@ -6925,9 +6939,11 @@ bool WasmBinaryBuilder::maybeVisitBrOn(Expression*& out, uint32_t code) {
       op = BrOnNonNull;
       break;
     case BinaryConsts::BrOnCastStatic:
+    case BinaryConsts::BrOnCast:
       op = BrOnCast;
       break;
     case BinaryConsts::BrOnCastStaticFail:
+    case BinaryConsts::BrOnCastFail:
       op = BrOnCastFail;
       break;
     case BinaryConsts::BrOnFunc:
@@ -6952,15 +6968,14 @@ bool WasmBinaryBuilder::maybeVisitBrOn(Expression*& out, uint32_t code) {
       return false;
   }
   auto name = getBreakTarget(getU32LEB()).name;
-  if (code == BinaryConsts::BrOnCastStatic ||
-      code == BinaryConsts::BrOnCastStaticFail) {
-    auto intendedType = getIndexedHeapType();
-    auto* ref = popNonVoidExpression();
-    out = Builder(wasm).makeBrOn(op, name, ref, intendedType);
-    return true;
+  HeapType intendedType;
+  if (op == BrOnCast || op == BrOnCastFail) {
+    bool legacy = code == BinaryConsts::BrOnCastStatic ||
+                  code == BinaryConsts::BrOnCastStaticFail;
+    intendedType = legacy ? getIndexedHeapType() : getHeapType();
   }
   auto* ref = popNonVoidExpression();
-  out = ValidatingBuilder(wasm, pos).validateAndMakeBrOn(op, name, ref);
+  out = Builder(wasm).makeBrOn(op, name, ref, intendedType);
   return true;
 }
 

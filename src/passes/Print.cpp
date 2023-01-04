@@ -2109,16 +2109,26 @@ struct PrintExpressionContents
     printHeapType(o, curr->target->type.getHeapType(), wasm);
   }
   void visitRefTest(RefTest* curr) {
-    printMedium(o, "ref.test_static ");
-    printHeapType(o, curr->intendedType, wasm);
+    printMedium(o, "ref.test ");
+    if (curr->castType.isNullable()) {
+      printMedium(o, "null ");
+    }
+    printHeapType(o, curr->castType.getHeapType(), wasm);
   }
   void visitRefCast(RefCast* curr) {
-    if (curr->safety == RefCast::Unsafe) {
-      printMedium(o, "ref.cast_nop_static ");
-    } else {
-      printMedium(o, "ref.cast_static ");
+    if (printUnreachableReplacement(curr)) {
+      return;
     }
-    printHeapType(o, curr->intendedType, wasm);
+    if (curr->safety == RefCast::Unsafe) {
+      printMedium(o, "ref.cast_nop ");
+    } else {
+      if (curr->type.isNullable()) {
+        printMedium(o, "ref.cast null ");
+      } else {
+        printMedium(o, "ref.cast ");
+      }
+    }
+    printHeapType(o, curr->type.getHeapType(), wasm);
   }
 
   void visitBrOn(BrOn* curr) {
@@ -2130,13 +2140,13 @@ struct PrintExpressionContents
         printMedium(o, "br_on_non_null ");
         break;
       case BrOnCast:
-        printMedium(o, "br_on_cast_static ");
+        printMedium(o, "br_on_cast ");
         printName(curr->name, o);
         o << ' ';
         printHeapType(o, curr->intendedType, wasm);
         return;
       case BrOnCastFail:
-        printMedium(o, "br_on_cast_static_fail ");
+        printMedium(o, "br_on_cast_fail ");
         printName(curr->name, o);
         o << ' ';
         printHeapType(o, curr->intendedType, wasm);
@@ -2820,6 +2830,9 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
   void visitCallRef(CallRef* curr) {
     maybePrintUnreachableOrNullReplacement(curr, curr->target->type);
   }
+  void visitRefCast(RefCast* curr) {
+    maybePrintUnreachableReplacement(curr, curr->type);
+  }
   void visitStructNew(StructNew* curr) {
     maybePrintUnreachableReplacement(curr, curr->type);
   }
@@ -3270,6 +3283,10 @@ struct PrintSExpression : public UnifiedExpressionVisitor<PrintSExpression> {
       o << ' ';
     }
     if (!curr->isPassive) {
+      assert(!currModule || currModule->memories.size() > 0);
+      if (!currModule || curr->memory != currModule->memories[0]->name) {
+        o << "(memory $" << curr->memory << ") ";
+      }
       visit(curr->offset);
       o << ' ';
     }

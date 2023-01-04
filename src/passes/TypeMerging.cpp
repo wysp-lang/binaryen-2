@@ -83,6 +83,12 @@ struct CastFinder
 
 #include "wasm-delegations-fields.def"
   }
+
+  void visitRefCast(Expression* curr) {
+    if (curr->type != Type::unreachable) {
+      referredTypes.insert(curr->type.getHeapType());
+    }
+  }
 };
 
 struct TypeMerging : public Pass {
@@ -101,6 +107,10 @@ struct TypeMerging : public Pass {
 
     if (!module->features.hasGC()) {
       return;
+    }
+
+    if (!getPassOptions().closedWorld) {
+      Fatal() << "TypeMerging requires --closed-world";
     }
 
     // First, find all the cast types.

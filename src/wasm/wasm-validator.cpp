@@ -61,6 +61,7 @@ struct ValidationInfo {
   bool validateWeb;
   bool validateGlobally;
   bool quiet;
+  bool closedWorld;
 
   std::atomic<bool> valid;
 
@@ -2504,49 +2505,60 @@ void FunctionValidator::visitI31Get(I31Get* curr) {
 void FunctionValidator::visitRefTest(RefTest* curr) {
   shouldBeTrue(
     getModule()->features.hasGC(), curr, "ref.test requires gc [--enable-gc]");
-  if (curr->ref->type != Type::unreachable) {
-    shouldBeTrue(
-      curr->ref->type.isRef(), curr, "ref.test ref must have ref type");
+  if (curr->ref->type == Type::unreachable) {
+    return;
   }
-  shouldBeUnequal(curr->intendedType,
-                  HeapType(),
-                  curr,
-                  "static ref.test must set intendedType field");
-  shouldBeTrue(
-    !curr->intendedType.isBasic(), curr, "ref.test must test a non-basic");
+  if (!shouldBeTrue(
+        curr->ref->type.isRef(), curr, "ref.test ref must have ref type")) {
+    return;
+  }
+  shouldBeEqual(
+    curr->castType.getHeapType().getBottom(),
+    curr->ref->type.getHeapType().getBottom(),
+    curr,
+    "ref.test target type and ref type must have a common supertype");
 }
 
 void FunctionValidator::visitRefCast(RefCast* curr) {
   shouldBeTrue(
     getModule()->features.hasGC(), curr, "ref.cast requires gc [--enable-gc]");
-  if (curr->ref->type != Type::unreachable) {
-    shouldBeTrue(
-      curr->ref->type.isRef(), curr, "ref.cast ref must have ref type");
+  if (curr->ref->type == Type::unreachable) {
+    return;
   }
-  shouldBeUnequal(curr->intendedType,
-                  HeapType(),
-                  curr,
-                  "static ref.cast must set intendedType field");
-  shouldBeTrue(
-    !curr->intendedType.isBasic(), curr, "ref.cast must cast to a non-basic");
+  if (!shouldBeTrue(
+        curr->ref->type.isRef(), curr, "ref.cast ref must have ref type")) {
+    return;
+  }
+  shouldBeEqual(
+    curr->type.getHeapType().getBottom(),
+    curr->ref->type.getHeapType().getBottom(),
+    curr,
+    "ref.cast target type and ref type must have a common supertype");
+
+  // We should never have a nullable cast of a non-nullable reference, since
+  // that unnecessarily loses type information.
+  shouldBeTrue(curr->ref->type.isNullable() || curr->type.isNonNullable(),
+               curr,
+               "ref.cast null of non-nullable references are not allowed");
 }
 
 void FunctionValidator::visitBrOn(BrOn* curr) {
   shouldBeTrue(getModule()->features.hasGC(),
                curr,
                "br_on_cast requires gc [--enable-gc]");
-  if (curr->ref->type != Type::unreachable) {
-    shouldBeTrue(
-      curr->ref->type.isRef(), curr, "br_on_cast ref must have ref type");
+  if (curr->ref->type == Type::unreachable) {
+    return;
+  }
+  if (!shouldBeTrue(
+        curr->ref->type.isRef(), curr, "br_on_cast ref must have ref type")) {
+    return;
   }
   if (curr->op == BrOnCast || curr->op == BrOnCastFail) {
-    shouldBeUnequal(curr->intendedType,
-                    HeapType(),
-                    curr,
-                    "static br_on_cast* must set intendedType field");
-    shouldBeTrue(!curr->intendedType.isBasic(),
-                 curr,
-                 "br_on_cast* must cast to a non-basic");
+    shouldBeEqual(
+      curr->intendedType.getBottom(),
+      curr->ref->type.getHeapType().getBottom(),
+      curr,
+      "br_on_cast* target type and ref type must have a common supertype");
   } else {
     shouldBeEqual(curr->intendedType,
                   HeapType(),
@@ -3495,6 +3507,32 @@ static void validateFeatures(Module& module, ValidationInfo& info) {
   }
 }
 
+static void validateClosedWorldInterface(Module& module, ValidationInfo& info) {
+  // Error if there are any publicly exposed heap types beyond the types of
+  // publicly exposed functions.
+  std::unordered_set<HeapType> publicFuncTypes;
+  ModuleUtils::iterImportedFunctions(
+    module, [&](Function* func) { publicFuncTypes.insert(func->type); });
+  for (auto& ex : module.exports) {
+    if (ex->kind == ExternalKind::Function) {
+      publicFuncTypes.insert(module.getFunction(ex->value)->type);
+    }
+  }
+
+  for (auto type : ModuleUtils::getPublicHeapTypes(module)) {
+    if (!publicFuncTypes.count(type)) {
+      auto name = type.toString();
+      if (auto it = module.typeNames.find(type); it != module.typeNames.end()) {
+        name = it->second.name.toString();
+      }
+      info.fail("publicly exposed type disallowed with a closed world: $" +
+                  name,
+                type,
+                nullptr);
+    }
+  }
+}
+
 // TODO: If we want the validator to be part of libwasm rather than libpasses,
 // then Using PassRunner::getPassDebug causes a circular dependence. We should
 // fix that, perhaps by moving some of the pass infrastructure into libsupport.
@@ -3503,6 +3541,7 @@ bool WasmValidator::validate(Module& module, Flags flags) {
   info.validateWeb = (flags & Web) != 0;
   info.validateGlobally = (flags & Globally) != 0;
   info.quiet = (flags & Quiet) != 0;
+  info.closedWorld = (flags & ClosedWorld) != 0;
   // parallel wasm logic validation
   PassRunner runner(&module);
   FunctionValidator(module, &info).validate(&runner);
@@ -3517,6 +3556,9 @@ bool WasmValidator::validate(Module& module, Flags flags) {
     validateTags(module, info);
     validateModule(module, info);
     validateFeatures(module, info);
+    if (info.closedWorld) {
+      validateClosedWorldInterface(module, info);
+    }
   }
   // validate additional internal IR details when in pass-debug mode
   if (PassRunner::getPassDebug()) {
@@ -3530,6 +3572,14 @@ bool WasmValidator::validate(Module& module, Flags flags) {
     std::cerr << info.getStream(nullptr).str();
   }
   return info.valid.load();
+}
+
+bool WasmValidator::validate(Module& module, const PassOptions& options) {
+  Flags flags = options.validateGlobally ? Globally : Minimal;
+  if (options.closedWorld) {
+    flags |= ClosedWorld;
+  }
+  return validate(module, flags);
 }
 
 bool WasmValidator::validate(Function* func, Module& module, Flags flags) {

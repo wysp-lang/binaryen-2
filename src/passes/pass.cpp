@@ -284,6 +284,11 @@ void PassRegistry::registerPasses() {
   registerPass("multi-memory-lowering",
                "combines multiple memories into a single memory",
                createMultiMemoryLoweringPass);
+  registerPass(
+    "multi-memory-lowering-with-bounds-checks",
+    "combines multiple memories into a single memory, trapping if the read or "
+    "write is larger than the length of the memory's data",
+    createMultiMemoryLoweringWithBoundsChecksPass);
   registerPass("nm", "name list", createNameListPass);
   registerPass("name-types", "(re)name all heap types", createNameTypesPass);
   registerPass("once-reduction",
@@ -367,6 +372,9 @@ void PassRegistry::registerPasses() {
   registerPass("remove-unused-names",
                "removes names from locations that are never branched to",
                createRemoveUnusedNamesPass);
+  registerPass("remove-unused-types",
+               "remove unused private GC types",
+               createRemoveUnusedTypesPass);
   registerPass("reorder-functions",
                "sorts functions by access frequency",
                createReorderFunctionsPass);
@@ -622,6 +630,7 @@ void PassRunner::addDefaultGlobalOptimizationPrePasses() {
     }
     addIfNoDWARFIssues("remove-unused-module-elements");
     if (options.closedWorld) {
+      addIfNoDWARFIssues("remove-unused-types");
       addIfNoDWARFIssues("cfp");
       addIfNoDWARFIssues("gsi");
     }
@@ -669,7 +678,6 @@ void PassRunner::addDefaultGlobalOptimizationPostPasses() {
 }
 
 static void dumpWasm(Name name, Module* wasm) {
-  // write out the wat
   static int counter = 0;
   std::string numstr = std::to_string(counter++);
   while (numstr.size() < 3) {
@@ -683,6 +691,7 @@ static void dumpWasm(Name name, Module* wasm) {
   fullName += numstr + "-" + name.toString();
   Colors::setEnabled(false);
   ModuleWriter writer;
+  writer.setDebugInfo(true);
   writer.writeBinary(*wasm, fullName + ".wasm");
 }
 
@@ -700,10 +709,6 @@ void PassRunner::run() {
     // for debug logging purposes, run each pass in full before running the
     // other
     auto totalTime = std::chrono::duration<double>(0);
-    WasmValidator::Flags validationFlags = WasmValidator::Minimal;
-    if (options.validateGlobally) {
-      validationFlags = validationFlags | WasmValidator::Globally;
-    }
     auto what = isNested ? "nested passes" : "passes";
     std::cerr << "[PassRunner] running " << what << std::endl;
     size_t padding = 0;
@@ -740,7 +745,7 @@ void PassRunner::run() {
       if (options.validate && !isNested) {
         // validate, ignoring the time
         std::cerr << "[PassRunner]   (validating)\n";
-        if (!WasmValidator().validate(*wasm, validationFlags)) {
+        if (!WasmValidator().validate(*wasm, options)) {
           std::cout << *wasm << '\n';
           if (passDebug >= 2) {
             Fatal() << "Last pass (" << pass->name
@@ -762,7 +767,7 @@ void PassRunner::run() {
               << " seconds." << std::endl;
     if (options.validate && !isNested) {
       std::cerr << "[PassRunner] (final validation)\n";
-      if (!WasmValidator().validate(*wasm, validationFlags)) {
+      if (!WasmValidator().validate(*wasm, options)) {
         std::cout << *wasm << '\n';
         Fatal() << "final module does not validate\n";
       }

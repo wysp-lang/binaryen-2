@@ -64,12 +64,19 @@ struct GlobalStructInference : public Pass {
   bool requiresNonNullableLocalFixups() override { return false; }
 
   // Maps optimizable struct types to the globals whose init is a struct.new of
-  // them. If a global is not present here, it cannot be optimized.
+  // them.
+  //
+  // We will remove unoptimizable types from here, so in practice, if a type is
+  // optimizable it will have an entry here, and not if not.
   std::unordered_map<HeapType, std::vector<Name>> typeGlobals;
 
   void run(Module* module) override {
     if (!module->features.hasGC()) {
       return;
+    }
+
+    if (!getPassOptions().closedWorld) {
+      Fatal() << "GSI requires --closed-world";
     }
 
     // First, find all the information we need. We need to know which struct
@@ -123,6 +130,16 @@ struct GlobalStructInference : public Pass {
 
       auto type = global->init->type.getHeapType();
 
+      // The global's declared type must match the init's type. If not, say if
+      // we had a global declared as type |any| but that contains (ref $A), then
+      // that is not something we can optimize, as ref.eq on a global.get of
+      // that global will not validate. (This should not be a problem after
+      // GlobalSubtyping runs, which will specialize the type of the global.)
+      if (global->type != global->init->type) {
+        unoptimizable.insert(type);
+        continue;
+      }
+
       // We cannot optimize mutable globals.
       if (global->mutable_) {
         unoptimizable.insert(type);
@@ -142,7 +159,13 @@ struct GlobalStructInference : public Pass {
     //       fields)
     for (auto type : unoptimizable) {
       while (1) {
+        unoptimizable.insert(type);
+
+        // Also erase the globals, as we will never read them anyhow. This can
+        // allow us to skip unneeded work, when we check if typeGlobals is
+        // empty, below.
         typeGlobals.erase(type);
+
         auto super = type.getSuperType();
         if (!super) {
           break;
@@ -162,8 +185,12 @@ struct GlobalStructInference : public Pass {
           break;
         }
         curr = *super;
-        for (auto global : globals) {
-          typeGlobals[curr].push_back(global);
+
+        // As above, avoid adding pointless data for anything unoptimizable.
+        if (!unoptimizable.count(curr)) {
+          for (auto global : globals) {
+            typeGlobals[curr].push_back(global);
+          }
         }
       }
     }
@@ -197,14 +224,23 @@ struct GlobalStructInference : public Pass {
           return;
         }
 
-        auto iter = parent.typeGlobals.find(type.getHeapType());
+        // We must ignore the case of a non-struct heap type, that is, a bottom
+        // type (which is all that is left after we've already ruled out
+        // unreachable). Such things will not be in typeGlobals, which we are
+        // checking now anyhow.
+        auto heapType = type.getHeapType();
+        auto iter = parent.typeGlobals.find(heapType);
         if (iter == parent.typeGlobals.end()) {
           return;
         }
 
+        // This cannot be a bottom type as we found it in the typeGlobals map,
+        // which only contains types of struct.news.
+        assert(heapType.isStruct());
+
         // The field must be immutable.
         auto fieldIndex = curr->index;
-        auto& field = type.getHeapType().getStruct().fields[fieldIndex];
+        auto& field = heapType.getStruct().fields[fieldIndex];
         if (field.mutable_ == Mutable) {
           return;
         }

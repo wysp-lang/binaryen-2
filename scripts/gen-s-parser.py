@@ -567,29 +567,32 @@ instructions = [
     ("i31.new",              "makeI31New(s)"),
     ("i31.get_s",            "makeI31Get(s, true)"),
     ("i31.get_u",            "makeI31Get(s, false)"),
-    ("ref.test_static",      "makeRefTestStatic(s)"),
-    ("ref.cast_static",      "makeRefCastStatic(s)"),
-    ("ref.cast_nop_static",  "makeRefCastNopStatic(s)"),
+    ("ref.test",             "makeRefTest(s)"),
+    ("ref.test_static",      "makeRefTest(s)"),
+    ("ref.cast",             "makeRefCast(s)"),
+    ("ref.cast_static",      "makeRefCast(s)"),
+    ("ref.cast_nop",         "makeRefCastNop(s)"),
+    ("ref.cast_nop_static",  "makeRefCastNop(s)"),
     ("br_on_null",           "makeBrOn(s, BrOnNull)"),
     ("br_on_non_null",       "makeBrOn(s, BrOnNonNull)"),
     ("br_on_cast",           "makeBrOn(s, BrOnCast)"),
-    ("br_on_cast_static",    "makeBrOnStatic(s, BrOnCast)"),
+    ("br_on_cast_static",    "makeBrOn(s, BrOnCast)"),
     ("br_on_cast_fail",      "makeBrOn(s, BrOnCastFail)"),
-    ("br_on_cast_static_fail", "makeBrOnStatic(s, BrOnCastFail)"),
+    ("br_on_cast_static_fail", "makeBrOn(s, BrOnCastFail)"),
     ("br_on_func",           "makeBrOn(s, BrOnFunc)"),
     ("br_on_non_func",       "makeBrOn(s, BrOnNonFunc)"),
     ("br_on_data",           "makeBrOn(s, BrOnData)"),
     ("br_on_non_data",       "makeBrOn(s, BrOnNonData)"),
     ("br_on_i31",            "makeBrOn(s, BrOnI31)"),
     ("br_on_non_i31",        "makeBrOn(s, BrOnNonI31)"),
-    ("struct.new",           "makeStructNewStatic(s, false)"),
-    ("struct.new_default",   "makeStructNewStatic(s, true)"),
+    ("struct.new",           "makeStructNew(s, false)"),
+    ("struct.new_default",   "makeStructNew(s, true)"),
     ("struct.get",           "makeStructGet(s)"),
     ("struct.get_s",         "makeStructGet(s, true)"),
     ("struct.get_u",         "makeStructGet(s, false)"),
     ("struct.set",           "makeStructSet(s)"),
-    ("array.new",            "makeArrayNewStatic(s, false)"),
-    ("array.new_default",    "makeArrayNewStatic(s, true)"),
+    ("array.new",            "makeArrayNew(s, false)"),
+    ("array.new_default",    "makeArrayNew(s, true)"),
     ("array.new_data",       "makeArrayNewSeg(s, NewData)"),
     ("array.new_elem",       "makeArrayNewSeg(s, NewElem)"),
     ("array.init_static",    "makeArrayInitStatic(s)"),
@@ -713,16 +716,14 @@ def instruction_parser(new_parser=False):
 
     printer = CodePrinter()
 
-    printer.print_line("char buf[{}] = {{}};".format(inst_length + 1))
-
     if new_parser:
-        printer.print_line("auto str = *keyword;")
+        printer.print_line("auto op = *keyword;")
     else:
         printer.print_line("using namespace std::string_view_literals;")
-        printer.print_line("auto str = s[0]->str().str;")
+        printer.print_line("auto op = s[0]->str().str;")
 
-    printer.print_line("memcpy(buf, str.data(), str.size());")
-    printer.print_line("std::string_view op = {buf, str.size()};")
+    printer.print_line("char buf[{}] = {{}};".format(inst_length + 1))
+    printer.print_line("memcpy(buf, op.data(), op.size());")
 
     def print_leaf(expr, inst):
         if new_parser:
@@ -741,7 +742,7 @@ def instruction_parser(new_parser=False):
 
     def emit(node, idx=0):
         assert node.children
-        printer.print_line("switch (op[{}]) {{".format(idx))
+        printer.print_line("switch (buf[{}]) {{".format(idx))
         with printer.indent():
             if node.expr:
                 printer.print_line("case '\\0':")
