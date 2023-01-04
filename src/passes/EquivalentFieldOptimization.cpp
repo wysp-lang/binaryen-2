@@ -111,7 +111,7 @@ using Sequences = std::vector<Sequence>;
 // An improvement is a sequence that we want to turn into another sequence,
 // because the latter sequence is better.
 using Improvement = std::pair<Sequence, Sequence>;
-using Improvements = std::vector<Improvement>;
+using Improvements = std::unordered_set<Improvement>;
 
 // That is, if we reach a point that we load
 // something with a type that is not refined enough for us to perform the load
@@ -180,8 +180,6 @@ struct Finder : public PostWalker<Finder> {
     auto& improvements = map[curr];
 //std::cerr << "apply in " << getModule()->typeNames[curr->type.getHeapType()].name << '\n';
 
-    // Fill in the entry with equivalent pairs: all sequences for the same value
-    // are equivalent (the value itself no longer matters from here).
     for (auto& [value, sequences] : valueMap) {
       // The final type each sequence arrives at is the known value.
       auto finalType = value.getType();
@@ -225,7 +223,7 @@ struct Finder : public PostWalker<Finder> {
     if (requiresCast(a, startType) || bSize < aSize) {
       // We are either getting rid of a cast, or neither have casts but B is
       // shorter, so it is a valid improvement.
-      improvements.push_back({a, b});
+      improvements.insert({a, b});
       return true;
     }
 
@@ -239,7 +237,7 @@ struct Finder : public PostWalker<Finder> {
     // do need to handle the case of a non-heap type, as the final type may be
     // such.
     auto type = Type(startType, Nullable);
-    for (auto i : s) {
+    for (auto i : s) { // XXX reversed later down, so reverse iteration here?
       // Check if we can do the current lookup using the current type.
       auto& fields = type.getHeapType().getStruct().fields;
       if (i >= fields.size()) {
@@ -254,18 +252,18 @@ struct Finder : public PostWalker<Finder> {
 
     // We must have arrived at the proper final type, or else we need a cast
     // there.
-    return type == finalType;
+    return type != finalType;
   }
 
-  // Given a struct.new and a sequence prefix, look into this struct.new and add
-  // anything we find into the given entry. For example, if the prefix is [1,2]
-  // and we find (ref.func $foo) at index #3 then we can add a note to the entry
+  // Given a struct.new and a sequence, look into this struct.new and add
+  // anything we find into the given valueMap. For example, if the prefix is [1,2]
+  // and we find (ref.func $foo) at index #3 then we can add a note to the valueMap
   // that [1,2,3] arrives at value $foo.
   //
   // We also receive the "storage type" - the type of the location this data is
   // stored in. If it is stored in a less-refined location then we will need a
   // cast to read from it.
-  void scanNew(StructNew* curr, const Sequence& prefix, ValueMap& entry, Type storageType) {
+  void scanNew(StructNew* curr, const Sequence& prefix, ValueMap& valueMap, Type storageType) {
     // We'll only look at immutable fields.
     auto& fields = curr->type.getHeapType().getStruct().fields;
 
@@ -290,31 +288,31 @@ struct Finder : public PostWalker<Finder> {
       // which ends with index i.
       currSequence.back() = i;
 
-      processChild(curr->operands[i], currSequence, entry, field.type);
+      processChild(curr->operands[i], currSequence, valueMap, field.type);
     }
   }
 
-  void scanCast(RefCast* curr, const Sequence& prefix, ValueMap& entry, Type storageType) { // XXX remove this entire func? Or at least storageType
+  void scanCast(RefCast* curr, const Sequence& prefix, ValueMap& valueMap, Type storageType) { // XXX remove this entire func? Or at least storageType
     // The current sequence will be the given prefix, plus an index representing
     // a cast.
     // TODO: avoid these copies?
     auto currSequence = prefix;
     currSequence.push_back(Item(curr->intendedType));
-    processChild(curr->ref, currSequence, entry, storageType);
+    processChild(curr->ref, currSequence, valueMap, storageType);
   }
 
   // Note that unlike scanStructNew and scanCast, this is given the current
   // sequence, which also encodes the current expression (the other two are
   // given a prefix that they append to).
-  void processChild(Expression* curr, const Sequence& currSequence, ValueMap& entry, Type storageType) {
+  void processChild(Expression* curr, const Sequence& currSequence, ValueMap& valueMap, Type storageType) {
     if (auto* subNew = curr->dynCast<StructNew>()) {
       // Look into this struct.new recursively.
-      scanNew(subNew, currSequence, entry, storageType);
+      scanNew(subNew, currSequence, valueMap, storageType);
       return;
     }
 
     if (auto* cast = curr->dynCast<RefCast>()) {
-      scanCast(cast, currSequence, entry, storageType);
+      scanCast(cast, currSequence, valueMap, storageType);
       return;
     }
 
@@ -331,7 +329,7 @@ struct Finder : public PostWalker<Finder> {
 //std::cerr << "add sequence for " << value << " : ";
 //for (auto x : reverse) std::cerr << x << ' ';
 //std::cerr << '\n';
-      entry[value].push_back(reverse);
+      valueMap[value].push_back(reverse);
 
       if (value.isConstantGlobal()) {
         // Not only can we track the global itself, but we may be able to look
@@ -341,7 +339,7 @@ struct Finder : public PostWalker<Finder> {
         assert(!global->mutable_);
         if (!global->imported()) {
           if (auto* subNew = global->init->dynCast<StructNew>()) {
-            scanNew(subNew, currSequence, entry, storageType);
+            scanNew(subNew, currSequence, valueMap, storageType);
           }
         }
       }
