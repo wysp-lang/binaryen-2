@@ -415,18 +415,19 @@ struct EquivalentFieldOptimization : public Pass {
     };
 
     for (const auto& [_, map] : analysis.map) {
-      for (const auto& [curr, equivalences] : map) {
-        mergeMapIntoUnifiedMap(curr->type.getHeapType(), equivalences);
+      for (const auto& [curr, improvements] : map) {
+        mergeMapIntoUnifiedMap(curr->type.getHeapType(), improvements);
       }
     }
-    for (const auto& [curr, equivalences] : moduleFinder.map) {
-      mergeMapIntoUnifiedMap(curr->type.getHeapType(), equivalences);
+    for (const auto& [curr, improvements] : moduleFinder.map) {
+      mergeMapIntoUnifiedMap(curr->type.getHeapType(), improvements);
     }
 
-    // Check if we found anything to work with.
+    // We have found all the improvement opportunities in the entire module.
+    // Stop if there are none.
     auto foundWork = [&]() {
-      for (auto& [type, equivalences] : unifiedMap) {
-        if (!equivalences.empty()) {
+      for (auto& [type, improvements] : unifiedMap) {
+        if (!improvements.empty()) {
           return true;
         }
       }
@@ -541,14 +542,14 @@ struct EquivalentFieldOptimization : public Pass {
         if (iter == unifiedMap.end()) {
           continue;
         }
-        auto& equivalences = iter->second;
+        auto& improvements = iter->second;
 //std::cerr << "seek in " << getModule()->typeNames[currValue->type.getHeapType()].name << '\n';
 
         // Look at everything equivalent to this sequence.
         //
         // TODO: Make this more efficient than a brute-force search to find the
-        //       equivalences and then on those equivalences. However, there are
-        //       usually not that many equivalences anyhow.
+        //       improvements and then on those improvements. However, there are
+        //       usually not that many improvements anyhow.
 
         // If we find a sequence better than currSequence, we'll set it here.
         std::optional<Sequence> best;
@@ -566,7 +567,7 @@ struct EquivalentFieldOptimization : public Pass {
           }
         };
 
-        for (auto& [a, b] : equivalences.pairs) {
+        for (auto& [a, b] : improvements.pairs) {
           if (a == currSequence) {
             maybeUse(b);
           } else if (b == currSequence) {
