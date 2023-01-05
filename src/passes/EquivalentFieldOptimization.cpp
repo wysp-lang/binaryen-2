@@ -231,9 +231,14 @@ std::cerr << "  nope0\n";
     // We also give up if B requires a cast at some point in the sequence. That
     // prevents us from computing the final type, and it would also prevent us
     // from emitting a proper replacement sequence when we try to optimize.
+    //
+    // We also only compare the final types if both exist. If A lacks a final
+    // type, that means it has a cast, which is great - we want to remove it.
     auto aFinalType = getFinalType(a, startType);
     auto bFinalType = getFinalType(b, startType);
-    if (aFinalType != bFinalType || !bFinalType) {
+std::cerr << "finals: " << !!aFinalType << " : " << !!bFinalType << '\n';
+if (aFinalType && bFinalType) std::cerr << "  :: " << *aFinalType << " : " << *bFinalType << '\n';
+    if (!bFinalType || (aFinalType && aFinalType != bFinalType)) {
 std::cerr << "  nope1\n";
       return false;
     }

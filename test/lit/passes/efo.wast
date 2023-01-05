@@ -1797,53 +1797,46 @@
   )
 )
 
-;; A sequence that requires a cast.
+;; A case where we can remove a cast.
 ;;
-;; The global $C is written into both $A and $B. We can pick a shorter sequence
-;; without a cast.
+;; Type A contains B1 and B2, but one field has type data, so after we read from
+;; it we'd need to cast to read its field. We avoid the cast by switching to a
+;; read from the other one.
 (module
-  ;; CHECK:      (type $A (struct (field (ref $B)) (field (ref data))))
-  (type $A (struct (field (ref $B)) (field (ref data))))
+  ;; CHECK:      (type $A (struct (field (ref $B1)) (field (ref data))))
 
-  ;; CHECK:      (type $C (struct (field i32)))
+  ;; CHECK:      (type $B1 (struct (field i32)))
+  (type $B1 (struct (field i32)))
 
-  ;; CHECK:      (type $B (struct (field (ref $C))))
-  (type $B (struct (field (ref $C))))
+  ;; CHECK:      (type $B2 (struct (field i32)))
+  (type $B2 (struct (field i32)))
 
-  (type $C (struct (field i32)))
-
-  ;; CHECK:      (global $C (ref $C) (struct.new $C
-  ;; CHECK-NEXT:  (i32.const 0)
-  ;; CHECK-NEXT: ))
-  (global $C (ref $C) (struct.new $C
-    (i32.const 0)
-  ))
+  (type $A (struct (field (ref $B1)) (field (ref data))))
 
   ;; CHECK:      (func $A (type $none_=>_none)
   ;; CHECK-NEXT:  (local $ref (ref null $A))
   ;; CHECK-NEXT:  (local.set $ref
   ;; CHECK-NEXT:   (struct.new $A
-  ;; CHECK-NEXT:    (struct.new $B
-  ;; CHECK-NEXT:     (global.get $C)
+  ;; CHECK-NEXT:    (struct.new $B1
+  ;; CHECK-NEXT:     (i32.const 10)
   ;; CHECK-NEXT:    )
-  ;; CHECK-NEXT:    (global.get $C)
+  ;; CHECK-NEXT:    (struct.new $B2
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $A 0
-  ;; CHECK-NEXT:    (local.get $ref)
-  ;; CHECK-NEXT:   )
-  ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $B 0
+  ;; CHECK-NEXT:   (struct.get $B1 0
   ;; CHECK-NEXT:    (struct.get $A 0
   ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $A 1
-  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   (struct.get $B1 0
+  ;; CHECK-NEXT:    (struct.get $A 0
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -1851,28 +1844,31 @@
     (local $ref (ref null $A))
     (local.set $ref
       (struct.new $A
-        (struct.new $B
-          (global.get $C)
+        (struct.new $B1
+          (i32.const 10)
         )
-        (global.get $C)
+        (struct.new $B2
+          (i32.const 10)
+        )
       )
     )
     (drop
-      (struct.get $A 0
-        (local.get $ref)
-      )
-    )
-    (drop
-      (struct.get $B 0     ;; This can read from $A.1 instead of $A.B.0. FIXME why not work?
+      (struct.get $B1 0
         (struct.get $A 0
           (local.get $ref)
         )
       )
     )
     (drop
-      (struct.get $A 1
-        (local.get $ref)
+      (struct.get $B2 0
+        (ref.cast $B2
+          (struct.get $A 1
+            (local.get $ref)
+          )
+        )
       )
     )
   )
-)
+) ;; as above but flip B1 and B2
+
+;; TODO itable like situation with a cast
