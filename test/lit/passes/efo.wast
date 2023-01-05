@@ -1869,6 +1869,79 @@
       )
     )
   )
-) ;; as above but flip B1 and B2
+)
+
+;; As above, but flip the fields so now data is where B1 would be, and there is
+;; a ref of B2. Now B1 needs a cast to be read from, and we'll optimize to use
+;; B2 instead.
+(module
+  ;; CHECK:      (type $A (struct (field (ref data)) (field (ref $B2))))
+
+  ;; CHECK:      (type $B2 (struct (field i32)))
+
+  ;; CHECK:      (type $B1 (struct (field i32)))
+  (type $B1 (struct (field i32)))
+
+  (type $B2 (struct (field i32)))
+
+  (type $A (struct (field (ref data)) (field (ref $B2)))) ;; change is here
+
+  ;; CHECK:      (func $A (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $ref (ref null $A))
+  ;; CHECK-NEXT:  (local.set $ref
+  ;; CHECK-NEXT:   (struct.new $A
+  ;; CHECK-NEXT:    (struct.new $B1
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (struct.new $B2
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $B2 0
+  ;; CHECK-NEXT:    (struct.get $A 1
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $B2 0
+  ;; CHECK-NEXT:    (struct.get $A 1
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $A
+    (local $ref (ref null $A))
+    (local.set $ref
+      (struct.new $A
+        (struct.new $B1
+          (i32.const 10)
+        )
+        (struct.new $B2
+          (i32.const 10)
+        )
+      )
+    )
+    (drop
+      (struct.get $B1 0
+        (ref.cast $B1
+          (struct.get $A 0
+            (local.get $ref)
+          )
+        )
+      )
+    )
+    (drop
+      (struct.get $B2 0
+        (struct.get $A 1
+          (local.get $ref)
+        )
+      )
+    )
+  )
+)
 
 ;; TODO itable like situation with a cast
