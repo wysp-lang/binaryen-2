@@ -420,31 +420,32 @@ struct EquivalentFieldOptimization : public Pass {
         // This is the first time we see this type. Just copy the data, there is
         // nothing to compare it to yet.
         unifiedMap[type] = currImprovements;
-      } else {
-        // This is not the first time, so we must filter what we've seen so far
-        // with the current data: anything we've seen so far as consistently
-        // improvable must also be improvable in this new info, or else it must
-        // not be optimized.
+        return;
+      }
 
-        // Accumulate keys to erase to avoid invalidation.
-        std::vector<Sequence> toErase;
-        
-        auto& typeImprovements = iter->second;
-        for (const auto& improvement : typeImprovements) {
-          auto iter = currImprovements.find(improvement.first);
-          if (iter == currImprovements.end() ||
-              iter->second != improvement.second) {
-            // Either this existing improvement is not present in the current
-            // set, or there is something else there, so we do not see the
-            // consistency we are looking for.
-            // TODO: Perhaps if there is something different, we can find the
-            //       intersection.
-            toErase.push_back(improvement.first);
+      // This is not the first time, so we must filter what we've seen so far
+      // with the current data: anything we've seen so far as consistently
+      // improvable must also be improvable in this new info, or else it must
+      // not be optimized. That means we want to take the intersection of
+      // the sets of improved sequences, for each sequence.
+      auto& typeImprovements = iter->second;
+                              
+      for (auto& [sequence, typeImprovementSet] : typeImprovements) {
+        auto iter = currImprovements.find(sequence);
+        if (iter == currImprovements.end()) {
+          // Nothing at all, so the intersection is empty.
+          typeImprovementSet.clear();
+          continue;
+        }
+
+        auto& currImprovementSet = iter->second;
+        ImprovementSet intersection;
+        for (auto& s : currImprovementSet) {
+          if (typeImprovementSet.count(s)) {
+            intersection.insert(s);
           }
         }
-        for (const auto& sequence : toErase) {
-          typeImprovements.erase(sequence);
-        }
+        typeImprovementSet = intersection;
       }
     };
 
@@ -514,6 +515,27 @@ std::cerr << "nada2\n";
     }
 
     // Excellent, we have things we can optimize with!
+    //
+    // Before optimizing, prune the data. We have a set of possible improvements
+    // for each sequence, but after merging everything as we have, we just care
+    // about the best one for each sequence (as that is what we'll pick whenever
+    // we find a place to optimize.
+    for (auto& [_, improvements] : unifiedMap) {
+      for (auto& [_, newSequences] : improvements) {
+        if (newSequences.size() > 1) {
+          std::optional<Sequence> best;
+          for (auto& s : newSequences) {
+            if (!best || s.size() < best->size() || (s.size() == best->size() && s < *best)) {
+              best = s;
+            }
+          }
+          assert(best);
+          newSequences = {*best};
+        }
+      }
+    }
+
+    // Optimize.
     FunctionOptimizer(unifiedMap).run(getPassRunner(), module);
   }
 
@@ -591,10 +613,12 @@ std::cerr << "  sad1\n";
           // TODO Rather than use this immediately, we could consider longer
           //      sequences first, and pick the best.
           auto& newSequences = iter2->second;
-          assert(newSequences.size() == 1);
-          auto& newSequence = *newSequences.begin();
-          replaceCurrent(buildSequence(newSequence, currStart));
-          return;
+          if (!newSequences.empty()) {
+            assert(newSequences.size() == 1);
+            auto& newSequence = *newSequences.begin();
+            replaceCurrent(buildSequence(newSequence, currStart));
+            return;
+          }
         }
 std::cerr << "  sad2\n";
       }
