@@ -414,7 +414,7 @@ struct EquivalentFieldOptimization : public Pass {
     // Given a type and some improvements we found for it somewhere, merge that into
     // the main unified map.
     auto mergeIntoUnifiedMap = [&](HeapType type,
-                                   const ImprovementMap& currImprovements) {
+                                   const Improvements& currImprovements) {
       auto iter = unifiedMap.find(type);
       if (iter == unifiedMap.end()) {
         // This is the first time we see this type. Just copy the data, there is
@@ -448,22 +448,13 @@ struct EquivalentFieldOptimization : public Pass {
       }
     };
 
-    auto mergeMapIntoUnifiedMap = [&](HeapType type,
-                                   const Improvements& currImprovements) {
-      ImprovementMap currImprovementMap;
-      for (const auto& improvement : currImprovements) {
-        currImprovementMap[improvement.first] = improvement.second;
-      }
-      mergeIntoUnifiedMap(type, currImprovementMap);
-    };
-
     for (const auto& [_, map] : analysis.map) {
       for (const auto& [curr, improvements] : map) {
-        mergeMapIntoUnifiedMap(curr->type.getHeapType(), improvements);
+        mergeIntoUnifiedMap(curr->type.getHeapType(), improvements);
       }
     }
     for (const auto& [curr, improvements] : moduleFinder.map) {
-      mergeMapIntoUnifiedMap(curr->type.getHeapType(), improvements);
+      mergeIntoUnifiedMap(curr->type.getHeapType(), improvements);
     }
 
     // We have found all the improvement opportunities in the entire module.
@@ -599,7 +590,9 @@ std::cerr << "  sad1\n";
           // operations with the new ones of the new and better sequence.
           // TODO Rather than use this immediately, we could consider longer
           //      sequences first, and pick the best.
-          auto newSequence = iter2->second;
+          auto& newSequences = iter2->second;
+          assert(newSequences.size() == 1);
+          auto& newSequence = *newSequences.begin();
           replaceCurrent(buildSequence(newSequence, currStart));
           return;
         }
