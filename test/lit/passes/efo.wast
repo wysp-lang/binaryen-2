@@ -1686,8 +1686,9 @@
 )
 
 ;; Realistic vtable scenario. This is something no other optimization can handle
-;; as we cannot simply infer the called function here - we can only infer
-;; equivalence using this pass, and switch the get to the lower index.
+;; as we cannot simply infer the called function here - only this pass can see
+;; that different fields are equivalent *without* knowing the actual function
+;; references. Using that, we can switch the get to the lower index.
 ;;
 ;; This also tests function references being optimized.
 (module
