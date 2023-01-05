@@ -552,11 +552,7 @@
   )
 )
 
-;; Four fields, now with potential optimizability, but it is not realized. One
-;; struct.new suggests we optimize field 3 to 2, and another 3 to 1. The latter
-;; also allows 3 to 2, but as 1 is a lower index we look at that first, and we
-;; do not intersect the set of all possible improvements atm, so this is a
-;; missed opportunity for now. TODO
+;; Four fields, now with optimizability.
 (module
   ;; CHECK:      (type $A (struct (field i32) (field i32) (field i32) (field i32)))
   (type $A (struct (field i32) (field i32) (field i32) (field i32)))
@@ -598,7 +594,7 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $A 3
+  ;; CHECK-NEXT:   (struct.get $A 2
   ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
@@ -640,7 +636,7 @@
       )
     )
     (drop
-      (struct.get $A 3
+      (struct.get $A 3   ;; This will be optimized to index 2.
         (local.get $ref)
       )
     )
