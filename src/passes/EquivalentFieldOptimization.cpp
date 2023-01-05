@@ -114,10 +114,11 @@ using Item = Index;
 using Sequence = std::vector<Item>;
 using Sequences = std::vector<Sequence>;
 
-// An improvement is a sequence that we want to turn into another sequence,
-// because the latter sequence is better.
-using Improvement = std::pair<Sequence, Sequence>;
-using Improvements = std::unordered_set<Improvement>;
+// An improvement for a sequence is another sequence that we'd like to replace
+// it with (e.g. because it is shorter). We will track sets of possible
+// improvements for a given sequence.
+using ImprovementSet = std::unordered_set<Sequence>;
+using Improvements = std::unordered_map<Sequence, ImprovementSet>;
 
 // That is, if we reach a point that we load
 // something with a type that is not refined enough for us to perform the load
@@ -259,7 +260,7 @@ std::cerr << "  nope1\n";
 //for (auto x : reverse) std::cerr << x << ' ';
 //std::cerr << '\n';
 
-      improvements.insert({reverseA, reverseB});
+      improvements[reverseA].insert(reverseB);
 std::cerr << "adddd\n";
       return true;
     }
@@ -376,11 +377,8 @@ std::cerr << "  cast2\n";
   }
 };
 
-// As we optimize, we will find the current sequence used in a particular spot,
-// and will check in a map of possible improvements whether that sequence has an
-// improvement in fact.
-using ImprovementMap =  std::unordered_map<Sequence, Sequence>;
-using TypeImprovementMap = std::unordered_map<HeapType, ImprovementMap>;
+// We need to collect all the improvements for each type.
+using TypeImprovementMap = std::unordered_map<HeapType, Improvements>;
 
 struct EquivalentFieldOptimization : public Pass {
   // Only modifies types.
