@@ -95,8 +95,8 @@ namespace wasm {
 
 template<typename T>
 void dump(const T& t) {
-  for (auto x : t) std::cerr << x << ' ';
-  std::cerr << '\n';
+//  for (auto x : t) std::cerr << x << ' ';
+//  std::cerr << '\n';
 }
 
 namespace {
@@ -211,16 +211,16 @@ struct Finder : public PostWalker<Finder> {
   // Add (A, B) (an improvement from A to B) if it is indeed an improvement.
   // Return true if so.
   bool addIfImprovement(const Sequence& a, const Sequence& b, Improvements& improvements, HeapType startType, Type finalType /* XXX */) {
-std::cerr << "addIf " << getModule()->typeNames[startType].name << "\n";
-dump(a);
-dump(b);
+//std::cerr << "addIf " << getModule()->typeNames[startType].name << "\n";
+//dump(a);
+//dump(b);
 
     // If B is larger, give up.
     // TODO Perhaps if B has no casts but A does, it is worth it?
     auto aSize = a.size();
     auto bSize = b.size();
     if (bSize > aSize) {
-std::cerr << "  nope0\n";
+//std::cerr << "  nope0\n";
       return false;
     }
 
@@ -237,10 +237,10 @@ std::cerr << "  nope0\n";
     // type, that means it has a cast, which is great - we want to remove it.
     auto aFinalType = getFinalType(a, startType);
     auto bFinalType = getFinalType(b, startType);
-std::cerr << "finals: " << !!aFinalType << " : " << !!bFinalType << '\n';
-if (aFinalType && bFinalType) std::cerr << "  :: " << *aFinalType << " : " << *bFinalType << '\n';
+//std::cerr << "finals: " << !!aFinalType << " : " << !!bFinalType << '\n';
+//if (aFinalType && bFinalType) std::cerr << "  :: " << *aFinalType << " : " << *bFinalType << '\n';
     if (!bFinalType || (aFinalType && aFinalType != bFinalType)) {
-std::cerr << "  nope1\n";
+//std::cerr << "  nope1\n";
       return false;
     }
     
@@ -261,11 +261,11 @@ std::cerr << "  nope1\n";
 //std::cerr << '\n';
 
       improvements[reverseA].insert(reverseB);
-std::cerr << "adddd\n";
+//std::cerr << "adddd\n";
       return true;
     }
 
-std::cerr << "  nope2\n";
+//std::cerr << "  nope2\n";
     return false;
   }
 
@@ -285,7 +285,7 @@ std::cerr << "  nope2\n";
       if (!heapType.isStruct()) {
         // This is not even a struct, so it is something like data or eq. A cast
         // is definitely necessary here.
-std::cerr << "  cast1\n";
+//std::cerr << "  cast1\n";
         return {};
       }
 
@@ -293,7 +293,7 @@ std::cerr << "  cast1\n";
       if (i >= fields.size()) {
         // This field does not exist in this type - it is added in a subtype. So
         // a cast is necessary.
-std::cerr << "  cast2\n";
+//std::cerr << "  cast2\n";
         return {};
       }
 
@@ -469,7 +469,7 @@ struct EquivalentFieldOptimization : public Pass {
       return false;
     };
     if (!foundWork()) {
-std::cerr << "nada\n";
+//std::cerr << "nada\n";
       return;
     }
 
@@ -510,7 +510,7 @@ std::cerr << "nada\n";
 
     // We may have just filtered out all the possible work, so check again.
     if (!foundWork()) {
-std::cerr << "nada2\n";
+//std::cerr << "nada2\n";
       return;
     }
 
@@ -572,10 +572,10 @@ std::cerr << "nada2\n";
       // The start of the sequence - the reference that the sequence of field
       // accesses begins with.
       Expression* currStart = curr;
-std::cerr << "\noptimizeSequence in visit: " << *curr << '\n';
+//std::cerr << "\noptimizeSequence in visit: " << *curr << '\n';
       while (1) {
 
-std::cerr << "loop inspect sequence for " << *currStart << "\n";
+//std::cerr << "loop inspect sequence for " << *currStart << "\n";
 
         // Apply the current value to the sequence, and point currStart to the
         // item we are reading from right now (which will be the next item
@@ -594,14 +594,14 @@ std::cerr << "loop inspect sequence for " << *currStart << "\n";
           break;
         }
 
-for (auto x : currSequence) std::cerr << x << ' ';
-std::cerr << '\n';
+//for (auto x : currSequence) std::cerr << x << ' ';
+//std::cerr << '\n';
 
         // See if a sequence starting here has anything we can optimize with.
         // TODO: we could also look at our supertypes
         auto iter = unifiedMap.find(currStart->type.getHeapType());
         if (iter == unifiedMap.end()) {
-std::cerr << "  sad1\n";
+//std::cerr << "  sad1\n";
           continue;
         }
 
@@ -620,7 +620,7 @@ std::cerr << "  sad1\n";
             return;
           }
         }
-std::cerr << "  sad2\n";
+//std::cerr << "  sad2\n";
       }
     }
 
