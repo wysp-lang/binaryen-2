@@ -1861,9 +1861,9 @@
     )
     (drop
       (struct.get $B2 0
-        (ref.cast $B2
-          (struct.get $A 1
-            (local.get $ref)
+        (ref.cast $B2        ;; We can avoid this cast by reading from A's
+          (struct.get $A 1   ;; field #0 instead, turning this sequence into
+            (local.get $ref) ;; the same as the one above.
           )
         )
       )
