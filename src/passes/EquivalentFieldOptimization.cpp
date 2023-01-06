@@ -567,6 +567,8 @@ struct EquivalentFieldOptimization : public Pass {
 
       // The current sequence of operations. We'll go deeper and build up the
       // sequence as we go, looking for improvements as we go.
+      //
+      // TODO: use a fallthrough here. a Tee in the middle should not stop us.
       Sequence currSequence;
 
       // The start of the sequence - the reference that the sequence of field
