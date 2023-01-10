@@ -106,8 +106,7 @@ inline EvaluationResult evaluateKindCheck(Expression* curr) {
         flip = true;
         [[fallthrough]];
       case BrOnCast: {
-        switch (
-          GCTypeUtils::evaluateCastCheck(br->ref->type, br->castType)) {
+        switch (GCTypeUtils::evaluateCastCheck(br->ref->type, br->castType)) {
           case Unknown:
             return Unknown;
           case Success:

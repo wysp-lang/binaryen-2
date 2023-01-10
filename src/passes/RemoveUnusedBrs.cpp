@@ -764,15 +764,15 @@ struct RemoveUnusedBrs : public WalkerPass<PostWalker<RemoveUnusedBrs>> {
             // since that does not flow out a value. Instead, change the cast
             // type to a null.
             curr->op = BrOnCast;
-            curr->castType = Type(curr->castType.getHeapType().getBottom(),
-                                  Nullable);
+            curr->castType =
+              Type(curr->castType.getHeapType().getBottom(), Nullable);
             break;
           case GCTypeUtils::SuccessOnlyIfNonNull:
             // Parallel to the above, but now the cast must fail for us to
             // branch.
             curr->op = BrOnCastFail; // XXX
-            curr->castType = Type(curr->castType.getHeapType().getBottom(),
-                                  Nullable);
+            curr->castType =
+              Type(curr->castType.getHeapType().getBottom(), Nullable);
             break;
         }
       }
