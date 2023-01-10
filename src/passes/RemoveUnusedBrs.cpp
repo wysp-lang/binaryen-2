@@ -771,7 +771,7 @@ struct RemoveUnusedBrs : public WalkerPass<PostWalker<RemoveUnusedBrs>> {
           case GCTypeUtils::SuccessOnlyIfNonNull:
             // Parallel to the above, but now the cast must fail for us to
             // branch.
-            curr->op = BrOnCastFail; // XXX
+            curr->op = BrOnCastFail;
             curr->castType =
               Type(curr->castType.getHeapType().getBottom(), Nullable);
             worked = true;

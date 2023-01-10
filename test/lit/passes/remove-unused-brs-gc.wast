@@ -279,7 +279,6 @@
      ;; As above, but now the type is nullable. The cast succeeds when the
      ;; value is non-nullable, so we can check for null directly: if we fail to
      ;; cast to null, then we should take the branch.
-     ;; TODO fail variant?
      (local.get $struct)
     )
    )
@@ -323,6 +322,42 @@
     ;; As $br_on_cast, but this checks for a failing cast, so we know it will
     ;; *not* be taken.
     (br_on_cast_fail $block $struct
+     (struct.new $struct)
+    )
+   )
+   (unreachable)
+  )
+ )
+
+ (func $br_on_cast_fail_null_cast (result (ref $struct))
+  (block $block (result (ref $struct))
+   (drop
+    ;; As above, but now the cast is nullable.
+    (br_on_cast_fail null $block $struct
+     (struct.new $struct)
+    )
+   )
+   (unreachable)
+  )
+ )
+
+ (func $br_on_cast_fail_null_ref (result (ref null $struct))
+  (block $block (result (ref $struct))
+   (drop
+    ;; As above, but now the ref input is nullable.
+    (br_on_cast_fail $block $struct
+     (struct.new $struct)
+    )
+   )
+   (unreachable)
+  )
+ )
+
+ (func $br_on_cast_fail_nulls (result (ref null $struct))
+  (block $block (result (ref $struct))
+   (drop
+    ;; As above, but now both cast and ref are nullable.
+    (br_on_cast_fail null $block $struct
      (struct.new $struct)
     )
    )
