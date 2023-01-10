@@ -739,7 +739,7 @@ struct RemoveUnusedBrs : public WalkerPass<PostWalker<RemoveUnusedBrs>> {
         }
 
         // We handled everything but the cast operations.
-        assert(curr->op == BrOnCast || curr->op != BrOnCastFail);
+        assert(curr->op == BrOnCast || curr->op == BrOnCastFail);
 
         // Check if the type is the kind we are checking for.
         switch (GCTypeUtils::evaluateKindCheck(curr)) {
