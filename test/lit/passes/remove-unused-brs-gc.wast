@@ -329,11 +329,20 @@
   )
  )
 
+ ;; CHECK:      (func $br_on_cast_fail_null_cast (type $none_=>_ref|$struct|) (result (ref $struct))
+ ;; CHECK-NEXT:  (block $block
+ ;; CHECK-NEXT:   (drop
+ ;; CHECK-NEXT:    (struct.new_default $struct)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (unreachable)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
  (func $br_on_cast_fail_null_cast (result (ref $struct))
   (block $block (result (ref $struct))
    (drop
     ;; As above, but now the cast is nullable.
-    (br_on_cast_fail null $block $struct
+    ;; The cast cannot fail, so we can remove the br.
+    (br_on_cast_fail $block null $struct
      (struct.new $struct)
     )
    )
@@ -341,24 +350,44 @@
   )
  )
 
- (func $br_on_cast_fail_null_ref (result (ref null $struct))
-  (block $block (result (ref $struct))
+ ;; CHECK:      (func $br_on_cast_fail_null_ref (type $ref?|$struct|_=>_ref?|$struct|) (param $ref-null (ref null $struct)) (result (ref null $struct))
+ ;; CHECK-NEXT:  (block $block (result nullref)
+ ;; CHECK-NEXT:   (drop
+ ;; CHECK-NEXT:    (br_on_cast $block null none
+ ;; CHECK-NEXT:     (local.get $ref-null)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (unreachable)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $br_on_cast_fail_null_ref (param $ref-null (ref null $struct)) (result (ref null $struct))
+  (block $block (result (ref null $struct))
    (drop
     ;; As above, but now the ref input is nullable.
+    ;; The cast can fail only on a null, so we can check for that directly.
     (br_on_cast_fail $block $struct
-     (struct.new $struct)
+     (local.get $ref-null)
     )
    )
    (unreachable)
   )
  )
 
- (func $br_on_cast_fail_nulls (result (ref null $struct))
-  (block $block (result (ref $struct))
+ ;; CHECK:      (func $br_on_cast_fail_nulls (type $ref?|$struct|_=>_ref?|$struct|) (param $ref-null (ref null $struct)) (result (ref null $struct))
+ ;; CHECK-NEXT:  (block $block
+ ;; CHECK-NEXT:   (drop
+ ;; CHECK-NEXT:    (local.get $ref-null)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (unreachable)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $br_on_cast_fail_nulls (param $ref-null (ref null $struct)) (result (ref null $struct))
+  (block $block (result (ref null $struct))
    (drop
     ;; As above, but now both cast and ref are nullable.
-    (br_on_cast_fail null $block $struct
-     (struct.new $struct)
+    ;; The cast cannot fail, so we can remove the br.
+    (br_on_cast_fail $block null $struct
+     (local.get $ref-null)
     )
    )
    (unreachable)
@@ -377,7 +406,7 @@
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (drop
- ;; CHECK-NEXT:   (if (result anyref)
+ ;; CHECK-NEXT:   (if (result (ref null $struct))
  ;; CHECK-NEXT:    (local.get $x)
  ;; CHECK-NEXT:    (ref.null none)
  ;; CHECK-NEXT:    (ref.cast null $struct
@@ -386,9 +415,9 @@
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (drop
- ;; CHECK-NEXT:   (if (result anyref)
+ ;; CHECK-NEXT:   (if (result (ref null $struct))
  ;; CHECK-NEXT:    (local.get $x)
- ;; CHECK-NEXT:    (block $something (result anyref)
+ ;; CHECK-NEXT:    (block $something (result (ref null $struct))
  ;; CHECK-NEXT:     (drop
  ;; CHECK-NEXT:      (br_on_cast_fail $something null none
  ;; CHECK-NEXT:       (local.get $struct)
@@ -400,8 +429,8 @@
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT:  (drop
- ;; CHECK-NEXT:   (select (result anyref)
- ;; CHECK-NEXT:    (block (result anyref)
+ ;; CHECK-NEXT:   (select (result nullref)
+ ;; CHECK-NEXT:    (block (result nullref)
  ;; CHECK-NEXT:     (block $nothing
  ;; CHECK-NEXT:      (drop
  ;; CHECK-NEXT:       (br_on_null $nothing
