@@ -738,20 +738,42 @@ struct RemoveUnusedBrs : public WalkerPass<PostWalker<RemoveUnusedBrs>> {
           return;
         }
 
-        // Check if the type is the kind we are checking for.
-        auto result = GCTypeUtils::evaluateKindCheck(curr);
+        // We handled everything but the cast operations.
+        assert(curr->op == BrOnCast || curr->op != BrOnCastFail);
 
-        if (result == GCTypeUtils::Success) {
-          // The type is what we are looking for, so we can switch from BrOn to
-          // a simple br which is always taken.
-          replaceCurrent(
-            Builder(*getModule()).makeBreak(curr->name, curr->ref));
-          worked = true;
-        } else if (result == GCTypeUtils::Failure) {
-          // The type is not what we are looking for, so the branch is never
-          // taken, and the value just flows through.
-          replaceCurrent(curr->ref);
-          worked = true;
+        // Check if the type is the kind we are checking for.
+        switch (GCTypeUtils::evaluateKindCheck(curr)) {
+          case GCTypeUtils::Unknown:
+            break;
+          case GCTypeUtils::Success:
+            // The type is what we are looking for, so we can switch from BrOn
+            // to a simple br which is always taken.
+            replaceCurrent(
+              Builder(*getModule()).makeBreak(curr->name, curr->ref));
+            worked = true;
+            break;
+          case GCTypeUtils::Failure:
+            // The type is not what we are looking for, so the branch is never
+            // taken, and the value just flows through.
+            replaceCurrent(curr->ref);
+            worked = true;
+            break;
+          case GCTypeUtils::SuccessOnlyIfNull:
+            // The br is taken only when the input is null, so we just need to
+            // check for that. However, we can't just switch to using BrOnNull
+            // since that does not flow out a value. Instead, change the cast
+            // type to a null.
+            curr->op = BrOnCast;
+            curr->castType = Type(curr->castType.getHeapType().getBottom(),
+                                  Nullable);
+            break;
+          case GCTypeUtils::SuccessOnlyIfNonNull:
+            // Parallel to the above, but now the cast must fail for us to
+            // branch.
+            curr->op = BrOnCastFail; // XXX
+            curr->castType = Type(curr->castType.getHeapType().getBottom(),
+                                  Nullable);
+            break;
         }
       }
     } optimizer;

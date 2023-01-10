@@ -106,14 +106,23 @@ inline EvaluationResult evaluateKindCheck(Expression* curr) {
         flip = true;
         [[fallthrough]];
       case BrOnCast: {
-        auto result =
-          GCTypeUtils::evaluateCastCheck(br->ref->type, br->castType);
-        if (result == Success) {
-          return flip ? Failure : Success;
-        } else if (result == Failure) {
-          return flip ? Success : Failure;
+        switch (
+          GCTypeUtils::evaluateCastCheck(br->ref->type, br->castType)) {
+          case Unknown:
+            return Unknown;
+          case Success:
+            return flip ? Failure : Success;
+          case Failure:
+            return flip ? Success : Failure;
+          case SuccessOnlyIfNull:
+            return flip ? SuccessOnlyIfNonNull : SuccessOnlyIfNull;
+          case SuccessOnlyIfNonNull:
+            return flip ? SuccessOnlyIfNull : SuccessOnlyIfNonNull;
         }
-        return Unknown;
+        // All the cases above return, but to avoid a compiler warning use a
+        // fallthrough annotation here. The WASM_UNREACHABLE there is what we'd
+        // want for a logic error anyhow.
+        [[fallthrough]];
       }
       default:
         WASM_UNREACHABLE("unhandled BrOn");
