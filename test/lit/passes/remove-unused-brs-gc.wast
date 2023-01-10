@@ -146,7 +146,7 @@
 
  ;; CHECK:      (func $br_on_cast_unrelated (type $none_=>_ref?|$struct|) (result (ref null $struct))
  ;; CHECK-NEXT:  (local $nullable-struct2 (ref null $struct2))
- ;; CHECK-NEXT:  (block $block (result (ref null $struct))
+ ;; CHECK-NEXT:  (block $block (result nullref)
  ;; CHECK-NEXT:   (drop
  ;; CHECK-NEXT:    (struct.new_default $struct2)
  ;; CHECK-NEXT:   )
@@ -157,7 +157,7 @@
  ;; CHECK-NEXT:    (local.get $nullable-struct2)
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:   (drop
- ;; CHECK-NEXT:    (br_on_cast $block null $struct
+ ;; CHECK-NEXT:    (br_on_cast $block null none
  ;; CHECK-NEXT:     (local.get $nullable-struct2)
  ;; CHECK-NEXT:    )
  ;; CHECK-NEXT:   )
@@ -189,6 +189,8 @@
    (drop
     ;; But if both are nullable, then we can't optimize because the cast would
     ;; succeed if the value is a null.
+    ;; As the only possible value that passes the cast is null, we can at least
+    ;; switch the cast to look for the null type.
     (br_on_cast $block null $struct
      (local.get $nullable-struct2)
     )
@@ -216,7 +218,7 @@
  ;; CHECK-NEXT:    )
  ;; CHECK-NEXT:   )
  ;; CHECK-NEXT:   (drop
- ;; CHECK-NEXT:    (br_on_cast_fail $block null $struct
+ ;; CHECK-NEXT:    (br_on_cast_fail $block null none
  ;; CHECK-NEXT:     (local.get $nullable-struct2)
  ;; CHECK-NEXT:    )
  ;; CHECK-NEXT:   )
@@ -246,8 +248,10 @@
     )
    )
    (drop
-    ;; But if both are nullable, then we can't optimize because the cast would
+    ;; But if both are nullable, then we can't optimize away the cast, as it can
     ;; succeed if the value is a null.
+    ;; As the only possible value that passes the cast is null, we can at least
+    ;; switch the cast to look for the null type.
     (br_on_cast_fail $block null $struct
      (local.get $nullable-struct2)
     )
@@ -260,7 +264,7 @@
  ;; CHECK-NEXT:  (local $struct (ref null $struct))
  ;; CHECK-NEXT:  (block $block (result (ref $struct))
  ;; CHECK-NEXT:   (drop
- ;; CHECK-NEXT:    (br_on_cast $block $struct
+ ;; CHECK-NEXT:    (br_on_cast_fail $block null none
  ;; CHECK-NEXT:     (local.get $struct)
  ;; CHECK-NEXT:    )
  ;; CHECK-NEXT:   )
@@ -272,7 +276,10 @@
   (block $block (result (ref $struct))
    (drop
     (br_on_cast $block $struct
-     ;; As above, but now the type is nullable, so we cannot infer anything.
+     ;; As above, but now the type is nullable. The cast succeeds when the
+     ;; value is non-nullable, so we can check for null directly: if we fail to
+     ;; cast to null, then we should take the branch.
+     ;; TODO fail variant?
      (local.get $struct)
     )
    )
@@ -348,7 +355,7 @@
  ;; CHECK-NEXT:    (local.get $x)
  ;; CHECK-NEXT:    (block $something (result anyref)
  ;; CHECK-NEXT:     (drop
- ;; CHECK-NEXT:      (br_on_cast $something $struct
+ ;; CHECK-NEXT:      (br_on_cast_fail $something null none
  ;; CHECK-NEXT:       (local.get $struct)
  ;; CHECK-NEXT:      )
  ;; CHECK-NEXT:     )

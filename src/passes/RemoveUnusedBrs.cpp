@@ -766,6 +766,7 @@ struct RemoveUnusedBrs : public WalkerPass<PostWalker<RemoveUnusedBrs>> {
             curr->op = BrOnCast;
             curr->castType =
               Type(curr->castType.getHeapType().getBottom(), Nullable);
+            worked = true;
             break;
           case GCTypeUtils::SuccessOnlyIfNonNull:
             // Parallel to the above, but now the cast must fail for us to
@@ -773,6 +774,7 @@ struct RemoveUnusedBrs : public WalkerPass<PostWalker<RemoveUnusedBrs>> {
             curr->op = BrOnCastFail; // XXX
             curr->castType =
               Type(curr->castType.getHeapType().getBottom(), Nullable);
+            worked = true;
             break;
         }
       }
