@@ -56,311 +56,10 @@
 #include "wasm-builder.h"
 #include "wasm.h"
 
-#include "support/hash.h" // XXX
-namespace std {           // XXX
-// Hashing vectors is often useful
-template<typename T> struct hash<vector<T>> {
-  size_t operator()(const vector<T> v) const {
-    auto digest = wasm::hash(v.size());
-    for (const auto& t : v) {
-      wasm::rehash(digest, t);
-    }
-    return digest;
-  }
-};
-} // namespace std
-
-namespace wasm {
-
-template<typename T>
-void dump(const T& t) {
-//  for (auto x : t) std::cerr << x << ' ';
-//  std::cerr << '\n';
-}
-
 namespace {
 
-// We will be comparing sequences of accesses. For example,
-//
-//    object.itable.interface_vtable_M.slot_K
-//
-// has three accesess, first we load the itable, then one of its fields, then
-// one of the fields of that interface vtable. For simplicity we denote each
-// access by the index of the field that is loaded from the relevant struct. (We
-// can infer the type as we go, so there is no need to store that as well.) Thus
-// the items in our sequences are simply indexes.
-using Item = Index;
-using Sequence = std::vector<Item>;
-using Sequences = std::vector<Sequence>;
-
-// An improvement for a sequence is another sequence that we'd like to replace
-// it with (e.g. because it is shorter). We will track sets of possible
-// improvements for a given sequence.
-using ImprovementSet = std::unordered_set<Sequence>;
-using Improvements = std::unordered_map<Sequence, ImprovementSet>;
-
-// That is, if we reach a point that we load
-// something with a type that is not refined enough for us to perform the load
-// after it (say, if a field were anyref then that would be the case). We don't
-// need to track more specifically than that, as we'll follow the simple rule of
-// never optimizing anything to a sequence that requires a cast - we only want
-// to generate new code with no casts, either if it had no casts before, or if
-// we can remove a cast. This is sufficient at least for J2Wasm
-// TODO Consider other situations with multiple casts and where it is worthwhile
-//      to leave a cast or even add one.
-// TODO: small 3
-
-// In our first phase we will find equivalent sequences in each struct.new in
-// the entire program, and then which are useful improvements. For simplicity
-// we'll gather them in a map whose key is the struct.new they derive from, in
-// the Finder class. Later we'll merge all that together: an improvement is
-// valid if it is present in all struct.news in the entire program.
-
-using NewImprovementsMap = std::unordered_map<StructNew*, Improvements>;
-
-struct Finder : public PostWalker<Finder> {
-  PassOptions& options;
-
-  Finder(PassOptions& options) : options(options) {}
-
-  NewImprovementsMap map;
-
-  // A map of values to the sequences that lead to those values. For example, if
-  // we have
-  //
-  //    map[(ref.func $foo)] = [[0], [2, 3]]
-  //
-  // then that means that object.field0 == object.field2.field3 == $foo. In that
-  // case we want to optimize the longer sequence to the shorter one.
-  //
-  // Going back to the example in the top of this file, we would find that the
-  // first struct.new has [0] and [1] for value 5, and the second struct.new has
-  // the same but for value 7. [0] and [1] are equivalent in both cases, which
-  // will allow optimization later, when we just remember the equivalences and
-  // not the particular values in each struct.new.
-  //
-  // Note that we use a PossibleConstantValues here as we want to handle not
-  // just Literals but also GlobalGets of immutable things, which is how itables
-  // and vtables are declared.
-  using ValueMap = std::unordered_map<PossibleConstantValues, Sequences>;
-
-  void visitStructNew(StructNew* curr) {
-    if (curr->type == Type::unreachable) {
-      return;
-    }
-
-    // All sequences will begin with the type we are creating right here.
-    auto startType = curr->type.getHeapType();
-
-    // Scan this struct.new, finding values and the sequences that lead to them.
-    // We will recurse as we look through accesses. We start with an empty
-    // sequence as our prefix, which will get built up during the recursion.
-    ValueMap valueMap;
-    scanNew(curr, Sequence(), valueMap);
-
-    // We now have a map of values to the sequences that get to them, which
-    // means we know which sequences are equivalent in this struct.new, and can
-    // start to build an entry for it in the global map. Note we need an entry
-    // even if we find no equivalences, because that means there are no
-    // equivalences at all (which will prevent optimizations later).
-    auto& improvements = map[curr];
-//std::cerr << "apply in " << getModule()->typeNames[curr->type.getHeapType()].name << '\n';
-
-    for (auto& [value, sequences] : valueMap) {
-      // The final type each sequence arrives at is the known value.
-      auto finalType = value.getType(*getModule());
-
-      auto num = sequences.size();
-      if (num > 1) {
-        // Great, there are equivalent sequences for this value. All the pairs
-        // here are potential improvements. Find the actual ones and add them.
-        for (size_t i = 0; i < num; i++) {
-          for (size_t j = i + 1; j < num; j++) {
-            // Given a pair (A, B), A may be an improvement on B, or B on A, but
-            // never both ways.
-            // TODO cache the cast checks and other operations here
-            addIfImprovement(sequences[i], sequences[j], improvements, startType, finalType) ||
-              addIfImprovement(sequences[j], sequences[i], improvements, startType, finalType);
-          }
-        }
-      }
-    }
-  }
-
-  // Add (A, B) (an improvement from A to B) if it is indeed an improvement.
-  // Return true if so.
-  bool addIfImprovement(const Sequence& a, const Sequence& b, Improvements& improvements, HeapType startType, Type finalType /* XXX */) {
-//std::cerr << "addIf " << getModule()->typeNames[startType].name << "\n";
-//dump(a);
-//dump(b);
-
-    // If B is larger, give up.
-    // TODO Perhaps if B has no casts but A does, it is worth it?
-    auto aSize = a.size();
-    auto bSize = b.size();
-    if (bSize > aSize) {
-//std::cerr << "  nope0\n";
-      return false;
-    }
-
-    // The final types of both sequences must be the same, that is, they must
-    // both lead to the same type. If, say, one leads to a nullable verson of
-    // the other then that could cause validation issues, even if the value in
-    // the field is identical in both cases.
-    //
-    // We also give up if B requires a cast at some point in the sequence. That
-    // prevents us from computing the final type, and it would also prevent us
-    // from emitting a proper replacement sequence when we try to optimize.
-    //
-    // We also only compare the final types if both exist. If A lacks a final
-    // type, that means it has a cast, which is great - we want to remove it.
-    auto aFinalType = getFinalType(a, startType);
-    auto bFinalType = getFinalType(b, startType);
-//std::cerr << "finals: " << !!aFinalType << " : " << !!bFinalType << '\n';
-//if (aFinalType && bFinalType) std::cerr << "  :: " << *aFinalType << " : " << *bFinalType << '\n';
-    if (!bFinalType || (aFinalType && aFinalType != bFinalType)) {
-//std::cerr << "  nope1\n";
-      return false;
-    }
-    
-    // We would like to use this as an improvement if one of the following
-    // holds:
-    //   - A has a cast (B does not, so we are removing one)
-    //   - we reduce the length of the sequence
-    //   - we are the same length, but use lower indexes
-    if (!aFinalType || bSize < aSize || b < a) {
-      // We insert the reversed sequence, as that is how we will be using it
-      // later TODO explain with example
-      auto reverseA = a;
-      auto reverseB = b;
-      std::reverse(reverseA.begin(), reverseA.end());
-      std::reverse(reverseB.begin(), reverseB.end());
-//std::cerr << "add sequence for " << value << " : ";
-//for (auto x : reverse) std::cerr << x << ' ';
-//std::cerr << '\n';
-
-      improvements[reverseA].insert(reverseB);
-//std::cerr << "adddd\n";
-      return true;
-    }
-
-//std::cerr << "  nope2\n";
-    return false;
-  }
-
-  // Given a sequence of field lookups starting from a particular type, go
-  // through those operations and return the last type at the end.
-  //
-  // If we cannot get there, then that means a cast is needed somewhere in the
-  // middle, and we return {}.
-  std::optional<Type> getFinalType(const Sequence& s, HeapType startType) {
-    // Track the current type as we go. Nullability does not matter here, but we
-    // do need to handle the case of a non-heap type, as the final type may be
-    // such.
-    auto type = Type(startType, Nullable);
-    for (auto i : s) { // XXX reversed later down, so reverse iteration here?
-      // Check if we can do the current lookup using the current type.
-      auto heapType = type.getHeapType();
-      if (!heapType.isStruct()) {
-        // This is not even a struct, so it is something like data or eq. A cast
-        // is definitely necessary here.
-//std::cerr << "  cast1\n";
-        return {};
-      }
-
-      auto& fields = heapType.getStruct().fields;
-      if (i >= fields.size()) {
-        // This field does not exist in this type - it is added in a subtype. So
-        // a cast is necessary.
-//std::cerr << "  cast2\n";
-        return {};
-      }
-
-      // Continue onwards.
-      type = fields[i].type;
-    }
-
-    // We made it! Return the type we are left with at the end.
-    return type;
-  }
-
-  // Given a struct.new and a sequence prefix, look into this struct.new and add
-  // anything we find into the given valueMap. For example, if the prefix is [1,2]
-  // and we find (ref.func $foo) at index #3 then we can add a note to the valueMap
-  // that [1,2,3] arrives at value $foo.
-  //
-  // We also receive the "storage type" - the type of the location this data is
-  // stored in. If it is stored in a less-refined location then we will need a
-  // cast to read from it.
-  void scanNew(StructNew* curr, const Sequence& prefix, ValueMap& valueMap) {
-    // We'll only look at immutable fields.
-    auto& fields = curr->type.getHeapType().getStruct().fields;
-
-    // The current sequence will be the given prefix, plus a possible cast, then
-    // plus the current index. Add a 0 for the current index, which we will then
-    // increment as we go.
-    auto currSequence = prefix;
-    currSequence.push_back(Item(0));
-
-    for (Index i = 0; i < fields.size(); i++) {
-      auto& field = fields[i];
-      if (field.mutable_ == Mutable) {
-        continue;
-      }
-
-      // TODO: disallow packed fields for now, we need to encode that.
-
-      // This is a field we can work with, so we can keep going, with this index
-      // added.
-      currSequence.back() = i;
-
-      processChild(curr->operands[i], currSequence, valueMap);
-    }
-  }
-
-  // Note that unlike scanStructNew, this is given the current
-  // sequence, which also encodes the current expression (the other two are
-  // given a prefix that they append to).
-  void processChild(Expression* curr, const Sequence& currSequence, ValueMap& valueMap) {
-    if (auto* subNew = curr->dynCast<StructNew>()) {
-      // Look into this struct.new recursively.
-      scanNew(subNew, currSequence, valueMap);
-      return;
-    }
-
-    // See if this is a constant value.
-    PossibleConstantValues value;
-    value.note(curr, *getModule());
-    if (value.isConstantLiteral() || value.isConstantGlobal()) {
-      // Great, this is something we can track.
-
-      valueMap[value].push_back(currSequence);
-
-      if (value.isConstantGlobal()) {
-        // Not only can we track the global itself, but we may be able to look
-        // into the object created in the global.
-        auto* global = getModule()->getGlobal(value.getConstantGlobal());
-        // We already checked the global is immutable via isConstantGlobal.
-        assert(!global->mutable_);
-        if (!global->imported()) {
-          if (auto* subNew = global->init->dynCast<StructNew>()) {
-            scanNew(subNew, currSequence, valueMap);
-          }
-        }
-      }
-    }
-
-    // TODO Handle more cases like a tee and a get (with nothing in the middle).
-    //      See related code in OptimizeInstructions that can perhaps be
-    //      shared.
-  }
-};
-
-// We need to collect all the improvements for each type.
-using TypeImprovementMap = std::unordered_map<HeapType, Improvements>;
-
 struct FieldCaching : public Pass {
-  // Only modifies types.
+  // No local changes, only types and fields.
   bool requiresNonNullableLocalFixups() override { return false; }
 
   void run(Module* module) override {
@@ -368,7 +67,39 @@ struct FieldCaching : public Pass {
       return;
     }
 
-    // First, find all the relevant improvements inside each function.
+    // First, find all the relevant improvements inside each function. We are
+    // looking for heap types that have an optimization opportunity, which looks
+    // like this:
+    //
+    //   x = new Struct(.., g, ..);
+    //
+    // where g is a global with nesting, like this:
+    //
+    //  global g = {
+    //    ..
+    //    {
+    //      value
+    //    },
+    //    ..
+    //  };
+    //
+    // |value| is nested, and we'd like to cache it at a higher level, like
+    // this:
+    //
+    //  global g = {
+    //    ..
+    //    {
+    //      value
+    //    },
+    //    ..,
+    //    value
+    //  };
+    //
+    // After that, we can replace x.foo.bar with x.newfield, using the new field
+    // we just added at the end.
+    //
+    // To optimize, we need all creations of a particular struct type to have
+    // the same optimization pattern
     ModuleUtils::ParallelFunctionAnalysis<NewImprovementsMap> analysis(
       *module, [&](Function* func, NewImprovementsMap& map) {
         if (func->imported()) {
