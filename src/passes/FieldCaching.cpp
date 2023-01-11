@@ -240,6 +240,7 @@ struct FieldCaching : public Pass {
     // such as [0,3] which means read field 0, and then read field 4. The
     // intersection of all sequences for a type is the set of things we want to
     // actually optimize. XXX move comment
+    std::unordered_map<HeapType, Sequence> typeSequences;
     for (const auto& [type, globals] : typeGlobals) {
       if (ignore.count(type)) {
         continue;
@@ -272,16 +273,18 @@ struct FieldCaching : public Pass {
         }
       }
 
-      if (intersection.empty()) {
-        continue;
+      if (!intersection.empty()) {
+        typeSequences[type] = intersection;
       }
-
-      // We found an intersection for this type! Optimize.
-      // toposort
-      // chak subtypes for conflicts in adding new fields
     }
 
-
+    // We found all the types that have optimizable sequences, and can now start
+    // to optimize. We must do this in a proper order, as we are adding fields
+    // here, so we cannot add a field to a type if it has a subtype whose fields
+    // "conflict", that is, the subtype would not longer be a proper subtype. By
+    // operating on subtypes first we can
+    
+    // types in the middle - add automatically?
 
 
 
