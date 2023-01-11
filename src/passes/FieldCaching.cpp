@@ -162,6 +162,10 @@ struct FieldCaching : public Pass {
     // We can connect $X to the global directly, and optimize it, but $Y is
     // created in a nested position. We could handle it, but for simplicity for
     // now we don't.
+    //
+    // Also build a map of types to the globals with that type, which we'll
+    // need next.
+    std::unordered_map<HeapType, std::vector<Name>> typeGlobals;
     for (auto& global : module->globals) {
       if (global->imported()) {
         continue;
@@ -172,12 +176,13 @@ struct FieldCaching : public Pass {
           ignore.insert(curr->type.getHeapType());
         }
       }
+
+      if (auto* new_ = global->init->dynCast<StructNew>()) {
+        typeGlobals[new_->type.getHeapType()].push_back(global->name);
+      }
     }
 
-    // Now we know all the types we must ignore. We can now proceed to find the
-    // things we want to optimize, and skip those we must ignore as we do.
-    //
-    // Specifically, we are looking for globals with nesting, like this:
+    // We are looking for globals with nesting, like this:
     //
     //  global g = {
     //    ..
@@ -201,13 +206,8 @@ struct FieldCaching : public Pass {
     //
     // After that, we can replace x.foo.bar with x.newfield, using the new field
     // we just added at the end.
-    for (auto& global : module->globals) {
-      if (global->imported()) {
-        continue;
-      }
+    for (const auto& [type, globals] : typeGlobals) {
     }
-
-
 
 
 
