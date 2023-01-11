@@ -129,10 +129,14 @@ void getSequences(StructNew* new_, std::vector<Index> prefix, Module& wasm, Sequ
     auto* operand = curr->operands[i];
     if (PossibleConstantValues(operand, wasm).isConstant()) {
       // This is a constant value, which is something we can optimize with,
-      // so it ends a sequence.
-      prefix.push_back(i);
-      out.push_back(prefix);
-      prefix.pop_back();
+      // so it ends a sequence. However, we can ignore it if the sequence length
+      // is 1: we are looking for a nested value to cache at the outermost
+      // level, so already being there means we have nothing to do.
+      if (!prefix.empty()) {
+        prefix.push_back(i);
+        out.push_back(prefix);
+        prefix.pop_back();
+      }
     } else if (auto* nested = operand->dynCast<StructNew>()) {
       // This is a nested struct.new. Look deeper.
       prefix.push_back(i);
@@ -235,7 +239,7 @@ struct FieldCaching : public Pass {
     // particular type. We'll find sequences of indexes that we can optimize,
     // such as [0,3] which means read field 0, and then read field 4. The
     // intersection of all sequences for a type is the set of things we want to
-    // actually optimize.
+    // actually optimize. XXX move comment
     for (const auto& [type, globals] : typeGlobals) {
       if (ignore.count(type)) {
         continue;
@@ -268,7 +272,13 @@ struct FieldCaching : public Pass {
         }
       }
 
-      
+      if (intersection.empty()) {
+        continue;
+      }
+
+      // We found an intersection for this type! Optimize.
+      // toposort
+      // chak subtypes for conflicts in adding new fields
     }
 
 
