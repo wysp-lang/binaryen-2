@@ -154,6 +154,9 @@ void PassRegistry::registerPasses() {
   registerPass("extract-function-index",
                "leaves just one function selected by index",
                createExtractFunctionIndexPass);
+  registerPass("field-caching",
+               "cache struct fields in easier-accessible locations",
+               createFieldCachingPass);
   registerPass(
     "flatten", "flattens out code, removing nesting", createFlattenPass);
   registerPass("fpcast-emu",

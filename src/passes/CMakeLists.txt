@@ -35,6 +35,7 @@ set(passes_SOURCES
   DWARF.cpp
   EquivalentFieldOptimization.cpp
   ExtractFunction.cpp
+  FieldCaching.cpp
   Flatten.cpp
   FuncCastEmulation.cpp
   GenerateDynCalls.cpp

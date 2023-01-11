@@ -46,6 +46,7 @@ Pass* createEmitTargetFeaturesPass();
 Pass* createEquivalentFieldOptimizationPass();
 Pass* createExtractFunctionPass();
 Pass* createExtractFunctionIndexPass();
+Pass* createFieldCachingPass();
 Pass* createFlattenPass();
 Pass* createFuncCastEmulationPass();
 Pass* createFullPrinterPass();
