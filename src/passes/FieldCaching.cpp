@@ -46,17 +46,79 @@
 
 #include <algorithm>
 
+#include "ir/find_all.h"
 #include "ir/module-utils.h"
 #include "ir/possible-constant.h"
 #include "ir/subtypes.h"
 #include "pass.h"
-#include "support/small_set.h"
-#include "support/small_vector.h"
 #include "support/topological_sort.h"
 #include "wasm-builder.h"
 #include "wasm.h"
 
 namespace {
+
+/*
+struct FieldInfo {
+  // A map of field indexes to the globals written to them. If an index appears
+  // in this map, and the value is not nullopt, then it is optimizable, which means so far we've always
+  // seen the same (optimizable) global written there. If we see more than
+  // one global for an index then we'll set the value to nullopt, which means
+  // we've failed.
+  std::unordered_map<Index, std::optional<Name>> fieldGlobals;
+
+  // Note an optimizable global's name for an index.
+  void note(Index index, Name name) {
+    bool first = fieldGlobals.count(index);
+    auto& fieldName = fieldGlobals[index];
+    if (first) {
+      // This is the first time we see this index.
+      fieldName = name;
+    } else if (fieldName) {
+      // We've seen this index before. If the global names do not match then we
+      // have failed here.
+      if (*fieldName != name) {
+        fieldName = std::nullopt;
+      }
+    } else {
+      // The field contains nullopt, which means we've already failed.
+    }
+  }
+
+  // Note that an index cannot be optimized.
+  void noteFail(Index index) {
+    fieldGlobals[index] = std::nullopt;
+  }
+};
+
+using TypeFieldInfoMap = std::unordered_map<HeapType, FieldInfo>;
+
+struct Finder : public PostWalker<Finder> {
+  TypeFieldInfoMap map;
+
+  void visitStructNew(StructNew* curr) {
+    auto& fieldInfo = map[curr->type.getHeapType()];
+
+    // Look for optimizable fields, that is, assignments of globals that contain
+    // nesting.
+    for (Index i = 0; i < curr->operands.size(); i++) {
+      auto* operand = curr->operands[i];
+      if (auto* get = operand->dynCast<GlobalGet>()) {
+        auto* global = getModule()->getGlobal(get->name);
+        process(global->init, fieldInfo
+        if (global->init) {
+          if (auto* new_ = global->init->dynCast<StructNew>()) {
+            // Look one more level deep to find nesting
+          }
+        }
+      }
+
+      // Otherwise, we fail to optimize here.
+      fieldInfo.noteFail(i);
+    }
+  }
+};
+
+*/
 
 struct FieldCaching : public Pass {
   // No local changes, only types and fields.
@@ -67,13 +129,55 @@ struct FieldCaching : public Pass {
       return;
     }
 
-    // First, find all the relevant improvements inside each function. We are
-    // looking for heap types that have an optimization opportunity, which looks
-    // like this:
+    // First, find types that we just can't optimize. The types we want to look
+    // at are those that are only created in globals, so find all struct.new
+    // operations in functions so that we can ignore them.
+    using TypeSet = std::unordered_set<HeapType>
+    ModuleUtils::ParallelFunctionAnalysis<TypeSet> analysis(
+      *module, [&](Function* func, TypeSet& ignore) {
+        if (func->imported()) {
+          return;
+        }
+
+        for (auto* curr : FindAll<StructNew>(func->body)) {
+          if (curr->type != Type::unreachable) {
+            ignore.insert(curr->type.getHeapType());
+          }
+        }
+      });
+
+    // Merge all function info.
+    TypeSet ignore;
+    for (const auto& [_, funcIgnore] : analysis.map) {
+      ignore.insert(funcIgnore.begin(), funcIgnore.end());
+    }
+
+    // We also want to ignore types created in a nested position in globals,
+    // that is, like this:
     //
-    //   x = new Struct(.., g, ..);
+    //  (global $g
+    //    (struct.new $X
+    //      (struct.new $Y ..
     //
-    // where g is a global with nesting, like this:
+    // We can connect $X to the global directly, and optimize it, but $Y is
+    // created in a nested position. We could handle it, but for simplicity for
+    // now we don't.
+    for (auto& global : module->globals) {
+      if (global->imported()) {
+        continue;
+      }
+
+      for (auto* curr : FindAll<StructNew>(global->init)) {
+        if (curr != global->init) {
+          ignore.insert(curr->type.getHeapType());
+        }
+      }
+    }
+
+    // Now we know all the types we must ignore. We can now proceed to find the
+    // things we want to optimize, and skip those we must ignore as we do.
+    //
+    // Specifically, we are looking for globals with nesting, like this:
     //
     //  global g = {
     //    ..
@@ -97,91 +201,40 @@ struct FieldCaching : public Pass {
     //
     // After that, we can replace x.foo.bar with x.newfield, using the new field
     // we just added at the end.
-    //
-    // To optimize, we need all creations of a particular struct type to have
-    // the same optimization pattern
-    ModuleUtils::ParallelFunctionAnalysis<NewImprovementsMap> analysis(
-      *module, [&](Function* func, NewImprovementsMap& map) {
-        if (func->imported()) {
-          return;
-        }
-
-        Finder finder(getPassOptions());
-        finder.walkFunctionInModule(func, module);
-        map = std::move(finder.map);
-      });
-
-    // Also look in the module scope.
-    Finder moduleFinder(getPassOptions());
-    moduleFinder.walkModuleCode(module);
-
-    // Combine all the info. The property we seek is an improvement which is
-    // valid in all the struct.news of a particular type. When that is the case
-    // we can apply the improvement in any position in the module. To find that,
-    // we'll merge information into a unified map.
-    TypeImprovementMap unifiedMap;
-
-    // Given a type and some improvements we found for it somewhere, merge that into
-    // the main unified map.
-    auto mergeIntoUnifiedMap = [&](HeapType type,
-                                   const Improvements& currImprovements) {
-      auto iter = unifiedMap.find(type);
-      if (iter == unifiedMap.end()) {
-        // This is the first time we see this type. Just copy the data, there is
-        // nothing to compare it to yet.
-        unifiedMap[type] = currImprovements;
-        return;
-      }
-
-      // This is not the first time, so we must filter what we've seen so far
-      // with the current data: anything we've seen so far as consistently
-      // improvable must also be improvable in this new info, or else it must
-      // not be optimized. That means we want to take the intersection of
-      // the sets of improved sequences, for each sequence.
-      auto& typeImprovements = iter->second;
-                              
-      for (auto& [sequence, typeImprovementSet] : typeImprovements) {
-        auto iter = currImprovements.find(sequence);
-        if (iter == currImprovements.end()) {
-          // Nothing at all, so the intersection is empty.
-          typeImprovementSet.clear();
-          continue;
-        }
-
-        auto& currImprovementSet = iter->second;
-        ImprovementSet intersection;
-        for (auto& s : currImprovementSet) {
-          if (typeImprovementSet.count(s)) {
-            intersection.insert(s);
-          }
-        }
-        typeImprovementSet = intersection;
-      }
-    };
-
-    for (const auto& [_, map] : analysis.map) {
-      for (const auto& [curr, improvements] : map) {
-        mergeIntoUnifiedMap(curr->type.getHeapType(), improvements);
+    for (auto& global : module->globals) {
+      if (global->imported()) {
+        continue;
       }
     }
-    for (const auto& [curr, improvements] : moduleFinder.map) {
-      mergeIntoUnifiedMap(curr->type.getHeapType(), improvements);
-    }
 
-    // We have found all the improvement opportunities in the entire module.
-    // Stop if there are none.
-    auto foundWork = [&]() {
-      for (auto& [type, improvements] : unifiedMap) {
-        if (!improvements.empty()) {
-          return true;
-        }
-      }
-      return false;
-    };
-    if (!foundWork()) {
-//std::cerr << "nada\n";
-      return;
-    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     // Apply subtyping: To consider fields i, j equivalent in a type, we also
     // need them to be equivalent in all subtypes.
