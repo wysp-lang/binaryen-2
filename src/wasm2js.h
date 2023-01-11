@@ -173,8 +173,11 @@ public:
     // and store would need to do a check. Given that, we can just ignore
     // implicit traps like those when optimizing. (When not optimizing, it's
     // nice to see codegen that matches wasm more precisely.)
+    // It is also important to prevent the optimizer from adding new things that
+    // require additional lowering, as we could hit a cycle.
     if (options.optimizeLevel > 0) {
       options.ignoreImplicitTraps = true;
+      options.targetJS = true;
     }
   }
 
@@ -574,15 +577,6 @@ void Wasm2JSBuilder::addBasics(Ref ast, Module* wasm) {
   addMath(MATH_CEIL, CEIL);
   addMath(MATH_TRUNC, TRUNC);
   addMath(MATH_SQRT, SQRT);
-  // TODO: this shouldn't be needed once we stop generating literal asm.js code
-  // NaN and Infinity variables
-  Ref nanVar = ValueBuilder::makeVar();
-  ast->push_back(nanVar);
-  ValueBuilder::appendToVar(nanVar, "nan", ValueBuilder::makeName("NaN"));
-  Ref infinityVar = ValueBuilder::makeVar();
-  ast->push_back(infinityVar);
-  ValueBuilder::appendToVar(
-    infinityVar, "infinity", ValueBuilder::makeName("Infinity"));
 }
 
 static bool needsQuoting(Name name) {
@@ -2212,7 +2206,7 @@ Ref Wasm2JSBuilder::processFunctionBody(Module* m,
       unimplemented(curr);
       WASM_UNREACHABLE("unimp");
     }
-    Ref visitRefIs(RefIs* curr) {
+    Ref visitRefIsNull(RefIsNull* curr) {
       unimplemented(curr);
       WASM_UNREACHABLE("unimp");
     }

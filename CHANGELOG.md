@@ -28,6 +28,10 @@ Current Trunk
 - The isorecursive WasmGC type system (i.e. --hybrid) is now the default to
   match the spec and the old default equirecursive (i.e. --structural) system
   has been removed.
+- `ref.is_func`, `ref.is_data`, and `ref.is_i31` have been removed from the C
+  and JS APIs and `RefIs` has been replaced with `RefIsNull`.
+- Types `Data` and `Dataref` have been replaced with types `Struct` and
+  `Structref` in the C and JS APIs.
 
 v111
 ----

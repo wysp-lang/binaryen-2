@@ -15,6 +15,7 @@
  */
 
 #include "module-utils.h"
+#include "ir/intrinsics.h"
 #include "support/insert_ordered.h"
 #include "support/topological_sort.h"
 
@@ -76,7 +77,7 @@ struct CodeScanner
       counts.note(cast->castType);
     } else if (auto* cast = curr->dynCast<BrOn>()) {
       if (cast->op == BrOnCast || cast->op == BrOnCastFail) {
-        counts.note(cast->intendedType);
+        counts.note(cast->castType);
       }
     } else if (auto* get = curr->dynCast<StructGet>()) {
       counts.note(get->ref->type);
@@ -245,8 +246,13 @@ InsertOrderedSet<HeapType> getPublicTypeSet(Module& wasm) {
       notePublic(global->type.getHeapType());
     }
   });
-  ModuleUtils::iterImportedFunctions(
-    wasm, [&](Function* func) { notePublic(func->type); });
+  ModuleUtils::iterImportedFunctions(wasm, [&](Function* func) {
+    // We can ignore call.without.effects, which is implemented as an import but
+    // functionally is a call within the module.
+    if (!Intrinsics(wasm).isCallWithoutEffects(func)) {
+      notePublic(func->type);
+    }
+  });
   for (auto& ex : wasm.exports) {
     switch (ex->kind) {
       case ExternalKind::Function: {

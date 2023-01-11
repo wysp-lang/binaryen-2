@@ -1,6 +1,6 @@
 (module
  (type $struct (struct (mut i32)))
- (type $extendedstruct (struct (mut i32) f64))
+ (type $extendedstruct (struct_subtype (mut i32) f64 $struct))
  (type $bytes (array (mut i8)))
 
  (type $void_func (func))
@@ -174,14 +174,6 @@
     ;; $x is null, and so we will not branch, and log and then trap
     (call $log (i32.const 1))
     (unreachable)
-   )
-  )
- )
- (func "ref-as-func-of-data"
-  (drop
-   ;; This should trap.
-   (ref.as_func
-    (struct.new_default $struct)
    )
   )
  )

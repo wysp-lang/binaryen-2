@@ -10,16 +10,16 @@ function asmFunc(imports) {
  var Math_ceil = Math.ceil;
  var Math_trunc = Math.trunc;
  var Math_sqrt = Math.sqrt;
- function foo($0) {
-  $0 = $0 | 0;
-  return (($0 >>> 0) / (100 >>> 0) | 0) + (($0 | 0) / (-100 | 0) | 0) | 0 | 0;
+ function func(x) {
+  x = x | 0;
+  return (1 << x | 0) ^ -1 | 0 | 0;
  }
  
  return {
-  "foo": foo
+  "func": func
  };
 }
 
 var retasmFunc = asmFunc({
 });
-export var foo = retasmFunc.foo;
+export var func = retasmFunc.func;

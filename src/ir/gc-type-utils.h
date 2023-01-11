@@ -33,8 +33,57 @@ enum EvaluationResult {
   // The evaluation is known to succeed (i.e., we find what we are looking
   // for), or fail, at compile time.
   Success,
-  Failure
+  Failure,
+  // The cast will only succeed if the input is a null, or is not
+  SuccessOnlyIfNull,
+  SuccessOnlyIfNonNull,
 };
+
+// Given the type of a reference and a type to attempt to cast it to, return
+// what we know about the result.
+inline EvaluationResult evaluateCastCheck(Type refType, Type castType) {
+  if (!refType.isRef() || !castType.isRef()) {
+    // Unreachable etc. are meaningless situations in which we can inform the
+    // caller about nothing useful.
+    return Unknown;
+  }
+
+  if (Type::isSubType(refType, castType)) {
+    return Success;
+  }
+
+  auto refHeapType = refType.getHeapType();
+  auto castHeapType = castType.getHeapType();
+  auto refIsHeapSubType = HeapType::isSubType(refHeapType, castHeapType);
+  auto castIsHeapSubType = HeapType::isSubType(castHeapType, refHeapType);
+  bool heapTypesCompatible = refIsHeapSubType || castIsHeapSubType;
+
+  if (!heapTypesCompatible) {
+    // If at least one is not null, then since the heap types are not compatible
+    // we must fail.
+    if (refType.isNonNullable() || castType.isNonNullable()) {
+      return Failure;
+    }
+
+    // Otherwise, both are nullable and a null is the only hope of success.
+    return SuccessOnlyIfNull;
+  }
+
+  // The cast will not definitely succeed nor will it definitely fail.
+  //
+  // Perhaps the heap type part of the cast can be reasoned about, at least.
+  // E.g. if the heap type part of the cast is definitely compatible, but the
+  // cast as a whole is not, that would leave only nullability as an issue,
+  // that is, this means that the input ref is nullable but we are casting to
+  // non-null.
+  if (refIsHeapSubType) {
+    assert(refType.isNullable());
+    assert(castType.isNonNullable());
+    return SuccessOnlyIfNonNull;
+  }
+
+  return Unknown;
+}
 
 // Given an instruction that checks if the child reference is of a certain kind
 // (like br_on_func checks if it is a function), see if type info lets us
@@ -52,79 +101,24 @@ inline EvaluationResult evaluateKindCheck(Expression* curr) {
       // We don't check nullability here.
       case BrOnNull:
       case BrOnNonNull:
+        return Unknown;
       case BrOnCastFail:
         flip = true;
         [[fallthrough]];
-      case BrOnCast:
-        // Note that the type must be non-nullable for us to succeed since a
-        // null would make us fail.
-        if (Type::isSubType(br->ref->type,
-                            Type(br->intendedType, NonNullable))) {
+      case BrOnCast: {
+        auto result =
+          GCTypeUtils::evaluateCastCheck(br->ref->type, br->castType);
+        if (result == Success) {
           return flip ? Failure : Success;
+        } else if (result == Failure) {
+          return flip ? Success : Failure;
         }
         return Unknown;
-      case BrOnNonFunc:
-        flip = true;
-        [[fallthrough]];
-      case BrOnFunc:
-        expected = Func;
-        break;
-      case BrOnNonData:
-        flip = true;
-        [[fallthrough]];
-      case BrOnData:
-        expected = Data;
-        break;
-      case BrOnNonI31:
-        flip = true;
-        [[fallthrough]];
-      case BrOnI31:
-        expected = I31;
-        break;
+      }
       default:
         WASM_UNREACHABLE("unhandled BrOn");
     }
     child = br->ref;
-  } else if (auto* is = curr->dynCast<RefIs>()) {
-    switch (is->op) {
-      // We don't check nullability here.
-      case RefIsNull:
-        return Unknown;
-      case RefIsFunc:
-        expected = Func;
-        break;
-      case RefIsData:
-        expected = Data;
-        break;
-      case RefIsI31:
-        expected = I31;
-        break;
-      default:
-        WASM_UNREACHABLE("unhandled RefIs");
-    }
-    child = is->value;
-  } else if (auto* as = curr->dynCast<RefAs>()) {
-    switch (as->op) {
-      // We don't check nullability here.
-      case RefAsNonNull:
-        return Unknown;
-      case RefAsFunc:
-        expected = Func;
-        break;
-      case RefAsData:
-        expected = Data;
-        break;
-      case RefAsI31:
-        expected = I31;
-        break;
-      case ExternInternalize:
-      case ExternExternalize:
-        // These instructions can never be removed.
-        return Unknown;
-      default:
-        WASM_UNREACHABLE("unhandled RefAs");
-    }
-    child = as->value;
   } else {
     WASM_UNREACHABLE("invalid input to evaluateKindCheck");
   }
@@ -133,7 +127,9 @@ inline EvaluationResult evaluateKindCheck(Expression* curr) {
 
   Kind actual;
 
-  if (childType.isFunction()) {
+  if (childType == Type::unreachable) {
+    return Unknown;
+  } else if (childType.isFunction()) {
     actual = Func;
   } else if (childType.isData()) {
     actual = Data;

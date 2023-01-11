@@ -15,12 +15,10 @@
   ;; TNH-NEXT: )
   ;; NO_TNH:      (func $ref.eq (type $eqref_eqref_=>_i32) (param $a eqref) (param $b eqref) (result i32)
   ;; NO_TNH-NEXT:  (ref.eq
-  ;; NO_TNH-NEXT:   (ref.as_non_null
-  ;; NO_TNH-NEXT:    (ref.cast null $struct
-  ;; NO_TNH-NEXT:     (local.get $a)
-  ;; NO_TNH-NEXT:    )
+  ;; NO_TNH-NEXT:   (ref.cast $struct
+  ;; NO_TNH-NEXT:    (local.get $a)
   ;; NO_TNH-NEXT:   )
-  ;; NO_TNH-NEXT:   (ref.as_data
+  ;; NO_TNH-NEXT:   (ref.cast struct
   ;; NO_TNH-NEXT:    (local.get $b)
   ;; NO_TNH-NEXT:   )
   ;; NO_TNH-NEXT:  )
@@ -29,7 +27,9 @@
     ;; When traps never happen we can remove all the casts here, since they do
     ;; not affect the comparison of the references.
     (ref.eq
-      (ref.as_data
+      ;; When traps can happen we can still improve this by removing and
+      ;; combining redundant casts.
+      (ref.cast struct
         (ref.as_non_null
           (ref.cast null $struct
             (local.get $a)
@@ -37,8 +37,8 @@
         )
       )
       ;; Note that we can remove the non-null casts here in both modes, as the
-      ;; ref.as_data also checks for null.
-      (ref.as_data
+      ;; ref.cast struct also checks for null.
+      (ref.cast struct
         (ref.as_non_null
           (ref.as_non_null
             (local.get $b)
@@ -59,7 +59,7 @@
   ;; NO_TNH-NEXT:    (ref.cast null $struct
   ;; NO_TNH-NEXT:     (local.get $any)
   ;; NO_TNH-NEXT:    )
-  ;; NO_TNH-NEXT:    (ref.as_data
+  ;; NO_TNH-NEXT:    (ref.cast struct
   ;; NO_TNH-NEXT:     (local.get $any)
   ;; NO_TNH-NEXT:    )
   ;; NO_TNH-NEXT:   )
@@ -73,7 +73,7 @@
           (local.get $any) ;; *Not* an eqref!
         )
         (ref.as_non_null
-          (ref.as_data
+          (ref.cast struct
             (ref.as_non_null
               (local.get $any) ;; *Not* an eqref!
             )
@@ -86,9 +86,7 @@
   ;; TNH:      (func $ref.is (type $eqref_=>_i32) (param $a eqref) (result i32)
   ;; TNH-NEXT:  (drop
   ;; TNH-NEXT:   (ref.cast $struct
-  ;; TNH-NEXT:    (ref.as_data
-  ;; TNH-NEXT:     (local.get $a)
-  ;; TNH-NEXT:    )
+  ;; TNH-NEXT:    (local.get $a)
   ;; TNH-NEXT:   )
   ;; TNH-NEXT:  )
   ;; TNH-NEXT:  (i32.const 0)
@@ -96,9 +94,7 @@
   ;; NO_TNH:      (func $ref.is (type $eqref_=>_i32) (param $a eqref) (result i32)
   ;; NO_TNH-NEXT:  (drop
   ;; NO_TNH-NEXT:   (ref.cast $struct
-  ;; NO_TNH-NEXT:    (ref.as_data
-  ;; NO_TNH-NEXT:     (local.get $a)
-  ;; NO_TNH-NEXT:    )
+  ;; NO_TNH-NEXT:    (local.get $a)
   ;; NO_TNH-NEXT:   )
   ;; NO_TNH-NEXT:  )
   ;; NO_TNH-NEXT:  (i32.const 0)
@@ -109,7 +105,7 @@
     (ref.is_null
       (ref.cast $struct
         (ref.as_non_null
-          (ref.as_data
+          (ref.cast struct
             (local.get $a)
           )
         )
@@ -140,53 +136,28 @@
     )
   )
 
-  ;; TNH:      (func $ref.is_func_a (type $anyref_=>_i32) (param $a anyref) (result i32)
+  ;; TNH:      (func $ref.is_func (type $funcref_=>_i32) (param $a funcref) (result i32)
   ;; TNH-NEXT:  (drop
-  ;; TNH-NEXT:   (ref.as_func
+  ;; TNH-NEXT:   (ref.as_non_null
   ;; TNH-NEXT:    (local.get $a)
   ;; TNH-NEXT:   )
   ;; TNH-NEXT:  )
   ;; TNH-NEXT:  (i32.const 1)
   ;; TNH-NEXT: )
-  ;; NO_TNH:      (func $ref.is_func_a (type $anyref_=>_i32) (param $a anyref) (result i32)
+  ;; NO_TNH:      (func $ref.is_func (type $funcref_=>_i32) (param $a funcref) (result i32)
   ;; NO_TNH-NEXT:  (drop
-  ;; NO_TNH-NEXT:   (ref.as_func
+  ;; NO_TNH-NEXT:   (ref.as_non_null
   ;; NO_TNH-NEXT:    (local.get $a)
   ;; NO_TNH-NEXT:   )
   ;; NO_TNH-NEXT:  )
   ;; NO_TNH-NEXT:  (i32.const 1)
   ;; NO_TNH-NEXT: )
-  (func $ref.is_func_a (param $a (ref null any)) (result i32)
+  (func $ref.is_func (param $a funcref) (result i32)
     ;; The check must succeed. We can return 1 here, and drop the rest, with or
     ;; without TNH (in particular, TNH should not just remove the cast but not
     ;; return a 1).
     (ref.is_func
       (ref.as_func
-        (local.get $a)
-      )
-    )
-  )
-
-  ;; TNH:      (func $ref.is_func_b (type $anyref_=>_i32) (param $a anyref) (result i32)
-  ;; TNH-NEXT:  (drop
-  ;; TNH-NEXT:   (ref.as_data
-  ;; TNH-NEXT:    (local.get $a)
-  ;; TNH-NEXT:   )
-  ;; TNH-NEXT:  )
-  ;; TNH-NEXT:  (i32.const 0)
-  ;; TNH-NEXT: )
-  ;; NO_TNH:      (func $ref.is_func_b (type $anyref_=>_i32) (param $a anyref) (result i32)
-  ;; NO_TNH-NEXT:  (drop
-  ;; NO_TNH-NEXT:   (ref.as_data
-  ;; NO_TNH-NEXT:    (local.get $a)
-  ;; NO_TNH-NEXT:   )
-  ;; NO_TNH-NEXT:  )
-  ;; NO_TNH-NEXT:  (i32.const 0)
-  ;; NO_TNH-NEXT: )
-  (func $ref.is_func_b (param $a (ref null any)) (result i32)
-    ;; A case where the type cannot match, and we return 0.
-    (ref.is_func
-      (ref.as_data
         (local.get $a)
       )
     )
@@ -443,6 +414,90 @@
         (call $get-i32)
       )
       (i32.const 1)
+    )
+  )
+
+  ;; TNH:      (func $set-get-cast (type $structref_=>_none) (param $ref structref)
+  ;; TNH-NEXT:  (drop
+  ;; TNH-NEXT:   (struct.get $struct 0
+  ;; TNH-NEXT:    (ref.cast $struct
+  ;; TNH-NEXT:     (local.get $ref)
+  ;; TNH-NEXT:    )
+  ;; TNH-NEXT:   )
+  ;; TNH-NEXT:  )
+  ;; TNH-NEXT:  (struct.set $struct 0
+  ;; TNH-NEXT:   (ref.cast $struct
+  ;; TNH-NEXT:    (local.get $ref)
+  ;; TNH-NEXT:   )
+  ;; TNH-NEXT:   (i32.const 1)
+  ;; TNH-NEXT:  )
+  ;; TNH-NEXT:  (struct.set $struct 0
+  ;; TNH-NEXT:   (ref.cast null $struct
+  ;; TNH-NEXT:    (local.get $ref)
+  ;; TNH-NEXT:   )
+  ;; TNH-NEXT:   (block (result i32)
+  ;; TNH-NEXT:    (return)
+  ;; TNH-NEXT:    (i32.const 1)
+  ;; TNH-NEXT:   )
+  ;; TNH-NEXT:  )
+  ;; TNH-NEXT: )
+  ;; NO_TNH:      (func $set-get-cast (type $structref_=>_none) (param $ref structref)
+  ;; NO_TNH-NEXT:  (drop
+  ;; NO_TNH-NEXT:   (struct.get $struct 0
+  ;; NO_TNH-NEXT:    (ref.cast $struct
+  ;; NO_TNH-NEXT:     (local.get $ref)
+  ;; NO_TNH-NEXT:    )
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (struct.set $struct 0
+  ;; NO_TNH-NEXT:   (ref.cast null $struct
+  ;; NO_TNH-NEXT:    (local.get $ref)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:   (i32.const 1)
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT:  (struct.set $struct 0
+  ;; NO_TNH-NEXT:   (ref.cast null $struct
+  ;; NO_TNH-NEXT:    (local.get $ref)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:   (block (result i32)
+  ;; NO_TNH-NEXT:    (return)
+  ;; NO_TNH-NEXT:    (i32.const 1)
+  ;; NO_TNH-NEXT:   )
+  ;; NO_TNH-NEXT:  )
+  ;; NO_TNH-NEXT: )
+  (func $set-get-cast (param $ref (ref null struct))
+    ;; A nullable cast flowing into a place that traps on null can become a
+    ;; non-nullable cast.
+    (drop
+      (struct.get $struct 0
+        (ref.cast null $struct
+          (local.get $ref)
+        )
+      )
+    )
+    ;; Ditto for a set, at least in traps-happen mode.
+    ;; TODO handle non-TNH as well, but we need to be careful of effects in
+    ;;      other children.
+    (struct.set $struct 0
+      (ref.cast null $struct
+        (local.get $ref)
+      )
+      (i32.const 1)
+    )
+    ;; Even in TNH mode, a child with an effect of control flow transfer
+    ;; prevents us from optimizing - if the parent is not necessarily reached,
+    ;; we cannot infer the child won't trap.
+    (struct.set $struct 0
+      (ref.cast null $struct
+        (local.get $ref)
+      )
+      (block (result i32)
+        ;; This block has type i32, to check that we don't just look for
+        ;; unreachable. We must scan for any transfer of control flow in the
+        ;; child of the struct.set.
+        (return)
+        (i32.const 1)
+      )
     )
   )
 

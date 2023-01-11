@@ -1875,23 +1875,8 @@ void BinaryInstWriter::visitRefNull(RefNull* curr) {
   parent.writeHeapType(curr->type.getHeapType());
 }
 
-void BinaryInstWriter::visitRefIs(RefIs* curr) {
-  switch (curr->op) {
-    case RefIsNull:
-      o << int8_t(BinaryConsts::RefIsNull);
-      break;
-    case RefIsFunc:
-      o << int8_t(BinaryConsts::GCPrefix) << int8_t(BinaryConsts::RefIsFunc);
-      break;
-    case RefIsData:
-      o << int8_t(BinaryConsts::GCPrefix) << int8_t(BinaryConsts::RefIsData);
-      break;
-    case RefIsI31:
-      o << int8_t(BinaryConsts::GCPrefix) << int8_t(BinaryConsts::RefIsI31);
-      break;
-    default:
-      WASM_UNREACHABLE("unimplemented ref.is_*");
-  }
+void BinaryInstWriter::visitRefIsNull(RefIsNull* curr) {
+  o << int8_t(BinaryConsts::RefIsNull);
 }
 
 void BinaryInstWriter::visitRefFunc(RefFunc* curr) {
@@ -2025,6 +2010,20 @@ void BinaryInstWriter::visitCallRef(CallRef* curr) {
 
 void BinaryInstWriter::visitRefTest(RefTest* curr) {
   o << int8_t(BinaryConsts::GCPrefix);
+  // TODO: These instructions are deprecated. Remove them.
+  if (auto type = curr->castType.getHeapType();
+      curr->castType.isNonNullable() && type.isBasic()) {
+    switch (type.getBasic()) {
+      case HeapType::func:
+        o << U32LEB(BinaryConsts::RefIsFunc);
+        return;
+      case HeapType::i31:
+        o << U32LEB(BinaryConsts::RefIsI31);
+        return;
+      default:
+        break;
+    }
+  }
   if (curr->castType.isNullable()) {
     o << U32LEB(BinaryConsts::RefTestNull);
   } else {
@@ -2039,6 +2038,20 @@ void BinaryInstWriter::visitRefCast(RefCast* curr) {
     o << U32LEB(BinaryConsts::RefCastNop);
     parent.writeIndexedHeapType(curr->type.getHeapType());
   } else {
+    // TODO: These instructions are deprecated. Remove them.
+    if (auto type = curr->type.getHeapType();
+        type.isBasic() && curr->type.isNonNullable()) {
+      switch (type.getBasic()) {
+        case HeapType::func:
+          o << U32LEB(BinaryConsts::RefAsFunc);
+          return;
+        case HeapType::i31:
+          o << U32LEB(BinaryConsts::RefAsI31);
+          return;
+        default:
+          break;
+      }
+    }
     if (curr->type.isNullable()) {
       o << U32LEB(BinaryConsts::RefCastNull);
     } else {
@@ -2052,43 +2065,66 @@ void BinaryInstWriter::visitBrOn(BrOn* curr) {
   switch (curr->op) {
     case BrOnNull:
       o << int8_t(BinaryConsts::BrOnNull);
-      break;
+      o << U32LEB(getBreakIndex(curr->name));
+      return;
     case BrOnNonNull:
       o << int8_t(BinaryConsts::BrOnNonNull);
-      break;
+      o << U32LEB(getBreakIndex(curr->name));
+      return;
     case BrOnCast:
       o << int8_t(BinaryConsts::GCPrefix);
-      o << U32LEB(BinaryConsts::BrOnCast);
-      break;
+      // TODO: These instructions are deprecated, so stop emitting them.
+      if (auto type = curr->castType.getHeapType();
+          type.isBasic() && curr->castType.isNonNullable()) {
+        switch (type.getBasic()) {
+          case HeapType::func:
+            o << U32LEB(BinaryConsts::BrOnFunc);
+            o << U32LEB(getBreakIndex(curr->name));
+            return;
+          case HeapType::i31:
+            o << U32LEB(BinaryConsts::BrOnI31);
+            o << U32LEB(getBreakIndex(curr->name));
+            return;
+          default:
+            break;
+        }
+      }
+      if (curr->castType.isNullable()) {
+        o << U32LEB(BinaryConsts::BrOnCastNull);
+      } else {
+        o << U32LEB(BinaryConsts::BrOnCast);
+      }
+      o << U32LEB(getBreakIndex(curr->name));
+      parent.writeHeapType(curr->castType.getHeapType());
+      return;
     case BrOnCastFail:
       o << int8_t(BinaryConsts::GCPrefix);
-      o << U32LEB(BinaryConsts::BrOnCastFail);
-      break;
-    case BrOnFunc:
-      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::BrOnFunc);
-      break;
-    case BrOnNonFunc:
-      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::BrOnNonFunc);
-      break;
-    case BrOnData:
-      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::BrOnData);
-      break;
-    case BrOnNonData:
-      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::BrOnNonData);
-      break;
-    case BrOnI31:
-      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::BrOnI31);
-      break;
-    case BrOnNonI31:
-      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::BrOnNonI31);
-      break;
-    default:
-      WASM_UNREACHABLE("invalid br_on_*");
+      // TODO: These instructions are deprecated, so stop emitting them.
+      if (auto type = curr->castType.getHeapType();
+          type.isBasic() && curr->castType.isNonNullable()) {
+        switch (type.getBasic()) {
+          case HeapType::func:
+            o << U32LEB(BinaryConsts::BrOnNonFunc);
+            o << U32LEB(getBreakIndex(curr->name));
+            return;
+          case HeapType::i31:
+            o << U32LEB(BinaryConsts::BrOnNonI31);
+            o << U32LEB(getBreakIndex(curr->name));
+            return;
+          default:
+            break;
+        }
+      }
+      if (curr->castType.isNullable()) {
+        o << U32LEB(BinaryConsts::BrOnCastFailNull);
+      } else {
+        o << U32LEB(BinaryConsts::BrOnCastFail);
+      }
+      o << U32LEB(getBreakIndex(curr->name));
+      parent.writeHeapType(curr->castType.getHeapType());
+      return;
   }
-  o << U32LEB(getBreakIndex(curr->name));
-  if (curr->op == BrOnCast || curr->op == BrOnCastFail) {
-    parent.writeHeapType(curr->intendedType);
-  }
+  WASM_UNREACHABLE("invalid br_on_*");
 }
 
 void BinaryInstWriter::visitStructNew(StructNew* curr) {
@@ -2210,15 +2246,6 @@ void BinaryInstWriter::visitRefAs(RefAs* curr) {
   switch (curr->op) {
     case RefAsNonNull:
       o << int8_t(BinaryConsts::RefAsNonNull);
-      break;
-    case RefAsFunc:
-      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::RefAsFunc);
-      break;
-    case RefAsData:
-      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::RefAsData);
-      break;
-    case RefAsI31:
-      o << int8_t(BinaryConsts::GCPrefix) << U32LEB(BinaryConsts::RefAsI31);
       break;
     case ExternInternalize:
       o << int8_t(BinaryConsts::GCPrefix)

@@ -38,7 +38,7 @@ function initializeConstants() {
     ['anyref', 'Anyref'],
     ['eqref', 'Eqref'],
     ['i31ref', 'I31ref'],
-    ['dataref', 'Dataref'],
+    ['structref', 'Structref'],
     ['stringref', 'Stringref'],
     ['stringview_wtf8', 'StringviewWTF8'],
     ['stringview_wtf16', 'StringviewWTF16'],
@@ -92,7 +92,7 @@ function initializeConstants() {
     'MemoryCopy',
     'MemoryFill',
     'RefNull',
-    'RefIs',
+    'RefIsNull',
     'RefFunc',
     'RefEq',
     'TableGet',
@@ -549,26 +549,13 @@ function initializeConstants() {
     'DemoteZeroVecF64x2ToVecF32x4',
     'PromoteLowVecF32x4ToVecF64x2',
     'SwizzleVecI8x16',
-    'RefIsNull',
-    'RefIsFunc',
-    'RefIsData',
-    'RefIsI31',
     'RefAsNonNull',
-    'RefAsFunc',
-    'RefAsData',
-    'RefAsI31',
     'RefAsExternInternalize',
     'RefAsExternExternalize',
     'BrOnNull',
     'BrOnNonNull',
     'BrOnCast',
     'BrOnCastFail',
-    'BrOnFunc',
-    'BrOnNonFunc',
-    'BrOnData',
-    'BrOnNonData',
-    'BrOnI31',
-    'BrOnNonI31',
     'StringNewUTF8',
     'StringNewWTF8',
     'StringNewReplace',
@@ -2315,9 +2302,9 @@ function wrapModule(module, self = {}) {
     }
   };
 
-  self['dataref'] = {
+  self['structref'] = {
     'pop'() {
-      return Module['_BinaryenPop'](module, Module['dataref']);
+      return Module['_BinaryenPop'](module, Module['structref']);
     }
   };
 
@@ -2350,28 +2337,10 @@ function wrapModule(module, self = {}) {
       return Module['_BinaryenRefNull'](module, type);
     },
     'is_null'(value) {
-      return Module['_BinaryenRefIs'](module, Module['RefIsNull'], value);
-    },
-    'is_func'(value) {
-      return Module['_BinaryenRefIs'](module, Module['RefIsFunc'], value);
-    },
-    'is_data'(value) {
-      return Module['_BinaryenRefIs'](module, Module['RefIsData'], value);
-    },
-    'is_i31'(value) {
-      return Module['_BinaryenRefIs'](module, Module['RefIsI31'], value);
+      return Module['_BinaryenRefIsNull'](module, value);
     },
     'as_non_null'(value) {
       return Module['_BinaryenRefAs'](module, Module['RefAsNonNull'], value);
-    },
-    'as_func'(value) {
-      return Module['_BinaryenRefAs'](module, Module['RefAsFunc'], value);
-    },
-    'as_data'(value) {
-      return Module['_BinaryenRefAs'](module, Module['RefAsData'], value);
-    },
-    'as_i31'(value) {
-      return Module['_BinaryenRefAs'](module, Module['RefAsI31'], value);
     },
     'func'(func, type) {
       return preserveStack(() => Module['_BinaryenRefFunc'](module, strToStack(func), type));
@@ -2628,7 +2597,7 @@ function wrapModule(module, self = {}) {
         const ptr = _malloc(size);
         Module['_BinaryenCopyMemorySegmentData'](module, id, ptr);
         const res = new Uint8Array(size);
-        res.set(new Uint8Array(buffer, ptr, size));
+        res.set(HEAP8.subarray(ptr, ptr + size));
         _free(ptr);
         return res.buffer;
       })(),
@@ -3209,12 +3178,11 @@ Module['getExpressionInfo'] = function(expr) {
         'id': id,
         'type': type
       };
-    case Module['RefIsId']:
+    case Module['RefIsNullId']:
       return {
         'id': id,
         'type': type,
-        'op': Module['_BinaryenRefIsGetOp'](expr),
-        'value': Module['_BinaryenRefIsGetValue'](expr)
+        'value': Module['_BinaryenRefIsNullGetValue'](expr)
       };
     case Module['RefAsId']:
       return {
@@ -4628,18 +4596,12 @@ Module['MemoryFill'] = makeExpressionWrapper({
   }
 });
 
-Module['RefIs'] = makeExpressionWrapper({
-  'getOp'(expr) {
-    return Module['_BinaryenRefIsGetOp'](expr);
-  },
-  'setOp'(expr, op) {
-    Module['_BinaryenRefIsSetOp'](expr, op);
-  },
+Module['RefIsNull'] = makeExpressionWrapper({
   'getValue'(expr) {
-    return Module['_BinaryenRefIsGetValue'](expr);
+    return Module['_BinaryenRefIsNullGetValue'](expr);
   },
   'setValue'(expr, valueExpr) {
-    Module['_BinaryenRefIsSetValue'](expr, valueExpr);
+    Module['_BinaryenRefIsNullSetValue'](expr, valueExpr);
   }
 });
 

@@ -267,7 +267,7 @@ private:
   Expression* makeBreakTable(Element& s);
   Expression* makeReturn(Element& s);
   Expression* makeRefNull(Element& s);
-  Expression* makeRefIs(Element& s, RefIsOp op);
+  Expression* makeRefIsNull(Element& s);
   Expression* makeRefFunc(Element& s);
   Expression* makeRefEq(Element& s);
   Expression* makeTableGet(Element& s);
@@ -283,10 +283,14 @@ private:
   Expression* makeCallRef(Element& s, bool isReturn);
   Expression* makeI31New(Element& s);
   Expression* makeI31Get(Element& s, bool signed_);
-  Expression* makeRefTest(Element& s);
-  Expression* makeRefCast(Element& s);
+  Expression* makeRefTest(Element& s,
+                          std::optional<Type> castType = std::nullopt);
+  Expression* makeRefCast(Element& s,
+                          std::optional<Type> castType = std::nullopt);
   Expression* makeRefCastNop(Element& s);
-  Expression* makeBrOn(Element& s, BrOnOp op);
+  Expression* makeBrOnNull(Element& s, bool onFail = false);
+  Expression*
+  makeBrOnCast(Element& s, std::optional<Type> castType, bool onFail = false);
   Expression* makeStructNew(Element& s, bool default_);
   Index getStructIndex(Element& type, Element& field);
   Expression* makeStructGet(Element& s, bool signed_ = false);
@@ -299,6 +303,7 @@ private:
   Expression* makeArrayLen(Element& s);
   Expression* makeArrayCopy(Element& s);
   Expression* makeRefAs(Element& s, RefAsOp op);
+  Expression* makeRefAsNonNull(Element& s);
   Expression* makeStringNew(Element& s, StringNewOp op);
   Expression* makeStringConst(Element& s);
   Expression* makeStringMeasure(Element& s, StringMeasureOp op);

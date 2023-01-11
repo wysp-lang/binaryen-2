@@ -9,12 +9,12 @@
 
  ;; CHECK:      (type $pair (struct (field (mut i32)) (field (mut i64))))
 
- ;; CHECK:      (type $none_=>_i32 (func (result i32)))
-
  ;; CHECK:      (type $ret2 (func (result i32 i32)))
  (type $ret2 (func (result i32 i32)))
 
  (rec
+  ;; CHECK:      (type $none_=>_i32 (func (result i32)))
+
   ;; CHECK:      (type $i32_i64_=>_none (func (param i32 i64)))
 
   ;; CHECK:      (type $a1 (array i64))
@@ -59,7 +59,7 @@
 
   ;; CHECK:      (type $none_=>_i32_i64 (func (result i32 i64)))
 
-  ;; CHECK:      (type $anyref_=>_none (func (param anyref)))
+  ;; CHECK:      (type $anyref_=>_i32 (func (param anyref) (result i32)))
 
   ;; CHECK:      (type $eqref_eqref_=>_i32 (func (param eqref eqref) (result i32)))
 
@@ -701,6 +701,112 @@
   drop
  )
 
+ ;; CHECK:      (func $block (type $void)
+ ;; CHECK-NEXT:  (nop)
+ ;; CHECK-NEXT:  (block $l
+ ;; CHECK-NEXT:   (nop)
+ ;; CHECK-NEXT:   (nop)
+ ;; CHECK-NEXT:   (nop)
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT: )
+ (func $block
+  nop
+  block $l (type $void)
+   nop
+   nop
+   nop
+  end $l
+ )
+
+ ;; CHECK:      (func $block-folded (type $void)
+ ;; CHECK-NEXT:  (local $scratch (i32 i32))
+ ;; CHECK-NEXT:  (nop)
+ ;; CHECK-NEXT:  (local.set $scratch
+ ;; CHECK-NEXT:   (block $l (result i32 i32)
+ ;; CHECK-NEXT:    (nop)
+ ;; CHECK-NEXT:    (nop)
+ ;; CHECK-NEXT:    (unreachable)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (tuple.extract 0
+ ;; CHECK-NEXT:    (local.get $scratch)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (drop
+ ;; CHECK-NEXT:   (tuple.extract 1
+ ;; CHECK-NEXT:    (local.get $scratch)
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (unreachable)
+ ;; CHECK-NEXT: )
+ (func $block-folded
+  nop
+  (block $l (result i32) (result) (result i32)
+   nop
+   nop
+   unreachable
+  )
+  unreachable
+ )
+
+ ;; CHECK:      (func $block-mix (type $void)
+ ;; CHECK-NEXT:  (local $scratch i32)
+ ;; CHECK-NEXT:  (local $scratch_0 (i32 i32))
+ ;; CHECK-NEXT:  (local $scratch_1 i32)
+ ;; CHECK-NEXT:  (block $0
+ ;; CHECK-NEXT:   (local.set $scratch_0
+ ;; CHECK-NEXT:    (block $1 (result i32 i32)
+ ;; CHECK-NEXT:     (tuple.make
+ ;; CHECK-NEXT:      (block $2 (result i32)
+ ;; CHECK-NEXT:       (block (result i32)
+ ;; CHECK-NEXT:        (local.set $scratch
+ ;; CHECK-NEXT:         (block $3 (result i32)
+ ;; CHECK-NEXT:          (i32.const 0)
+ ;; CHECK-NEXT:         )
+ ;; CHECK-NEXT:        )
+ ;; CHECK-NEXT:        (nop)
+ ;; CHECK-NEXT:        (local.get $scratch)
+ ;; CHECK-NEXT:       )
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:      (i32.const 1)
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:   (drop
+ ;; CHECK-NEXT:    (block (result i32)
+ ;; CHECK-NEXT:     (local.set $scratch_1
+ ;; CHECK-NEXT:      (tuple.extract 0
+ ;; CHECK-NEXT:       (local.get $scratch_0)
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (drop
+ ;; CHECK-NEXT:      (tuple.extract 1
+ ;; CHECK-NEXT:       (local.get $scratch_0)
+ ;; CHECK-NEXT:      )
+ ;; CHECK-NEXT:     )
+ ;; CHECK-NEXT:     (local.get $scratch_1)
+ ;; CHECK-NEXT:    )
+ ;; CHECK-NEXT:   )
+ ;; CHECK-NEXT:  )
+ ;; CHECK-NEXT:  (nop)
+ ;; CHECK-NEXT: )
+ (func $block-mix
+  (block $0
+   block $1 (type $ret2)
+    (block $2 (result i32)
+     block $3 (result i32)
+      i32.const 0
+     end
+     nop
+    )
+    i32.const 1
+   end $1
+   drop
+   drop
+  )
+  nop
+ )
 
  ;; CHECK:      (func $binary (type $i32_i32_f64_f64_=>_none) (param $0 i32) (param $1 i32) (param $2 f64) (param $3 f64)
  ;; CHECK-NEXT:  (drop
@@ -1292,41 +1398,14 @@
   return
  )
 
- ;; CHECK:      (func $ref-is (type $anyref_=>_none) (param $0 anyref)
- ;; CHECK-NEXT:  (drop
- ;; CHECK-NEXT:   (ref.is_null
- ;; CHECK-NEXT:    (local.get $0)
- ;; CHECK-NEXT:   )
- ;; CHECK-NEXT:  )
- ;; CHECK-NEXT:  (drop
- ;; CHECK-NEXT:   (ref.is_func
- ;; CHECK-NEXT:    (local.get $0)
- ;; CHECK-NEXT:   )
- ;; CHECK-NEXT:  )
- ;; CHECK-NEXT:  (drop
- ;; CHECK-NEXT:   (ref.is_data
- ;; CHECK-NEXT:    (local.get $0)
- ;; CHECK-NEXT:   )
- ;; CHECK-NEXT:  )
- ;; CHECK-NEXT:  (drop
- ;; CHECK-NEXT:   (ref.is_i31
- ;; CHECK-NEXT:    (local.get $0)
- ;; CHECK-NEXT:   )
+ ;; CHECK:      (func $ref-is-null (type $anyref_=>_i32) (param $0 anyref) (result i32)
+ ;; CHECK-NEXT:  (ref.is_null
+ ;; CHECK-NEXT:   (local.get $0)
  ;; CHECK-NEXT:  )
  ;; CHECK-NEXT: )
- (func $ref-is (param anyref)
+ (func $ref-is-null (param anyref) (result i32)
   local.get 0
   ref.is_null
-  drop
-  local.get 0
-  ref.is_func
-  drop
-  local.get 0
-  ref.is_data
-  drop
-  local.get 0
-  ref.is_i31
-  drop
  )
 
  ;; CHECK:      (func $ref-eq (type $eqref_eqref_=>_i32) (param $0 eqref) (param $1 eqref) (result i32)

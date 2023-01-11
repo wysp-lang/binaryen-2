@@ -100,20 +100,20 @@ switch (buf[0]) {
                   case 'c': {
                     switch (buf[10]) {
                       case '\0':
-                        if (op == "br_on_cast"sv) { return makeBrOn(s, BrOnCast); }
+                        if (op == "br_on_cast"sv) { return makeBrOnCast(s, std::nullopt); }
                         goto parse_error;
                       case '_': {
                         switch (buf[11]) {
                           case 'f':
-                            if (op == "br_on_cast_fail"sv) { return makeBrOn(s, BrOnCastFail); }
+                            if (op == "br_on_cast_fail"sv) { return makeBrOnCast(s, std::nullopt, true); }
                             goto parse_error;
                           case 's': {
                             switch (buf[17]) {
                               case '\0':
-                                if (op == "br_on_cast_static"sv) { return makeBrOn(s, BrOnCast); }
+                                if (op == "br_on_cast_static"sv) { return makeBrOnCast(s, std::nullopt); }
                                 goto parse_error;
                               case '_':
-                                if (op == "br_on_cast_static_fail"sv) { return makeBrOn(s, BrOnCastFail); }
+                                if (op == "br_on_cast_static_fail"sv) { return makeBrOnCast(s, std::nullopt, true); }
                                 goto parse_error;
                               default: goto parse_error;
                             }
@@ -124,36 +124,30 @@ switch (buf[0]) {
                       default: goto parse_error;
                     }
                   }
-                  case 'd':
-                    if (op == "br_on_data"sv) { return makeBrOn(s, BrOnData); }
-                    goto parse_error;
                   case 'f':
-                    if (op == "br_on_func"sv) { return makeBrOn(s, BrOnFunc); }
+                    if (op == "br_on_func"sv) { return makeBrOnCast(s, Type(HeapType::func, NonNullable)); }
                     goto parse_error;
                   case 'i':
-                    if (op == "br_on_i31"sv) { return makeBrOn(s, BrOnI31); }
+                    if (op == "br_on_i31"sv) { return makeBrOnCast(s, Type(HeapType::i31, NonNullable)); }
                     goto parse_error;
                   case 'n': {
                     switch (buf[7]) {
                       case 'o': {
                         switch (buf[10]) {
-                          case 'd':
-                            if (op == "br_on_non_data"sv) { return makeBrOn(s, BrOnNonData); }
-                            goto parse_error;
                           case 'f':
-                            if (op == "br_on_non_func"sv) { return makeBrOn(s, BrOnNonFunc); }
+                            if (op == "br_on_non_func"sv) { return makeBrOnCast(s, Type(HeapType::func, NonNullable), true); }
                             goto parse_error;
                           case 'i':
-                            if (op == "br_on_non_i31"sv) { return makeBrOn(s, BrOnNonI31); }
+                            if (op == "br_on_non_i31"sv) { return makeBrOnCast(s, Type(HeapType::i31, NonNullable), true); }
                             goto parse_error;
                           case 'n':
-                            if (op == "br_on_non_null"sv) { return makeBrOn(s, BrOnNonNull); }
+                            if (op == "br_on_non_null"sv) { return makeBrOnNull(s, true); }
                             goto parse_error;
                           default: goto parse_error;
                         }
                       }
                       case 'u':
-                        if (op == "br_on_null"sv) { return makeBrOn(s, BrOnNull); }
+                        if (op == "br_on_null"sv) { return makeBrOnNull(s); }
                         goto parse_error;
                       default: goto parse_error;
                     }
@@ -2999,14 +2993,11 @@ switch (buf[0]) {
         switch (buf[4]) {
           case 'a': {
             switch (buf[7]) {
-              case 'd':
-                if (op == "ref.as_data"sv) { return makeRefAs(s, RefAsData); }
-                goto parse_error;
               case 'f':
-                if (op == "ref.as_func"sv) { return makeRefAs(s, RefAsFunc); }
+                if (op == "ref.as_func"sv) { return makeRefCast(s, Type(HeapType::func, NonNullable)); }
                 goto parse_error;
               case 'i':
-                if (op == "ref.as_i31"sv) { return makeRefAs(s, RefAsI31); }
+                if (op == "ref.as_i31"sv) { return makeRefCast(s, Type(HeapType::i31, NonNullable)); }
                 goto parse_error;
               case 'n':
                 if (op == "ref.as_non_null"sv) { return makeRefAs(s, RefAsNonNull); }
@@ -3049,17 +3040,14 @@ switch (buf[0]) {
             goto parse_error;
           case 'i': {
             switch (buf[7]) {
-              case 'd':
-                if (op == "ref.is_data"sv) { return makeRefIs(s, RefIsData); }
-                goto parse_error;
               case 'f':
-                if (op == "ref.is_func"sv) { return makeRefIs(s, RefIsFunc); }
+                if (op == "ref.is_func"sv) { return makeRefTest(s, Type(HeapType::func, NonNullable)); }
                 goto parse_error;
               case 'i':
-                if (op == "ref.is_i31"sv) { return makeRefIs(s, RefIsI31); }
+                if (op == "ref.is_i31"sv) { return makeRefTest(s, Type(HeapType::i31, NonNullable)); }
                 goto parse_error;
               case 'n':
-                if (op == "ref.is_null"sv) { return makeRefIs(s, RefIsNull); }
+                if (op == "ref.is_null"sv) { return makeRefIsNull(s); }
                 goto parse_error;
               default: goto parse_error;
             }
@@ -3727,7 +3715,7 @@ switch (buf[0]) {
                     switch (buf[10]) {
                       case '\0':
                         if (op == "br_on_cast"sv) {
-                          auto ret = makeBrOn(ctx, pos, BrOnCast);
+                          auto ret = makeBrOnCast(ctx, pos, std::nullopt);
                           CHECK_ERR(ret);
                           return *ret;
                         }
@@ -3736,7 +3724,7 @@ switch (buf[0]) {
                         switch (buf[11]) {
                           case 'f':
                             if (op == "br_on_cast_fail"sv) {
-                              auto ret = makeBrOn(ctx, pos, BrOnCastFail);
+                              auto ret = makeBrOnCast(ctx, pos, std::nullopt, true);
                               CHECK_ERR(ret);
                               return *ret;
                             }
@@ -3745,14 +3733,14 @@ switch (buf[0]) {
                             switch (buf[17]) {
                               case '\0':
                                 if (op == "br_on_cast_static"sv) {
-                                  auto ret = makeBrOn(ctx, pos, BrOnCast);
+                                  auto ret = makeBrOnCast(ctx, pos, std::nullopt);
                                   CHECK_ERR(ret);
                                   return *ret;
                                 }
                                 goto parse_error;
                               case '_':
                                 if (op == "br_on_cast_static_fail"sv) {
-                                  auto ret = makeBrOn(ctx, pos, BrOnCastFail);
+                                  auto ret = makeBrOnCast(ctx, pos, std::nullopt, true);
                                   CHECK_ERR(ret);
                                   return *ret;
                                 }
@@ -3766,23 +3754,16 @@ switch (buf[0]) {
                       default: goto parse_error;
                     }
                   }
-                  case 'd':
-                    if (op == "br_on_data"sv) {
-                      auto ret = makeBrOn(ctx, pos, BrOnData);
-                      CHECK_ERR(ret);
-                      return *ret;
-                    }
-                    goto parse_error;
                   case 'f':
                     if (op == "br_on_func"sv) {
-                      auto ret = makeBrOn(ctx, pos, BrOnFunc);
+                      auto ret = makeBrOnCast(ctx, pos, Type(HeapType::func, NonNullable));
                       CHECK_ERR(ret);
                       return *ret;
                     }
                     goto parse_error;
                   case 'i':
                     if (op == "br_on_i31"sv) {
-                      auto ret = makeBrOn(ctx, pos, BrOnI31);
+                      auto ret = makeBrOnCast(ctx, pos, Type(HeapType::i31, NonNullable));
                       CHECK_ERR(ret);
                       return *ret;
                     }
@@ -3791,30 +3772,23 @@ switch (buf[0]) {
                     switch (buf[7]) {
                       case 'o': {
                         switch (buf[10]) {
-                          case 'd':
-                            if (op == "br_on_non_data"sv) {
-                              auto ret = makeBrOn(ctx, pos, BrOnNonData);
-                              CHECK_ERR(ret);
-                              return *ret;
-                            }
-                            goto parse_error;
                           case 'f':
                             if (op == "br_on_non_func"sv) {
-                              auto ret = makeBrOn(ctx, pos, BrOnNonFunc);
+                              auto ret = makeBrOnCast(ctx, pos, Type(HeapType::func, NonNullable), true);
                               CHECK_ERR(ret);
                               return *ret;
                             }
                             goto parse_error;
                           case 'i':
                             if (op == "br_on_non_i31"sv) {
-                              auto ret = makeBrOn(ctx, pos, BrOnNonI31);
+                              auto ret = makeBrOnCast(ctx, pos, Type(HeapType::i31, NonNullable), true);
                               CHECK_ERR(ret);
                               return *ret;
                             }
                             goto parse_error;
                           case 'n':
                             if (op == "br_on_non_null"sv) {
-                              auto ret = makeBrOn(ctx, pos, BrOnNonNull);
+                              auto ret = makeBrOnNull(ctx, pos, true);
                               CHECK_ERR(ret);
                               return *ret;
                             }
@@ -3824,7 +3798,7 @@ switch (buf[0]) {
                       }
                       case 'u':
                         if (op == "br_on_null"sv) {
-                          auto ret = makeBrOn(ctx, pos, BrOnNull);
+                          auto ret = makeBrOnNull(ctx, pos);
                           CHECK_ERR(ret);
                           return *ret;
                         }
@@ -8597,23 +8571,16 @@ switch (buf[0]) {
         switch (buf[4]) {
           case 'a': {
             switch (buf[7]) {
-              case 'd':
-                if (op == "ref.as_data"sv) {
-                  auto ret = makeRefAs(ctx, pos, RefAsData);
-                  CHECK_ERR(ret);
-                  return *ret;
-                }
-                goto parse_error;
               case 'f':
                 if (op == "ref.as_func"sv) {
-                  auto ret = makeRefAs(ctx, pos, RefAsFunc);
+                  auto ret = makeRefCast(ctx, pos, Type(HeapType::func, NonNullable));
                   CHECK_ERR(ret);
                   return *ret;
                 }
                 goto parse_error;
               case 'i':
                 if (op == "ref.as_i31"sv) {
-                  auto ret = makeRefAs(ctx, pos, RefAsI31);
+                  auto ret = makeRefCast(ctx, pos, Type(HeapType::i31, NonNullable));
                   CHECK_ERR(ret);
                   return *ret;
                 }
@@ -8687,30 +8654,23 @@ switch (buf[0]) {
             goto parse_error;
           case 'i': {
             switch (buf[7]) {
-              case 'd':
-                if (op == "ref.is_data"sv) {
-                  auto ret = makeRefIs(ctx, pos, RefIsData);
-                  CHECK_ERR(ret);
-                  return *ret;
-                }
-                goto parse_error;
               case 'f':
                 if (op == "ref.is_func"sv) {
-                  auto ret = makeRefIs(ctx, pos, RefIsFunc);
+                  auto ret = makeRefTest(ctx, pos, Type(HeapType::func, NonNullable));
                   CHECK_ERR(ret);
                   return *ret;
                 }
                 goto parse_error;
               case 'i':
                 if (op == "ref.is_i31"sv) {
-                  auto ret = makeRefIs(ctx, pos, RefIsI31);
+                  auto ret = makeRefTest(ctx, pos, Type(HeapType::i31, NonNullable));
                   CHECK_ERR(ret);
                   return *ret;
                 }
                 goto parse_error;
               case 'n':
                 if (op == "ref.is_null"sv) {
-                  auto ret = makeRefIs(ctx, pos, RefIsNull);
+                  auto ret = makeRefIsNull(ctx, pos);
                   CHECK_ERR(ret);
                   return *ret;
                 }
@@ -9544,7 +9504,7 @@ switch (buf[0]) {
   default: goto parse_error;
 }
 parse_error:
-  return ctx.in.err("unrecognized instruction");
+  return ctx.in.err(pos, "unrecognized instruction");
 #endif // NEW_INSTRUCTION_PARSER
 
 // clang-format on

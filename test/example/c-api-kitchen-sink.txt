@@ -10,7 +10,7 @@ BinaryenTypeExternref: (ptr)
 BinaryenTypeAnyref: (ptr)
 BinaryenTypeEqref: (ptr)
 BinaryenTypeI31ref: (ptr)
-BinaryenTypeDataref: (ptr)
+BinaryenTypeStructref: (ptr)
 BinaryenTypeArrayref: (ptr)
 BinaryenTypeStringref: (ptr)
 BinaryenTypeStringviewWTF8: (ptr)
@@ -28,7 +28,7 @@ BinaryenHeapTypeFunc: 1
 BinaryenHeapTypeAny: 2
 BinaryenHeapTypeEq: 3
 BinaryenHeapTypeI31: 4
-BinaryenHeapTypeData: 5
+BinaryenHeapTypeStruct: 5
 BinaryenHeapTypeArray: 6
 BinaryenHeapTypeString: 7
 BinaryenHeapTypeStringviewWTF8: 8
@@ -2004,37 +2004,7 @@ BinaryenFeatureAll: 126975
        )
       )
       (drop
-       (ref.is_func
-        (ref.null none)
-       )
-      )
-      (drop
-       (ref.is_data
-        (ref.null none)
-       )
-      )
-      (drop
-       (ref.is_i31
-        (ref.null none)
-       )
-      )
-      (drop
        (ref.as_non_null
-        (ref.null none)
-       )
-      )
-      (drop
-       (ref.as_func
-        (ref.null none)
-       )
-      )
-      (drop
-       (ref.as_data
-        (ref.null none)
-       )
-      )
-      (drop
-       (ref.as_i31
         (ref.null none)
        )
       )

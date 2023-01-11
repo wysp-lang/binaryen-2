@@ -1408,8 +1408,8 @@ void WasmBinaryWriter::writeType(Type type) {
         case HeapType::i31:
           o << S32LEB(BinaryConsts::EncodedType::i31ref);
           return;
-        case HeapType::data:
-          o << S32LEB(BinaryConsts::EncodedType::dataref);
+        case HeapType::struct_:
+          o << S32LEB(BinaryConsts::EncodedType::structref);
           return;
         case HeapType::array:
           o << S32LEB(BinaryConsts::EncodedType::arrayref);
@@ -1517,8 +1517,8 @@ void WasmBinaryWriter::writeHeapType(HeapType type) {
     case HeapType::i31:
       ret = BinaryConsts::EncodedHeapType::i31;
       break;
-    case HeapType::data:
-      ret = BinaryConsts::EncodedHeapType::data;
+    case HeapType::struct_:
+      ret = BinaryConsts::EncodedHeapType::struct_;
       break;
     case HeapType::array:
       ret = BinaryConsts::EncodedHeapType::array;
@@ -1887,8 +1887,8 @@ bool WasmBinaryBuilder::getBasicType(int32_t code, Type& out) {
     case BinaryConsts::EncodedType::i31ref:
       out = Type(HeapType::i31, Nullable);
       return true;
-    case BinaryConsts::EncodedType::dataref:
-      out = Type(HeapType::data, Nullable);
+    case BinaryConsts::EncodedType::structref:
+      out = Type(HeapType::struct_, Nullable);
       return true;
     case BinaryConsts::EncodedType::arrayref:
       out = Type(HeapType::array, Nullable);
@@ -1936,8 +1936,8 @@ bool WasmBinaryBuilder::getBasicHeapType(int64_t code, HeapType& out) {
     case BinaryConsts::EncodedHeapType::i31:
       out = HeapType::i31;
       return true;
-    case BinaryConsts::EncodedHeapType::data:
-      out = HeapType::data;
+    case BinaryConsts::EncodedHeapType::struct_:
+      out = HeapType::struct_;
       return true;
     case BinaryConsts::EncodedHeapType::array:
       out = HeapType::array;
@@ -2240,7 +2240,13 @@ void WasmBinaryBuilder::readTypes() {
               "The only allowed trivial supertype for functions is func");
           }
         } else {
-          if (basicSuper != HeapType::data) {
+          // Check for "struct" here even if we are parsing an array definition.
+          // This is the old nonstandard "struct_subtype" or "array_subtype"
+          // form of type definitions that used the old "data" type as the
+          // supertype placeholder when there was no nontrivial supertype.
+          // "data" no longer exists, but "struct" has the same encoding it used
+          // to have.
+          if (basicSuper != HeapType::struct_) {
             throwError("The only allowed trivial supertype for structs and "
                        "arrays is data");
           }
@@ -3795,7 +3801,7 @@ BinaryConsts::ASTNodes WasmBinaryBuilder::readExpression(Expression*& curr) {
       visitRefNull((curr = allocator.alloc<RefNull>())->cast<RefNull>());
       break;
     case BinaryConsts::RefIsNull:
-      visitRefIs((curr = allocator.alloc<RefIs>())->cast<RefIs>(), code);
+      visitRefIsNull((curr = allocator.alloc<RefIsNull>())->cast<RefIsNull>());
       break;
     case BinaryConsts::RefFunc:
       visitRefFunc((curr = allocator.alloc<RefFunc>())->cast<RefFunc>());
@@ -4024,15 +4030,18 @@ BinaryConsts::ASTNodes WasmBinaryBuilder::readExpression(Expression*& curr) {
         break;
       }
       if (opcode == BinaryConsts::RefIsFunc ||
-          opcode == BinaryConsts::RefIsData ||
           opcode == BinaryConsts::RefIsI31) {
-        visitRefIs((curr = allocator.alloc<RefIs>())->cast<RefIs>(), opcode);
+        visitRefIs((curr = allocator.alloc<RefTest>())->cast<RefTest>(),
+                   opcode);
         break;
       }
       if (opcode == BinaryConsts::RefAsFunc ||
-          opcode == BinaryConsts::RefAsData ||
-          opcode == BinaryConsts::RefAsI31 ||
-          opcode == BinaryConsts::ExternInternalize ||
+          opcode == BinaryConsts::RefAsI31) {
+        visitRefAsCast((curr = allocator.alloc<RefCast>())->cast<RefCast>(),
+                       opcode);
+        break;
+      }
+      if (opcode == BinaryConsts::ExternInternalize ||
           opcode == BinaryConsts::ExternExternalize) {
         visitRefAs((curr = allocator.alloc<RefAs>())->cast<RefAs>(), opcode);
         break;
@@ -6591,25 +6600,25 @@ void WasmBinaryBuilder::visitRefNull(RefNull* curr) {
   curr->finalize(getHeapType().getBottom());
 }
 
-void WasmBinaryBuilder::visitRefIs(RefIs* curr, uint8_t code) {
+void WasmBinaryBuilder::visitRefIsNull(RefIsNull* curr) {
+  BYN_TRACE("zz node: RefIsNull\n");
+  curr->value = popNonVoidExpression();
+  curr->finalize();
+}
+
+void WasmBinaryBuilder::visitRefIs(RefTest* curr, uint8_t code) {
   BYN_TRACE("zz node: RefIs\n");
   switch (code) {
-    case BinaryConsts::RefIsNull:
-      curr->op = RefIsNull;
-      break;
     case BinaryConsts::RefIsFunc:
-      curr->op = RefIsFunc;
-      break;
-    case BinaryConsts::RefIsData:
-      curr->op = RefIsData;
+      curr->castType = Type(HeapType::func, NonNullable);
       break;
     case BinaryConsts::RefIsI31:
-      curr->op = RefIsI31;
+      curr->castType = Type(HeapType::i31, NonNullable);
       break;
     default:
       WASM_UNREACHABLE("invalid code for ref.is_*");
   }
-  curr->value = popNonVoidExpression();
+  curr->ref = popNonVoidExpression();
   curr->finalize();
 }
 
@@ -6906,6 +6915,23 @@ bool WasmBinaryBuilder::maybeVisitRefTest(Expression*& out, uint32_t code) {
   return false;
 }
 
+void WasmBinaryBuilder::visitRefAsCast(RefCast* curr, uint32_t code) {
+  // TODO: These instructions are deprecated. Remove them.
+  switch (code) {
+    case BinaryConsts::RefAsFunc:
+      curr->type = Type(HeapType::func, NonNullable);
+      break;
+    case BinaryConsts::RefAsI31:
+      curr->type = Type(HeapType::i31, NonNullable);
+      break;
+    default:
+      WASM_UNREACHABLE("unexpected ref.as*");
+  }
+  curr->ref = popNonVoidExpression();
+  curr->safety = RefCast::Safe;
+  curr->finalize();
+}
+
 bool WasmBinaryBuilder::maybeVisitRefCast(Expression*& out, uint32_t code) {
   if (code == BinaryConsts::RefCastStatic || code == BinaryConsts::RefCast ||
       code == BinaryConsts::RefCastNull || code == BinaryConsts::RefCastNop) {
@@ -6930,6 +6956,7 @@ bool WasmBinaryBuilder::maybeVisitRefCast(Expression*& out, uint32_t code) {
 }
 
 bool WasmBinaryBuilder::maybeVisitBrOn(Expression*& out, uint32_t code) {
+  Type castType = Type::none;
   BrOnOp op;
   switch (code) {
     case BinaryConsts::BrOnNull:
@@ -6940,42 +6967,46 @@ bool WasmBinaryBuilder::maybeVisitBrOn(Expression*& out, uint32_t code) {
       break;
     case BinaryConsts::BrOnCastStatic:
     case BinaryConsts::BrOnCast:
+    case BinaryConsts::BrOnCastNull:
       op = BrOnCast;
       break;
     case BinaryConsts::BrOnCastStaticFail:
     case BinaryConsts::BrOnCastFail:
+    case BinaryConsts::BrOnCastFailNull:
       op = BrOnCastFail;
       break;
     case BinaryConsts::BrOnFunc:
-      op = BrOnFunc;
+      op = BrOnCast;
+      castType = Type(HeapType::func, NonNullable);
       break;
     case BinaryConsts::BrOnNonFunc:
-      op = BrOnNonFunc;
-      break;
-    case BinaryConsts::BrOnData:
-      op = BrOnData;
-      break;
-    case BinaryConsts::BrOnNonData:
-      op = BrOnNonData;
+      op = BrOnCastFail;
+      castType = Type(HeapType::func, NonNullable);
       break;
     case BinaryConsts::BrOnI31:
-      op = BrOnI31;
+      op = BrOnCast;
+      castType = Type(HeapType::i31, NonNullable);
       break;
     case BinaryConsts::BrOnNonI31:
-      op = BrOnNonI31;
+      op = BrOnCastFail;
+      castType = Type(HeapType::i31, NonNullable);
       break;
     default:
       return false;
   }
   auto name = getBreakTarget(getU32LEB()).name;
-  HeapType intendedType;
-  if (op == BrOnCast || op == BrOnCastFail) {
+  if (castType == Type::none && (op == BrOnCast || op == BrOnCastFail)) {
+    auto nullability = (code == BinaryConsts::BrOnCastNull ||
+                        code == BinaryConsts::BrOnCastFailNull)
+                         ? Nullable
+                         : NonNullable;
     bool legacy = code == BinaryConsts::BrOnCastStatic ||
                   code == BinaryConsts::BrOnCastStaticFail;
-    intendedType = legacy ? getIndexedHeapType() : getHeapType();
+    auto type = legacy ? getIndexedHeapType() : getHeapType();
+    castType = Type(type, nullability);
   }
   auto* ref = popNonVoidExpression();
-  out = Builder(wasm).makeBrOn(op, name, ref, intendedType);
+  out = Builder(wasm).makeBrOn(op, name, ref, castType);
   return true;
 }
 
@@ -7421,15 +7452,6 @@ void WasmBinaryBuilder::visitRefAs(RefAs* curr, uint8_t code) {
   switch (code) {
     case BinaryConsts::RefAsNonNull:
       curr->op = RefAsNonNull;
-      break;
-    case BinaryConsts::RefAsFunc:
-      curr->op = RefAsFunc;
-      break;
-    case BinaryConsts::RefAsData:
-      curr->op = RefAsData;
-      break;
-    case BinaryConsts::RefAsI31:
-      curr->op = RefAsI31;
       break;
     case BinaryConsts::ExternInternalize:
       curr->op = ExternInternalize;

@@ -105,8 +105,8 @@ bool maybePrintRefShorthand(std::ostream& o, Type type) {
       case HeapType::i31:
         o << "i31ref";
         return true;
-      case HeapType::data:
-        o << "dataref";
+      case HeapType::struct_:
+        o << "structref";
         return true;
       case HeapType::array:
         o << "arrayref";
@@ -2000,24 +2000,7 @@ struct PrintExpressionContents
     printMedium(o, "ref.null ");
     printHeapType(o, curr->type.getHeapType(), wasm);
   }
-  void visitRefIs(RefIs* curr) {
-    switch (curr->op) {
-      case RefIsNull:
-        printMedium(o, "ref.is_null");
-        break;
-      case RefIsFunc:
-        printMedium(o, "ref.is_func");
-        break;
-      case RefIsData:
-        printMedium(o, "ref.is_data");
-        break;
-      case RefIsI31:
-        printMedium(o, "ref.is_i31");
-        break;
-      default:
-        WASM_UNREACHABLE("unimplemented ref.is_*");
-    }
-  }
+  void visitRefIsNull(RefIsNull* curr) { printMedium(o, "ref.is_null"); }
   void visitRefFunc(RefFunc* curr) {
     printMedium(o, "ref.func ");
     printName(curr->func, o);
@@ -2109,6 +2092,20 @@ struct PrintExpressionContents
     printHeapType(o, curr->target->type.getHeapType(), wasm);
   }
   void visitRefTest(RefTest* curr) {
+    // TODO: These instructions are deprecated. Remove them.
+    if (auto type = curr->castType.getHeapType();
+        curr->castType.isNonNullable() && type.isBasic()) {
+      switch (type.getBasic()) {
+        case HeapType::func:
+          printMedium(o, "ref.is_func");
+          return;
+        case HeapType::i31:
+          printMedium(o, "ref.is_i31");
+          return;
+        default:
+          break;
+      }
+    }
     printMedium(o, "ref.test ");
     if (curr->castType.isNullable()) {
       printMedium(o, "null ");
@@ -2122,6 +2119,20 @@ struct PrintExpressionContents
     if (curr->safety == RefCast::Unsafe) {
       printMedium(o, "ref.cast_nop ");
     } else {
+      // TODO: These instructions are deprecated. Remove them.
+      if (auto type = curr->type.getHeapType();
+          type.isBasic() && curr->type.isNonNullable()) {
+        switch (type.getBasic()) {
+          case HeapType::func:
+            printMedium(o, "ref.as_func");
+            return;
+          case HeapType::i31:
+            printMedium(o, "ref.as_i31");
+            return;
+          default:
+            break;
+        }
+      }
       if (curr->type.isNullable()) {
         printMedium(o, "ref.cast null ");
       } else {
@@ -2135,44 +2146,64 @@ struct PrintExpressionContents
     switch (curr->op) {
       case BrOnNull:
         printMedium(o, "br_on_null ");
-        break;
+        printName(curr->name, o);
+        return;
       case BrOnNonNull:
         printMedium(o, "br_on_non_null ");
-        break;
+        printName(curr->name, o);
+        return;
       case BrOnCast:
+        // TODO: These instructions are deprecated, so stop emitting them.
+        if (auto type = curr->castType.getHeapType();
+            type.isBasic() && curr->castType.isNonNullable()) {
+          switch (type.getBasic()) {
+            case HeapType::func:
+              printMedium(o, "br_on_func ");
+              printName(curr->name, o);
+              return;
+            case HeapType::i31:
+              printMedium(o, "br_on_i31 ");
+              printName(curr->name, o);
+              return;
+            default:
+              break;
+          }
+        }
         printMedium(o, "br_on_cast ");
         printName(curr->name, o);
         o << ' ';
-        printHeapType(o, curr->intendedType, wasm);
+        if (curr->castType.isNullable()) {
+          printMedium(o, "null ");
+        }
+        printHeapType(o, curr->castType.getHeapType(), wasm);
         return;
       case BrOnCastFail:
+        // TODO: These instructions are deprecated, so stop emitting them.
+        if (auto type = curr->castType.getHeapType();
+            type.isBasic() && curr->castType.isNonNullable()) {
+          switch (type.getBasic()) {
+            case HeapType::func:
+              printMedium(o, "br_on_non_func ");
+              printName(curr->name, o);
+              return;
+            case HeapType::i31:
+              printMedium(o, "br_on_non_i31 ");
+              printName(curr->name, o);
+              return;
+            default:
+              break;
+          }
+        }
         printMedium(o, "br_on_cast_fail ");
         printName(curr->name, o);
         o << ' ';
-        printHeapType(o, curr->intendedType, wasm);
+        if (curr->castType.isNullable()) {
+          printMedium(o, "null ");
+        }
+        printHeapType(o, curr->castType.getHeapType(), wasm);
         return;
-      case BrOnFunc:
-        printMedium(o, "br_on_func ");
-        break;
-      case BrOnNonFunc:
-        printMedium(o, "br_on_non_func ");
-        break;
-      case BrOnData:
-        printMedium(o, "br_on_data ");
-        break;
-      case BrOnNonData:
-        printMedium(o, "br_on_non_data ");
-        break;
-      case BrOnI31:
-        printMedium(o, "br_on_i31 ");
-        break;
-      case BrOnNonI31:
-        printMedium(o, "br_on_non_i31 ");
-        break;
-      default:
-        WASM_UNREACHABLE("invalid ref.is_*");
     }
-    printName(curr->name, o);
+    WASM_UNREACHABLE("Unexpected br_on* op");
   }
   void visitStructNew(StructNew* curr) {
     if (printUnreachableReplacement(curr)) {
@@ -2300,15 +2331,6 @@ struct PrintExpressionContents
     switch (curr->op) {
       case RefAsNonNull:
         printMedium(o, "ref.as_non_null");
-        break;
-      case RefAsFunc:
-        printMedium(o, "ref.as_func");
-        break;
-      case RefAsData:
-        printMedium(o, "ref.as_data");
-        break;
-      case RefAsI31:
-        printMedium(o, "ref.as_i31");
         break;
       case ExternInternalize:
         printMedium(o, "extern.internalize");

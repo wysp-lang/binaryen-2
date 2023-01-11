@@ -195,6 +195,14 @@ public:
     ret->finalize(type);
     return ret;
   }
+  Block*
+  makeBlock(Name name, const std::vector<Expression*>& items, Type type) {
+    auto* ret = wasm.allocator.alloc<Block>();
+    ret->name = name;
+    ret->list.set(items);
+    ret->finalize(type);
+    return ret;
+  }
   Block* makeBlock(const ExpressionList& items) {
     auto* ret = wasm.allocator.alloc<Block>();
     ret->list.set(items);
@@ -708,9 +716,8 @@ public:
     ret->finalize(type);
     return ret;
   }
-  RefIs* makeRefIs(RefIsOp op, Expression* value) {
-    auto* ret = wasm.allocator.alloc<RefIs>();
-    ret->op = op;
+  RefIsNull* makeRefIsNull(Expression* value) {
+    auto* ret = wasm.allocator.alloc<RefIsNull>();
     ret->value = value;
     ret->finalize();
     return ret;
@@ -883,20 +890,13 @@ public:
     ret->finalize();
     return ret;
   }
-  BrOn* makeBrOn(BrOnOp op, Name name, Expression* ref) {
+  BrOn*
+  makeBrOn(BrOnOp op, Name name, Expression* ref, Type castType = Type::none) {
     auto* ret = wasm.allocator.alloc<BrOn>();
     ret->op = op;
     ret->name = name;
     ret->ref = ref;
-    ret->finalize();
-    return ret;
-  }
-  BrOn* makeBrOn(BrOnOp op, Name name, Expression* ref, HeapType intendedType) {
-    auto* ret = wasm.allocator.alloc<BrOn>();
-    ret->op = op;
-    ret->name = name;
-    ret->ref = ref;
-    ret->intendedType = intendedType;
+    ret->castType = castType;
     ret->finalize();
     return ret;
   }

@@ -539,7 +539,7 @@ instructions = [
 
     # reference types instructions
     ("ref.null",             "makeRefNull(s)"),
-    ("ref.is_null",          "makeRefIs(s, RefIsNull)"),
+    ("ref.is_null",          "makeRefIsNull(s)"),
     ("ref.func",             "makeRefFunc(s)"),
     ("ref.eq",               "makeRefEq(s)"),
     # table instructions
@@ -573,18 +573,16 @@ instructions = [
     ("ref.cast_static",      "makeRefCast(s)"),
     ("ref.cast_nop",         "makeRefCastNop(s)"),
     ("ref.cast_nop_static",  "makeRefCastNop(s)"),
-    ("br_on_null",           "makeBrOn(s, BrOnNull)"),
-    ("br_on_non_null",       "makeBrOn(s, BrOnNonNull)"),
-    ("br_on_cast",           "makeBrOn(s, BrOnCast)"),
-    ("br_on_cast_static",    "makeBrOn(s, BrOnCast)"),
-    ("br_on_cast_fail",      "makeBrOn(s, BrOnCastFail)"),
-    ("br_on_cast_static_fail", "makeBrOn(s, BrOnCastFail)"),
-    ("br_on_func",           "makeBrOn(s, BrOnFunc)"),
-    ("br_on_non_func",       "makeBrOn(s, BrOnNonFunc)"),
-    ("br_on_data",           "makeBrOn(s, BrOnData)"),
-    ("br_on_non_data",       "makeBrOn(s, BrOnNonData)"),
-    ("br_on_i31",            "makeBrOn(s, BrOnI31)"),
-    ("br_on_non_i31",        "makeBrOn(s, BrOnNonI31)"),
+    ("br_on_null",           "makeBrOnNull(s)"),
+    ("br_on_non_null",       "makeBrOnNull(s, true)"),
+    ("br_on_cast",           "makeBrOnCast(s, std::nullopt)"),
+    ("br_on_cast_static",    "makeBrOnCast(s, std::nullopt)"),
+    ("br_on_cast_fail",      "makeBrOnCast(s, std::nullopt, true)"),
+    ("br_on_cast_static_fail", "makeBrOnCast(s, std::nullopt, true)"),
+    ("br_on_func",           "makeBrOnCast(s, Type(HeapType::func, NonNullable))"),
+    ("br_on_non_func",       "makeBrOnCast(s, Type(HeapType::func, NonNullable), true)"),
+    ("br_on_i31",            "makeBrOnCast(s, Type(HeapType::i31, NonNullable))"),
+    ("br_on_non_i31",        "makeBrOnCast(s, Type(HeapType::i31, NonNullable), true)"),
     ("struct.new",           "makeStructNew(s, false)"),
     ("struct.new_default",   "makeStructNew(s, true)"),
     ("struct.get",           "makeStructGet(s)"),
@@ -602,13 +600,11 @@ instructions = [
     ("array.set",            "makeArraySet(s)"),
     ("array.len",            "makeArrayLen(s)"),
     ("array.copy",           "makeArrayCopy(s)"),
-    ("ref.is_func",          "makeRefIs(s, RefIsFunc)"),
-    ("ref.is_data",          "makeRefIs(s, RefIsData)"),
-    ("ref.is_i31",           "makeRefIs(s, RefIsI31)"),
+    ("ref.is_func",          "makeRefTest(s, Type(HeapType::func, NonNullable))"),
+    ("ref.is_i31",           "makeRefTest(s, Type(HeapType::i31, NonNullable))"),
     ("ref.as_non_null",      "makeRefAs(s, RefAsNonNull)"),
-    ("ref.as_func",          "makeRefAs(s, RefAsFunc)"),
-    ("ref.as_data",          "makeRefAs(s, RefAsData)"),
-    ("ref.as_i31",           "makeRefAs(s, RefAsI31)"),
+    ("ref.as_func",          "makeRefCast(s, Type(HeapType::func, NonNullable))"),
+    ("ref.as_i31",           "makeRefCast(s, Type(HeapType::i31, NonNullable))"),
     ("extern.internalize",   "makeRefAs(s, ExternInternalize)"),
     ("extern.externalize",   "makeRefAs(s, ExternExternalize)"),
     ("string.new_wtf8",      "makeStringNew(s, StringNewWTF8)"),
@@ -767,7 +763,7 @@ def instruction_parser(new_parser=False):
     printer.print_line("parse_error:")
     with printer.indent():
         if new_parser:
-            printer.print_line("return ctx.in.err(\"unrecognized instruction\");")
+            printer.print_line("return ctx.in.err(pos, \"unrecognized instruction\");")
         else:
             printer.print_line("throw ParseException(std::string(op), s.line, s.col);")
 

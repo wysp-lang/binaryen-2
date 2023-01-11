@@ -182,14 +182,12 @@
     (unreachable)
   )
   (func $ref.is_X (param $x anyref)
-    (if (ref.is_func (local.get $x)) (unreachable))
-    (if (ref.is_data (local.get $x)) (unreachable))
+    (if (ref.is_null (local.get $x)) (unreachable))
     (if (ref.is_i31 (local.get $x)) (unreachable))
   )
-  (func $ref.as_X (param $x anyref)
+  (func $ref.as_X (param $x anyref) (param $f funcref)
     (drop (ref.as_non_null (local.get $x)))
-    (drop (ref.as_func (local.get $x)))
-    (drop (ref.as_data (local.get $x)))
+    (drop (ref.as_func (local.get $f)))
     (drop (ref.as_i31 (local.get $x)))
   )
   (func $br_on_X (param $x anyref)
@@ -200,14 +198,6 @@
     (block $null
       (local.set $z
         (br_on_null $null (local.get $x))
-      )
-    )
-    (drop
-      (block $func (result funcref)
-        (local.set $y
-          (br_on_func $func (local.get $x))
-        )
-        (ref.null func)
       )
     )
     (drop
@@ -222,14 +212,6 @@
       (block $non-null (result (ref any))
         (br_on_non_null $non-null (local.get $x))
         (unreachable)
-      )
-    )
-    (drop
-      (block $non-func (result anyref)
-        (local.set $temp-func
-          (br_on_non_func $non-func (local.get $x))
-        )
-        (ref.null any)
       )
     )
     (drop
