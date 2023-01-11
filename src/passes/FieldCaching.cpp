@@ -261,7 +261,14 @@ struct FieldCaching : public Pass {
             }
           }
         }
+        if (intersection.empty()) {
+          // We only ever intersect here, so the set of optimizable things
+          // decreases. If it ever gets to the empty set, give up.
+          break;
+        }
       }
+
+      
     }
 
 
