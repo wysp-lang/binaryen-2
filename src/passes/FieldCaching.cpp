@@ -178,11 +178,13 @@ struct FieldCaching : public Pass {
       }
 
       if (auto* new_ = global->init->dynCast<StructNew>()) {
-        typeGlobals[new_->type.getHeapType()].push_back(global->name);
+        auto type = new_->type.getHeapType();
+        typeGlobals[type].push_back(global->name);
       }
     }
 
-    // We are looking for globals with nesting, like this:
+    // We found the globals with optimizable types, and can now look at them in
+    // detail. Specifically we are looking for globals with nesting, like this:
     //
     //  global g = {
     //    ..
@@ -206,7 +208,43 @@ struct FieldCaching : public Pass {
     //
     // After that, we can replace x.foo.bar with x.newfield, using the new field
     // we just added at the end.
+    //
+    // To do this, we need to see the same pattern in all the globals for a
+    // particular type. We'll find sequences of indexes that we can optimize,
+    // such as [0,3] which means read field 0, and then read field 4. The
+    // intersection of all sequences for a type is the set of things we want to
+    // actually optimize.
+    using Sequences = std::unordered_set<std::vector<Index>>;
+
+    std::function<Sequences (StructNew*)> getSequences = [&](StructNew* new_) {
+      
+    };
+
     for (const auto& [type, globals] : typeGlobals) {
+      if (ignore.count(type)) {
+        continue;
+      }
+
+      // An entry in the map must only exist if we found a global.
+      assert(!globals.empty());
+
+      Sequences intersection;
+      for (auto global : globals) {
+        auto* new_ = module->getGlobal(global)->init->cast<StructNew>();
+        auto sequences = getSequences(new_);
+        if (global == globals[0]) {
+          // This is the first global. Copy the sequences.
+          intersection = sequences;
+        } else {
+          // This is a later global. Intersect with the current sequences.
+          auto intersectionCopy = intersection;
+          for (auto sequence : intersectionCopy) {
+            if (!sequences.count(sequence)) {
+              intersection.erase(sequence);
+            }
+          }
+        }
+      }
     }
 
 
