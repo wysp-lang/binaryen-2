@@ -48,6 +48,10 @@ private:
 public:
   PossibleConstantValues() : value(None()) {}
 
+  PossibleConstantValues(Expression* expr, Module& wasm) : PossibleConstantValues() {
+    note(expr, wasm);
+  }
+
   // Notes the contents of an expression and update our internal knowledge based
   // on it and all previous values noted.
   void note(Expression* expr, Module& wasm) {

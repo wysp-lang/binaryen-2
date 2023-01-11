@@ -120,6 +120,28 @@ struct Finder : public PostWalker<Finder> {
 
 */
 
+using Sequences = std::unordered_set<std::vector<Index>>;
+
+// Given a StructNew and a prefix of the indexes we took so far to get here,
+// keep looking recursively to find complete sequences.
+void getSequences(StructNew* new_, std::vector<Index> prefix, Module& wasm, Sequences& out) {
+  for (Index i = 0; i < curr->operands.size(); i++) {
+    auto* operand = curr->operands[i];
+    if (PossibleConstantValues(operand, wasm).isConstant()) {
+      // This is a constant value, which is something we can optimize with,
+      // so it ends a sequence.
+      prefix.push_back(i);
+      out.push_back(prefix);
+      prefix.pop_back();
+    } else if (auto* nested = operand->dynCast<StructNew>()) {
+      // This is a nested struct.new. Look deeper.
+      prefix.push_back(i);
+      getSequences(nested, prefix, wasm, out);
+      prefix.pop_back();
+    }
+  }
+};
+
 struct FieldCaching : public Pass {
   // No local changes, only types and fields.
   bool requiresNonNullableLocalFixups() override { return false; }
@@ -214,12 +236,6 @@ struct FieldCaching : public Pass {
     // such as [0,3] which means read field 0, and then read field 4. The
     // intersection of all sequences for a type is the set of things we want to
     // actually optimize.
-    using Sequences = std::unordered_set<std::vector<Index>>;
-
-    std::function<Sequences (StructNew*)> getSequences = [&](StructNew* new_) {
-      
-    };
-
     for (const auto& [type, globals] : typeGlobals) {
       if (ignore.count(type)) {
         continue;
@@ -231,7 +247,8 @@ struct FieldCaching : public Pass {
       Sequences intersection;
       for (auto global : globals) {
         auto* new_ = module->getGlobal(global)->init->cast<StructNew>();
-        auto sequences = getSequences(new_);
+        Sequences sequences;
+        getSequences(new_, {}, *module, sequences);
         if (global == globals[0]) {
           // This is the first global. Copy the sequences.
           intersection = sequences;
