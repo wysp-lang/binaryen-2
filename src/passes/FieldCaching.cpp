@@ -284,7 +284,8 @@ struct FieldCaching : public Pass {
     // "conflict", that is, the subtype would not longer be a proper subtype. By
     // operating on subtypes first we can
     
-    // types in the middle - add automatically?
+    // TODO types in the middle - add automatically? If A :> B:> C then if we
+    // add fields to A and C, we must add them to B. In which direction..?
 
 
 
@@ -301,7 +302,7 @@ struct FieldCaching : public Pass {
 
 
 
-
+TODO
 
 
 
@@ -346,147 +347,13 @@ struct FieldCaching : public Pass {
       }
     }
 
-    // We may have just filtered out all the possible work, so check again.
-    if (!foundWork()) {
-//std::cerr << "nada2\n";
-      return;
-    }
 
-    // Excellent, we have things we can optimize with!
-    //
-    // Before optimizing, prune the data. We have a set of possible improvements
-    // for each sequence, but after merging everything as we have, we just care
-    // about the best one for each sequence (as that is what we'll pick whenever
-    // we find a place to optimize.
-    for (auto& [_, improvements] : unifiedMap) {
-      for (auto& [_, newSequences] : improvements) {
-        if (newSequences.size() > 1) {
-          std::optional<Sequence> best;
-          for (auto& s : newSequences) {
-            if (!best || s.size() < best->size() || (s.size() == best->size() && s < *best)) {
-              best = s;
-            }
-          }
-          assert(best);
-          newSequences = {*best};
-        }
-      }
-    }
 
-    // Optimize.
-    FunctionOptimizer(unifiedMap).run(getPassRunner(), module);
-  }
+TODO
 
-  struct FunctionOptimizer : public WalkerPass<PostWalker<FunctionOptimizer>> {
-    bool isFunctionParallel() override { return true; }
+TypeRewriter
+update struct.news in the globals
 
-    // Only modifies struct.get operations.
-    bool requiresNonNullableLocalFixups() override { return false; }
-
-    std::unique_ptr<Pass> create() override {
-      return std::make_unique<FunctionOptimizer>(unifiedMap);
-    }
-
-    FunctionOptimizer(TypeImprovementMap& unifiedMap)
-      : unifiedMap(unifiedMap) {}
-
-    void visitStructGet(StructGet* curr) {
-      optimizeSequence(curr);
-    }
-
-    void visitRefCast(RefCast* curr) {
-      optimizeSequence(curr);
-    }
-
-    void optimizeSequence(Expression* curr) {
-      if (curr->type == Type::unreachable) {
-        return;
-      }
-
-      // The current sequence of operations. We'll go deeper and build up the
-      // sequence as we go, looking for improvements as we go.
-      //
-      // TODO: use a fallthrough here. a Tee in the middle should not stop us.
-      Sequence currSequence;
-
-      // The start of the sequence - the reference that the sequence of field
-      // accesses begins with.
-      Expression* currStart = curr;
-//std::cerr << "\noptimizeSequence in visit: " << *curr << '\n';
-      while (1) {
-
-//std::cerr << "loop inspect sequence for " << *currStart << "\n";
-
-        // Apply the current value to the sequence, and point currStart to the
-        // item we are reading from right now (which will be the next item
-        // later, and is also the reference from which the entire sequence
-        // begins).
-        if (auto* get = currStart->dynCast<StructGet>()) {
-          currStart = get->ref;
-          currSequence.push_back(Item(get->index));
-        } else if (auto* cast = currStart->dynCast<RefCast>()) {
-          currStart = cast->ref;
-          // Nothing to add to the sequence, as it contains only field lookups.
-          // If we actually optimize, it will be to a sequence with no casts, so
-          // the cast will end up optimized out anyhow.
-        } else {
-          // The sequence ended.
-          break;
-        }
-
-//for (auto x : currSequence) std::cerr << x << ' ';
-//std::cerr << '\n';
-
-        // See if a sequence starting here has anything we can optimize with.
-        // TODO: we could also look at our supertypes
-        auto iter = unifiedMap.find(currStart->type.getHeapType());
-        if (iter == unifiedMap.end()) {
-//std::cerr << "  sad1\n";
-          continue;
-        }
-
-        auto& improvements = iter->second;
-        auto iter2 = improvements.find(currSequence);
-        if (iter2 != improvements.end()) {
-          // Wonderful, we can optimize here! Replace the current sequence of
-          // operations with the new ones of the new and better sequence.
-          // TODO Rather than use this immediately, we could consider longer
-          //      sequences first, and pick the best.
-          auto& newSequences = iter2->second;
-          if (!newSequences.empty()) {
-            assert(newSequences.size() == 1);
-            auto& newSequence = *newSequences.begin();
-            replaceCurrent(buildSequence(newSequence, currStart));
-            return;
-          }
-        }
-//std::cerr << "  sad2\n";
-      }
-    }
-
-    // Given a sequence of field accesses, and a starting reference from which
-    // to begin applying them, build struct.gets for that sequence and return
-    // them.
-    Expression* buildSequence(const Sequence& s, Expression* start) {
-      auto* result = start;
-
-      // Starting from the top, build up the new stack of instructions.
-      for (Index i = 0; i < s.size(); i++) {
-        auto index = s[s.size() - i - 1];
-        auto fields = result->type.getHeapType().getStruct().fields;
-        // We must be able to read the field here. A possible bug here is if a
-        // cast is needed, but we are only aiming to optimize to sequences with
-        // no casts, and we should have ignored casting sequences before.
-        assert(index < fields.size());
-        auto type = fields[index].type;
-        result = Builder(*getModule()).makeStructGet(index, result, type);
-      }
-
-      return result;
-    }
-
-  private:
-    TypeImprovementMap& unifiedMap;
   };
 };
 
