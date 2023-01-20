@@ -779,6 +779,7 @@ struct EquivalentFieldOptimization : public Pass {
       // from it any more when we use the new sequence we built here (other code
       // later might read from that local).
       if (skippedCode) {
+        // XXX doesn't this duplicate a node in the tree?!
         result = builder.makeSequence(builder.makeDrop(getCurrent()), result);
       }
 
