@@ -2139,8 +2139,10 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $B2 0
-  ;; CHECK-NEXT:    (local.get $B2)
+  ;; CHECK-NEXT:   (struct.get $B1 0
+  ;; CHECK-NEXT:    (struct.get $A 0
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
@@ -2176,14 +2178,14 @@
       )
     )
     (local.set $B2
-      (ref.cast $B2         ;; We can avoid this cast by reading from A's
-        (local.get $struct) ;; field #0 instead, turning this sequence into
-                            ;; the same as the one above.
+      (ref.cast $B2
+        (local.get $struct)
       )
     )
     (drop
-      (struct.get $B2 0
-        (local.get $B2)
+      (struct.get $B2 0 ;; We can replace this sequence with one that reads from
+        (local.get $B2) ;; $B1, and avoids a cast.
+                        ;; XXX FIXME but careful as we copy `ref`! We need to cache that in a new local.
       )
     )
   )
