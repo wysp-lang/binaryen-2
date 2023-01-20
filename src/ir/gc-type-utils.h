@@ -39,6 +39,22 @@ enum EvaluationResult {
   SuccessOnlyIfNonNull,
 };
 
+inline EvaluationResult flipEvaluationResult(EvaluationResult result) {
+  switch (result) {
+    case Unknown:
+      return Unknown;
+    case Success:
+      return Failure;
+    case Failure:
+      return Success;
+    case SuccessOnlyIfNull:
+      return SuccessOnlyIfNonNull;
+    case SuccessOnlyIfNonNull:
+      return SuccessOnlyIfNull;
+  }
+  WASM_UNREACHABLE("unexpected result");
+}
+
 // Given the type of a reference and a type to attempt to cast it to, return
 // what we know about the result.
 inline EvaluationResult evaluateCastCheck(Type refType, Type castType) {
@@ -69,81 +85,21 @@ inline EvaluationResult evaluateCastCheck(Type refType, Type castType) {
     return SuccessOnlyIfNull;
   }
 
-  // The cast will not definitely succeed nor will it definitely fail.
-  //
-  // Perhaps the heap type part of the cast can be reasoned about, at least.
-  // E.g. if the heap type part of the cast is definitely compatible, but the
-  // cast as a whole is not, that would leave only nullability as an issue,
-  // that is, this means that the input ref is nullable but we are casting to
-  // non-null.
+  // If the heap type part of the cast is compatible but the cast as a whole is
+  // not, we must have a nullable input ref that we are casting to a
+  // non-nullable type.
   if (refIsHeapSubType) {
     assert(refType.isNullable());
     assert(castType.isNonNullable());
+    if (refHeapType.isBottom()) {
+      // Non-null references to bottom types do not exist, so there's no value
+      // that could make the cast succeed.
+      return Failure;
+    }
     return SuccessOnlyIfNonNull;
   }
 
   return Unknown;
-}
-
-// Given an instruction that checks if the child reference is of a certain kind
-// (like br_on_func checks if it is a function), see if type info lets us
-// determine that at compile time.
-// This ignores nullability - it just checks the kind.
-inline EvaluationResult evaluateKindCheck(Expression* curr) {
-  Kind expected;
-  Expression* child;
-
-  // Some operations flip the condition.
-  bool flip = false;
-
-  if (auto* br = curr->dynCast<BrOn>()) {
-    switch (br->op) {
-      // We don't check nullability here.
-      case BrOnNull:
-      case BrOnNonNull:
-        return Unknown;
-      case BrOnCastFail:
-        flip = true;
-        [[fallthrough]];
-      case BrOnCast: {
-        auto result =
-          GCTypeUtils::evaluateCastCheck(br->ref->type, br->castType);
-        if (result == Success) {
-          return flip ? Failure : Success;
-        } else if (result == Failure) {
-          return flip ? Success : Failure;
-        }
-        return Unknown;
-      }
-      default:
-        WASM_UNREACHABLE("unhandled BrOn");
-    }
-    child = br->ref;
-  } else {
-    WASM_UNREACHABLE("invalid input to evaluateKindCheck");
-  }
-
-  auto childType = child->type;
-
-  Kind actual;
-
-  if (childType == Type::unreachable) {
-    return Unknown;
-  } else if (childType.isFunction()) {
-    actual = Func;
-  } else if (childType.isData()) {
-    actual = Data;
-  } else if (childType.getHeapType() == HeapType::i31) {
-    actual = I31;
-  } else {
-    return Unknown;
-  }
-
-  auto success = actual == expected;
-  if (flip) {
-    success = !success;
-  }
-  return success ? Success : Failure;
 }
 
 } // namespace wasm::GCTypeUtils
