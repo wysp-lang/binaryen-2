@@ -2091,4 +2091,100 @@
   )
 )
 
-;; TODO: test local operations in the later phase, nested struct.get etc.
+;; A case where we can remove a cast even with tees and local.gets.
+(module
+  ;; CHECK:      (type $A (struct (field (ref $B1)) (field (ref struct))))
+
+  ;; CHECK:      (type $B1 (struct (field i32)))
+  (type $B1 (struct (field i32)))
+
+  ;; CHECK:      (type $B2 (struct (field i32)))
+  (type $B2 (struct (field i32)))
+
+  (type $A (struct (field (ref $B1)) (field (ref struct))))
+
+  ;; CHECK:      (func $A (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $ref (ref null $A))
+  ;; CHECK-NEXT:  (local $B1 (ref $B1))
+  ;; CHECK-NEXT:  (local $B2 (ref $B2))
+  ;; CHECK-NEXT:  (local $struct (ref struct))
+  ;; CHECK-NEXT:  (local.set $ref
+  ;; CHECK-NEXT:   (struct.new $A
+  ;; CHECK-NEXT:    (struct.new $B1
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (struct.new $B2
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $B1
+  ;; CHECK-NEXT:   (struct.get $A 0
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $B1 0
+  ;; CHECK-NEXT:    (local.get $B1)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $struct
+  ;; CHECK-NEXT:   (struct.get $A 1
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (local.set $B2
+  ;; CHECK-NEXT:   (ref.cast $B2
+  ;; CHECK-NEXT:    (local.get $struct)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $B2 0
+  ;; CHECK-NEXT:    (local.get $B2)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $A
+    (local $ref (ref null $A))
+    (local $B1 (ref $B1))
+    (local $B2 (ref $B2))
+    (local $struct (ref struct))
+
+    (local.set $ref
+      (struct.new $A
+        (struct.new $B1
+          (i32.const 10)
+        )
+        (struct.new $B2
+          (i32.const 10)
+        )
+      )
+    )
+    (local.set $B1
+      (struct.get $A 0
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $B1 0
+        (local.get $B1)
+      )
+    )
+    (local.set $struct
+      (struct.get $A 1
+        (local.get $ref)
+      )
+    )
+    (local.set $B2
+      (ref.cast $B2         ;; We can avoid this cast by reading from A's
+        (local.get $struct) ;; field #0 instead, turning this sequence into
+                            ;; the same as the one above.
+      )
+    )
+    (drop
+      (struct.get $B2 0
+        (local.get $B2)
+      )
+    )
+  )
+)
