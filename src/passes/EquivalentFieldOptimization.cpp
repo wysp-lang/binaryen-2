@@ -67,6 +67,7 @@
 
 #include <algorithm>
 
+#include "ir/local-graph.h"
 #include "ir/module-utils.h"
 #include "ir/possible-constant.h"
 #include "ir/subtypes.h"
@@ -98,6 +99,54 @@ void dump(const T& t) {
 //  for (auto x : t) std::cerr << x << ' ';
 //  std::cerr << '\n';
 }
+
+// Given an expression, look through local.get/local.set operations where we can
+// trivially do so. We can look through a local.tee, and also when we see a
+// local.get we can find the local.set for it, if there is a single one.
+//
+// This is not enough in general to know the proper value of something, due to
+// things like this:
+//
+//  x = y + 10;
+//  y++;
+//  foo(x);
+//
+// That is, x has a single definition, but we can't compute that value at the
+// time of foo(x) as it depends on data that has changed. However, this is
+// enough if all we care about is the structure and types of the local.
+struct SingleLocalValueFinder {
+  SingleLocalValueFinder(Function* func) : func(func) {}
+
+  Expression *lookThroughLocals(Expression* curr) {
+    while (1) {
+      if (auto* set = curr->dynCast<LocalSet>()) {
+        if (set->isTee()) {
+          curr = tee;
+          continue;
+        }
+      } else if (auto* get = curr->dynCast<LocalGet>()) {
+        // Constructing a LocalGraph is a non-trivial amount of work so do so
+        // only on demand.
+        if (!localGraph) {
+          localGraph = std::make_unique<LocalGraph>(func);
+        }
+        auto& sets = localGraph->getSetses[get];
+        if (sets.size() == 1) {
+          LocalSet* set = *sets.begin();
+          curr = set->value;
+          continue;
+        }
+      }
+      break;
+    }
+    return curr;
+  }
+
+private:
+  Function* func;
+
+  std::unique_ptr<LocalGraph> localGraph;
+};
 
 namespace {
 
