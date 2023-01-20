@@ -1942,11 +1942,12 @@
 )
 
 (module
-  ;; CHECK:      (type $A (struct (field i32) (field i32) (field i32) (field i32) (field i32) (field i32) (field i32)))
-  (type $A (struct (field i32) (field i32) (field i32) (field i32) (field i32) (field i32) (field i32)))
+  ;; CHECK:      (type $A (struct (field i32) (field i32) (field i32) (field i32) (field i32) (field i32) (field i32) (field i32)))
+  (type $A (struct (field i32) (field i32) (field i32) (field i32) (field i32) (field i32) (field i32) (field i32)))
 
   ;; CHECK:      (func $A (type $none_=>_none)
   ;; CHECK-NEXT:  (local $x i32)
+  ;; CHECK-NEXT:  (local $default i32)
   ;; CHECK-NEXT:  (local $ref (ref $A))
   ;; CHECK-NEXT:  (local.set $ref
   ;; CHECK-NEXT:   (struct.new $A
@@ -1965,6 +1966,7 @@
   ;; CHECK-NEXT:     (i32.const 12)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (local.get $x)
+  ;; CHECK-NEXT:    (local.get $default)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
@@ -1973,7 +1975,7 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $A 1
+  ;; CHECK-NEXT:   (struct.get $A 0
   ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
@@ -1983,12 +1985,12 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $A 3
+  ;; CHECK-NEXT:   (struct.get $A 0
   ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $A 4
+  ;; CHECK-NEXT:   (struct.get $A 0
   ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
@@ -1998,13 +2000,19 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $A 6
+  ;; CHECK-NEXT:   (struct.get $A 5
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 7
   ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   (func $A
     (local $x i32)
+    (local $default i32)
     (local $ref (ref $A))
 
     ;; $A is always written the same value in all fields, so they are
@@ -2012,21 +2020,30 @@
     ;; even though local operations are used.
     (local.set $ref
       (struct.new $A
+        ;; Nested tees.
         (local.tee $x
           (local.tee $x
             (i32.const 10)
           )
         )
+        ;; This is the same value as in the tee.
         (i32.const 10)
+        ;; A different value.
         (i32.const 11)
+        ;; This is 10 once more.
         (local.tee $x
           (local.get $x)
         )
+        ;; This is also 10.
         (local.get $x)
+        ;; A different value.
         (local.tee $x
           (i32.const 12)
         )
+        ;; The same as the last field.
         (local.get $x)
+        ;; Test using the default (null) value.
+        (local.get $default)
       )
     )
 
@@ -2066,5 +2083,12 @@
         (local.get $ref)
       )
     )
+    (drop
+      (struct.get $A 7
+        (local.get $ref)
+      )
+    )
   )
 )
+
+;; TODO: test local operations in the later phase, nested struct.get etc.
