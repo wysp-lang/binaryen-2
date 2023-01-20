@@ -114,6 +114,9 @@ void dump(const T& t) {
 // That is, x has a single definition, but we can't compute that value at the
 // time of foo(x) as it depends on data that has changed. However, this is
 // enough if all we care about is the structure and types of the local.
+//
+// It is ok to pass in a null function. In that case lookThroughLocals simply
+// passes out the input each time, that is, this becomes a no-op.
 struct SingleLocalValueFinder {
   SingleLocalValueFinder(Function* func) : func(func) {}
 
@@ -128,13 +131,22 @@ struct SingleLocalValueFinder {
         // Constructing a LocalGraph is a non-trivial amount of work so do so
         // only on demand.
         if (!localGraph) {
+          // If we see a LocalGet then we must have been told which function we
+          // are in (while if we are in a place like a global init, we cannot
+          // have a LocalGet and the function can be null).
+          assert(func);
           localGraph = std::make_unique<LocalGraph>(func);
         }
         auto& sets = localGraph->getSetses[get];
         if (sets.size() == 1) {
           LocalSet* set = *sets.begin();
-          curr = set->value;
-          continue;
+          if (set) {
+            // There is a single set, and it is not null (which would mean it is
+            // the default value, or the parameter value at the function entry),
+            // so we can look further.
+            curr = set->value;
+            continue;
+          }
         }
       }
       break;
@@ -190,8 +202,9 @@ using NewImprovementsMap = std::unordered_map<StructNew*, Improvements>;
 
 struct Finder : public PostWalker<Finder> {
   PassOptions& options;
+  SingleLocalValueFinder localValueFinder;
 
-  Finder(PassOptions& options) : options(options) {}
+  Finder(PassOptions& options, Function* func = nullptr) : options(options), localValueFinder(func) {}
 
   NewImprovementsMap map;
 
@@ -392,6 +405,8 @@ struct Finder : public PostWalker<Finder> {
   // sequence, which also encodes the current expression (the other two are
   // given a prefix that they append to).
   void processChild(Expression* curr, const Sequence& currSequence, ValueMap& valueMap) {
+    curr = localValueFinder.lookThroughLocals(curr);
+
     if (auto* subNew = curr->dynCast<StructNew>()) {
       // Look into this struct.new recursively.
       scanNew(subNew, currSequence, valueMap);
@@ -445,7 +460,7 @@ struct EquivalentFieldOptimization : public Pass {
           return;
         }
 
-        Finder finder(getPassOptions());
+        Finder finder(getPassOptions(), func);
         finder.walkFunctionInModule(func, module);
         map = std::move(finder.map);
       });
