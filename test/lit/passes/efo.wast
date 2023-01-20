@@ -2203,9 +2203,18 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $B1 0
-  ;; CHECK-NEXT:    (struct.get $A 0
-  ;; CHECK-NEXT:     (local.get $5)
+  ;; CHECK-NEXT:   (block (result i32)
+  ;; CHECK-NEXT:    (drop
+  ;; CHECK-NEXT:     (struct.get $B2 0
+  ;; CHECK-NEXT:      (local.tee $temp
+  ;; CHECK-NEXT:       (local.get $B2)
+  ;; CHECK-NEXT:      )
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (struct.get $B1 0
+  ;; CHECK-NEXT:     (struct.get $A 0
+  ;; CHECK-NEXT:      (local.get $5)
+  ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )

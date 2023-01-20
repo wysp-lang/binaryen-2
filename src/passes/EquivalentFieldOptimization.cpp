@@ -773,6 +773,15 @@ struct EquivalentFieldOptimization : public Pass {
         result = builder.makeStructGet(index, result, type);
       }
 
+      // If we skipped code then we must also keep the current expression in the
+      // IR and only append to it. For example, the skip may include a local.tee
+      // which is a side effect we must preserve, even if we won't be reading
+      // from it any more when we use the new sequence we built here (other code
+      // later might read from that local).
+      if (skippedCode) {
+        result = builder.makeSequence(builder.makeDrop(getCurrent()), result);
+      }
+
       return result;
     }
 
