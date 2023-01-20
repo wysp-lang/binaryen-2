@@ -2108,6 +2108,7 @@
   ;; CHECK-NEXT:  (local $B1 (ref $B1))
   ;; CHECK-NEXT:  (local $B2 (ref $B2))
   ;; CHECK-NEXT:  (local $struct (ref struct))
+  ;; CHECK-NEXT:  (local $4 (ref null $A))
   ;; CHECK-NEXT:  (local.set $ref
   ;; CHECK-NEXT:   (struct.new $A
   ;; CHECK-NEXT:    (struct.new $B1
@@ -2130,7 +2131,9 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (local.set $struct
   ;; CHECK-NEXT:   (struct.get $A 1
-  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:    (local.tee $4
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (local.set $B2
@@ -2141,7 +2144,7 @@
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (struct.get $B1 0
   ;; CHECK-NEXT:    (struct.get $A 0
-  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:     (local.get $4)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
@@ -2184,8 +2187,10 @@
     )
     (drop
       (struct.get $B2 0 ;; We can replace this sequence with one that reads from
-        (local.get $B2) ;; $B1, and avoids a cast.
-                        ;; XXX FIXME but careful as we copy `ref`! We need to cache that in a new local.
+        (local.get $B2) ;; $B1, and avoids a cast. While doing so, we'll create
+                        ;; a temp local for $ref two instructions back, as we
+                        ;; are skipping code in the middle which in theory could
+                        ;; modify $ref.
       )
     )
   )

@@ -661,9 +661,34 @@ struct EquivalentFieldOptimization : public Pass {
       // address of the top, and not top itself, as we may need to update it,
       // see below.
       Expression** topp = getCurrentPointer();
+
+      // We need to note if we skip any code while looking through the
+      // sequence. If we do, then we might be in a situation like this:
+      //
+      //  t = x.a
+      //  x = y
+      //  t.b
+      //
+      // In this case, what we are looking at on the last line is effectively
+      // x.a.b, so we need to start with a ref of |a|. However, if we compute
+      // |x| at that time, that is, we just do a local.get of it, then we'd get
+      // |y| because of the mutation in the second line, that our sequence
+      // "skips" over. In the presence of such skips we'll be careful to craft
+      // a copy of the original reference, ending up with this:
+      //
+      //  t = (x' = x).a
+      //  x = y
+      //  x'.a.b
+      bool skippedCode = false;
+
 //std::cerr << "\noptimizeSequence in visit: " << *curr << '\n';
       while (1) {
+        auto old = topp;
         topp = localValueFinder->lookThroughLocals(topp);
+        if (topp != old) {
+          skippedCode = true;
+        }
+
         auto* top = *topp;
 
 //std::cerr << "loop inspect sequence for " << *top << "\n";
@@ -708,7 +733,7 @@ struct EquivalentFieldOptimization : public Pass {
           if (!newSequences.empty()) {
             assert(newSequences.size() == 1);
             auto& newSequence = *newSequences.begin();
-            replaceCurrent(buildSequence(newSequence, topp));
+            replaceCurrent(buildSequence(newSequence, topp, skippedCode));
             return;
           }
         }
@@ -719,12 +744,19 @@ struct EquivalentFieldOptimization : public Pass {
     // Given a sequence of field accesses, and a top reference from which
     // to begin applying them, build struct.gets for that sequence and return
     // them.
-    Expression* buildSequence(const Sequence& s, Expression** topp) {
-
-// TODO
-// XXX cache start in a local, if we skiped anything but a cast or a strcut.get, which have no side effects, and cannot be interleaved with effects (like locla.get to a set).
+    Expression* buildSequence(const Sequence& s, Expression** topp, bool skippedCode) {
+      Builder builder(*getModule());
 
       auto* result = *topp;
+
+      // If we skipped code then we need to copy the top reference, see the
+      // comment in optimizeSequence().
+      if (skippedCode) {
+        auto type = result->type;
+        auto local = builder.addVar(getFunction(), type);
+        *topp = builder.makeLocalTee(local, *topp, type);
+        result = builder.makeLocalGet(local, type);
+      }
 
       // Starting from the top, build up the new stack of instructions.
       for (Index i = 0; i < s.size(); i++) {
@@ -735,7 +767,7 @@ struct EquivalentFieldOptimization : public Pass {
         // no casts, and we should have ignored casting sequences before.
         assert(index < fields.size());
         auto type = fields[index].type;
-        result = Builder(*getModule()).makeStructGet(index, result, type);
+        result = builder.makeStructGet(index, result, type);
       }
 
       return result;
