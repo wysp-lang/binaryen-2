@@ -120,11 +120,12 @@ void dump(const T& t) {
 struct SingleLocalValueFinder {
   SingleLocalValueFinder(Function* func) : func(func) {}
 
-  Expression *lookThroughLocals(Expression* curr) {
+  Expression** lookThroughLocals(Expression** currp) {
     while (1) {
+      auto* curr = *currp;
       if (auto* set = curr->dynCast<LocalSet>()) {
         if (set->isTee()) {
-          curr = set->value;
+          currp = &set->value;
           continue;
         }
       } else if (auto* get = curr->dynCast<LocalGet>()) {
@@ -144,14 +145,20 @@ struct SingleLocalValueFinder {
             // There is a single set, and it is not null (which would mean it is
             // the default value, or the parameter value at the function entry),
             // so we can look further.
-            curr = set->value;
+            currp = &set->value;
             continue;
           }
         }
       }
       break;
     }
-    return curr;
+    return currp;
+  }
+
+  // Convenience method when we don't need a pointer to curr but just curr
+  // itself.
+  Expression* lookThroughLocals(Expression* curr) {
+    return *lookThroughLocals(&curr);
   }
 
 private:
@@ -641,25 +648,35 @@ struct EquivalentFieldOptimization : public Pass {
       // TODO: use a fallthrough here. a Tee in the middle should not stop us.
       Sequence currSequence;
 
-      // The start of the sequence - the reference that the sequence of field
-      // accesses begins with. We reach this at the end as we start at the
-      // parents and look into children.
-      Expression* currStart = curr;
+      // The pointer of the 'top' of the sequence, that is, given this:
+      //
+      //  (struct.get
+      //    (struct.get
+      //      (top)
+      //    )
+      //  )
+      //
+      // "top" is the top. We start at the bottom and work up, so we will find
+      // the actual top at the end of our iteration. Note that we need the
+      // address of the top, and not top itself, as we may need to update it,
+      // see below.
+      Expression** topp = getCurrentPointer();
 //std::cerr << "\noptimizeSequence in visit: " << *curr << '\n';
       while (1) {
-        currStart = localValueFinder->lookThroughLocals(currStart);
+        topp = localValueFinder->lookThroughLocals(topp);
+        auto* top = *topp;
 
-//std::cerr << "loop inspect sequence for " << *currStart << "\n";
+//std::cerr << "loop inspect sequence for " << *top << "\n";
 
-        // Apply the current value to the sequence, and point currStart to the
+        // Apply the current value to the sequence, and point top to the
         // item we are reading from right now (which will be the next item
         // later, and is also the reference from which the entire sequence
         // begins).
-        if (auto* get = currStart->dynCast<StructGet>()) {
-          currStart = get->ref;
+        if (auto* get = top->dynCast<StructGet>()) {
+          topp = &get->ref;
           currSequence.push_back(Item(get->index));
-        } else if (auto* cast = currStart->dynCast<RefCast>()) {
-          currStart = cast->ref;
+        } else if (auto* cast = top->dynCast<RefCast>()) {
+          topp = &cast->ref;
           // Nothing to add to the sequence, as it contains only field lookups.
           // If we actually optimize, it will be to a sequence with no casts, so
           // the cast will end up optimized out anyhow.
@@ -668,12 +685,13 @@ struct EquivalentFieldOptimization : public Pass {
           break;
         }
 
+        top = *topp;
 //for (auto x : currSequence) std::cerr << x << ' ';
 //std::cerr << '\n';
 
         // See if a sequence starting here has anything we can optimize with.
         // TODO: we could also look at our supertypes
-        auto iter = unifiedMap.find(currStart->type.getHeapType());
+        auto iter = unifiedMap.find(top->type.getHeapType());
         if (iter == unifiedMap.end()) {
 //std::cerr << "  sad1\n";
           continue;
@@ -690,7 +708,7 @@ struct EquivalentFieldOptimization : public Pass {
           if (!newSequences.empty()) {
             assert(newSequences.size() == 1);
             auto& newSequence = *newSequences.begin();
-            replaceCurrent(buildSequence(newSequence, currStart));
+            replaceCurrent(buildSequence(newSequence, topp));
             return;
           }
         }
@@ -698,12 +716,15 @@ struct EquivalentFieldOptimization : public Pass {
       }
     }
 
-    // Given a sequence of field accesses, and a starting reference from which
+    // Given a sequence of field accesses, and a top reference from which
     // to begin applying them, build struct.gets for that sequence and return
     // them.
-    Expression* buildSequence(const Sequence& s, Expression* start) {
-      // XXX cache start in a local, if we skiped anything but a cast or a strcut.get, which have no side effects, and cannot be interleaved with effects (like locla.get to a set).
-      auto* result = start;
+    Expression* buildSequence(const Sequence& s, Expression** topp) {
+
+// TODO
+// XXX cache start in a local, if we skiped anything but a cast or a strcut.get, which have no side effects, and cannot be interleaved with effects (like locla.get to a set).
+
+      auto* result = *topp;
 
       // Starting from the top, build up the new stack of instructions.
       for (Index i = 0; i < s.size(); i++) {
