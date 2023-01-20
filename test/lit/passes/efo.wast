@@ -1024,7 +1024,7 @@
 ;; optimize them all to read field index #0.
 (module
   ;; CHECK:      (type $A (struct (field i32) (field i32)))
-  (type $A (struct_subtype (field i32) (field i32) data))
+  (type $A (struct (field i32) (field i32)))
   ;; CHECK:      (type $B (struct_subtype (field i32) (field i32) $A))
   (type $B (struct_subtype (field i32) (field i32) $A))
 
@@ -1111,7 +1111,7 @@
 ;; optimization there. But we can still optimize the child.
 (module
   ;; CHECK:      (type $A (struct (field i32) (field i32)))
-  (type $A (struct_subtype (field i32) (field i32) data))
+  (type $A (struct (field i32) (field i32)))
   ;; CHECK:      (type $B (struct_subtype (field i32) (field i32) $A))
   (type $B (struct_subtype (field i32) (field i32) $A))
 
@@ -1198,7 +1198,7 @@
 ;; optimization in both the parent and the child.
 (module
   ;; CHECK:      (type $A (struct (field i32) (field i32)))
-  (type $A (struct_subtype (field i32) (field i32) data))
+  (type $A (struct (field i32) (field i32)))
   ;; CHECK:      (type $B (struct_subtype (field i32) (field i32) $A))
   (type $B (struct_subtype (field i32) (field i32) $A))
 
@@ -1696,7 +1696,7 @@
   (type $vtable (struct (field $op1 funcref) (field $op2 funcref)))
 
   ;; CHECK:      (type $A (struct (field $vtable (ref $vtable))))
-  (type $A (struct_subtype (field $vtable (ref $vtable)) data))
+  (type $A (struct (field $vtable (ref $vtable))))
   ;; CHECK:      (type $B (struct_subtype (field $vtable (ref $vtable)) $A))
   (type $B (struct_subtype (field $vtable (ref $vtable)) $A))
 
@@ -1796,11 +1796,11 @@
 
 ;; A case where we can remove a cast.
 ;;
-;; Type A contains B1 and B2, but one field has type data, so after we read from
+;; Type A contains B1 and B2, but one field has type struct, so after we read from
 ;; it we'd need to cast to read its field. We avoid the cast by switching to a
 ;; read from the other one.
 (module
-  ;; CHECK:      (type $A (struct (field (ref $B1)) (field (ref data))))
+  ;; CHECK:      (type $A (struct (field (ref $B1)) (field (ref struct))))
 
   ;; CHECK:      (type $B1 (struct (field i32)))
   (type $B1 (struct (field i32)))
@@ -1808,7 +1808,7 @@
   ;; CHECK:      (type $B2 (struct (field i32)))
   (type $B2 (struct (field i32)))
 
-  (type $A (struct (field (ref $B1)) (field (ref data))))
+  (type $A (struct (field (ref $B1)) (field (ref struct))))
 
   ;; CHECK:      (func $A (type $none_=>_none)
   ;; CHECK-NEXT:  (local $ref (ref null $A))
@@ -1868,11 +1868,11 @@
   )
 )
 
-;; As above, but flip the fields so now data is where B1 would be, and there is
+;; As above, but flip the fields so now struct is where B1 would be, and there is
 ;; a ref of B2. Now B1 needs a cast to be read from, and we'll optimize to use
 ;; B2 instead.
 (module
-  ;; CHECK:      (type $A (struct (field (ref data)) (field (ref $B2))))
+  ;; CHECK:      (type $A (struct (field (ref struct)) (field (ref $B2))))
 
   ;; CHECK:      (type $B2 (struct (field i32)))
 
@@ -1881,7 +1881,7 @@
 
   (type $B2 (struct (field i32)))
 
-  (type $A (struct (field (ref data)) (field (ref $B2)))) ;; change is here
+  (type $A (struct (field (ref struct)) (field (ref $B2)))) ;; change is here
 
   ;; CHECK:      (func $A (type $none_=>_none)
   ;; CHECK-NEXT:  (local $ref (ref null $A))
@@ -1941,4 +1941,130 @@
   )
 )
 
-;; TODO itable like situation with a cast
+(module
+  ;; CHECK:      (type $A (struct (field i32) (field i32) (field i32) (field i32) (field i32) (field i32) (field i32)))
+  (type $A (struct (field i32) (field i32) (field i32) (field i32) (field i32) (field i32) (field i32)))
+
+  ;; CHECK:      (func $A (type $none_=>_none)
+  ;; CHECK-NEXT:  (local $x i32)
+  ;; CHECK-NEXT:  (local $ref (ref $A))
+  ;; CHECK-NEXT:  (local.set $ref
+  ;; CHECK-NEXT:   (struct.new $A
+  ;; CHECK-NEXT:    (local.tee $x
+  ;; CHECK-NEXT:     (local.tee $x
+  ;; CHECK-NEXT:      (i32.const 10)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (i32.const 10)
+  ;; CHECK-NEXT:    (i32.const 11)
+  ;; CHECK-NEXT:    (local.tee $x
+  ;; CHECK-NEXT:     (local.get $x)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.get $x)
+  ;; CHECK-NEXT:    (local.tee $x
+  ;; CHECK-NEXT:     (i32.const 12)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (local.get $x)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 0
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 1
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 2
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 3
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 4
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 5
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 6
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $A
+    (local $x i32)
+    (local $ref (ref $A))
+
+    ;; $A is always written the same value in all fields, so they are
+    ;; equivalent, and we optimize to always read from field #0. We can do so
+    ;; even though local operations are used.
+    (local.set $ref
+      (struct.new $A
+        (local.tee $x
+          (local.tee $x
+            (i32.const 10)
+          )
+        )
+        (i32.const 10)
+        (i32.const 11)
+        (local.tee $x
+          (local.get $x)
+        )
+        (local.get $x)
+        (local.tee $x
+          (i32.const 12)
+        )
+        (local.get $x)
+      )
+    )
+
+    (drop
+      (struct.get $A 0
+        (local.get $ref)
+      )
+    )
+
+    (drop
+      (struct.get $A 1   ;; this can use index #0
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $A 2
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $A 3   ;; this can use index #0
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $A 4   ;; this can use index #0
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $A 5
+        (local.get $ref)
+      )
+    )
+    (drop
+      (struct.get $A 6   ;; this can use index #5
+        (local.get $ref)
+      )
+    )
+  )
+)

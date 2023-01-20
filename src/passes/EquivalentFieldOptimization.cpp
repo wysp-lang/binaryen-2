@@ -121,7 +121,7 @@ struct SingleLocalValueFinder {
     while (1) {
       if (auto* set = curr->dynCast<LocalSet>()) {
         if (set->isTee()) {
-          curr = tee;
+          curr = set;
           continue;
         }
       } else if (auto* get = curr->dynCast<LocalGet>()) {
