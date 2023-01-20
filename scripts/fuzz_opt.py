@@ -1288,6 +1288,8 @@ opt_choices = [
     ("--directize",),
     ("--discard-global-effects",),
     ("--efo",),
+    ("--efo",),
+    ("--efo",),
     ("--flatten", "--dfo",),
     ("--duplicate-function-elimination",),
     ("--flatten",),
