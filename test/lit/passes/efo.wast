@@ -2168,7 +2168,8 @@
   ;; CHECK-NEXT:  (local $B1 (ref $B1))
   ;; CHECK-NEXT:  (local $B2 (ref $B2))
   ;; CHECK-NEXT:  (local $struct (ref struct))
-  ;; CHECK-NEXT:  (local $4 (ref null $A))
+  ;; CHECK-NEXT:  (local $temp (ref $B2))
+  ;; CHECK-NEXT:  (local $5 (ref null $A))
   ;; CHECK-NEXT:  (local.set $ref
   ;; CHECK-NEXT:   (struct.new $A
   ;; CHECK-NEXT:    (struct.new $B1
@@ -2191,7 +2192,7 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (local.set $struct
   ;; CHECK-NEXT:   (struct.get $A 1
-  ;; CHECK-NEXT:    (local.tee $4
+  ;; CHECK-NEXT:    (local.tee $5
   ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
@@ -2204,7 +2205,7 @@
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (struct.get $B1 0
   ;; CHECK-NEXT:    (struct.get $A 0
-  ;; CHECK-NEXT:     (local.get $4)
+  ;; CHECK-NEXT:     (local.get $5)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
@@ -2214,6 +2215,7 @@
     (local $B1 (ref $B1))
     (local $B2 (ref $B2))
     (local $struct (ref struct))
+    (local $temp (ref $B2))
 
     (local.set $ref
       (struct.new $A
@@ -2246,11 +2248,14 @@
       )
     )
     (drop
-      (struct.get $B2 0 ;; We can replace this sequence with one that reads from
-        (local.get $B2) ;; $B1, and avoids a cast. While doing so, we'll create
-                        ;; a temp local for $ref two instructions back, as we
-                        ;; are skipping code in the middle which in theory could
-                        ;; modify $ref.
+      ;; We can replace this sequence with one that reads from $B1, and avoids a
+      ;; cast. While doing so, we'll create a temp local for $ref two
+      ;; instructions back, as we are skipping code in the middle which in
+      ;; theory could modify $ref.
+      (struct.get $B2 0
+        (local.tee $temp ;; This local.tee is a side effect we must not remove.
+          (local.get $B2)
+        )
       )
     )
   )
