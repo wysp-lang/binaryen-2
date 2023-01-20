@@ -614,7 +614,7 @@ struct EquivalentFieldOptimization : public Pass {
     }
 
     FunctionOptimizer(TypeImprovementMap& unifiedMap)
-      : unifiedMap(unifiedMap), localValueFinder(getFunction()) {}
+      : unifiedMap(unifiedMap) {}
 
     void visitStructGet(StructGet* curr) {
       optimizeSequence(curr);
@@ -624,9 +624,15 @@ struct EquivalentFieldOptimization : public Pass {
       optimizeSequence(curr);
     }
 
+    std::unique_ptr<SingleLocalValueFinder> localValueFinder;
+
     void optimizeSequence(Expression* curr) {
       if (curr->type == Type::unreachable) {
         return;
+      }
+
+      if (!localValueFinder) {
+        localValueFinder = std::make_unique<SingleLocalValueFinder>(getFunction());
       }
 
       // The current sequence of operations. We'll go deeper and build up the
@@ -636,10 +642,12 @@ struct EquivalentFieldOptimization : public Pass {
       Sequence currSequence;
 
       // The start of the sequence - the reference that the sequence of field
-      // accesses begins with.
+      // accesses begins with. We reach this at the end as we start at the
+      // parents and look into children.
       Expression* currStart = curr;
 //std::cerr << "\noptimizeSequence in visit: " << *curr << '\n';
       while (1) {
+        currStart = localValueFinder->lookThroughLocals(currStart);
 
 //std::cerr << "loop inspect sequence for " << *currStart << "\n";
 
@@ -713,7 +721,6 @@ struct EquivalentFieldOptimization : public Pass {
 
   private:
     TypeImprovementMap& unifiedMap;
-    SingleLocalValueFinder localValueFinder;
   };
 };
 
