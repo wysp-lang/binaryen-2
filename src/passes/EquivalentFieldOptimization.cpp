@@ -702,6 +702,7 @@ struct EquivalentFieldOptimization : public Pass {
     // to begin applying them, build struct.gets for that sequence and return
     // them.
     Expression* buildSequence(const Sequence& s, Expression* start) {
+      // XXX cache start in a local, if we skiped anything but a cast or a strcut.get, which have no side effects, and cannot be interleaved with effects (like locla.get to a set).
       auto* result = start;
 
       // Starting from the top, build up the new stack of instructions.
