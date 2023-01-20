@@ -458,9 +458,6 @@ struct Finder : public PostWalker<Finder> {
 using TypeImprovementMap = std::unordered_map<HeapType, Improvements>;
 
 struct EquivalentFieldOptimization : public Pass {
-  // Only modifies types.
-  bool requiresNonNullableLocalFixups() override { return false; }
-
   void run(Module* module) override {
     if (!module->features.hasGC()) {
       return;
