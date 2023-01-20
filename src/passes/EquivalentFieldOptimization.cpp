@@ -614,7 +614,7 @@ struct EquivalentFieldOptimization : public Pass {
     }
 
     FunctionOptimizer(TypeImprovementMap& unifiedMap)
-      : unifiedMap(unifiedMap) {}
+      : unifiedMap(unifiedMap), localValueFinder(getFunction()) {}
 
     void visitStructGet(StructGet* curr) {
       optimizeSequence(curr);
@@ -713,6 +713,7 @@ struct EquivalentFieldOptimization : public Pass {
 
   private:
     TypeImprovementMap& unifiedMap;
+    SingleLocalValueFinder localValueFinder;
   };
 };
 
