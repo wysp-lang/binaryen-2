@@ -383,6 +383,12 @@ struct Finder : public PostWalker<Finder> {
   // stored in. If it is stored in a less-refined location then we will need a
   // cast to read from it.
   void scanNew(StructNew* curr, const Sequence& prefix, ValueMap& valueMap) {
+    if (curr->isWithDefault()) {
+      // TODO: We could add sequences with the default value, but we need to be
+      //       careful of types at least.
+      return;
+    }
+
     // We'll only look at immutable fields.
     auto& fields = curr->type.getHeapType().getStruct().fields;
 

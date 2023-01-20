@@ -142,6 +142,66 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new_default $A)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $A 1
+  ;; CHECK-NEXT:    (local.get $ref)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $A (param $x i32)
+    (local $ref (ref null $A))
+    ;; As above, but now there is a struct.new_with_default later, which
+    ;; prevents optimization, as we do not handle that atm. TODO
+    (if
+      (local.get $x)
+      (local.set $ref
+        (struct.new $A
+          (i32.const 10)
+          (i32.const 10)
+        )
+      )
+      (local.set $ref
+        (struct.new $A
+          (i32.const 20)
+          (i32.const 20)
+        )
+      )
+    )
+    (drop
+      (struct.new_default $A)
+    )
+    (drop
+      (struct.get $A 1 ;; This will stay #1, and not get optimized to 0.
+        (local.get $ref)
+      )
+    )
+  )
+)
+
+(module
+  ;; CHECK:      (type $A (struct (field i32) (field i32)))
+  (type $A (struct (field i32) (field i32)))
+
+  ;; CHECK:      (func $A (type $i32_=>_none) (param $x i32)
+  ;; CHECK-NEXT:  (local $ref (ref null $A))
+  ;; CHECK-NEXT:  (if
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:   (local.set $ref
+  ;; CHECK-NEXT:    (struct.new $A
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:     (i32.const 10)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (local.set $ref
+  ;; CHECK-NEXT:    (struct.new $A
+  ;; CHECK-NEXT:     (i32.const 20)
+  ;; CHECK-NEXT:     (i32.const 20)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (struct.get $A 0
   ;; CHECK-NEXT:    (local.get $ref)
   ;; CHECK-NEXT:   )
