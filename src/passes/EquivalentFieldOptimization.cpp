@@ -581,6 +581,8 @@ struct EquivalentFieldOptimization : public Pass {
       // unified map, like before: as we merge information in, we filter to
       // leave the intersection of all sequences.
       for (auto subType : subTypeAnalyzer.subTypes.getStrictSubTypes(type)) {
+        // TODO: We can avoid merging sequences that use fields we don't have,
+        //       for efficiency (currently we notice that later and skip).
         mergeIntoUnifiedMap(type, unifiedMap[subType]);
       }
     }
@@ -814,3 +816,8 @@ Pass* createEquivalentFieldOptimizationPass() {
 }
 
 } // namespace wasm
+
+/*
+TODO
+Why no help on calc_worker.wat? Helps on b.ArrayListObjectAddBenchmark_j2wasm_binary.wasm.wat.modded perfectly...
+*/
