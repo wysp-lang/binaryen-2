@@ -599,17 +599,27 @@ struct EquivalentFieldOptimization : public Pass {
     // for each sequence, but after merging everything as we have, we just care
     // about the best one for each sequence (as that is what we'll pick whenever
     // we find a place to optimize.
-    for (auto& [_, improvements] : unifiedMap) {
-      for (auto& [_, newSequences] : improvements) {
-        if (newSequences.size() > 1) {
+    for (auto& [type, improvements] : unifiedMap) {
+      for (auto& [sequence, newSequences] : improvements) {
+std::cerr << "findings for " << module->typeNames[type].name << "  ";
+for (auto x : sequence) std::cerr << x << ' ';
+std::cerr << '\n';
+
+        if (1 || newSequences.size() > 1) {
           std::optional<Sequence> best;
           for (auto& s : newSequences) {
+std::cerr << "    ";
+for (auto x : s) std::cerr << x << ' ';
+std::cerr << '\n';
             if (!best || s.size() < best->size() || (s.size() == best->size() && s < *best)) {
               best = s;
             }
           }
           assert(best);
           newSequences = {*best};
+std::cerr << " => ";
+for (auto x : *best) std::cerr << x << ' ';
+std::cerr << '\n';
         }
       }
     }
@@ -632,17 +642,17 @@ struct EquivalentFieldOptimization : public Pass {
       : unifiedMap(unifiedMap) {}
 
     void visitStructGet(StructGet* curr) {
-      optimizeSequence(curr);
+      optimizeSequence();
     }
 
     void visitRefCast(RefCast* curr) {
-      optimizeSequence(curr);
+      optimizeSequence();
     }
 
     std::unique_ptr<SingleLocalValueFinder> localValueFinder;
 
-    void optimizeSequence(Expression* curr) {
-      if (curr->type == Type::unreachable) {
+    void optimizeSequence() {
+      if (getCurrent()->type == Type::unreachable) {
         return;
       }
 
@@ -650,10 +660,23 @@ struct EquivalentFieldOptimization : public Pass {
         localValueFinder = std::make_unique<SingleLocalValueFinder>(getFunction());
       }
 
+      // Keep iterating while we manage to find an opportunity. For example, we
+      // may optimize a sequence of length 3 to one of length 3 as well, by just
+      // changing the indexes, but then when we look at sequences of length 4 we
+      // may find an opportunity to turn that into one of length 2. We can use a
+      // simple loop in which each iteration does a simple greedy operation of
+      // looking for any improvement at all, not necessarily the best one, which
+      // is guaranteed to converge to the optimal solution.
+      // TODO: Pre-optimize the data structures to avoid iteration here somehow.
+      while (optimizeSequenceIteration()) {}
+    }
+
+    // Returns true if we optimized.
+    bool optimizeSequenceIteration() {
+      auto* curr = getCurrent();
+
       // The current sequence of operations. We'll go deeper and build up the
       // sequence as we go, looking for improvements as we go.
-      //
-      // TODO: use a fallthrough here. a Tee in the middle should not stop us.
       Sequence currSequence;
 
       // The pointer of the 'top' of the sequence, that is, given this:
@@ -689,7 +712,7 @@ struct EquivalentFieldOptimization : public Pass {
       //  x'.a.b
       bool skippedCode = false;
 
-//std::cerr << "\noptimizeSequence in visit: " << *curr << '\n';
+std::cerr << "\noptimizeSequence in visit: " << *curr << '\n';
       while (1) {
         auto old = topp;
         topp = localValueFinder->lookThroughLocals(topp);
@@ -719,11 +742,11 @@ struct EquivalentFieldOptimization : public Pass {
         }
 
         top = *topp;
-//for (auto x : currSequence) std::cerr << x << ' ';
-//std::cerr << '\n';
+std::cout << "curr seq: ";
+for (auto x : currSequence) std::cerr << x << ' ';
+std::cerr << '\n';
 
         // See if a sequence starting here has anything we can optimize with.
-        // TODO: we could also look at our supertypes
         auto iter = unifiedMap.find(top->type.getHeapType());
         if (iter == unifiedMap.end()) {
 //std::cerr << "  sad1\n";
@@ -741,6 +764,11 @@ struct EquivalentFieldOptimization : public Pass {
           if (!newSequences.empty()) {
             assert(newSequences.size() == 1);
             auto& newSequence = *newSequences.begin();
+
+std::cerr << "new seq: ";
+for (auto x : newSequence) std::cerr << x << ' ';
+std::cerr << '\n';
+
             // To optimize, we need to be able to build a replacement sequence,
             // and we need the result to have a suitable type. Subtyping may
             // cause issues in both of those.
@@ -749,11 +777,13 @@ struct EquivalentFieldOptimization : public Pass {
                 replaceCurrent(rep);
               }
             }
-            return;
+            return true;
           }
         }
 //std::cerr << "  sad2\n";
       }
+
+      return false;
     }
 
     // Given a sequence of field accesses, and a top reference from which
