@@ -2451,6 +2451,10 @@
           (struct.new $itable.tab.C
             (ref.func $C5)
             ;; This function is also in the vtable.
+            ;; Note also that this sequence has two possible improvements: to
+            ;; use the other appearance of $C1 in the itable (which has lower
+            ;; indexes) or to use the one in the vtable (which is shorter). We
+            ;; should use the vtable one.
             (ref.func $C1)
           )
         )
