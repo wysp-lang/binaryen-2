@@ -2605,15 +2605,17 @@
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:    (struct.new $itable.B
   ;; CHECK-NEXT:     (struct.new $itable.tab.B
-  ;; CHECK-NEXT:      (ref.func $B1)
+  ;; CHECK-NEXT:      (ref.func $B3)
   ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $vtable.B $func1
-  ;; CHECK-NEXT:    (struct.get $object.B $vtable
-  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:   (struct.get $itable.tab.B $func1
+  ;; CHECK-NEXT:    (struct.get $itable.B $tab1
+  ;; CHECK-NEXT:     (struct.get $object.B $itable
+  ;; CHECK-NEXT:      (local.get $ref)
+  ;; CHECK-NEXT:     )
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
