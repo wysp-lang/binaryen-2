@@ -2535,4 +2535,270 @@
   (func $C5)
 )
 
-;; test with a change to the last one: make $B have no opt opportunities at all
+;; As above, but now $object.B has no optimization opportunities. That should
+;; not impact $object.C.
+(module
+  (type $object (struct (field $vtable (ref struct)) (field $itable (ref struct))))
+
+  ;; CHECK:      (type $itable.tab.B (struct (field $func1 funcref)))
+
+  ;; CHECK:      (type $itable.tab.C (struct_subtype (field $func1 funcref) (field $func2 funcref) $itable.tab.B))
+
+  ;; CHECK:      (type $object.A (struct (field $vtable (ref $vtable.A)) (field $itable (ref $itable.A))))
+  (type $object.A (struct (field $vtable (ref $vtable.A)) (field $itable (ref $itable.A))))
+
+  ;; CHECK:      (type $object.B (struct_subtype (field $vtable (ref $vtable.B)) (field $itable (ref $itable.B)) $object.A))
+  (type $object.B (struct_subtype (field $vtable (ref $vtable.B)) (field $itable (ref $itable.B)) $object.A))
+
+  ;; CHECK:      (type $object.C (struct_subtype (field $vtable (ref $vtable.C)) (field $itable (ref $itable.C)) $object.B))
+  (type $object.C (struct_subtype (field $vtable (ref $vtable.C)) (field $itable (ref $itable.C)) $object.B))
+
+  ;; CHECK:      (type $vtable.A (struct (field $func1 funcref)))
+  (type $vtable.A (struct (field $func1 funcref)))
+
+  ;; CHECK:      (type $vtable.B (struct_subtype (field $func1 funcref) (field $func2 funcref) $vtable.A))
+  (type $vtable.B (struct_subtype (field $func1 funcref) (field $func2 funcref) $vtable.A))
+
+  ;; CHECK:      (type $vtable.C (struct_subtype (field $func1 funcref) (field $func2 funcref) (field $func3 funcref) $vtable.B))
+  (type $vtable.C (struct_subtype (field $func1 funcref) (field $func2 funcref) (field $func3 funcref) $vtable.B))
+
+  ;; CHECK:      (type $itable.A (struct ))
+  (type $itable.A (struct))
+
+  (type $itable.tab.B (struct (field $func1 funcref)))
+
+  ;; CHECK:      (type $itable.B (struct_subtype (field $tab1 (ref $itable.tab.B)) $itable.A))
+  (type $itable.B (struct_subtype (field $tab1 (ref $itable.tab.B)) $itable.A))
+
+  (type $itable.tab.C (struct_subtype (field $func1 funcref) (field $func2 funcref) $itable.tab.B))
+
+  ;; CHECK:      (type $itable.C (struct_subtype (field $tab1 (ref $itable.tab.C)) (field $tab2 (ref $itable.tab.C)) $itable.B))
+  (type $itable.C (struct_subtype (field $tab1 (ref $itable.tab.C)) (field $tab2 (ref $itable.tab.C)) $itable.B))
+
+  ;; CHECK:      (func $test.A (type $ref|$object.A|_=>_none) (param $ref (ref $object.A))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $object.A
+  ;; CHECK-NEXT:    (struct.new $vtable.A
+  ;; CHECK-NEXT:     (ref.func $A)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (struct.new_default $itable.A)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $test.A (param $ref (ref $object.A))
+    (drop
+      (struct.new $object.A
+        (struct.new $vtable.A
+          (ref.func $A)
+        )
+        (struct.new $itable.A)
+      )
+    )
+  )
+
+  ;; CHECK:      (func $test.B (type $ref|$object.B|_=>_none) (param $ref (ref $object.B))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $object.B
+  ;; CHECK-NEXT:    (struct.new $vtable.B
+  ;; CHECK-NEXT:     (ref.func $B1)
+  ;; CHECK-NEXT:     (ref.func $B2)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (struct.new $itable.B
+  ;; CHECK-NEXT:     (struct.new $itable.tab.B
+  ;; CHECK-NEXT:      (ref.func $B1)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $vtable.B $func1
+  ;; CHECK-NEXT:    (struct.get $object.B $vtable
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $test.B (param $ref (ref $object.B))
+    (drop
+      (struct.new $object.B
+        (struct.new $vtable.B
+          (ref.func $B1)
+          (ref.func $B2)
+        )
+        (struct.new $itable.B
+          (struct.new $itable.tab.B
+            ;; This changed, and now nothing can be optimized in $object.B.
+            (ref.func $B3)
+          )
+        )
+      )
+    )
+
+    (drop
+      (struct.get $itable.tab.B 0
+        (struct.get $itable.B 0
+          (struct.get $object.B 1
+            (local.get $ref)
+          )
+        )
+      )
+    )
+  )
+
+  ;; CHECK:      (func $test.C (type $ref|$object.C|_=>_none) (param $ref (ref $object.C))
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.new $object.C
+  ;; CHECK-NEXT:    (struct.new $vtable.C
+  ;; CHECK-NEXT:     (ref.func $C1)
+  ;; CHECK-NEXT:     (ref.func $C2)
+  ;; CHECK-NEXT:     (ref.func $C3)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:    (struct.new $itable.C
+  ;; CHECK-NEXT:     (struct.new $itable.tab.C
+  ;; CHECK-NEXT:      (ref.func $C1)
+  ;; CHECK-NEXT:      (ref.func $C4)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:     (struct.new $itable.tab.C
+  ;; CHECK-NEXT:      (ref.func $C5)
+  ;; CHECK-NEXT:      (ref.func $C1)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $vtable.C $func1
+  ;; CHECK-NEXT:    (struct.get $object.C $vtable
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $itable.tab.C $func2
+  ;; CHECK-NEXT:    (struct.get $itable.C $tab1
+  ;; CHECK-NEXT:     (struct.get $object.C $itable
+  ;; CHECK-NEXT:      (local.get $ref)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $itable.tab.C $func1
+  ;; CHECK-NEXT:    (struct.get $itable.C $tab2
+  ;; CHECK-NEXT:     (struct.get $object.C $itable
+  ;; CHECK-NEXT:      (local.get $ref)
+  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (struct.get $vtable.C $func1
+  ;; CHECK-NEXT:    (struct.get $object.C $vtable
+  ;; CHECK-NEXT:     (local.get $ref)
+  ;; CHECK-NEXT:    )
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  (func $test.C (param $ref (ref $object.C))
+    (drop
+      (struct.new $object.C
+        (struct.new $vtable.C
+          (ref.func $C1)
+          (ref.func $C2)
+          (ref.func $C3)
+        )
+        (struct.new $itable.C
+          (struct.new $itable.tab.C
+            ;; This function is also in the vtable.
+            (ref.func $C1)
+            (ref.func $C4)
+          )
+          (struct.new $itable.tab.C
+            (ref.func $C5)
+            ;; This function is also in the vtable.
+            (ref.func $C1)
+          )
+        )
+      )
+    )
+
+    ;; This itable access can be replaced with a vtable access.
+    (drop
+      (struct.get $itable.tab.C 0
+        (struct.get $itable.C 0
+          (struct.get $object.C 1
+            (local.get $ref)
+          )
+        )
+      )
+    )
+
+    ;; But these two can't.
+    (drop
+      (struct.get $itable.tab.C 1
+        (struct.get $itable.C 0
+          (struct.get $object.C 1
+            (local.get $ref)
+          )
+        )
+      )
+    )
+    (drop
+      (struct.get $itable.tab.C 0
+        (struct.get $itable.C 1
+          (struct.get $object.C 1
+            (local.get $ref)
+          )
+        )
+      )
+    )
+
+    ;; This last one can.
+    (drop
+      (struct.get $itable.tab.C 1
+        (struct.get $itable.C 1
+          (struct.get $object.C 1
+            (local.get $ref)
+          )
+        )
+      )
+    )
+  )
+
+  ;; Helper functions
+  ;; CHECK:      (func $A (type $none_=>_none)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $A)
+  ;; CHECK:      (func $B1 (type $none_=>_none)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $B1)
+  ;; CHECK:      (func $B2 (type $none_=>_none)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $B2)
+  ;; CHECK:      (func $B3 (type $none_=>_none)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $B3)
+  ;; CHECK:      (func $C1 (type $none_=>_none)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $C1)
+  ;; CHECK:      (func $C2 (type $none_=>_none)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $C2)
+  ;; CHECK:      (func $C3 (type $none_=>_none)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $C3)
+  ;; CHECK:      (func $C4 (type $none_=>_none)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $C4)
+  ;; CHECK:      (func $C5 (type $none_=>_none)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  (func $C5)
+)
