@@ -739,7 +739,14 @@ struct EquivalentFieldOptimization : public Pass {
           if (!newSequences.empty()) {
             assert(newSequences.size() == 1);
             auto& newSequence = *newSequences.begin();
-            replaceCurrent(buildSequence(newSequence, topp, skippedCode));
+            // To optimize, we need to be able to build a replacement sequence,
+            // and we need the result to have a suitable type. Subtyping may
+            // cause issues in both of those.
+            if (auto *rep = buildSequence(newSequence, topp, skippedCode)) {
+              if (Type::isSubType(rep->type, curr->type)) {
+                replaceCurrent(rep);
+              }
+            }
             return;
           }
         }
@@ -750,6 +757,8 @@ struct EquivalentFieldOptimization : public Pass {
     // Given a sequence of field accesses, and a top reference from which
     // to begin applying them, build struct.gets for that sequence and return
     // them.
+    //
+    // Returns nullptr if we fail to build a sequence.
     Expression* buildSequence(const Sequence& s, Expression** topp, bool skippedCode) {
       Builder builder(*getModule());
 
@@ -768,10 +777,14 @@ struct EquivalentFieldOptimization : public Pass {
       for (Index i = 0; i < s.size(); i++) {
         auto index = s[s.size() - i - 1];
         auto fields = result->type.getHeapType().getStruct().fields;
-        // We must be able to read the field here. A possible bug here is if a
-        // cast is needed, but we are only aiming to optimize to sequences with
-        // no casts, and we should have ignored casting sequences before.
-        assert(index < fields.size());
+
+        // It is possible that the field we want to read from does not exist in
+        // this type. For example, we may have found a sequence in a subtype of
+        // ours, but it cannot be used in the supertype.
+        if (index >= fields.size()) {
+          return nullptr;
+        }
+
         auto type = fields[index].type;
         result = builder.makeStructGet(index, result, type);
       }
