@@ -599,9 +599,9 @@ struct EquivalentFieldOptimization : public Pass {
     // for each sequence, but after merging everything as we have, we just care
     // about the best one for each sequence (as that is what we'll pick whenever
     // we find a place to optimize.
-    for (auto& [type, improvements] : unifiedMap) {
-      for (auto& [sequence, newSequences] : improvements) {
-        if (1 || newSequences.size() > 1) {
+    for (auto& [_, improvements] : unifiedMap) {
+      for (auto& [_, newSequences] : improvements) {
+        if (newSequences.size() > 1) {
           std::optional<Sequence> best;
           for (auto& s : newSequences) {
             if (!best || s.size() < best->size() || (s.size() == best->size() && s < *best)) {

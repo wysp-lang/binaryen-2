@@ -2288,12 +2288,6 @@
   ;; CHECK:      (type $object.C (struct_subtype (field $vtable (ref $vtable.C)) (field $itable (ref $itable.C)) $object.B))
   (type $object.C (struct_subtype (field $vtable (ref $vtable.C)) (field $itable (ref $itable.C)) $object.B))
 
-  ;; CHECK:      (type $itable.A (struct ))
-
-  ;; CHECK:      (type $itable.B (struct_subtype (field $tab1 (ref $itable.tab.B)) $itable.A))
-
-  ;; CHECK:      (type $itable.C (struct_subtype (field $tab1 (ref $itable.tab.C)) (field $tab2 (ref $itable.tab.C)) $itable.B))
-
   ;; CHECK:      (type $vtable.A (struct (field $func1 funcref)))
   (type $vtable.A (struct (field $func1 funcref)))
 
@@ -2303,14 +2297,17 @@
   ;; CHECK:      (type $vtable.C (struct_subtype (field $func1 funcref) (field $func2 funcref) (field $func3 funcref) $vtable.B))
   (type $vtable.C (struct_subtype (field $func1 funcref) (field $func2 funcref) (field $func3 funcref) $vtable.B))
 
+  ;; CHECK:      (type $itable.A (struct ))
   (type $itable.A (struct))
 
   (type $itable.tab.B (struct (field $func1 funcref)))
 
+  ;; CHECK:      (type $itable.B (struct_subtype (field $tab1 (ref $itable.tab.B)) $itable.A))
   (type $itable.B (struct_subtype (field $tab1 (ref $itable.tab.B)) $itable.A))
 
   (type $itable.tab.C (struct_subtype (field $func1 funcref) (field $func2 funcref) $itable.tab.B))
 
+  ;; CHECK:      (type $itable.C (struct_subtype (field $tab1 (ref $itable.tab.C)) (field $tab2 (ref $itable.tab.C)) $itable.B))
   (type $itable.C (struct_subtype (field $tab1 (ref $itable.tab.C)) (field $tab2 (ref $itable.tab.C)) $itable.B))
 
   ;; CHECK:      (func $test.A (type $ref|$object.A|_=>_none) (param $ref (ref $object.A))
@@ -2430,11 +2427,9 @@
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (drop
-  ;; CHECK-NEXT:   (struct.get $itable.tab.C $func1
-  ;; CHECK-NEXT:    (struct.get $itable.C $tab1
-  ;; CHECK-NEXT:     (struct.get $object.C $itable
-  ;; CHECK-NEXT:      (local.get $ref)
-  ;; CHECK-NEXT:     )
+  ;; CHECK-NEXT:   (struct.get $vtable.C $func1
+  ;; CHECK-NEXT:    (struct.get $object.C $vtable
+  ;; CHECK-NEXT:     (local.get $ref)
   ;; CHECK-NEXT:    )
   ;; CHECK-NEXT:   )
   ;; CHECK-NEXT:  )
@@ -2493,7 +2488,7 @@
       )
     )
 
-    ;; This last one can. FIXME
+    ;; This last one can.
     (drop
       (struct.get $itable.tab.C 1
         (struct.get $itable.C 1
@@ -2539,3 +2534,5 @@
   ;; CHECK-NEXT: )
   (func $C5)
 )
+
+;; test with a change to the last one: make $B have no opt opportunities at all
