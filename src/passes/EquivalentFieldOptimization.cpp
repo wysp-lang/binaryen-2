@@ -601,25 +601,15 @@ struct EquivalentFieldOptimization : public Pass {
     // we find a place to optimize.
     for (auto& [type, improvements] : unifiedMap) {
       for (auto& [sequence, newSequences] : improvements) {
-std::cerr << "findings for " << module->typeNames[type].name << "  ";
-for (auto x : sequence) std::cerr << x << ' ';
-std::cerr << '\n';
-
         if (1 || newSequences.size() > 1) {
           std::optional<Sequence> best;
           for (auto& s : newSequences) {
-std::cerr << "    ";
-for (auto x : s) std::cerr << x << ' ';
-std::cerr << '\n';
             if (!best || s.size() < best->size() || (s.size() == best->size() && s < *best)) {
               best = s;
             }
           }
           assert(best);
           newSequences = {*best};
-std::cerr << " => ";
-for (auto x : *best) std::cerr << x << ' ';
-std::cerr << '\n';
         }
       }
     }
@@ -712,7 +702,7 @@ std::cerr << '\n';
       //  x'.a.b
       bool skippedCode = false;
 
-std::cerr << "\noptimizeSequence in visit: " << *curr << '\n';
+//std::cerr << "\noptimizeSequence in visit: " << *curr << '\n';
       while (1) {
         auto old = topp;
         topp = localValueFinder->lookThroughLocals(topp);
@@ -742,9 +732,6 @@ std::cerr << "\noptimizeSequence in visit: " << *curr << '\n';
         }
 
         top = *topp;
-std::cout << "curr seq: ";
-for (auto x : currSequence) std::cerr << x << ' ';
-std::cerr << '\n';
 
         // See if a sequence starting here has anything we can optimize with.
         auto iter = unifiedMap.find(top->type.getHeapType());
@@ -764,10 +751,6 @@ std::cerr << '\n';
           if (!newSequences.empty()) {
             assert(newSequences.size() == 1);
             auto& newSequence = *newSequences.begin();
-
-std::cerr << "new seq: ";
-for (auto x : newSequence) std::cerr << x << ' ';
-std::cerr << '\n';
 
             // To optimize, we need to be able to build a replacement sequence,
             // and we need the result to have a suitable type. Subtyping may
