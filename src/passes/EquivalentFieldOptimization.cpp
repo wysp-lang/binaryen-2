@@ -642,7 +642,9 @@ struct EquivalentFieldOptimization : public Pass {
     std::unique_ptr<SingleLocalValueFinder> localValueFinder;
 
     void optimizeSequence() {
-      if (getCurrent()->type == Type::unreachable) {
+      auto* curr = getCurrent();
+
+      if (curr->type == Type::unreachable) {
         return;
       }
 
@@ -650,23 +652,19 @@ struct EquivalentFieldOptimization : public Pass {
         localValueFinder = std::make_unique<SingleLocalValueFinder>(getFunction());
       }
 
-      // Keep iterating while we manage to find an opportunity. For example, we
+      // Note that there may be more than one opportunity here. For example, we
       // may optimize a sequence of length 3 to one of length 3 as well, by just
       // changing the indexes, but then when we look at sequences of length 4 we
-      // may find an opportunity to turn that into one of length 2. We can use a
-      // simple loop in which each iteration does a simple greedy operation of
-      // looking for any improvement at all, not necessarily the best one, which
-      // is guaranteed to converge to the optimal solution.
-      // TODO: Pre-optimize the data structures to avoid iteration here somehow.
-      while (optimizeSequenceIteration()) {}
-    }
+      // may find an opportunity to turn that into one of length 2. We will
+      // therefore loop over all sequence lengths and pick the one that saves
+      // the most operations (reduces the sequence the most), and at the end
+      // we'll replace ourselves with the best new code for that sequence.
+      bool foundBest = false;
+      Index bestSizeSaved = 0;
+      Expression* bestNewCode = nullptr;
 
-    // Returns true if we optimized.
-    bool optimizeSequenceIteration() {
-      auto* curr = getCurrent();
-
-      // The current sequence of operations. We'll go deeper and build up the
-      // sequence as we go, looking for improvements as we go.
+      // The current sequence of operations as we iterate. We'll go deeper and
+      // build up the sequence as we go, looking for improvements as we go.
       Sequence currSequence;
 
       // The pointer of the 'top' of the sequence, that is, given this:
@@ -756,18 +754,35 @@ struct EquivalentFieldOptimization : public Pass {
             // To optimize, we need to be able to build a replacement sequence,
             // and we need the result to have a suitable type. Subtyping may
             // cause issues in both of those.
-            if (auto *rep = buildSequence(newSequence, topp, skippedCode)) {
-              if (Type::isSubType(rep->type, curr->type)) {
-                replaceCurrent(rep);
+            if (auto *newCode = buildSequence(newSequence, topp, skippedCode)) {
+//std::cout << "new code:\n" << *newCode << '\n';
+              if (Type::isSubType(newCode->type, curr->type)) {
+//std::cout << "type ok " << bestSequence.size() << " => " << newSequence.size() << " ?\n";
+                // This is a viable candidate to optimize! Note it if it is
+                // better than the previous best. To check that, compute the
+                // size saved and see if we did better than before.
+                assert(currSequence.size() >= newSequence.size());
+                auto sizeSaved = currSequence.size() - newSequence.size();
+                // Purposefully use >= here, as if the size saved is the same
+                // in a later iteration then we want to replace. A later
+                // iteration means we'll be adjusting more indexes, potentially,
+                // which means more optimization benefit in theory later.
+                if (!foundBest || sizeSaved >= bestSizeSaved) {
+//std::cout << "found best! " << currSequence.size() << " => " << newSequence.size() << '\n';
+                  foundBest = true;
+                  bestSizeSaved = sizeSaved;
+                  bestNewCode = newCode;
+                }
               }
             }
-            return true;
           }
         }
 //std::cerr << "  sad2\n";
       }
 
-      return false;
+      if (foundBest) {
+        replaceCurrent(bestNewCode);
+      }
     }
 
     // Given a sequence of field accesses, and a top reference from which
