@@ -459,6 +459,9 @@ using TypeImprovementMap = std::unordered_map<HeapType, Improvements>;
 
 struct EquivalentFieldOptimization : public Pass {
   void run(Module* module) override {
+
+    // TODO: just in closed world
+
     if (!module->features.hasGC()) {
       return;
     }
