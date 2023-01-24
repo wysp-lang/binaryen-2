@@ -754,7 +754,7 @@ struct EquivalentFieldOptimization : public Pass {
           if (!newSequences.empty()) {
             assert(newSequences.size() == 1);
             auto& newSequence = *newSequences.begin();
-            assert(isBetterSequence(newSequence, currSequence));
+            assert(newSequence != currSequence);
 
             // To optimize, we need to be able to build a replacement sequence,
             // and we need the result to have a suitable type. Subtyping may
