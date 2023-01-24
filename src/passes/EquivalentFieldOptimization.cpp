@@ -180,14 +180,6 @@ namespace {
 // the items in our sequences are simply indexes.
 using Item = Index;
 using Sequence = std::vector<Item>;
-
-bool isBetterSequence(const Sequence& a, const Sequence& b) {
-  // A sequence a is better than b if
-  //   - we reduce the length of the sequence
-  //   - we are the same length, but use lower indexes
-  return a.size() < b.size() || a < b;
-}
-
 using Sequences = std::vector<Sequence>;
 
 // An improvement for a sequence is another sequence that we'd like to replace
@@ -292,9 +284,11 @@ struct Finder : public PostWalker<Finder> {
 //dump(a);
 //dump(b);
 
-    // If B is larger, early exit here as there is no hope of it being better.
+    // If B is larger, give up.
     // TODO Perhaps if B has no casts but A does, it is worth it?
-    if (b.size() > a.size()) {
+    auto aSize = a.size();
+    auto bSize = b.size();
+    if (bSize > aSize) {
 //std::cerr << "  nope0\n";
       return false;
     }
@@ -321,9 +315,10 @@ struct Finder : public PostWalker<Finder> {
     
     // We would like to use this as an improvement if one of the following
     // holds:
-    //   - A has a cast and B does not, so we are removing one
-    //   - both have no casts, and B is a better sequence (shorter, or lower)
-    if (!aFinalType || isBetterSequence(b, a)) {
+    //   - A has a cast (B does not, so we are removing one)
+    //   - we reduce the length of the sequence
+    //   - we are the same length, but use lower indexes
+    if (!aFinalType || bSize < aSize || b < a) {
       // We insert the reversed sequence, as that is how we will be using it
       // later TODO explain with example
       auto reverseA = a;
