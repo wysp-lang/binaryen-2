@@ -19,6 +19,7 @@
 #include <cfg/cfg-traversal.h>
 #include <ir/find_all.h>
 #include <ir/local-graph.h>
+#include <ir/properties.h>
 #include <wasm-builder.h>
 
 namespace wasm {
@@ -277,6 +278,39 @@ bool LocalGraph::equivalent(LocalGet* a, LocalGet* b) {
     // They are both the same actual set.
     return true;
   }
+}
+
+bool LocalGraph::equivalent(LocalSet* a, LocalGet* b) {
+  // For them to be equivalent, the set must be the only set for the get.
+  auto& bSets = getSetses[b];
+  return bSets.size() == 1 && *bSets.begin() == a;
+}
+
+bool LocalGraph::equivalent(Expression* a, Expression* b, const PassOptions& options, Module& wasm) {
+  a = Properties::getFallthrough(a, options, wasm);
+  b = Properties::getFallthrough(b, options, wasm);
+
+  // If one is a tee, and the other is a get of that tee, they are equivalent.
+  if (auto* tee = a->dynCast<LocalSet>()) {
+    if (auto* get = b->dynCast<LocalGet>()) {
+      return equivalent(tee, get);
+    }
+    return false;
+  }
+  if (auto* tee = b->dynCast<LocalSet>()) {
+    if (auto* get = a->dynCast<LocalGet>()) {
+      return equivalent(tee, get);
+    }
+    return false;
+  }
+
+  // Otherwise, perhaps they are both gets.
+  if (auto* getA = a->dynCast<LocalSet>()) {
+    if (auto* getB = b->dynCast<LocalGet>()) {
+      return equivalent(getA, getB);
+    }
+  }
+  return false;
 }
 
 void LocalGraph::computeSetInfluences() {

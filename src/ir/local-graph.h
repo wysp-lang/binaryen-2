@@ -55,6 +55,12 @@ struct LocalGraph {
   // value.
   bool equivalent(LocalGet* a, LocalGet* b);
 
+  bool equivalent(LocalSet* a, LocalGet* b);
+
+  // Check if two general expressions are equivalent, which can include gets or
+  // other things.
+  bool equivalent(Expression* a, Expression* b, const PassOptions& options, Module& wasm);
+
   // Optional: compute the influence graphs between sets and gets
   // (useful for algorithms that propagate changes).
 
