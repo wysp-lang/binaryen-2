@@ -287,9 +287,13 @@ bool LocalGraph::equivalent(LocalSet* a, LocalGet* b) {
 }
 
 bool LocalGraph::equivalent(Expression* a, Expression* b, const PassOptions& options, Module& wasm) {
+  // XXX this will not emit a tee, we look through them! notee
   a = Properties::getFallthrough(a, options, wasm);
   b = Properties::getFallthrough(b, options, wasm);
 
+// Find casts in the body if an if-ref.test, and make the casts at least as refined as that test.
+
+  // XXX two tees, nested
   // If one is a tee, and the other is a get of that tee, they are equivalent.
   if (auto* tee = a->dynCast<LocalSet>()) {
     if (auto* get = b->dynCast<LocalGet>()) {
