@@ -104,7 +104,7 @@ struct DAEScanner
   void visitCall(Call* curr) {
     if (!getModule()->getFunction(curr->target)->imported()) {
       info->calls[curr->target].push_back(curr);
-// 10 seems good
+      // 10 seems good
     }
     if (curr->isReturn) {
       info->hasTailCalls = true;
@@ -317,8 +317,9 @@ struct DAE : public Pass {
 private:
   std::unordered_map<Call*, Expression**> allDroppedCalls;
 
-  void
-  removeReturnValue(Function* func, ParamUtils::CallVector& calls, Module* module) {
+  void removeReturnValue(Function* func,
+                         ParamUtils::CallVector& calls,
+                         Module* module) {
     func->setResults(Type::none);
     Builder builder(*module);
     // Remove any return values.

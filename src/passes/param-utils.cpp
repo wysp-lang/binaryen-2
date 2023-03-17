@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
+#include "param-utils.h"
 #include "ir/function-utils.h"
 #include "ir/local-graph.h"
 #include "ir/possible-constant.h"
 #include "ir/type-updating.h"
-#include "param-utils.h"
 #include "support/sorted_vector.h"
 #include "wasm.h"
 

@@ -88,8 +88,10 @@ struct SignaturePruning : public Pass {
           return;
         }
 
-        info.calls = std::move(FindAll<Call, ParamUtils::CallVector>(func->body).list);
-        info.callRefs = std::move(FindAll<CallRef, ParamUtils::CallVector>(func->body).list);
+        info.calls =
+          std::move(FindAll<Call, ParamUtils::CallVector>(func->body).list);
+        info.callRefs =
+          std::move(FindAll<CallRef, ParamUtils::CallVector>(func->body).list);
         info.usedParams = ParamUtils::getUsedParams(func);
       });
 
