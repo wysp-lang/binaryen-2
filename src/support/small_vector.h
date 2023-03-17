@@ -49,8 +49,7 @@ public:
   }
   SmallVector(size_t initialSize) { resize(initialSize); }
   SmallVector(const SmallVector<T, N>& init)
-    : usedFixed(init.usedFixed), fixed(init.fixed),
-      flexible(init.flexible) {}
+    : usedFixed(init.usedFixed), fixed(init.fixed), flexible(init.flexible) {}
   SmallVector(SmallVector<T, N>&& init)
     : usedFixed(init.usedFixed), fixed(std::move(init.fixed)),
       flexible(std::move(init.flexible)) {}
