@@ -48,10 +48,19 @@ public:
     }
   }
   SmallVector(size_t initialSize) { resize(initialSize); }
+  SmallVector(SmallVector<T, N>& init)
+    : usedFixed(init.usedFixed), fixed(init.fixed),
+      flexible(init.flexible) {}
   SmallVector(SmallVector<T, N>&& init)
     : usedFixed(init.usedFixed), fixed(std::move(init.fixed)),
       flexible(std::move(init.flexible)) {}
 
+  SmallVector<T, N>& operator=(const SmallVector<T, N>& init) {
+    usedFixed = init.usedFixed;
+    fixed = init.fixed;
+    flexible = init.flexible;
+    return *this;
+  }
   SmallVector<T, N>& operator=(SmallVector<T, N>&& init) {
     usedFixed = init.usedFixed;
     fixed = std::move(init.fixed);
