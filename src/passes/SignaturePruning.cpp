@@ -70,8 +70,8 @@ struct SignaturePruning : public Pass {
     // function in parallel.
 
     struct Info {
-      std::vector<Call*> calls;
-      std::vector<CallRef*> callRefs;
+      ParamUtils::CallVector calls;
+      ParamUtils::CallVector callRefs;
 
       std::unordered_set<Index> usedParams;
 
@@ -88,8 +88,8 @@ struct SignaturePruning : public Pass {
           return;
         }
 
-        info.calls = std::move(FindAll<Call>(func->body).list);
-        info.callRefs = std::move(FindAll<CallRef>(func->body).list);
+        info.calls = std::move(FindAll<Call, ParamUtils::CallVector>(func->body).list);
+        info.callRefs = std::move(FindAll<CallRef, ParamUtils::CallVector>(func->body).list);
         info.usedParams = ParamUtils::getUsedParams(func);
       });
 

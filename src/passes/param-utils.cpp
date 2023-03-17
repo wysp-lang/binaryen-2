@@ -18,6 +18,7 @@
 #include "ir/local-graph.h"
 #include "ir/possible-constant.h"
 #include "ir/type-updating.h"
+#include "param-utils.h"
 #include "support/sorted_vector.h"
 #include "wasm.h"
 
@@ -47,8 +48,8 @@ std::unordered_set<Index> getUsedParams(Function* func) {
 
 bool removeParameter(const std::vector<Function*>& funcs,
                      Index index,
-                     const std::vector<Call*>& calls,
-                     const std::vector<CallRef*>& callRefs,
+                     const CallVector& calls,
+                     const CallVector& callRefs,
                      Module* module,
                      PassRunner* runner) {
   assert(funcs.size() > 0);
@@ -166,8 +167,8 @@ bool removeParameter(const std::vector<Function*>& funcs,
 
 SortedVector removeParameters(const std::vector<Function*>& funcs,
                               SortedVector indexes,
-                              const std::vector<Call*>& calls,
-                              const std::vector<CallRef*>& callRefs,
+                              const CallVector& calls,
+                              const CallVector& callRefs,
                               Module* module,
                               PassRunner* runner) {
   if (indexes.empty()) {
@@ -202,8 +203,8 @@ SortedVector removeParameters(const std::vector<Function*>& funcs,
 }
 
 SortedVector applyConstantValues(const std::vector<Function*>& funcs,
-                                 const std::vector<Call*>& calls,
-                                 const std::vector<CallRef*>& callRefs,
+                                 const CallVector& calls,
+                                 const CallVector& callRefs,
                                  Module* module) {
   assert(funcs.size() > 0);
   auto* first = funcs[0];

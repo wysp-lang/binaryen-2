@@ -23,7 +23,7 @@ namespace wasm {
 
 // Find all instances of a certain node type
 
-template<typename T> struct FindAll {
+template<typename T, typename Vec = std::vector<T*>> struct FindAll {
   std::vector<T*> list;
 
   FindAll(Expression* ast) {

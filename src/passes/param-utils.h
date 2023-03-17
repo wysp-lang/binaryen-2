@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-#ifndef wasm_ir_function_h
-#define wasm_ir_function_h
+#ifndef wasm_passes_param_utils_h
+#define wasm_passes_param_utils_h
 
 #include "pass.h"
+#include "support/small_vector.h"
 #include "support/sorted_vector.h"
 #include "wasm.h"
 
@@ -27,6 +28,8 @@
 // pass .cpp file, but there is more than one).
 
 namespace wasm::ParamUtils {
+
+using CallVector = SmallVector<Call*, 10>;
 
 // Find which parameters are actually used in the function, that is, that the
 // values arriving in the parameter are read. This ignores values set in the
@@ -66,8 +69,8 @@ std::unordered_set<Index> getUsedParams(Function* func);
 // multiple calls to removeParameter().
 bool removeParameter(const std::vector<Function*>& funcs,
                      Index index,
-                     const std::vector<Call*>& calls,
-                     const std::vector<CallRef*>& callRefs,
+                     const CallVector& calls,
+                     const CallVector& callRefs,
                      Module* module,
                      PassRunner* runner);
 
@@ -75,8 +78,8 @@ bool removeParameter(const std::vector<Function*>& funcs,
 // remove them all, and returns which we removed.
 SortedVector removeParameters(const std::vector<Function*>& funcs,
                               SortedVector indexes,
-                              const std::vector<Call*>& calls,
-                              const std::vector<CallRef*>& callRefs,
+                              const CallVector& calls,
+                              const CallVector& callRefs,
                               Module* module,
                               PassRunner* runner);
 
@@ -88,10 +91,10 @@ SortedVector removeParameters(const std::vector<Function*>& funcs,
 //
 // Returns the indexes that were optimized.
 SortedVector applyConstantValues(const std::vector<Function*>& funcs,
-                                 const std::vector<Call*>& calls,
-                                 const std::vector<CallRef*>& callRefs,
+                                 const CallVector& calls,
+                                 const CallVector& callRefs,
                                  Module* module);
 
 } // namespace wasm::ParamUtils
 
-#endif // wasm_ir_function_h
+#endif // wasm_passes_param_utils_h

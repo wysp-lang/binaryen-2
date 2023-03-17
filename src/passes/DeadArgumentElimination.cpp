@@ -58,7 +58,7 @@ struct DAEFunctionInfo {
   // The unused parameters, if any.
   SortedVector unusedParams;
   // Maps a function name to the calls going to it.
-  std::unordered_map<Name, std::vector<Call*>> calls;
+  std::unordered_map<Name, ParamUtils::CallVector> calls;
   // Map of all calls that are dropped, to their drops' locations (so that
   // if we can optimize out the drop, we can replace the drop there).
   std::unordered_map<Call*, Expression**> droppedCalls;
@@ -104,6 +104,7 @@ struct DAEScanner
   void visitCall(Call* curr) {
     if (!getModule()->getFunction(curr->target)->imported()) {
       info->calls[curr->target].push_back(curr);
+// 10 seems good
     }
     if (curr->isReturn) {
       info->hasTailCalls = true;
@@ -202,12 +203,14 @@ struct DAE : public Pass {
     // Scan all the functions.
     scanner.run(getPassRunner(), module);
     // Combine all the info.
-    std::map<Name, std::vector<Call*>> allCalls;
+    std::map<Name, ParamUtils::CallVector> allCalls;
     std::unordered_set<Name> tailCallees;
     for (auto& [_, info] : infoMap) {
       for (auto& [name, calls] : info.calls) {
         auto& allCallsToName = allCalls[name];
-        allCallsToName.insert(allCallsToName.end(), calls.begin(), calls.end());
+        for (auto* call : calls) {
+          allCallsToName.push_back(call);
+        }
       }
       for (auto& callee : info.tailCallees) {
         tailCallees.insert(callee);
@@ -315,7 +318,7 @@ private:
   std::unordered_map<Call*, Expression**> allDroppedCalls;
 
   void
-  removeReturnValue(Function* func, std::vector<Call*>& calls, Module* module) {
+  removeReturnValue(Function* func, ParamUtils::CallVector& calls, Module* module) {
     func->setResults(Type::none);
     Builder builder(*module);
     // Remove any return values.
@@ -356,7 +359,7 @@ private:
   // This assumes that the function has no calls aside from |calls|, that is, it
   // is not exported or called from the table or by reference.
   void refineArgumentTypes(Function* func,
-                           const std::vector<Call*>& calls,
+                           const ParamUtils::CallVector& calls,
                            Module* module,
                            const DAEFunctionInfo& info) {
     if (!module->features.hasGC()) {
@@ -425,7 +428,7 @@ private:
   //       unoptimality can happen with multiple functions, more local code in
   //       the middle, etc.
   bool refineReturnTypes(Function* func,
-                         const std::vector<Call*>& calls,
+                         const ParamUtils::CallVector& calls,
                          Module* module) {
     auto lub = LUB::getResultsLUB(func, *module);
     if (!lub.noted()) {
