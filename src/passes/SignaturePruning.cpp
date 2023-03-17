@@ -71,7 +71,7 @@ struct SignaturePruning : public Pass {
 
     struct Info {
       ParamUtils::CallVector calls;
-      ParamUtils::CallVector callRefs;
+      ParamUtils::CallRefVector callRefs;
 
       std::unordered_set<Index> usedParams;
 

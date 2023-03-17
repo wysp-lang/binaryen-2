@@ -24,12 +24,12 @@ namespace wasm {
 // Find all instances of a certain node type
 
 template<typename T, typename Vec = std::vector<T*>> struct FindAll {
-  std::vector<T*> list;
+  Vec list;
 
   FindAll(Expression* ast) {
     struct Finder
       : public PostWalker<Finder, UnifiedExpressionVisitor<Finder>> {
-      std::vector<T*>* list;
+      Vec* list;
       void visitExpression(Expression* curr) {
         if (curr->is<T>()) {
           (*list).push_back(curr->cast<T>());
