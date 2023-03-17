@@ -48,7 +48,7 @@ public:
     }
   }
   SmallVector(size_t initialSize) { resize(initialSize); }
-  SmallVector(SmallVector<T, N>& init)
+  SmallVector(const SmallVector<T, N>& init)
     : usedFixed(init.usedFixed), fixed(init.fixed),
       flexible(init.flexible) {}
   SmallVector(SmallVector<T, N>&& init)
@@ -168,8 +168,10 @@ public:
   // iteration
 
   template<typename Parent, typename Iterator> struct IteratorBase {
-    using value_type = T;
+    using iterator_category = std::forward_iterator_tag;
     using difference_type = long;
+    using value_type = T;
+    using pointer = T*;
     using reference = T&;
 
     Parent* parent;
@@ -190,6 +192,10 @@ public:
 
     const Iterator operator+(difference_type off) const {
       return Iterator(*this) += off;
+    }
+
+    bool operator==(const Iterator& other) {
+      return parent == other.parent && index == other.index;
     }
   };
 

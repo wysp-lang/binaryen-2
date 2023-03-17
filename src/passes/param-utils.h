@@ -30,6 +30,7 @@
 namespace wasm::ParamUtils {
 
 using CallVector = SmallVector<Call*, 10>;
+using CallRefVector = SmallVector<CallRef*, 10>;
 
 // Find which parameters are actually used in the function, that is, that the
 // values arriving in the parameter are read. This ignores values set in the
@@ -70,7 +71,7 @@ std::unordered_set<Index> getUsedParams(Function* func);
 bool removeParameter(const std::vector<Function*>& funcs,
                      Index index,
                      const CallVector& calls,
-                     const CallVector& callRefs,
+                     const CallRefVector& callRefs,
                      Module* module,
                      PassRunner* runner);
 
@@ -79,7 +80,7 @@ bool removeParameter(const std::vector<Function*>& funcs,
 SortedVector removeParameters(const std::vector<Function*>& funcs,
                               SortedVector indexes,
                               const CallVector& calls,
-                              const CallVector& callRefs,
+                              const CallRefVector& callRefs,
                               Module* module,
                               PassRunner* runner);
 
@@ -92,7 +93,7 @@ SortedVector removeParameters(const std::vector<Function*>& funcs,
 // Returns the indexes that were optimized.
 SortedVector applyConstantValues(const std::vector<Function*>& funcs,
                                  const CallVector& calls,
-                                 const CallVector& callRefs,
+                                 const CallRefVector& callRefs,
                                  Module* module);
 
 } // namespace wasm::ParamUtils

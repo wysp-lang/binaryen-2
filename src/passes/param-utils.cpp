@@ -49,7 +49,7 @@ std::unordered_set<Index> getUsedParams(Function* func) {
 bool removeParameter(const std::vector<Function*>& funcs,
                      Index index,
                      const CallVector& calls,
-                     const CallVector& callRefs,
+                     const CallRefVector& callRefs,
                      Module* module,
                      PassRunner* runner) {
   assert(funcs.size() > 0);
@@ -168,7 +168,7 @@ bool removeParameter(const std::vector<Function*>& funcs,
 SortedVector removeParameters(const std::vector<Function*>& funcs,
                               SortedVector indexes,
                               const CallVector& calls,
-                              const CallVector& callRefs,
+                              const CallRefVector& callRefs,
                               Module* module,
                               PassRunner* runner) {
   if (indexes.empty()) {
@@ -204,7 +204,7 @@ SortedVector removeParameters(const std::vector<Function*>& funcs,
 
 SortedVector applyConstantValues(const std::vector<Function*>& funcs,
                                  const CallVector& calls,
-                                 const CallVector& callRefs,
+                                 const CallRefVector& callRefs,
                                  Module* module) {
   assert(funcs.size() > 0);
   auto* first = funcs[0];
