@@ -15,10 +15,16 @@
  */
 
 //
-// When we see a call foo(arg1, arg2) and at least one of the arguments has a
-// more refined type than is declared in the function being called, create a
-// copy of the function with the refined type. That copy can then potentially be
-// optimized in useful ways later.
+// When we see a call foo(arg1, arg2) and at least one of the arguments is more
+// refined - either a more refined type, or a constant value - than is declared
+// in the function being called, create a copy of the function with the refined
+// type. That copy can then potentially be optimized in useful ways later.
+//
+// For constant values, LLVM calls this "function specialization", and GCC does
+// it by default. See background in this talk:
+// https://www.youtube.com/watch?v=zJiCjeXgV5Q
+// For types, this is a natural idea but we are not aware of prior work on that
+// atm. If you read this and have an example, let us know!
 //
 // Inlining also monomorphizes in effect. What this pass does is handle the
 // cases where inlining cannot be done.
@@ -54,15 +60,14 @@
 //       compute the LUB of a bunch of calls to a target and then investigate
 //       that one case and use it in all those callers.
 // TODO: Not just direct calls? But updating vtables is complex.
-// TODO: Not just types? We could monomorphize using Literal values. E.g. for
-//       function references, if we monomorphized we'd end up specializing qsort
-//       for the particular functions it is given.
 //
 
 #include "ir/cost.h"
 #include "ir/find_all.h"
 #include "ir/module-utils.h"
 #include "ir/names.h"
+#include "ir/possible-contents.h"
+#include "ir/properties.h"
 #include "ir/type-updating.h"
 #include "ir/utils.h"
 #include "pass.h"
@@ -124,12 +129,30 @@ struct Monomorphize : public Pass {
       // Nothing to do since this calls outside of the module.
       return target;
     }
+
     auto params = func->getParams();
+    // TODO: SmallVector?
+    std::vector<Type> refinedTypes;
+    std::vector<PossibleContent> refinedContents;
     bool hasRefinedParam = false;
     for (Index i = 0; i < call->operands.size(); i++) {
-      if (call->operands[i]->type != params[i]) {
+      auto* operand = call->operands[i];
+
+      refinedTypes.push_back(operand->type);
+
+      contents = PossibleContents::fromExpr(operand);
+      // We should have ruled out the trivial cases of none/unreachable before,
+      // by ignoring unreachable code. And so the type should simply match the
+      // expression.
+      assert(content.getType() != Type::none &&
+             content.getType() != Type::unreachable);
+      assert(contents.getType() == operand->type);
+
+      if (contents.isLiteral() || contents.isGlobal() || operand->type !=
+          params[i]) {
+        // This is interesting: either a constant literal or global, or it has
+        // a type different than the declared type.
         hasRefinedParam = true;
-        break;
       }
     }
     if (!hasRefinedParam) {
@@ -137,12 +160,7 @@ struct Monomorphize : public Pass {
       return target;
     }
 
-    std::vector<Type> refinedTypes;
-    for (auto* operand : call->operands) {
-      refinedTypes.push_back(operand->type);
-    }
-    auto refinedParams = Type(refinedTypes);
-    auto iter = funcParamMap.find({target, refinedParams});
+    auto iter = funcParamMap.find({target, refinedContents});
     if (iter != funcParamMap.end()) {
       return iter->second;
     }
@@ -159,7 +177,34 @@ struct Monomorphize : public Pass {
     auto refinedTarget = Names::getValidFunctionName(*module, target);
     auto* refinedFunc = ModuleUtils::copyFunction(func, *module, refinedTarget);
     TypeUpdating::updateParamTypes(refinedFunc, refinedTypes, *module);
-    refinedFunc->type = HeapType(Signature(refinedParams, func->getResults()));
+    refinedFunc->type = HeapType(Signature(Type(refinedTypes), func->getResults()));
+
+    // Apply constants at the start of the function, that is, we go from
+    //
+    //  foo(42);
+    //  ..
+    //  function foo(x) {
+    //    ..
+    //
+    // to
+    //
+    //  function foo(x) {
+    //    x = 42;
+    //    ..
+    //
+    std::vector<Expression*> newBody;
+    for (Index i = 0; i < refinedContents.size(); i++) {
+      auto& content = refinedContents[i];
+      if (content.isLiteral() || content.isGlobal()) {
+        auto* value = content.makeExpression(*module);
+        auto* set = Builder(*module).makeLocalSet(i, value);
+        newBody.push_back(set);
+      }
+    }
+    if (!newBody.empty()) {
+      newBody.push_back(refinedFunc->body);
+      refinedFunc->body = Builder(*module).makeBlock(newBody);
+    }
 
     // Assume we'll choose to use the refined target, but if we are being
     // careful then we might change our mind.
@@ -229,14 +274,14 @@ struct Monomorphize : public Pass {
     runner.runOnFunction(func);
   }
 
-  // Maps [func name, param types] to the name of a new function whose params
-  // have those types.
+  // Maps [func name, vector of param contents] to the name of a new function
+  // whose params have those contents.
   //
-  // Note that this can contain funcParamMap{A, types} = A, that is, that maps
+  // Note that this can contain funcParamMap{A, ...} = A, that is, that maps
   // a function name to itself. That indicates we found no benefit from
   // refining with those particular types, and saves us from computing it again
   // later on.
-  std::unordered_map<std::pair<Name, Type>, Name> funcParamMap;
+  std::unordered_map<std::pair<Name, std::vector<PossibleContent>>, Name> funcParamMap;
 };
 
 } // anonymous namespace

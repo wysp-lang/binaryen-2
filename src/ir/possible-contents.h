@@ -19,7 +19,7 @@
 
 #include <variant>
 
-#include "ir/possible-constant.h"
+#include "ir/properties.h"
 #include "ir/subtypes.h"
 #include "support/hash.h"
 #include "support/small_vector.h"
@@ -149,6 +149,22 @@ public:
     // Otherwise, this is a concrete MVP type.
     assert(type.isConcrete());
     return exactType(type);
+  }
+
+  // Helper for creating a PossibleContents based on a wasm expression.
+  static PossibleContents fromExpr(Expression* curr, Module& wasm) {
+    if (Properties::isConstantExpression(curr)) {
+      return literal(Properties::getLiteral(curr));
+    }
+
+    if (auto* get = curr->dynCast<GlobalGet>()) {
+      auto* global = wasm.getGlobal(get->name);
+      if (global->mutable_ == Immutable) {
+        return global(get->name, global->type);
+      }
+    }
+
+    return fullConeType(curr->type);
   }
 
   PossibleContents& operator=(const PossibleContents& other) = default;
