@@ -74,6 +74,22 @@
 #include "wasm-type.h"
 #include "wasm.h"
 
+namespace std {
+
+// Hashing vectors is useful.
+template<typename T> struct hash<vector<T>> {
+public:
+  size_t operator()(const vector<T>& vec) const {
+    size_t digest = 0;
+    for (auto& x : vec) {
+      rehash(digest, x);
+    }
+    return digest;
+  }
+};
+
+} // namespace std
+
 namespace wasm {
 
 namespace {
@@ -133,19 +149,19 @@ struct Monomorphize : public Pass {
     auto params = func->getParams();
     // TODO: SmallVector?
     std::vector<Type> refinedTypes;
-    std::vector<PossibleContent> refinedContents;
+    std::vector<PossibleContents> refinedContents;
     bool hasRefinedParam = false;
     for (Index i = 0; i < call->operands.size(); i++) {
       auto* operand = call->operands[i];
 
       refinedTypes.push_back(operand->type);
 
-      contents = PossibleContents::fromExpr(operand);
+      auto contents = PossibleContents::fromExpr(operand, *module);
       // We should have ruled out the trivial cases of none/unreachable before,
       // by ignoring unreachable code. And so the type should simply match the
       // expression.
-      assert(content.getType() != Type::none &&
-             content.getType() != Type::unreachable);
+      assert(contents.getType() != Type::none &&
+             contents.getType() != Type::unreachable);
       assert(contents.getType() == operand->type);
 
       if (contents.isLiteral() || contents.isGlobal() ||
@@ -246,7 +262,7 @@ struct Monomorphize : public Pass {
 
     // Mark the chosen target in the map, so we don't do this work again: every
     // pair of target and refinedParams is only considered once.
-    funcParamMap[{target, refinedParams}] = chosenTarget;
+    funcParamMap[{target, refinedContents}] = chosenTarget;
 
     return chosenTarget;
   }
@@ -282,7 +298,7 @@ struct Monomorphize : public Pass {
   // a function name to itself. That indicates we found no benefit from
   // refining with those particular types, and saves us from computing it again
   // later on.
-  std::unordered_map<std::pair<Name, std::vector<PossibleContent>>, Name>
+  std::unordered_map<std::pair<Name, std::vector<PossibleContents>>, Name>
     funcParamMap;
 };
 
