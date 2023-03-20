@@ -158,9 +158,9 @@ public:
     }
 
     if (auto* get = curr->dynCast<GlobalGet>()) {
-      auto* global = wasm.getGlobal(get->name);
-      if (global->mutable_ == Immutable) {
-        return global(get->name, global->type);
+      auto* glob = wasm.getGlobal(get->name);
+      if (glob->mutable_ == Immutable) {
+        return global(get->name, glob->type);
       }
     }
 
