@@ -148,8 +148,8 @@ struct Monomorphize : public Pass {
              content.getType() != Type::unreachable);
       assert(contents.getType() == operand->type);
 
-      if (contents.isLiteral() || contents.isGlobal() || operand->type !=
-          params[i]) {
+      if (contents.isLiteral() || contents.isGlobal() ||
+          operand->type != params[i]) {
         // This is interesting: either a constant literal or global, or it has
         // a type different than the declared type.
         hasRefinedParam = true;
@@ -177,7 +177,8 @@ struct Monomorphize : public Pass {
     auto refinedTarget = Names::getValidFunctionName(*module, target);
     auto* refinedFunc = ModuleUtils::copyFunction(func, *module, refinedTarget);
     TypeUpdating::updateParamTypes(refinedFunc, refinedTypes, *module);
-    refinedFunc->type = HeapType(Signature(Type(refinedTypes), func->getResults()));
+    refinedFunc->type =
+      HeapType(Signature(Type(refinedTypes), func->getResults()));
 
     // Apply constants at the start of the function, that is, we go from
     //
@@ -281,7 +282,8 @@ struct Monomorphize : public Pass {
   // a function name to itself. That indicates we found no benefit from
   // refining with those particular types, and saves us from computing it again
   // later on.
-  std::unordered_map<std::pair<Name, std::vector<PossibleContent>>, Name> funcParamMap;
+  std::unordered_map<std::pair<Name, std::vector<PossibleContent>>, Name>
+    funcParamMap;
 };
 
 } // anonymous namespace
