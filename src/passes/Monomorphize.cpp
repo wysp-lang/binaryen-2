@@ -102,10 +102,6 @@ struct Monomorphize : public Pass {
   Monomorphize(bool onlyWhenHelpful) : onlyWhenHelpful(onlyWhenHelpful) {}
 
   void run(Module* module) override {
-    if (!module->features.hasGC()) {
-      return;
-    }
-
     // TODO: parallelize, see comments below
 
     // Note the list of all functions. We'll be adding more, and do not want to
@@ -157,6 +153,8 @@ struct Monomorphize : public Pass {
       refinedTypes.push_back(operand->type);
 
       auto contents = PossibleContents::fromExpr(operand, *module);
+      refinedContents.push_back(contents);
+
       // We should have ruled out the trivial cases of none/unreachable before,
       // by ignoring unreachable code. And so the type should simply match the
       // expression.
