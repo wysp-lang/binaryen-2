@@ -215,17 +215,15 @@
 
   ;; ALWAYS:      (type $none_=>_none (func))
 
+  ;; ALWAYS:      (type $ref|$A|_=>_none (func (param (ref $A))))
+
+  ;; ALWAYS:      (type $ref|$B|_=>_none (func (param (ref $B))))
+
   ;; ALWAYS:      (type $C (struct_subtype  $B))
   ;; CAREFUL:      (type $ref|$A|_=>_none (func (param (ref $A))))
 
   ;; CAREFUL:      (type $C (struct_subtype  $B))
   (type $C (struct_subtype $B))
-
-  ;; ALWAYS:      (type $ref|$A|_=>_none (func (param (ref $A))))
-
-  ;; ALWAYS:      (type $ref|$B|_=>_none (func (param (ref $B))))
-
-  ;; ALWAYS:      (type $ref|$C|_=>_none (func (param (ref $C))))
 
   ;; ALWAYS:      (func $calls1 (type $none_=>_none)
   ;; ALWAYS-NEXT:  (call $refinable1
@@ -253,7 +251,7 @@
   )
 
   ;; ALWAYS:      (func $calls2 (type $none_=>_none)
-  ;; ALWAYS-NEXT:  (call $refinable1_1
+  ;; ALWAYS-NEXT:  (call $refinable1_0
   ;; ALWAYS-NEXT:   (struct.new_default $C)
   ;; ALWAYS-NEXT:  )
   ;; ALWAYS-NEXT:  (call $refinable2_0
@@ -307,12 +305,6 @@
 )
 
 ;; ALWAYS:      (func $refinable1_0 (type $ref|$B|_=>_none) (param $ref (ref $B))
-;; ALWAYS-NEXT:  (drop
-;; ALWAYS-NEXT:   (local.get $ref)
-;; ALWAYS-NEXT:  )
-;; ALWAYS-NEXT: )
-
-;; ALWAYS:      (func $refinable1_1 (type $ref|$C|_=>_none) (param $ref (ref $C))
 ;; ALWAYS-NEXT:  (drop
 ;; ALWAYS-NEXT:   (local.get $ref)
 ;; ALWAYS-NEXT:  )
