@@ -248,6 +248,10 @@ struct Monomorphize : public Pass {
       doMinimalOpts(func);
       doMinimalOpts(refinedFunc);
 
+      // TODO: We may want a more strict cost model here. Copying a large
+      //       function just to save, say, a single i32.add is not worth it, but
+      //       turning an indirect call might. So both code size and speedup
+      //       could be considered.
       auto costBefore = CostAnalyzer(func->body).cost;
       auto costAfter = CostAnalyzer(refinedFunc->body).cost;
       if (costAfter >= costBefore) {
