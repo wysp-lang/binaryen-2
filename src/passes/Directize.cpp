@@ -235,7 +235,7 @@ struct ImpossibleCallOptimizer
     auto iter = typeTargets.find(heapType);
     if (iter == typeTargets.end()) {
       iter =
-        typeTargets.insert(heapType, findPossibleFunctions(heapType)).first;
+        typeTargets.emplace(heapType, findPossibleFunctions(heapType)).first;
     }
     auto& targets = iter->second;
 
