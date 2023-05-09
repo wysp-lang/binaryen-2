@@ -300,11 +300,10 @@ struct ImpossibleCallOptimizer
   if (refinalize) {
     ReFinalize().walkFunctionInModule(func, getModule());
   }
-}
 
 private:
-bool refinalize = false;
-}; // namespace
+  bool refinalize = false;
+};
 
 struct Directize : public Pass {
   void run(Module* module) override {
