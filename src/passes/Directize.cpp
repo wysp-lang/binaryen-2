@@ -226,6 +226,7 @@ struct ImpossibleCallOptimizer
   std::unordered_map<HeapType, std::vector<Name>> typeTargets;
 
   void visitCallRef(CallRef* curr) {
+std::cout << "vCR\n";
     auto type = curr->target->type;
     if (!type.isRef()) {
       return;
@@ -238,6 +239,7 @@ struct ImpossibleCallOptimizer
         typeTargets.emplace(heapType, findPossibleFunctions(heapType)).first;
     }
     auto& targets = iter->second;
+std::cout << "  targets " << targets.size() << '\n';
 
     // TODO: further filter using out arguments - if we see a cast will trap,
     //       the target is impossible.
@@ -246,6 +248,7 @@ struct ImpossibleCallOptimizer
 
     if (targets.empty()) {
       // Nothing can be called, so this will trap.
+      // XXX drop drop; share code with above.
       replaceCurrent(getDroppedChildrenAndAppend(
         curr, *getModule(), getPassOptions(), builder.makeUnreachable()));
       refinalize = true;
@@ -395,6 +398,8 @@ struct Directize : public Pass {
   // to be impossible, we can ignore those.
   void optimizeImpossibleCalls(Module* module) {
     // TODO: if no tables and no call_ref, quit early
+
+    // TODO use utility that finds type tree of function types? existing?
 
     auto& options = getPassOptions();
     if (options.trapsNeverHappen && options.closedWorld) {

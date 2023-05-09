@@ -10,65 +10,80 @@
 ;; RUN: foreach %s %t wasm-opt --directize -tnh --closed-world -all -S -o - | filecheck %s --check-prefix=BOTH_
 
 (module
-  ;; CHECK:      (type $t1 (func))
-  ;; TNH__:      (type $t1 (func))
-  ;; CLOSD:      (type $t1 (func))
-  ;; BOTH_:      (type $t1 (func))
-  (type $t1 (func))
+  (rec
+    ;; CHECK:      (rec
+    ;; CHECK-NEXT:  (type $t1 (func))
+    ;; TNH__:      (rec
+    ;; TNH__-NEXT:  (type $t1 (func))
+    ;; CLOSD:      (rec
+    ;; CLOSD-NEXT:  (type $t1 (func))
+    ;; BOTH_:      (rec
+    ;; BOTH_-NEXT:  (type $t1 (func))
+    (type $t1 (func))
 
-  (type $t2 (func))
+    ;; CHECK:       (type $t2 (func))
+    ;; TNH__:       (type $t2 (func))
+    ;; CLOSD:       (type $t2 (func))
+    ;; BOTH_:       (type $t2 (func))
+    (type $t2 (func))
 
-  (type $t3 (func))
+    ;; CHECK:       (type $t3 (func))
+    ;; TNH__:       (type $t3 (func))
+    ;; CLOSD:       (type $t3 (func))
+    ;; BOTH_:       (type $t3 (func))
+    (type $t3 (func))
+  )
 
-  ;; CHECK:      (type $ref|$t1|_ref|$t1|_ref|$t1|_=>_none (func (param (ref $t1) (ref $t1) (ref $t1))))
+  ;; CHECK:      (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none (func (param (ref $t1) (ref $t2) (ref $t3))))
 
-  ;; CHECK:      (func $caller (type $ref|$t1|_ref|$t1|_ref|$t1|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t1)) (param $t3 (ref $t1))
+  ;; CHECK:      (func $caller (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t2)) (param $t3 (ref $t3))
   ;; CHECK-NEXT:  (call_ref $t1
   ;; CHECK-NEXT:   (local.get $t1)
   ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT:  (call_ref $t1
+  ;; CHECK-NEXT:  (call_ref $t2
   ;; CHECK-NEXT:   (local.get $t2)
   ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT:  (call_ref $t1
+  ;; CHECK-NEXT:  (call_ref $t3
   ;; CHECK-NEXT:   (local.get $t3)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  ;; TNH__:      (type $ref|$t1|_ref|$t1|_ref|$t1|_=>_none (func (param (ref $t1) (ref $t1) (ref $t1))))
+  ;; TNH__:      (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none (func (param (ref $t1) (ref $t2) (ref $t3))))
 
-  ;; TNH__:      (func $caller (type $ref|$t1|_ref|$t1|_ref|$t1|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t1)) (param $t3 (ref $t1))
+  ;; TNH__:      (func $caller (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t2)) (param $t3 (ref $t3))
   ;; TNH__-NEXT:  (call_ref $t1
   ;; TNH__-NEXT:   (local.get $t1)
   ;; TNH__-NEXT:  )
-  ;; TNH__-NEXT:  (call_ref $t1
+  ;; TNH__-NEXT:  (call_ref $t2
   ;; TNH__-NEXT:   (local.get $t2)
   ;; TNH__-NEXT:  )
-  ;; TNH__-NEXT:  (call_ref $t1
+  ;; TNH__-NEXT:  (call_ref $t3
   ;; TNH__-NEXT:   (local.get $t3)
   ;; TNH__-NEXT:  )
   ;; TNH__-NEXT: )
-  ;; CLOSD:      (type $ref|$t1|_ref|$t1|_ref|$t1|_=>_none (func (param (ref $t1) (ref $t1) (ref $t1))))
+  ;; CLOSD:      (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none (func (param (ref $t1) (ref $t2) (ref $t3))))
 
-  ;; CLOSD:      (func $caller (type $ref|$t1|_ref|$t1|_ref|$t1|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t1)) (param $t3 (ref $t1))
+  ;; CLOSD:      (func $caller (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t2)) (param $t3 (ref $t3))
   ;; CLOSD-NEXT:  (call_ref $t1
   ;; CLOSD-NEXT:   (local.get $t1)
   ;; CLOSD-NEXT:  )
-  ;; CLOSD-NEXT:  (call_ref $t1
+  ;; CLOSD-NEXT:  (call_ref $t2
   ;; CLOSD-NEXT:   (local.get $t2)
   ;; CLOSD-NEXT:  )
-  ;; CLOSD-NEXT:  (call_ref $t1
+  ;; CLOSD-NEXT:  (call_ref $t3
   ;; CLOSD-NEXT:   (local.get $t3)
   ;; CLOSD-NEXT:  )
   ;; CLOSD-NEXT: )
-  ;; BOTH_:      (type $ref|$t1|_ref|$t1|_ref|$t1|_=>_none (func (param (ref $t1) (ref $t1) (ref $t1))))
+  ;; BOTH_:      (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none (func (param (ref $t1) (ref $t2) (ref $t3))))
 
-  ;; BOTH_:      (func $caller (type $ref|$t1|_ref|$t1|_ref|$t1|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t1)) (param $t3 (ref $t1))
-  ;; BOTH_-NEXT:  (call_ref $t1
-  ;; BOTH_-NEXT:   (local.get $t1)
+  ;; BOTH_:      (func $caller (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t2)) (param $t3 (ref $t3))
+  ;; BOTH_-NEXT:  (block
+  ;; BOTH_-NEXT:   (call_ref $t1
+  ;; BOTH_-NEXT:    (local.get $t1)
+  ;; BOTH_-NEXT:   )
+  ;; BOTH_-NEXT:   (unreachable)
   ;; BOTH_-NEXT:  )
-  ;; BOTH_-NEXT:  (call_ref $t1
-  ;; BOTH_-NEXT:   (local.get $t2)
-  ;; BOTH_-NEXT:  )
-  ;; BOTH_-NEXT:  (call_ref $t1
+  ;; BOTH_-NEXT:  (call $t2-0)
+  ;; BOTH_-NEXT:  (call_ref $t3
   ;; BOTH_-NEXT:   (local.get $t3)
   ;; BOTH_-NEXT:  )
   ;; BOTH_-NEXT: )
@@ -103,22 +118,22 @@
     (unreachable)
   )
 
-  ;; CHECK:      (func $t2-0 (type $t1)
+  ;; CHECK:      (func $t2-0 (type $t2)
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (i32.const 0)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  ;; TNH__:      (func $t2-0 (type $t1)
+  ;; TNH__:      (func $t2-0 (type $t2)
   ;; TNH__-NEXT:  (drop
   ;; TNH__-NEXT:   (i32.const 0)
   ;; TNH__-NEXT:  )
   ;; TNH__-NEXT: )
-  ;; CLOSD:      (func $t2-0 (type $t1)
+  ;; CLOSD:      (func $t2-0 (type $t2)
   ;; CLOSD-NEXT:  (drop
   ;; CLOSD-NEXT:   (i32.const 0)
   ;; CLOSD-NEXT:  )
   ;; CLOSD-NEXT: )
-  ;; BOTH_:      (func $t2-0 (type $t1)
+  ;; BOTH_:      (func $t2-0 (type $t2)
   ;; BOTH_-NEXT:  (drop
   ;; BOTH_-NEXT:   (i32.const 0)
   ;; BOTH_-NEXT:  )
@@ -129,22 +144,22 @@
     )
   )
 
-  ;; CHECK:      (func $t3-0 (type $t1)
+  ;; CHECK:      (func $t3-0 (type $t3)
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (i32.const 0)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  ;; TNH__:      (func $t3-0 (type $t1)
+  ;; TNH__:      (func $t3-0 (type $t3)
   ;; TNH__-NEXT:  (drop
   ;; TNH__-NEXT:   (i32.const 0)
   ;; TNH__-NEXT:  )
   ;; TNH__-NEXT: )
-  ;; CLOSD:      (func $t3-0 (type $t1)
+  ;; CLOSD:      (func $t3-0 (type $t3)
   ;; CLOSD-NEXT:  (drop
   ;; CLOSD-NEXT:   (i32.const 0)
   ;; CLOSD-NEXT:  )
   ;; CLOSD-NEXT: )
-  ;; BOTH_:      (func $t3-0 (type $t1)
+  ;; BOTH_:      (func $t3-0 (type $t3)
   ;; BOTH_-NEXT:  (drop
   ;; BOTH_-NEXT:   (i32.const 0)
   ;; BOTH_-NEXT:  )
@@ -155,22 +170,22 @@
     )
   )
 
-  ;; CHECK:      (func $t3-1 (type $t1)
+  ;; CHECK:      (func $t3-1 (type $t3)
   ;; CHECK-NEXT:  (drop
   ;; CHECK-NEXT:   (i32.const 1)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  ;; TNH__:      (func $t3-1 (type $t1)
+  ;; TNH__:      (func $t3-1 (type $t3)
   ;; TNH__-NEXT:  (drop
   ;; TNH__-NEXT:   (i32.const 1)
   ;; TNH__-NEXT:  )
   ;; TNH__-NEXT: )
-  ;; CLOSD:      (func $t3-1 (type $t1)
+  ;; CLOSD:      (func $t3-1 (type $t3)
   ;; CLOSD-NEXT:  (drop
   ;; CLOSD-NEXT:   (i32.const 1)
   ;; CLOSD-NEXT:  )
   ;; CLOSD-NEXT: )
-  ;; BOTH_:      (func $t3-1 (type $t1)
+  ;; BOTH_:      (func $t3-1 (type $t3)
   ;; BOTH_-NEXT:  (drop
   ;; BOTH_-NEXT:   (i32.const 1)
   ;; BOTH_-NEXT:  )
