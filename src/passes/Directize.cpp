@@ -293,7 +293,6 @@ struct ImpossibleCallOptimizer
       }
     }
   */
-}
 
   void doWalkFunction(Function* func) {
   WalkerPass<PostWalker<ImpossibleCallOptimizer>>::doWalkFunction(func);
