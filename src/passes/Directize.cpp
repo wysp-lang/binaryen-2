@@ -33,6 +33,7 @@
 #include <unordered_map>
 
 #include "call-utils.h"
+#include "ir/drop.h"
 #include "ir/table-utils.h"
 #include "ir/utils.h"
 #include "pass.h"
@@ -244,7 +245,7 @@ struct ImpossibleCallOptimizer
 
     if (targets.empty()) {
       // Nothing can be called, so this will trap.
-      replaceCurrent(getDroppedChildrenAndAppend(curr, *getModule(), getPassOptions(), builder.makeUnreachable());
+      replaceCurrent(getDroppedChildrenAndAppend(curr, *getModule(), getPassOptions(), builder.makeUnreachable()));
       refinalize = true;
       return;
     }
