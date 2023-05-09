@@ -238,6 +238,9 @@ struct ImpossibleCallOptimizer : public WalkerPass<PostWalker<ImpossibleCallOpti
 
     // TODO: further filter using out arguments - if we see a cast will trap,
     //       the target is impossible.
+
+    Builder builder(*getModule());
+
     if (targets.empty()) {
       // Nothing can be called, so this will trap.
       replaceCurrent(getDroppedChildrenAndAppend(curr, *getModule(), getPassOptions(), builder.makeUnreachable());
@@ -245,11 +248,12 @@ struct ImpossibleCallOptimizer : public WalkerPass<PostWalker<ImpossibleCallOpti
       return;
     }
 
-    // We can optimize!
-    Builder builder(*getModule());
-    replaceCurrent(
-      builder
-        .makeCall(*target, curr->operands, curr->type, curr->isReturn));
+    if (targets.size() == 1) {
+      // We can optimize to a direct call.
+      replaceCurrent(
+        builder
+          .makeCall(targets[0], curr->operands, curr->type, curr->isReturn));
+    }
   }
 
   // TODO: call_indirect too
@@ -299,7 +303,7 @@ struct ImpossibleCallOptimizer : public WalkerPass<PostWalker<ImpossibleCallOpti
   }
 
 private:
-  bool changedTypes = false;
+  bool refinalize = false;
 };
 
 struct Directize : public Pass {
