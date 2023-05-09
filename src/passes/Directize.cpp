@@ -214,17 +214,14 @@ struct ImpossibleCallOptimizer : public WalkerPass<PostWalker<ImpossibleCallOpti
     return std::make_unique<ImpossibleCallOptimizer>();
   }
 
-  // A map of function types to the single target we inferred that they must
-  // call. If a type is not in this map then we have not yet computed that
-  // type; if a type is in the map and the optional is empty, then we cannot
-  // infer a single function target; otherwise, the name is the function that
-  // must be called.
+  // A map of function types to the functions that can be called. If a type is
+  // not in this map then we have not yet computed that type.
   //
   // * We build this lazily to avoid unnecessary computation.
   // * Note that we can use a heap type here, as nullability does not matter
   //   (a null would trap anyhow, and we are assuming trapsNeverHappen).
   //
-  std::unordered_map<HeapType, std::optional<Name>> typeTargets;
+  std::unordered_map<HeapType, std::vector<Name>> typeTargets;
 
   void visitCallRef(CallRef* curr) {
     auto type = curr->ref->type;
@@ -233,15 +230,18 @@ struct ImpossibleCallOptimizer : public WalkerPass<PostWalker<ImpossibleCallOpti
     }
     auto heapType = type.getHeapType();
 
-    std::optional<Name> target;
     auto iter = typeTargets.find(heapType);
-    if (iter != typeTargets.end()) {
-      target = iter->second;
-    } else {
-      iter->second = target = computeTarget(heapType);
+    if (iter == typeTargets.end()) {
+      iter = typeTargets.insert(heapType, findPossibleFunctions(heapType));
     }
+    auto& targets = iter->second;
 
-    if (!target) {
+    // TODO: further filter using out arguments - if we see a cast will trap,
+    //       the target is impossible.
+    if (targets.empty()) {
+      // Nothing can be called, so this will trap.
+      replaceCurrent(getDroppedChildrenAndAppend(curr, *getModule(), getPassOptions(), builder.makeUnreachable());
+      refinalize = true;
       return;
     }
 
@@ -254,24 +254,28 @@ struct ImpossibleCallOptimizer : public WalkerPass<PostWalker<ImpossibleCallOpti
 
   // TODO: call_indirect too
 
-  // Given a function type, compute the single function that must be called, if
-  // we can do so.
-  std::optional<Name> computeTarget(HeapType type) {
-    std::vector<Function*> possible;
+  // Given a function type, find all possible targets of that type, filtering
+  // out ones we can prove are impossible.
+  std::vector<Name> findPossibleFunctions(HeapType type) {
+    std::vector<Function*> ret;
     for (auto& func : getModule()->functions) {
-      if (HeapType::isSubType(func->type, type)) {
-        possible.push_back(func.get());
+      // Filter out functions with an incompatible type.
+      if (!HeapType::isSubType(func->type, type)) {
+        continue;
       }
+
+      // If the function body definitely traps then it cannot be called. Note
+      // that Vacuum will turn a function body into a single unreachable when it
+      // can, so this is enough for us to look for - we don't need to look any
+      // further.
+      if (func->body->is<Unreachable>()) {
+        continue;
+      }
+
+      ret.push_back(func.get());
     }
 
-    // Scan first block for unreachable, or for a cast that we can prove
-    // traps using the types of the arguments. So we need the oerands...
-
-    if (possible.size() == 1) {
-      return possible[0]->name;
-    }
-
-    return {};
+    return ret;
   }
 /*
   void walk(Expression*& root) {
@@ -287,9 +291,16 @@ struct ImpossibleCallOptimizer : public WalkerPass<PostWalker<ImpossibleCallOpti
 */
   }
 
+  void doWalkFunction(Function* func) {
+    WalkerPass<PostWalker<ImpossibleCallOptimizer>>::doWalkFunction(func);
+    if (refinalize) {
+      ReFinalize().walkFunctionInModule(func, getModule());
+    }
+  }
 
-
-
+private:
+  bool changedTypes = false;
+};
 
 struct Directize : public Pass {
   void run(Module* module) override {
