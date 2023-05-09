@@ -207,7 +207,8 @@ private:
 // assume a closed world here, or there could be other functions of that type
 // which could be called, so this will only be done when trapsNeverHappen +
 // closedWorld.
-struct ImpossibleCallOptimizer : public WalkerPass<PostWalker<ImpossibleCallOptimizer>> {
+struct ImpossibleCallOptimizer
+  : public WalkerPass<PostWalker<ImpossibleCallOptimizer>> {
   bool isFunctionParallel() override { return true; }
 
   std::unique_ptr<Pass> create() override {
@@ -250,9 +251,8 @@ struct ImpossibleCallOptimizer : public WalkerPass<PostWalker<ImpossibleCallOpti
 
     if (targets.size() == 1) {
       // We can optimize to a direct call.
-      replaceCurrent(
-        builder
-          .makeCall(targets[0], curr->operands, curr->type, curr->isReturn));
+      replaceCurrent(builder.makeCall(
+        targets[0], curr->operands, curr->type, curr->isReturn));
     }
   }
 
@@ -281,30 +281,30 @@ struct ImpossibleCallOptimizer : public WalkerPass<PostWalker<ImpossibleCallOpti
 
     return ret;
   }
-/*
-  void walk(Expression*& root) {
-    assert(stack.size() == 0);
-    pushTask(SubType::scan, &root);
-    while (stack.size() > 0) {
-      auto task = popTask();
-      replacep = task.currp;
-      assert(*task.currp);
-      task.func(static_cast<SubType*>(this), task.currp);
+  /*
+    void walk(Expression*& root) {
+      assert(stack.size() == 0);
+      pushTask(SubType::scan, &root);
+      while (stack.size() > 0) {
+        auto task = popTask();
+        replacep = task.currp;
+        assert(*task.currp);
+        task.func(static_cast<SubType*>(this), task.currp);
+      }
     }
-  }
-*/
-  }
+  */
+}
 
   void doWalkFunction(Function* func) {
-    WalkerPass<PostWalker<ImpossibleCallOptimizer>>::doWalkFunction(func);
-    if (refinalize) {
-      ReFinalize().walkFunctionInModule(func, getModule());
-    }
+  WalkerPass<PostWalker<ImpossibleCallOptimizer>>::doWalkFunction(func);
+  if (refinalize) {
+    ReFinalize().walkFunctionInModule(func, getModule());
   }
+}
 
 private:
-  bool refinalize = false;
-};
+bool refinalize = false;
+}; // namespace
 
 struct Directize : public Pass {
   void run(Module* module) override {
