@@ -394,6 +394,8 @@ struct Directize : public Pass {
   // When multiple indirect call targets are possible, but some can be inferred
   // to be impossible, we can ignore those.
   void optimizeImpossibleCalls(Module* module) {
+    // TODO: if no tables and no call_ref, quit early
+
     auto& options = getPassOptions();
     if (options.trapsNeverHappen && options.closedWorld) {
       ImpossibleCallOptimizer().run(getPassRunner(), module);
