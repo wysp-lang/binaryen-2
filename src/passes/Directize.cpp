@@ -234,7 +234,8 @@ struct ImpossibleCallOptimizer
 
     auto iter = typeTargets.find(heapType);
     if (iter == typeTargets.end()) {
-      iter = typeTargets.insert(heapType, findPossibleFunctions(heapType)).first;
+      iter =
+        typeTargets.insert(heapType, findPossibleFunctions(heapType)).first;
     }
     auto& targets = iter->second;
 
@@ -245,7 +246,8 @@ struct ImpossibleCallOptimizer
 
     if (targets.empty()) {
       // Nothing can be called, so this will trap.
-      replaceCurrent(getDroppedChildrenAndAppend(curr, *getModule(), getPassOptions(), builder.makeUnreachable()));
+      replaceCurrent(getDroppedChildrenAndAppend(
+        curr, *getModule(), getPassOptions(), builder.makeUnreachable()));
       refinalize = true;
       return;
     }
