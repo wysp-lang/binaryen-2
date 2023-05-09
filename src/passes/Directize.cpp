@@ -225,7 +225,7 @@ struct ImpossibleCallOptimizer
   std::unordered_map<HeapType, std::vector<Name>> typeTargets;
 
   void visitCallRef(CallRef* curr) {
-    auto type = curr->ref->type;
+    auto type = curr->target->type;
     if (!type.isRef()) {
       return;
     }
@@ -261,7 +261,7 @@ struct ImpossibleCallOptimizer
   // Given a function type, find all possible targets of that type, filtering
   // out ones we can prove are impossible.
   std::vector<Name> findPossibleFunctions(HeapType type) {
-    std::vector<Function*> ret;
+    std::vector<Name> ret;
     for (auto& func : getModule()->functions) {
       // Filter out functions with an incompatible type.
       if (!HeapType::isSubType(func->type, type)) {
@@ -276,7 +276,7 @@ struct ImpossibleCallOptimizer
         continue;
       }
 
-      ret.push_back(func.get());
+      ret.push_back(func->name);
     }
 
     return ret;
@@ -392,7 +392,7 @@ struct Directize : public Pass {
   void optimizeImpossibleCalls(Module* module) {
     auto& options = getPassOptions();
     if (options.trapsNeverHappen && options.closedWorld) {
-      ImpossibleCallOptimizer(tables).run(getPassRunner(), module);
+      ImpossibleCallOptimizer().run(getPassRunner(), module);
     }
   }
 };
