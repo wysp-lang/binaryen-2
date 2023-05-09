@@ -66,14 +66,14 @@ struct TableInfo {
 
 using TableInfoMap = std::unordered_map<Name, TableInfo>;
 
-struct FunctionDirectizer : public WalkerPass<PostWalker<FunctionDirectizer>> {
+struct TableCallOptimizer : public WalkerPass<PostWalker<TableCallOptimizer>> {
   bool isFunctionParallel() override { return true; }
 
   std::unique_ptr<Pass> create() override {
-    return std::make_unique<FunctionDirectizer>(tables);
+    return std::make_unique<TableCallOptimizer>(tables);
   }
 
-  FunctionDirectizer(const TableInfoMap& tables) : tables(tables) {}
+  TableCallOptimizer(const TableInfoMap& tables) : tables(tables) {}
 
   void visitCallIndirect(CallIndirect* curr) {
     auto& table = tables.at(curr->table);
@@ -105,7 +105,7 @@ struct FunctionDirectizer : public WalkerPass<PostWalker<FunctionDirectizer>> {
   }
 
   void doWalkFunction(Function* func) {
-    WalkerPass<PostWalker<FunctionDirectizer>>::doWalkFunction(func);
+    WalkerPass<PostWalker<TableCallOptimizer>>::doWalkFunction(func);
     if (changedTypes) {
       ReFinalize().walkFunctionInModule(func, getModule());
     }
@@ -200,8 +200,105 @@ private:
   }
 };
 
+// When we assume traps never happen we can dismiss all indirect call targets
+// that will trap. That is, if we see a call that might go to any of {A, B, C},
+// and we have enough information to prove that if we reached A or C then we
+// would trap, then we can infer that B must be called. Of course, we must
+// assume a closed world here, or there could be other functions of that type
+// which could be called, so this will only be done when trapsNeverHappen +
+// closedWorld.
+struct ImpossibleCallOptimizer : public WalkerPass<PostWalker<ImpossibleCallOptimizer>> {
+  bool isFunctionParallel() override { return true; }
+
+  std::unique_ptr<Pass> create() override {
+    return std::make_unique<ImpossibleCallOptimizer>();
+  }
+
+  // A map of function types to the single target we inferred that they must
+  // call. If a type is not in this map then we have not yet computed that
+  // type; if a type is in the map and the optional is empty, then we cannot
+  // infer a single function target; otherwise, the name is the function that
+  // must be called.
+  //
+  // * We build this lazily to avoid unnecessary computation.
+  // * Note that we can use a heap type here, as nullability does not matter
+  //   (a null would trap anyhow, and we are assuming trapsNeverHappen).
+  //
+  std::unordered_map<HeapType, std::optional<Name>> typeTargets;
+
+  void visitCallRef(CallRef* curr) {
+    auto type = curr->ref->type;
+    if (!type.isRef()) {
+      return;
+    }
+    auto heapType = type.getHeapType();
+
+    std::optional<Name> target;
+    auto iter = typeTargets.find(heapType);
+    if (iter != typeTargets.end()) {
+      target = iter->second;
+    } else {
+      iter->second = target = computeTarget(heapType);
+    }
+
+    if (!target) {
+      return;
+    }
+
+    // We can optimize!
+    Builder builder(*getModule());
+    replaceCurrent(
+      builder
+        .makeCall(*target, curr->operands, curr->type, curr->isReturn));
+  }
+
+  // TODO: call_indirect too
+
+  // Given a function type, compute the single function that must be called, if
+  // we can do so.
+  std::optional<Name> computeTarget(HeapType type) {
+    std::vector<Function*> possible;
+    for (auto& func : getModule()->functions) {
+      if (HeapType::isSubType(func->type, type)) {
+        possible.push_back(func.get());
+      }
+    }
+
+    // Scan first block for unreachable, or for a cast that we can prove
+    // traps using the types of the arguments. So we need the oerands...
+
+    if (possible.size() == 1) {
+      return possible[0]->name;
+    }
+
+    return {};
+  }
+/*
+  void walk(Expression*& root) {
+    assert(stack.size() == 0);
+    pushTask(SubType::scan, &root);
+    while (stack.size() > 0) {
+      auto task = popTask();
+      replacep = task.currp;
+      assert(*task.currp);
+      task.func(static_cast<SubType*>(this), task.currp);
+    }
+  }
+*/
+  }
+
+
+
+
+
 struct Directize : public Pass {
   void run(Module* module) override {
+    optimizeTableCalls(module);
+    optimizeImpossibleCalls(module);
+  }
+
+  // Optimize CallIndirects using information about tables.
+  void optimizeTableCalls(Module* module) {
     if (module->tables.empty()) {
       return;
     }
@@ -274,7 +371,16 @@ struct Directize : public Pass {
     }
 
     // We can optimize!
-    FunctionDirectizer(tables).run(getPassRunner(), module);
+    TableCallOptimizer(tables).run(getPassRunner(), module);
+  }
+
+  // When multiple indirect call targets are possible, but some can be inferred
+  // to be impossible, we can ignore those.
+  void optimizeImpossibleCalls(Module* module) {
+    auto& options = getPassOptions();
+    if (options.trapsNeverHappen && options.closedWorld) {
+      ImpossibleCallOptimizer(tables).run(getPassRunner(), module);
+    }
   }
 };
 
