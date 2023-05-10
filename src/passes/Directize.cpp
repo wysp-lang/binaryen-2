@@ -252,7 +252,14 @@ struct PossibleCallOptimizer
         targets[0], curr->operands, curr->type, curr->isReturn));
     }
 
-    // TODO: with 2 targets we can do an if, like with TableCall Optimizer above
+    // We would like to optimize the case of targets.size() == 2 as well, to an
+    // if between two calls. However, function references cannot be compared, so
+    // we don't have a way to check which of the two functions to call, even
+    // though we know it must be one of the two.
+    // TODO: Perhaps one thing we can do here is have an option to convert
+    //       call_refs into call_indirects with separate tables. Then the table
+    //       here could be of size targets.size(), and turn into an if when
+    //       size() is 2, etc.
   }
 
   // TODO: call_indirect too
