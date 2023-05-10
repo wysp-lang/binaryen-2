@@ -67,7 +67,7 @@ struct TableInfo {
 
 struct TableInfoMap : public std::unordered_map<Name, TableInfo> {
   // We can optimize something if at least one table allows it.
-  bool canOptimize() {
+  bool canOptimize() const {
     for (auto& [_, info] : *this) {
       if (info.canOptimize()) {
         return true;
