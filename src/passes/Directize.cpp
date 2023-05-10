@@ -302,17 +302,17 @@ struct PossibleCallOptimizer
 
   // Given a function type, find all possible targets of that type.
   std::vector<Name> findFunctionsOfType(HeapType type) {
-    std::vector<Name> ret;
+    std::vector<Name> targets;
 
     for (auto& func : getModule()->functions) {
       if (HeapType::isSubType(func->type, type)) {
-        ret.push_back(func->name);
+        targets.push_back(func->name);
       }
     }
 
     filterImpossibleFunctions(targets);
 
-    return ret;
+    return targets;
   }
 
   // Filter out functions that cannot be a call target, from a list of possible
@@ -447,7 +447,7 @@ struct Directize : public Pass {
       return;
     }
 
-    PossibleCallOptimizer().run(getPassRunner(), module);
+    PossibleCallOptimizer(tables).run(getPassRunner(), module);
   }
 };
 
