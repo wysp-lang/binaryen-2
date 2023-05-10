@@ -226,8 +226,7 @@ struct PossibleCallOptimizer
   std::unordered_map<HeapType, std::vector<Name>> typeTargets;
 
   // Optimize a call given the set of targets it might reach.
-  template<typename T>
-  void optimizeCall(T* curr, std::vector<Name>& targets) {
+  template<typename T> void optimizeCall(T* curr, std::vector<Name>& targets) {
     // TODO: further filter using out arguments - if we see a cast will trap,
     //       the target is impossible in TNH
 
@@ -262,12 +261,10 @@ struct PossibleCallOptimizer
   }
 
   // Optimize a call given the type of the targets.
-  template<typename T>
-  void optimizeCall(T* curr, HeapType type) {
+  template<typename T> void optimizeCall(T* curr, HeapType type) {
     auto iter = typeTargets.find(type);
     if (iter == typeTargets.end()) {
-      iter =
-        typeTargets.emplace(type, findFunctionsOfType(type)).first;
+      iter = typeTargets.emplace(type, findFunctionsOfType(type)).first;
     }
     auto& targets = iter->second;
 
@@ -324,16 +321,20 @@ struct PossibleCallOptimizer
       return;
     }
 
-    targets.erase(std::remove_if(targets.begin(), 
+    targets.erase(std::remove_if(targets.begin(),
                                  targets.end(),
                                  [&](Name name) {
-      // If the function body definitely traps then it can be assumed not to be
-      // called in traps-never-happen mode. (Note that checking for the entire
-      // body being unreachable is enough, as Vacuum will optimize into that
-      // form.)
-      auto* func = getModule()->getFunction(name);
-      return !func->imported() && func->body->is<Unreachable>();
-                                 }), targets.end());
+                                   // If the function body definitely traps then
+                                   // it can be assumed not to be called in
+                                   // traps-never-happen mode. (Note that
+                                   // checking for the entire body being
+                                   // unreachable is enough, as Vacuum will
+                                   // optimize into that form.)
+                                   auto* func = getModule()->getFunction(name);
+                                   return !func->imported() &&
+                                          func->body->is<Unreachable>();
+                                 }),
+                  targets.end());
   }
 
   void doWalkFunction(Function* func) {
