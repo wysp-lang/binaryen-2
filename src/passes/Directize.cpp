@@ -234,8 +234,10 @@ struct PossibleCallOptimizer
 
     Builder builder(*getModule());
 
-    if (targets.empty()) {
-      // Nothing can be called, so this will trap; we don't need the call.
+    // Check if nothing can be called, or if there is a single target that is
+    // just a null name (from an empty table slot) - either way, this will trap.
+    if (targets.empty() || (targets.size() == 1 && !targets[0].is())) {
+      // Replace the call with its children (if we need them) + a trap.
       replaceCurrent(
         getDroppedChildrenAndAppend(curr,
                                     *getModule(),
@@ -328,10 +330,15 @@ struct PossibleCallOptimizer
                                  [&](Name name) {
                                    // If the function body definitely traps then
                                    // it can be assumed not to be called in
-                                   // traps-never-happen mode. (Note that
-                                   // checking for the entire body being
-                                   // unreachable is enough, as Vacuum will
-                                   // optimize into that form.)
+                                   // traps-never-happen mode.
+                                   if (!name.is()) {
+                                     // An empty name means a null in a table,
+                                     // which would traps, so erase it.
+                                     return true;
+                                   }
+                                   // Otherwise, check if the target function is
+                                   // just an unreachable (that check is enough,
+                                   // as Vacuum will optimize into that form.)
                                    auto* func = getModule()->getFunction(name);
                                    return !func->imported() &&
                                           func->body->is<Unreachable>();

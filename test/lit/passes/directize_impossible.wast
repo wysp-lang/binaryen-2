@@ -468,19 +468,63 @@
   ;; BOTH_:      (type $t1 (func))
   (type $t1 (func))
 
+  ;; CHECK:      (type $i32_ref|$t1|_=>_none (func (param i32 (ref $t1))))
+
+  ;; CHECK:      (import "a" "b" (func $t1-0))
+
+  ;; CHECK:      (table $one 0 funcref)
+  ;; TNH__:      (type $i32_ref|$t1|_=>_none (func (param i32 (ref $t1))))
+
+  ;; TNH__:      (import "a" "b" (func $t1-0))
+
+  ;; TNH__:      (table $one 0 funcref)
+  ;; CLOSD:      (type $i32_ref|$t1|_=>_none (func (param i32 (ref $t1))))
+
+  ;; CLOSD:      (import "a" "b" (func $t1-0))
+
+  ;; CLOSD:      (table $one 0 funcref)
+  ;; BOTH_:      (type $i32_ref|$t1|_=>_none (func (param i32 (ref $t1))))
+
+  ;; BOTH_:      (import "a" "b" (func $t1-0))
+
+  ;; BOTH_:      (table $one 0 funcref)
   (table $one funcref 10)
+  ;; CHECK:      (table $two 0 funcref)
+
+  ;; CHECK:      (table $three 0 funcref)
+
+  ;; CHECK:      (elem $one (table $one) (i32.const 1) func $t1-0)
+  ;; TNH__:      (table $two 0 funcref)
+
+  ;; TNH__:      (table $three 0 funcref)
+
+  ;; TNH__:      (elem $one (table $one) (i32.const 1) func $t1-0)
+  ;; CLOSD:      (table $two 0 funcref)
+
+  ;; CLOSD:      (table $three 0 funcref)
+
+  ;; CLOSD:      (elem $one (table $one) (i32.const 1) func $t1-0)
+  ;; BOTH_:      (table $two 0 funcref)
+
+  ;; BOTH_:      (table $three 0 funcref)
+
+  ;; BOTH_:      (elem $one (table $one) (i32.const 1) func $t1-0)
   (elem $one (i32.const 1) $t1-0)
 
   (table $two funcref 20)
+  ;; CHECK:      (elem $two (table $one) (i32.const 2) func $t1-0 $t1-1)
+  ;; TNH__:      (elem $two (table $one) (i32.const 2) func $t1-0 $t1-1)
+  ;; CLOSD:      (elem $two (table $one) (i32.const 2) func $t1-0 $t1-1)
+  ;; BOTH_:      (elem $two (table $one) (i32.const 2) func $t1-0 $t1-1)
   (elem $two (i32.const 2) $t1-0 $t1-1)
 
   (table $three funcref 30)
+  ;; CHECK:      (elem $three (table $one) (i32.const 3) func $t1-0 $t1-1 $t1-2)
+  ;; TNH__:      (elem $three (table $one) (i32.const 3) func $t1-0 $t1-1 $t1-2)
+  ;; CLOSD:      (elem $three (table $one) (i32.const 3) func $t1-0 $t1-1 $t1-2)
+  ;; BOTH_:      (elem $three (table $one) (i32.const 3) func $t1-0 $t1-1 $t1-2)
   (elem $three (i32.const 3) $t1-0 $t1-1 $t1-2)
 
-  ;; CHECK:      (import "a" "b" (func $t1-0))
-  ;; TNH__:      (import "a" "b" (func $t1-0))
-  ;; CLOSD:      (import "a" "b" (func $t1-0))
-  ;; BOTH_:      (import "a" "b" (func $t1-0))
   (import "a" "b" (func $t1-0 (type $t1)))
 
   ;; CHECK:      (func $t1-1 (type $t1)
@@ -499,27 +543,69 @@
     (unreachable)
   )
 
+  ;; CHECK:      (func $t1-2 (type $t1)
+  ;; CHECK-NEXT:  (nop)
+  ;; CHECK-NEXT: )
+  ;; TNH__:      (func $t1-2 (type $t1)
+  ;; TNH__-NEXT:  (nop)
+  ;; TNH__-NEXT: )
+  ;; CLOSD:      (func $t1-2 (type $t1)
+  ;; CLOSD-NEXT:  (nop)
+  ;; CLOSD-NEXT: )
+  ;; BOTH_:      (func $t1-2 (type $t1)
+  ;; BOTH_-NEXT:  (nop)
+  ;; BOTH_-NEXT: )
   (func $t1-2 (type $t1)
     (nop)
   )
 
-  ;; CHECK:      (func $caller (type $i32_=>_none) (param $x i32)
-  ;; CHECK-NEXT:  (call_indirect $table (type $t1)
+  ;; CHECK:      (func $caller (type $i32_ref|$t1|_=>_none) (param $x i32) (param $t1 (ref $t1))
+  ;; CHECK-NEXT:  (call_indirect $one (type $t1)
   ;; CHECK-NEXT:   (local.get $x)
   ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (call_indirect $two (type $t1)
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (call_indirect $two (type $t1)
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (call_ref $t1
+  ;; CHECK-NEXT:   (local.get $t1)
+  ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  ;; TNH__:      (func $caller (type $i32_=>_none) (param $x i32)
-  ;; TNH__-NEXT:  (call_indirect $table (type $t1)
+  ;; TNH__:      (func $caller (type $i32_ref|$t1|_=>_none) (param $x i32) (param $t1 (ref $t1))
+  ;; TNH__-NEXT:  (call_indirect $one (type $t1)
   ;; TNH__-NEXT:   (local.get $x)
   ;; TNH__-NEXT:  )
+  ;; TNH__-NEXT:  (call_indirect $two (type $t1)
+  ;; TNH__-NEXT:   (local.get $x)
+  ;; TNH__-NEXT:  )
+  ;; TNH__-NEXT:  (call_indirect $two (type $t1)
+  ;; TNH__-NEXT:   (local.get $x)
+  ;; TNH__-NEXT:  )
+  ;; TNH__-NEXT:  (call_ref $t1
+  ;; TNH__-NEXT:   (local.get $t1)
+  ;; TNH__-NEXT:  )
   ;; TNH__-NEXT: )
-  ;; CLOSD:      (func $caller (type $i32_=>_none) (param $x i32)
-  ;; CLOSD-NEXT:  (call_indirect $table (type $t1)
+  ;; CLOSD:      (func $caller (type $i32_ref|$t1|_=>_none) (param $x i32) (param $t1 (ref $t1))
+  ;; CLOSD-NEXT:  (call_indirect $one (type $t1)
   ;; CLOSD-NEXT:   (local.get $x)
   ;; CLOSD-NEXT:  )
+  ;; CLOSD-NEXT:  (unreachable)
+  ;; CLOSD-NEXT:  (unreachable)
+  ;; CLOSD-NEXT:  (call_ref $t1
+  ;; CLOSD-NEXT:   (local.get $t1)
+  ;; CLOSD-NEXT:  )
   ;; CLOSD-NEXT: )
-  ;; BOTH_:      (func $caller (type $i32_=>_none) (param $x i32)
-  ;; BOTH_-NEXT:  (call $t1-0)
+  ;; BOTH_:      (func $caller (type $i32_ref|$t1|_=>_none) (param $x i32) (param $t1 (ref $t1))
+  ;; BOTH_-NEXT:  (call_indirect $one (type $t1)
+  ;; BOTH_-NEXT:   (local.get $x)
+  ;; BOTH_-NEXT:  )
+  ;; BOTH_-NEXT:  (unreachable)
+  ;; BOTH_-NEXT:  (unreachable)
+  ;; BOTH_-NEXT:  (call_ref $t1
+  ;; BOTH_-NEXT:   (local.get $t1)
+  ;; BOTH_-NEXT:  )
   ;; BOTH_-NEXT: )
   (func $caller (param $x i32) (param $t1 (ref $t1))
     ;; Only one function is in that table, so we can call it directly.
