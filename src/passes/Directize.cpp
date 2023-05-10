@@ -284,7 +284,8 @@ struct ImpossibleCallOptimizer
       // called in traps-never-happen mode. (Note that checking for the entire
       // body being unreachable is enough, as Vacuum will optimize into that
       // form.)
-      if (trapsNeverHappen && func->body->is<Unreachable>()) {
+      if (trapsNeverHappen && !func->imported() &&
+          func->body->is<Unreachable>()) {
         continue;
       }
 

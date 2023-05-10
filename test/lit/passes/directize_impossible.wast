@@ -42,6 +42,8 @@
 
   ;; CHECK:      (type $ref|$t1|_ref|$t2|_ref|$t3|_ref|$t4|_=>_none (func (param (ref $t1) (ref $t2) (ref $t3) (ref $t4))))
 
+  ;; CHECK:      (type $ref|$t1|_=>_none (func (param (ref $t1))))
+
   ;; CHECK:      (func $caller (type $ref|$t1|_ref|$t2|_ref|$t3|_ref|$t4|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t2)) (param $t3 (ref $t3)) (param $t4 (ref $t4))
   ;; CHECK-NEXT:  (call_ref $t1
   ;; CHECK-NEXT:   (local.get $t1)
@@ -57,6 +59,8 @@
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
   ;; TNH__:      (type $ref|$t1|_ref|$t2|_ref|$t3|_ref|$t4|_=>_none (func (param (ref $t1) (ref $t2) (ref $t3) (ref $t4))))
+
+  ;; TNH__:      (type $ref|$t1|_=>_none (func (param (ref $t1))))
 
   ;; TNH__:      (func $caller (type $ref|$t1|_ref|$t2|_ref|$t3|_ref|$t4|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t2)) (param $t3 (ref $t3)) (param $t4 (ref $t4))
   ;; TNH__-NEXT:  (call_ref $t1
@@ -74,6 +78,8 @@
   ;; TNH__-NEXT: )
   ;; CLOSD:      (type $ref|$t1|_ref|$t2|_ref|$t3|_ref|$t4|_=>_none (func (param (ref $t1) (ref $t2) (ref $t3) (ref $t4))))
 
+  ;; CLOSD:      (type $ref|$t1|_=>_none (func (param (ref $t1))))
+
   ;; CLOSD:      (func $caller (type $ref|$t1|_ref|$t2|_ref|$t3|_ref|$t4|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t2)) (param $t3 (ref $t3)) (param $t4 (ref $t4))
   ;; CLOSD-NEXT:  (call_ref $t1
   ;; CLOSD-NEXT:   (local.get $t1)
@@ -87,6 +93,8 @@
   ;; CLOSD-NEXT:  )
   ;; CLOSD-NEXT: )
   ;; BOTH_:      (type $ref|$t1|_ref|$t2|_ref|$t3|_ref|$t4|_=>_none (func (param (ref $t1) (ref $t2) (ref $t3) (ref $t4))))
+
+  ;; BOTH_:      (type $ref|$t1|_=>_none (func (param (ref $t1))))
 
   ;; BOTH_:      (func $caller (type $ref|$t1|_ref|$t2|_ref|$t3|_ref|$t4|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t2)) (param $t3 (ref $t3)) (param $t4 (ref $t4))
   ;; BOTH_-NEXT:  (unreachable)
@@ -268,5 +276,108 @@
   ;; BOTH_-NEXT: )
   (func $t4-1 (type $t4)
     (unreachable)
+  )
+
+  ;; CHECK:      (func $ignore (type $ref|$t1|_=>_none) (param $t1 (ref $t1))
+  ;; CHECK-NEXT:  (block ;; (replaces something unreachable we can't emit)
+  ;; CHECK-NEXT:   (drop
+  ;; CHECK-NEXT:    (unreachable)
+  ;; CHECK-NEXT:   )
+  ;; CHECK-NEXT:   (unreachable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; TNH__:      (func $ignore (type $ref|$t1|_=>_none) (param $t1 (ref $t1))
+  ;; TNH__-NEXT:  (block ;; (replaces something unreachable we can't emit)
+  ;; TNH__-NEXT:   (drop
+  ;; TNH__-NEXT:    (unreachable)
+  ;; TNH__-NEXT:   )
+  ;; TNH__-NEXT:   (unreachable)
+  ;; TNH__-NEXT:  )
+  ;; TNH__-NEXT: )
+  ;; CLOSD:      (func $ignore (type $ref|$t1|_=>_none) (param $t1 (ref $t1))
+  ;; CLOSD-NEXT:  (block ;; (replaces something unreachable we can't emit)
+  ;; CLOSD-NEXT:   (drop
+  ;; CLOSD-NEXT:    (unreachable)
+  ;; CLOSD-NEXT:   )
+  ;; CLOSD-NEXT:   (unreachable)
+  ;; CLOSD-NEXT:  )
+  ;; CLOSD-NEXT: )
+  ;; BOTH_:      (func $ignore (type $ref|$t1|_=>_none) (param $t1 (ref $t1))
+  ;; BOTH_-NEXT:  (block ;; (replaces something unreachable we can't emit)
+  ;; BOTH_-NEXT:   (drop
+  ;; BOTH_-NEXT:    (unreachable)
+  ;; BOTH_-NEXT:   )
+  ;; BOTH_-NEXT:   (unreachable)
+  ;; BOTH_-NEXT:  )
+  ;; BOTH_-NEXT: )
+  (func $ignore (param $t1 (ref $t1))
+    ;; We should ignore this and not error.
+    (call_ref $t2
+      (unreachable)
+    )
+  )
+)
+
+(module
+  ;; CHECK:      (type $t1 (func))
+  ;; TNH__:      (type $t1 (func))
+  ;; CLOSD:      (type $t1 (func))
+  ;; BOTH_:      (type $t1 (func))
+  (type $t1 (func))
+
+  ;; CHECK:      (type $ref|$t1|_=>_none (func (param (ref $t1))))
+
+  ;; CHECK:      (import "a" "b" (func $t1-0))
+  ;; TNH__:      (type $ref|$t1|_=>_none (func (param (ref $t1))))
+
+  ;; TNH__:      (import "a" "b" (func $t1-0))
+  ;; CLOSD:      (type $ref|$t1|_=>_none (func (param (ref $t1))))
+
+  ;; CLOSD:      (import "a" "b" (func $t1-0))
+  ;; BOTH_:      (type $ref|$t1|_=>_none (func (param (ref $t1))))
+
+  ;; BOTH_:      (import "a" "b" (func $t1-0))
+  (import "a" "b" (func $t1-0 (type $t1)))
+
+  ;; CHECK:      (func $t1-1 (type $t1)
+  ;; CHECK-NEXT:  (unreachable)
+  ;; CHECK-NEXT: )
+  ;; TNH__:      (func $t1-1 (type $t1)
+  ;; TNH__-NEXT:  (unreachable)
+  ;; TNH__-NEXT: )
+  ;; CLOSD:      (func $t1-1 (type $t1)
+  ;; CLOSD-NEXT:  (unreachable)
+  ;; CLOSD-NEXT: )
+  ;; BOTH_:      (func $t1-1 (type $t1)
+  ;; BOTH_-NEXT:  (unreachable)
+  ;; BOTH_-NEXT: )
+  (func $t1-1 (type $t1)
+    (unreachable)
+  )
+
+  ;; CHECK:      (func $caller (type $ref|$t1|_=>_none) (param $t1 (ref $t1))
+  ;; CHECK-NEXT:  (call_ref $t1
+  ;; CHECK-NEXT:   (local.get $t1)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; TNH__:      (func $caller (type $ref|$t1|_=>_none) (param $t1 (ref $t1))
+  ;; TNH__-NEXT:  (call_ref $t1
+  ;; TNH__-NEXT:   (local.get $t1)
+  ;; TNH__-NEXT:  )
+  ;; TNH__-NEXT: )
+  ;; CLOSD:      (func $caller (type $ref|$t1|_=>_none) (param $t1 (ref $t1))
+  ;; CLOSD-NEXT:  (call_ref $t1
+  ;; CLOSD-NEXT:   (local.get $t1)
+  ;; CLOSD-NEXT:  )
+  ;; CLOSD-NEXT: )
+  ;; BOTH_:      (func $caller (type $ref|$t1|_=>_none) (param $t1 (ref $t1))
+  ;; BOTH_-NEXT:  (call $t1-0)
+  ;; BOTH_-NEXT: )
+  (func $caller (param $t1 (ref $t1))
+    ;; One of the targets is unreachable, and one is an import. In TNH mode
+    ;; (with closed-world) we can infer that the import must be called.
+    (call_ref $t1
+      (local.get $t1)
+    )
   )
 )
