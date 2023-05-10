@@ -33,12 +33,16 @@
     ;; BOTH_:       (type $t3 (func))
     (type $t3 (func))
 
+    ;; CHECK:       (type $t4 (func))
+    ;; TNH__:       (type $t4 (func))
+    ;; CLOSD:       (type $t4 (func))
+    ;; BOTH_:       (type $t4 (func))
     (type $t4 (func))
   )
 
-  ;; CHECK:      (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none (func (param (ref $t1) (ref $t2) (ref $t3))))
+  ;; CHECK:      (type $ref|$t1|_ref|$t2|_ref|$t3|_ref|$t4|_=>_none (func (param (ref $t1) (ref $t2) (ref $t3) (ref $t4))))
 
-  ;; CHECK:      (func $caller (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t2)) (param $t3 (ref $t3))
+  ;; CHECK:      (func $caller (type $ref|$t1|_ref|$t2|_ref|$t3|_ref|$t4|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t2)) (param $t3 (ref $t3)) (param $t4 (ref $t4))
   ;; CHECK-NEXT:  (call_ref $t1
   ;; CHECK-NEXT:   (local.get $t1)
   ;; CHECK-NEXT:  )
@@ -48,10 +52,13 @@
   ;; CHECK-NEXT:  (call_ref $t3
   ;; CHECK-NEXT:   (local.get $t3)
   ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (call_ref $t4
+  ;; CHECK-NEXT:   (local.get $t4)
+  ;; CHECK-NEXT:  )
   ;; CHECK-NEXT: )
-  ;; TNH__:      (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none (func (param (ref $t1) (ref $t2) (ref $t3))))
+  ;; TNH__:      (type $ref|$t1|_ref|$t2|_ref|$t3|_ref|$t4|_=>_none (func (param (ref $t1) (ref $t2) (ref $t3) (ref $t4))))
 
-  ;; TNH__:      (func $caller (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t2)) (param $t3 (ref $t3))
+  ;; TNH__:      (func $caller (type $ref|$t1|_ref|$t2|_ref|$t3|_ref|$t4|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t2)) (param $t3 (ref $t3)) (param $t4 (ref $t4))
   ;; TNH__-NEXT:  (call_ref $t1
   ;; TNH__-NEXT:   (local.get $t1)
   ;; TNH__-NEXT:  )
@@ -61,31 +68,42 @@
   ;; TNH__-NEXT:  (call_ref $t3
   ;; TNH__-NEXT:   (local.get $t3)
   ;; TNH__-NEXT:  )
+  ;; TNH__-NEXT:  (call_ref $t4
+  ;; TNH__-NEXT:   (local.get $t4)
+  ;; TNH__-NEXT:  )
   ;; TNH__-NEXT: )
-  ;; CLOSD:      (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none (func (param (ref $t1) (ref $t2) (ref $t3))))
+  ;; CLOSD:      (type $ref|$t1|_ref|$t2|_ref|$t3|_ref|$t4|_=>_none (func (param (ref $t1) (ref $t2) (ref $t3) (ref $t4))))
 
-  ;; CLOSD:      (func $caller (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t2)) (param $t3 (ref $t3))
-  ;; CLOSD-NEXT:  (call $t1-trap)
+  ;; CLOSD:      (func $caller (type $ref|$t1|_ref|$t2|_ref|$t3|_ref|$t4|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t2)) (param $t3 (ref $t3)) (param $t4 (ref $t4))
+  ;; CLOSD-NEXT:  (call_ref $t1
+  ;; CLOSD-NEXT:   (local.get $t1)
+  ;; CLOSD-NEXT:  )
   ;; CLOSD-NEXT:  (call $t2-0)
   ;; CLOSD-NEXT:  (call_ref $t3
   ;; CLOSD-NEXT:   (local.get $t3)
   ;; CLOSD-NEXT:  )
+  ;; CLOSD-NEXT:  (call_ref $t4
+  ;; CLOSD-NEXT:   (local.get $t4)
+  ;; CLOSD-NEXT:  )
   ;; CLOSD-NEXT: )
-  ;; BOTH_:      (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none (func (param (ref $t1) (ref $t2) (ref $t3))))
+  ;; BOTH_:      (type $ref|$t1|_ref|$t2|_ref|$t3|_ref|$t4|_=>_none (func (param (ref $t1) (ref $t2) (ref $t3) (ref $t4))))
 
-  ;; BOTH_:      (func $caller (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t2)) (param $t3 (ref $t3))
+  ;; BOTH_:      (func $caller (type $ref|$t1|_ref|$t2|_ref|$t3|_ref|$t4|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t2)) (param $t3 (ref $t3)) (param $t4 (ref $t4))
   ;; BOTH_-NEXT:  (unreachable)
   ;; BOTH_-NEXT:  (call $t2-0)
   ;; BOTH_-NEXT:  (call_ref $t3
   ;; BOTH_-NEXT:   (local.get $t3)
   ;; BOTH_-NEXT:  )
+  ;; BOTH_-NEXT:  (call $t4-0)
   ;; BOTH_-NEXT: )
   (func $caller (param $t1 (ref $t1)) (param $t2 (ref $t2)) (param $t3 (ref $t3)) (param $t4 (ref $t4))
-    ;; All targets will trap, so we can emit an unreachable.
+    ;; All targets will trap, so we can emit an unreachable in TNH mode (and in
+    ;; closed world). TODO: we could also trap here without TNH, basically to
+    ;; propagate the trap outwards
     (call_ref $t1
       (local.get $t1)
     )
-    ;; This has a single possible target, so we can directize.
+    ;; This has a single possible target, so we can directize (in closed world).
     (call_ref $t2
       (local.get $t2)
     )
@@ -94,28 +112,40 @@
       (local.get $t3)
     )
     ;; This has multiple targets, but one will trap, so the other must be called
-    ;; in TNH mode.
+    ;; in TNH mode (and also when closed world).
     (call_ref $t4
       (local.get $t4)
     )
   )
 
-  ;; CHECK:      (func $t1-trap (type $t1)
+  ;; CHECK:      (func $t1-0 (type $t1)
   ;; CHECK-NEXT:  (unreachable)
   ;; CHECK-NEXT: )
-  ;; TNH__:      (func $t1-trap (type $t1)
+  ;; TNH__:      (func $t1-0 (type $t1)
   ;; TNH__-NEXT:  (unreachable)
   ;; TNH__-NEXT: )
-  ;; CLOSD:      (func $t1-trap (type $t1)
+  ;; CLOSD:      (func $t1-0 (type $t1)
   ;; CLOSD-NEXT:  (unreachable)
   ;; CLOSD-NEXT: )
-  ;; BOTH_:      (func $t1-trap (type $t1)
+  ;; BOTH_:      (func $t1-0 (type $t1)
   ;; BOTH_-NEXT:  (unreachable)
   ;; BOTH_-NEXT: )
   (func $t1-0 (type $t1)
     (unreachable)
   )
 
+  ;; CHECK:      (func $t1-1 (type $t1)
+  ;; CHECK-NEXT:  (unreachable)
+  ;; CHECK-NEXT: )
+  ;; TNH__:      (func $t1-1 (type $t1)
+  ;; TNH__-NEXT:  (unreachable)
+  ;; TNH__-NEXT: )
+  ;; CLOSD:      (func $t1-1 (type $t1)
+  ;; CLOSD-NEXT:  (unreachable)
+  ;; CLOSD-NEXT: )
+  ;; BOTH_:      (func $t1-1 (type $t1)
+  ;; BOTH_-NEXT:  (unreachable)
+  ;; BOTH_-NEXT: )
   (func $t1-1 (type $t1)
     (unreachable)
   )
@@ -198,13 +228,45 @@
     )
   )
 
-  (func $t4-0 (type $t3)
+  ;; CHECK:      (func $t4-0 (type $t4)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 0)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; TNH__:      (func $t4-0 (type $t4)
+  ;; TNH__-NEXT:  (drop
+  ;; TNH__-NEXT:   (i32.const 0)
+  ;; TNH__-NEXT:  )
+  ;; TNH__-NEXT: )
+  ;; CLOSD:      (func $t4-0 (type $t4)
+  ;; CLOSD-NEXT:  (drop
+  ;; CLOSD-NEXT:   (i32.const 0)
+  ;; CLOSD-NEXT:  )
+  ;; CLOSD-NEXT: )
+  ;; BOTH_:      (func $t4-0 (type $t4)
+  ;; BOTH_-NEXT:  (drop
+  ;; BOTH_-NEXT:   (i32.const 0)
+  ;; BOTH_-NEXT:  )
+  ;; BOTH_-NEXT: )
+  (func $t4-0 (type $t4)
     (drop
       (i32.const 0)
     )
   )
 
-  (func $t341 (type $t4)
+  ;; CHECK:      (func $t4-1 (type $t4)
+  ;; CHECK-NEXT:  (unreachable)
+  ;; CHECK-NEXT: )
+  ;; TNH__:      (func $t4-1 (type $t4)
+  ;; TNH__-NEXT:  (unreachable)
+  ;; TNH__-NEXT: )
+  ;; CLOSD:      (func $t4-1 (type $t4)
+  ;; CLOSD-NEXT:  (unreachable)
+  ;; CLOSD-NEXT: )
+  ;; BOTH_:      (func $t4-1 (type $t4)
+  ;; BOTH_-NEXT:  (unreachable)
+  ;; BOTH_-NEXT: )
+  (func $t4-1 (type $t4)
     (unreachable)
   )
 )
