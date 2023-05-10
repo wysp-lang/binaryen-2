@@ -245,10 +245,11 @@ struct ImpossibleCallOptimizer
     Builder builder(*getModule());
 
     if (targets.empty()) {
-      // Nothing can be called, so this will trap.
-      // XXX drop drop; share code with above.
+      // Nothing can be called, so this will trap; we don't need the call.
+      // TODO: use this above in more places.
       replaceCurrent(getDroppedChildrenAndAppend(
-        curr, *getModule(), getPassOptions(), builder.makeUnreachable()));
+        curr, *getModule(), getPassOptions(), builder.makeUnreachable(),
+        DropMode::IgnoreParentEffects));
       refinalize = true;
       return;
     }
