@@ -65,7 +65,17 @@ struct TableInfo {
   }
 };
 
-using TableInfoMap = std::unordered_map<Name, TableInfo>;
+struct TableInfoMap : public std::unordered_map<Name, TableInfo> {
+  // We can optimize something if at least one table allows it.
+  bool canOptimize() {
+    for (auto& [_, info] : *this) {
+      if (info.canOptimize()) {
+        return true;
+      }
+    }
+    return false;
+  }
+};
 
 struct TableCallOptimizer : public WalkerPass<PostWalker<TableCallOptimizer>> {
   bool isFunctionParallel() override { return true; }
@@ -308,13 +318,17 @@ private:
 
 struct Directize : public Pass {
   void run(Module* module) override {
-    optimizeTableCalls(module);
-    optimizePossibleCalls(module);
+    // Build table info first.
+    TableInfoMap tables;
+    buildTableInfo(module, tables);
+
+    optimizeTableCalls(module, tables);
+    optimizePossibleCalls(module, tables);
   }
 
   // Optimize CallIndirects using information about tables, that is, matching
   // table indexes to the contents in the table.
-  void optimizeTableCalls(Module* module) {
+  void optimizeTableCalls(Module* module, TableInfoMap& tables) {
     if (module->tables.empty()) {
       return;
     }
@@ -324,7 +338,6 @@ struct Directize : public Pass {
       getPassOptions().hasArgument("directize-initial-contents-immutable");
 
     // Set up the initial info.
-    TableInfoMap tables;
     for (auto& table : module->tables) {
       tables[table->name].initialContentsImmutable = initialContentsImmutable;
       tables[table->name].flatTable =
@@ -347,16 +360,7 @@ struct Directize : public Pass {
 
     // This may already be enough information to know that we can't optimize
     // anything. If so, skip scanning all the module contents.
-    auto canOptimize = [&]() {
-      for (auto& [_, info] : tables) {
-        if (info.canOptimize()) {
-          return true;
-        }
-      }
-      return false;
-    };
-
-    if (!canOptimize()) {
+    if (!tables.canOptimize()) {
       return;
     }
 
@@ -379,20 +383,19 @@ struct Directize : public Pass {
         tables[name].mayBeModified = true;
       }
     }
+  }
 
-    // Perhaps the new information about tables with sets shows we cannot
-    // optimize.
-    if (!canOptimize()) {
+  void optimizeTableCalls(Module* module, TableInfoMap& tables) {
+    if (!tables.canOptimize()) {
       return;
     }
 
-    // We can optimize!
     TableCallOptimizer(tables).run(getPassRunner(), module);
   }
 
   // Optimize using an analysis of which call targets are possible using the
   // type and other information.
-  void optimizePossibleCalls(Module* module) {
+  void optimizePossibleCalls(Module* module, TableInfoMap& tables) {
     // We can only optimize call_indirect and call_ref, so exit early if those
     // instructions are not possible.
     if (module->tables.empty() && !module->features.hasGC()) {
