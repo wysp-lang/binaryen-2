@@ -225,6 +225,7 @@ struct PossibleCallOptimizer
   //       demand in each thread.
   std::unordered_map<HeapType, std::vector<Name>> typeTargets;
 
+  // Optimize a call given the set of targets it might reach.
   template<typename T>
   void optimizeCall(T* curr, std::vector<Name>& targets) {
     // TODO: further filter using out arguments - if we see a cast will trap,
@@ -260,50 +261,79 @@ struct PossibleCallOptimizer
     //       size() is 2, etc.
   }
 
-  void visitCallRef(CallRef* curr) {
-    auto type = curr->target->type;
-    if (!type.isRef()) {
-      return;
-    }
-    auto heapType = type.getHeapType();
-
-    auto iter = typeTargets.find(heapType);
+  // Optimize a call given the type of the targets.
+  template<typename T>
+  void optimizeCall(T* curr, HeapType type) {
+    auto iter = typeTargets.find(type);
     if (iter == typeTargets.end()) {
       iter =
-        typeTargets.emplace(heapType, findPossibleFunctions(heapType)).first;
+        typeTargets.emplace(type, findFunctionsOfType(type)).first;
     }
     auto& targets = iter->second;
 
     optimizeCall(curr, targets);
   }
 
-  // TODO: call_indirect too
+  void visitCallRef(CallRef* curr) {
+    auto type = curr->target->type;
+    if (!type.isRef()) {
+      return;
+    }
 
-  // Given a function type, find all possible targets of that type, filtering
-  // out ones we can prove are impossible.
-  std::vector<Name> findPossibleFunctions(HeapType type) {
-    auto trapsNeverHappen = getPassOptions().trapsNeverHappen;
+    optimizeCall(curr, type.getHeapType());
+  }
 
+  void visitCallIndirect(CallIndirect* curr) {
+    auto& table = tables.at(curr->table);
+    if (!table.canOptimize()) {
+      // We cannot see the contents of the table well enough at compile time, so
+      // all we can do is use the type, similar to CallRef.
+      optimizeCall(curr, curr->heapType);
+      return;
+    }
+
+    // We can optimize using this table: it has a simple and static layout, and
+    // so all possible targets are within the table.
+    auto targets = (*table.flatTable).names;
+
+    filterImpossibleFunctions(targets);
+
+    optimizeCall(curr, targets);
+  }
+
+  // Given a function type, find all possible targets of that type.
+  std::vector<Name> findFunctionsOfType(HeapType type) {
     std::vector<Name> ret;
-    for (auto& func : getModule()->functions) {
-      // Filter out functions with an incompatible type.
-      if (!HeapType::isSubType(func->type, type)) {
-        continue;
-      }
 
+    for (auto& func : getModule()->functions) {
+      if (HeapType::isSubType(func->type, type)) {
+        ret.push_back(func->name);
+      }
+    }
+
+    filterImpossibleFunctions(targets);
+
+    return ret;
+  }
+
+  // Filter out functions that cannot be a call target, from a list of possible
+  // targets.
+  void filterImpossibleFunctions(std::vector<Name>& targets) {
+    // We can only optimize here if traps never happen.
+    if (!getPassOptions().trapsNeverHappen) {
+      return;
+    }
+
+    targets.erase(std::remove_if(targets.begin(), 
+                                 targets.end(),
+                                 [&](Name name) {
       // If the function body definitely traps then it can be assumed not to be
       // called in traps-never-happen mode. (Note that checking for the entire
       // body being unreachable is enough, as Vacuum will optimize into that
       // form.)
-      if (trapsNeverHappen && !func->imported() &&
-          func->body->is<Unreachable>()) {
-        continue;
-      }
-
-      ret.push_back(func->name);
-    }
-
-    return ret;
+      auto* func = getModule()->getFunction(name);
+      return !func->imported() && func->body->is<Unreachable>();
+                                 }), targets.end());
   }
 
   void doWalkFunction(Function* func) {
