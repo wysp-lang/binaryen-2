@@ -468,13 +468,13 @@
   ;; BOTH_:      (type $t1 (func))
   (type $t1 (func))
 
-  (table $one 10)
+  (table $one funcref 10)
   (elem $one (i32.const 1) $t1-0)
 
-  (table $two 20)
+  (table $two funcref 20)
   (elem $two (i32.const 2) $t1-0 $t1-1)
 
-  (table $three 30)
+  (table $three funcref 30)
   (elem $three (i32.const 3) $t1-0 $t1-1 $t1-2)
 
   ;; CHECK:      (import "a" "b" (func $t1-0))
