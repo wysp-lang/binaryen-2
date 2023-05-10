@@ -214,8 +214,10 @@ struct PossibleCallOptimizer
   bool isFunctionParallel() override { return true; }
 
   std::unique_ptr<Pass> create() override {
-    return std::make_unique<PossibleCallOptimizer>();
+    return std::make_unique<PossibleCallOptimizer>(tables);
   }
+
+  PossibleCallOptimizer(const TableInfoMap& tables) : tables(tables) {}
 
   // A map of function types to the functions that can be called. If a type is
   // not in this map then we have not yet computed that type. We build this
@@ -349,6 +351,8 @@ struct PossibleCallOptimizer
   }
 
 private:
+  const TableInfoMap& tables;
+
   bool refinalize = false;
 };
 
