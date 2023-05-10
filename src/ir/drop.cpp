@@ -38,7 +38,7 @@ Expression* getDroppedChildrenAndAppend(Expression* parent,
   // parent anyhow (those cases are ruled out below), so looking at non-shallow
   // effects would never help us (and would be slower to run).
   bool keepParent = false;
-  if (mode == NoticeParentEffects) {
+  if (mode == DropMode::NoticeParentEffects) {
     ShallowEffectAnalyzer effects(options, wasm, parent);
     // Ignore a trap, as the unreachable replacement would trap too.
     if (last->is<Unreachable>()) {

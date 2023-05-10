@@ -83,8 +83,8 @@ enum class DropMode {
 Expression* getDroppedChildrenAndAppend(Expression* parent,
                                         Module& wasm,
                                         const PassOptions& options,
-                                        Expression* last
-                                        DropMode mode = NoticeParentEffects);
+                                        Expression* last,
+                                        DropMode mode = DropMode::NoticeParentEffects);
 
 } // namespace wasm
 
