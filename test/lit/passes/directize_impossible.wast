@@ -63,12 +63,8 @@
   ;; CLOSD:      (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none (func (param (ref $t1) (ref $t2) (ref $t3))))
 
   ;; CLOSD:      (func $caller (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t2)) (param $t3 (ref $t3))
-  ;; CLOSD-NEXT:  (call_ref $t1
-  ;; CLOSD-NEXT:   (local.get $t1)
-  ;; CLOSD-NEXT:  )
-  ;; CLOSD-NEXT:  (call_ref $t2
-  ;; CLOSD-NEXT:   (local.get $t2)
-  ;; CLOSD-NEXT:  )
+  ;; CLOSD-NEXT:  (call $t1-trap)
+  ;; CLOSD-NEXT:  (call $t2-0)
   ;; CLOSD-NEXT:  (call_ref $t3
   ;; CLOSD-NEXT:   (local.get $t3)
   ;; CLOSD-NEXT:  )
@@ -76,12 +72,7 @@
   ;; BOTH_:      (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none (func (param (ref $t1) (ref $t2) (ref $t3))))
 
   ;; BOTH_:      (func $caller (type $ref|$t1|_ref|$t2|_ref|$t3|_=>_none) (param $t1 (ref $t1)) (param $t2 (ref $t2)) (param $t3 (ref $t3))
-  ;; BOTH_-NEXT:  (block
-  ;; BOTH_-NEXT:   (call_ref $t1
-  ;; BOTH_-NEXT:    (local.get $t1)
-  ;; BOTH_-NEXT:   )
-  ;; BOTH_-NEXT:   (unreachable)
-  ;; BOTH_-NEXT:  )
+  ;; BOTH_-NEXT:  (unreachable)
   ;; BOTH_-NEXT:  (call $t2-0)
   ;; BOTH_-NEXT:  (call_ref $t3
   ;; BOTH_-NEXT:   (local.get $t3)
