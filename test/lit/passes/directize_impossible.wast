@@ -488,42 +488,42 @@
   ;; BOTH_:      (import "a" "b" (func $t1-0))
 
   ;; BOTH_:      (table $one 0 funcref)
-  (table $one funcref 10)
+  (table $one funcref 1)
   ;; CHECK:      (table $two 0 funcref)
 
   ;; CHECK:      (table $three 0 funcref)
 
-  ;; CHECK:      (elem $one (table $one) (i32.const 1) func $t1-0)
+  ;; CHECK:      (elem $one (table $one) (i32.const 0) func $t1-0)
   ;; TNH__:      (table $two 0 funcref)
 
   ;; TNH__:      (table $three 0 funcref)
 
-  ;; TNH__:      (elem $one (table $one) (i32.const 1) func $t1-0)
+  ;; TNH__:      (elem $one (table $one) (i32.const 0) func $t1-0)
   ;; CLOSD:      (table $two 0 funcref)
 
   ;; CLOSD:      (table $three 0 funcref)
 
-  ;; CLOSD:      (elem $one (table $one) (i32.const 1) func $t1-0)
+  ;; CLOSD:      (elem $one (table $one) (i32.const 0) func $t1-0)
   ;; BOTH_:      (table $two 0 funcref)
 
   ;; BOTH_:      (table $three 0 funcref)
 
-  ;; BOTH_:      (elem $one (table $one) (i32.const 1) func $t1-0)
-  (elem $one (i32.const 1) $t1-0)
+  ;; BOTH_:      (elem $one (table $one) (i32.const 0) func $t1-0)
+  (elem $one (i32.const 0) $t1-0)
 
-  (table $two funcref 20)
-  ;; CHECK:      (elem $two (table $one) (i32.const 2) func $t1-0 $t1-1)
-  ;; TNH__:      (elem $two (table $one) (i32.const 2) func $t1-0 $t1-1)
-  ;; CLOSD:      (elem $two (table $one) (i32.const 2) func $t1-0 $t1-1)
-  ;; BOTH_:      (elem $two (table $one) (i32.const 2) func $t1-0 $t1-1)
-  (elem $two (i32.const 2) $t1-0 $t1-1)
+  (table $two funcref 2)
+  ;; CHECK:      (elem $two (table $one) (i32.const 0) func $t1-0 $t1-1)
+  ;; TNH__:      (elem $two (table $one) (i32.const 0) func $t1-0 $t1-1)
+  ;; CLOSD:      (elem $two (table $one) (i32.const 0) func $t1-0 $t1-1)
+  ;; BOTH_:      (elem $two (table $one) (i32.const 0) func $t1-0 $t1-1)
+  (elem $two (i32.const 0) $t1-0 $t1-1)
 
-  (table $three funcref 30)
-  ;; CHECK:      (elem $three (table $one) (i32.const 3) func $t1-0 $t1-1 $t1-2)
-  ;; TNH__:      (elem $three (table $one) (i32.const 3) func $t1-0 $t1-1 $t1-2)
-  ;; CLOSD:      (elem $three (table $one) (i32.const 3) func $t1-0 $t1-1 $t1-2)
-  ;; BOTH_:      (elem $three (table $one) (i32.const 3) func $t1-0 $t1-1 $t1-2)
-  (elem $three (i32.const 3) $t1-0 $t1-1 $t1-2)
+  (table $three funcref 3)
+  ;; CHECK:      (elem $three (table $one) (i32.const 0) func $t1-0 $t1-1 $t1-2)
+  ;; TNH__:      (elem $three (table $one) (i32.const 0) func $t1-0 $t1-1 $t1-2)
+  ;; CLOSD:      (elem $three (table $one) (i32.const 0) func $t1-0 $t1-1 $t1-2)
+  ;; BOTH_:      (elem $three (table $one) (i32.const 0) func $t1-0 $t1-1 $t1-2)
+  (elem $three (i32.const 0) $t1-0 $t1-1 $t1-2)
 
   (import "a" "b" (func $t1-0 (type $t1)))
 
