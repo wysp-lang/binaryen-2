@@ -328,7 +328,7 @@ struct Directize : public Pass {
 
   // Optimize CallIndirects using information about tables, that is, matching
   // table indexes to the contents in the table.
-  void optimizeTableCalls(Module* module, TableInfoMap& tables) {
+  void buildTableInfo(Module* module, TableInfoMap& tables) {
     if (module->tables.empty()) {
       return;
     }
@@ -385,7 +385,7 @@ struct Directize : public Pass {
     }
   }
 
-  void optimizeTableCalls(Module* module, TableInfoMap& tables) {
+  void optimizeTableCalls(Module* module, const TableInfoMap& tables) {
     if (!tables.canOptimize()) {
       return;
     }
@@ -395,7 +395,7 @@ struct Directize : public Pass {
 
   // Optimize using an analysis of which call targets are possible using the
   // type and other information.
-  void optimizePossibleCalls(Module* module, TableInfoMap& tables) {
+  void optimizePossibleCalls(Module* module, const TableInfoMap& tables) {
     // We can only optimize call_indirect and call_ref, so exit early if those
     // instructions are not possible.
     if (module->tables.empty() && !module->features.hasGC()) {
