@@ -608,6 +608,7 @@
   ;; BOTH_-NEXT:  )
   ;; BOTH_-NEXT: )
   (func $caller (param $x i32) (param $t1 (ref $t1))
+    ;; XXX All the results here look wrongg
     ;; Only one function is in that table, so we can call it directly.
     (call_indirect $one (type $t1)
       (local.get $x)
