@@ -226,7 +226,6 @@ struct ImpossibleCallOptimizer
   std::unordered_map<HeapType, std::vector<Name>> typeTargets;
 
   void visitCallRef(CallRef* curr) {
-std::cout << "vCR\n";
     auto type = curr->target->type;
     if (!type.isRef()) {
       return;
@@ -239,7 +238,6 @@ std::cout << "vCR\n";
         typeTargets.emplace(heapType, findPossibleFunctions(heapType)).first;
     }
     auto& targets = iter->second;
-std::cout << "  targets " << targets.size() << '\n';
 
     // TODO: further filter using out arguments - if we see a cast will trap,
     //       the target is impossible.
@@ -260,6 +258,8 @@ std::cout << "  targets " << targets.size() << '\n';
       replaceCurrent(builder.makeCall(
         targets[0], curr->operands, curr->type, curr->isReturn));
     }
+
+    // TODO: with 2 targets we can do an if, like with TableCall Optimizer above
   }
 
   // TODO: call_indirect too
@@ -267,6 +267,8 @@ std::cout << "  targets " << targets.size() << '\n';
   // Given a function type, find all possible targets of that type, filtering
   // out ones we can prove are impossible.
   std::vector<Name> findPossibleFunctions(HeapType type) {
+    auto trapsNeverHappen = getPassOptions().trapsNeverHappen;
+
     std::vector<Name> ret;
     for (auto& func : getModule()->functions) {
       // Filter out functions with an incompatible type.
@@ -274,11 +276,11 @@ std::cout << "  targets " << targets.size() << '\n';
         continue;
       }
 
-      // If the function body definitely traps then it cannot be called. Note
-      // that Vacuum will turn a function body into a single unreachable when it
-      // can, so this is enough for us to look for - we don't need to look any
-      // further.
-      if (func->body->is<Unreachable>()) {
+      // If the function body definitely traps then it can assume to not be
+      // called in traps-never-happen mode. (Note that checking for the entire
+      // body being unreachable is enough, as Vacuum will optimize into that
+      // form.)
+      if (trapsNeverHappen && func->body->is<Unreachable>()) {
         continue;
       }
 
@@ -288,7 +290,7 @@ std::cout << "  targets " << targets.size() << '\n';
     return ret;
   }
   /*
-    void walk(Expression*& root) {
+    void walk(Expression*& root) { // first block
       assert(stack.size() == 0);
       pushTask(SubType::scan, &root);
       while (stack.size() > 0) {
@@ -301,6 +303,9 @@ std::cout << "  targets " << targets.size() << '\n';
   */
 
   void doWalkFunction(Function* func) {
+    // All optimizations in this class depend on closed world.
+    assert(getPassOptions().closedWorld);
+
     WalkerPass<PostWalker<ImpossibleCallOptimizer>>::doWalkFunction(func);
     if (refinalize) {
       ReFinalize().walkFunctionInModule(func, getModule());
@@ -401,8 +406,7 @@ struct Directize : public Pass {
 
     // TODO use utility that finds type tree of function types? existing?
 
-    auto& options = getPassOptions();
-    if (options.trapsNeverHappen && options.closedWorld) {
+    if (getPassOptions().closedWorld) {
       ImpossibleCallOptimizer().run(getPassRunner(), module);
     }
   }
