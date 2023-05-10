@@ -247,9 +247,12 @@ struct ImpossibleCallOptimizer
     if (targets.empty()) {
       // Nothing can be called, so this will trap; we don't need the call.
       // TODO: use this above in more places.
-      replaceCurrent(getDroppedChildrenAndAppend(
-        curr, *getModule(), getPassOptions(), builder.makeUnreachable(),
-        DropMode::IgnoreParentEffects));
+      replaceCurrent(
+        getDroppedChildrenAndAppend(curr,
+                                    *getModule(),
+                                    getPassOptions(),
+                                    builder.makeUnreachable(),
+                                    DropMode::IgnoreParentEffects));
       refinalize = true;
       return;
     }

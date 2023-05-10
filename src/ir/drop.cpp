@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include "ir/branch-utils.h"
 #include "ir/drop.h"
+#include "ir/branch-utils.h"
 #include "ir/effects.h"
 #include "ir/iteration.h"
 #include "wasm-builder.h"
@@ -31,10 +31,10 @@ Expression* getDroppedChildrenAndAppend(Expression* parent,
   // We check for shallow effects here, since we may be able to remove |parent|
   // itself but keep its children around - we don't want effects in the children
   // to stop us from improving the code. Note that there are cases where the
-  // combined parent+children has fewer effects than parent itself, such as if parent
-  // is a block and the child branches to it, but in such cases we cannot remove
-  // parent anyhow (those cases are ruled out below), so looking at non-shallow
-  // effects would never help us (and would be slower to run).
+  // combined parent+children has fewer effects than parent itself, such as if
+  // parent is a block and the child branches to it, but in such cases we cannot
+  // remove parent anyhow (those cases are ruled out below), so looking at
+  // non-shallow effects would never help us (and would be slower to run).
   bool keepParent = false;
   if (mode == DropMode::NoticeParentEffects) {
     ShallowEffectAnalyzer effects(options, wasm, parent);
@@ -53,9 +53,8 @@ Expression* getDroppedChildrenAndAppend(Expression* parent,
   // 5. Branch targets: We will need the target for the branches to it to
   //                    validate.
   Builder builder(wasm);
-  if (keepParent || parent->is<If>() ||
-      parent->is<Try>() || parent->is<Pop>() ||
-      BranchUtils::getDefinedName(parent).is()) {
+  if (keepParent || parent->is<If>() || parent->is<Try>() ||
+      parent->is<Pop>() || BranchUtils::getDefinedName(parent).is()) {
     // If parent is concrete we must drop it. Or, if it is unreachable or none,
     // then we can leave it as it is.
     if (parent->type.isConcrete()) {

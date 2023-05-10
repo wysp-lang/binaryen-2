@@ -76,15 +76,13 @@ struct PassOptions;
 // We can run in two modes: where we notice parent effects, and in that case we
 // won't remove effects there (we'll keep a drop of the parent too), or we can
 // ignore parent effects.
-enum class DropMode {
-  NoticeParentEffects,
-  IgnoreParentEffects
-};
-Expression* getDroppedChildrenAndAppend(Expression* parent,
-                                        Module& wasm,
-                                        const PassOptions& options,
-                                        Expression* last,
-                                        DropMode mode = DropMode::NoticeParentEffects);
+enum class DropMode { NoticeParentEffects, IgnoreParentEffects };
+Expression*
+getDroppedChildrenAndAppend(Expression* parent,
+                            Module& wasm,
+                            const PassOptions& options,
+                            Expression* last,
+                            DropMode mode = DropMode::NoticeParentEffects);
 
 } // namespace wasm
 
