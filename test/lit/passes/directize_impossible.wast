@@ -381,3 +381,76 @@
     )
   )
 )
+
+(module
+  ;; As above, but with call_indirect rather than call_ref. With an imported
+  ;; table as we have here, we optimize_call_indirect like call_ref basically
+  ;; since all we have is the type, but that is enough to optimize exactly like
+  ;; the last module above us.
+
+  ;; CHECK:      (type $t1 (func))
+  ;; TNH__:      (type $t1 (func))
+  ;; CLOSD:      (type $t1 (func))
+  ;; BOTH_:      (type $t1 (func))
+  (type $t1 (func))
+
+  ;; CHECK:      (type $i32_=>_none (func (param i32)))
+
+  ;; CHECK:      (import "a" "b" (table $table 0 funcref))
+  ;; TNH__:      (type $i32_=>_none (func (param i32)))
+
+  ;; TNH__:      (import "a" "b" (table $table 0 funcref))
+  ;; CLOSD:      (type $i32_=>_none (func (param i32)))
+
+  ;; CLOSD:      (import "a" "b" (table $table 0 funcref))
+  ;; BOTH_:      (type $i32_=>_none (func (param i32)))
+
+  ;; BOTH_:      (import "a" "b" (table $table 0 funcref))
+  (import "a" "b" (table $table 1))
+
+  ;; CHECK:      (import "a" "b" (func $t1-0))
+  ;; TNH__:      (import "a" "b" (func $t1-0))
+  ;; CLOSD:      (import "a" "b" (func $t1-0))
+  ;; BOTH_:      (import "a" "b" (func $t1-0))
+  (import "a" "b" (func $t1-0 (type $t1)))
+
+  ;; CHECK:      (func $t1-1 (type $t1)
+  ;; CHECK-NEXT:  (unreachable)
+  ;; CHECK-NEXT: )
+  ;; TNH__:      (func $t1-1 (type $t1)
+  ;; TNH__-NEXT:  (unreachable)
+  ;; TNH__-NEXT: )
+  ;; CLOSD:      (func $t1-1 (type $t1)
+  ;; CLOSD-NEXT:  (unreachable)
+  ;; CLOSD-NEXT: )
+  ;; BOTH_:      (func $t1-1 (type $t1)
+  ;; BOTH_-NEXT:  (unreachable)
+  ;; BOTH_-NEXT: )
+  (func $t1-1 (type $t1)
+    (unreachable)
+  )
+
+  ;; CHECK:      (func $caller (type $i32_=>_none) (param $x i32)
+  ;; CHECK-NEXT:  (call_indirect $table (type $t1)
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; TNH__:      (func $caller (type $i32_=>_none) (param $x i32)
+  ;; TNH__-NEXT:  (call_indirect $table (type $t1)
+  ;; TNH__-NEXT:   (local.get $x)
+  ;; TNH__-NEXT:  )
+  ;; TNH__-NEXT: )
+  ;; CLOSD:      (func $caller (type $i32_=>_none) (param $x i32)
+  ;; CLOSD-NEXT:  (call_indirect $table (type $t1)
+  ;; CLOSD-NEXT:   (local.get $x)
+  ;; CLOSD-NEXT:  )
+  ;; CLOSD-NEXT: )
+  ;; BOTH_:      (func $caller (type $i32_=>_none) (param $x i32)
+  ;; BOTH_-NEXT:  (call $t1-0)
+  ;; BOTH_-NEXT: )
+  (func $caller (param $x i32)
+    (call_indirect $table (type $t1)
+      (local.get $x)
+    )
+  )
+)
