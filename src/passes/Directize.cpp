@@ -194,28 +194,25 @@ private:
   }
 };
 
-// When we assume traps never happen we can dismiss all indirect call targets
-// that will trap. That is, if we see a call that might go to any of {A, B, C},
-// and we have enough information to prove that if we reached A or C then we
-// would trap, then we can infer that B must be called. Of course, we must
-// assume a closed world here, or there could be other functions of that type
-// which could be called, so this will only be done when trapsNeverHappen +
-// closedWorld.
-struct ImpossibleCallOptimizer
-  : public WalkerPass<PostWalker<ImpossibleCallOptimizer>> {
+// In some situations we can infer which indirect call targets are possible,
+// using the type or other information.
+//
+// To do so, we must have a closed world or else more targets are possible that
+// we do not see statically.
+struct PossibleCallOptimizer
+  : public WalkerPass<PostWalker<PossibleCallOptimizer>> {
   bool isFunctionParallel() override { return true; }
 
   std::unique_ptr<Pass> create() override {
-    return std::make_unique<ImpossibleCallOptimizer>();
+    return std::make_unique<PossibleCallOptimizer>();
   }
 
   // A map of function types to the functions that can be called. If a type is
-  // not in this map then we have not yet computed that type.
+  // not in this map then we have not yet computed that type. We build this
+  // lazily to avoid unnecessary computation.
   //
-  // * We build this lazily to avoid unnecessary computation.
-  // * Note that we can use a heap type here, as nullability does not matter
-  //   (a null would trap anyhow, and we are assuming trapsNeverHappen).
-  //
+  // TODO: Perhaps computing this once ahead of time could be faster than on-
+  //       demand in each thread.
   std::unordered_map<HeapType, std::vector<Name>> typeTargets;
 
   void visitCallRef(CallRef* curr) {
@@ -233,13 +230,12 @@ struct ImpossibleCallOptimizer
     auto& targets = iter->second;
 
     // TODO: further filter using out arguments - if we see a cast will trap,
-    //       the target is impossible.
+    //       the target is impossible in TNH
 
     Builder builder(*getModule());
 
     if (targets.empty()) {
       // Nothing can be called, so this will trap; we don't need the call.
-      // TODO: use this above in more places.
       replaceCurrent(
         getDroppedChildrenAndAppend(curr,
                                     *getModule(),
@@ -273,7 +269,7 @@ struct ImpossibleCallOptimizer
         continue;
       }
 
-      // If the function body definitely traps then it can assume to not be
+      // If the function body definitely traps then it can be assumed not to be
       // called in traps-never-happen mode. (Note that checking for the entire
       // body being unreachable is enough, as Vacuum will optimize into that
       // form.)
@@ -287,24 +283,13 @@ struct ImpossibleCallOptimizer
 
     return ret;
   }
-  /*
-    void walk(Expression*& root) { // first block
-      assert(stack.size() == 0);
-      pushTask(SubType::scan, &root);
-      while (stack.size() > 0) {
-        auto task = popTask();
-        replacep = task.currp;
-        assert(*task.currp);
-        task.func(static_cast<SubType*>(this), task.currp);
-      }
-    }
-  */
 
   void doWalkFunction(Function* func) {
     // All optimizations in this class depend on closed world.
     assert(getPassOptions().closedWorld);
 
-    WalkerPass<PostWalker<ImpossibleCallOptimizer>>::doWalkFunction(func);
+    WalkerPass<PostWalker<PossibleCallOptimizer>>::doWalkFunction(func);
+
     if (refinalize) {
       ReFinalize().walkFunctionInModule(func, getModule());
     }
@@ -317,10 +302,11 @@ private:
 struct Directize : public Pass {
   void run(Module* module) override {
     optimizeTableCalls(module);
-    optimizeImpossibleCalls(module);
+    optimizePossibleCalls(module);
   }
 
-  // Optimize CallIndirects using information about tables.
+  // Optimize CallIndirects using information about tables, that is, matching
+  // table indexes to the contents in the table.
   void optimizeTableCalls(Module* module) {
     if (module->tables.empty()) {
       return;
@@ -397,16 +383,21 @@ struct Directize : public Pass {
     TableCallOptimizer(tables).run(getPassRunner(), module);
   }
 
-  // When multiple indirect call targets are possible, but some can be inferred
-  // to be impossible, we can ignore those.
-  void optimizeImpossibleCalls(Module* module) {
-    // TODO: if no tables and no call_ref, quit early
-
-    // TODO use utility that finds type tree of function types? existing?
-
-    if (getPassOptions().closedWorld) {
-      ImpossibleCallOptimizer().run(getPassRunner(), module);
+  // Optimize using an analysis of which call targets are possible using the
+  // type and other information.
+  void optimizePossibleCalls(Module* module) {
+    // We can only optimize call_indirect and call_ref, so exit early if those
+    // instructions are not possible.
+    if (module->tables.empty() && !module->features.hasGC()) {
+      return;
     }
+
+    // We must be in a closed world to see all the possible call targets.
+    if (!getPassOptions().closedWorld) {
+      return;
+    }
+
+    PossibleCallOptimizer().run(getPassRunner(), module);
   }
 };
 
