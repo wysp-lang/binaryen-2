@@ -225,20 +225,8 @@ struct PossibleCallOptimizer
   //       demand in each thread.
   std::unordered_map<HeapType, std::vector<Name>> typeTargets;
 
-  void visitCallRef(CallRef* curr) {
-    auto type = curr->target->type;
-    if (!type.isRef()) {
-      return;
-    }
-    auto heapType = type.getHeapType();
-
-    auto iter = typeTargets.find(heapType);
-    if (iter == typeTargets.end()) {
-      iter =
-        typeTargets.emplace(heapType, findPossibleFunctions(heapType)).first;
-    }
-    auto& targets = iter->second;
-
+  template<typename T>
+  void optimizeCall(T* curr, std::vector<Name>& targets) {
     // TODO: further filter using out arguments - if we see a cast will trap,
     //       the target is impossible in TNH
 
@@ -270,6 +258,23 @@ struct PossibleCallOptimizer
     //       call_refs into call_indirects with separate tables. Then the table
     //       here could be of size targets.size(), and turn into an if when
     //       size() is 2, etc.
+  }
+
+  void visitCallRef(CallRef* curr) {
+    auto type = curr->target->type;
+    if (!type.isRef()) {
+      return;
+    }
+    auto heapType = type.getHeapType();
+
+    auto iter = typeTargets.find(heapType);
+    if (iter == typeTargets.end()) {
+      iter =
+        typeTargets.emplace(heapType, findPossibleFunctions(heapType)).first;
+    }
+    auto& targets = iter->second;
+
+    optimizeCall(curr, targets);
   }
 
   // TODO: call_indirect too
