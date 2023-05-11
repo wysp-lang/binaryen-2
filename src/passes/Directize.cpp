@@ -78,14 +78,16 @@ struct TableInfoMap : public std::unordered_map<Name, TableInfo> {
   }
 };
 
-struct TableCallOptimizer : public WalkerPass<PostWalker<TableCallOptimizer>> {
+// Optimize call_indirects using table index information: if we see a call to
+// index k, and we know what is present there, we can emit a direct call.
+struct TableIndexOptimizer : public WalkerPass<PostWalker<TableIndexOptimizer>> {
   bool isFunctionParallel() override { return true; }
 
   std::unique_ptr<Pass> create() override {
-    return std::make_unique<TableCallOptimizer>(tables);
+    return std::make_unique<TableIndexOptimizer>(tables);
   }
 
-  TableCallOptimizer(const TableInfoMap& tables) : tables(tables) {}
+  TableIndexOptimizer(const TableInfoMap& tables) : tables(tables) {}
 
   void visitCallIndirect(CallIndirect* curr) {
     auto& table = tables.at(curr->table);
@@ -117,7 +119,7 @@ struct TableCallOptimizer : public WalkerPass<PostWalker<TableCallOptimizer>> {
   }
 
   void doWalkFunction(Function* func) {
-    WalkerPass<PostWalker<TableCallOptimizer>>::doWalkFunction(func);
+    WalkerPass<PostWalker<TableIndexOptimizer>>::doWalkFunction(func);
     if (changedTypes) {
       ReFinalize().walkFunctionInModule(func, getModule());
     }
@@ -266,7 +268,7 @@ struct PossibleCallOptimizer
     // we don't have a way to check which of the two functions to call, even
     // though we know it must be one of the two.
     // TODO: For call_indirect with a static table we can optimize here. Also,
-    // TODO  An option to convert call_refs into call_indirects with separate
+    //       an option to convert call_refs into call_indirects with separate
     //       tables could let us optimize.
     // TODO: A simpler case we can optimize is two targets where one is null,
     //       since ref.is_null is a check we can do, unlike normal function
@@ -348,8 +350,7 @@ struct PossibleCallOptimizer
   void addTrappingTarget(Targets& targets) {
     // Only add if a trap is in fact possible.
     if (!getPassOptions().trapsNeverHappen) {
-      // A null name represents the possibility of trapping, which as mentioned
-      // above can happen if the index is out of bounds.
+      // A null name represents the possibility of trapping.
       targets.insert(Name());
     }
   }
@@ -358,7 +359,8 @@ struct PossibleCallOptimizer
   // targets.
   void filterImpossibleFunctions(Targets& targets) {
     // All the optimizations we have here involve finding traps and ignoring
-    // their possibility.
+    // their possibility: we assume trapsNeverHappen in the rest of this
+    // function.
     if (!getPassOptions().trapsNeverHappen) {
       return;
     }
@@ -407,12 +409,10 @@ struct Directize : public Pass {
     TableInfoMap tables;
     buildTableInfo(module, tables);
 
-    optimizeTableCalls(module, tables);
+    optimizeTableIndexCalls(module, tables);
     optimizePossibleCalls(module, tables);
   }
 
-  // Optimize CallIndirects using information about tables, that is, matching
-  // table indexes to the contents in the table.
   void buildTableInfo(Module* module, TableInfoMap& tables) {
     if (module->tables.empty()) {
       return;
@@ -470,12 +470,13 @@ struct Directize : public Pass {
     }
   }
 
-  void optimizeTableCalls(Module* module, const TableInfoMap& tables) {
+  // Optimize CallIndirects using index information about tables.
+  void optimizeTableIndex(Module* module, const TableInfoMap& tables) {
     if (!tables.canOptimize()) {
       return;
     }
 
-    TableCallOptimizer(tables).run(getPassRunner(), module);
+    TableIndexOptimizer(tables).run(getPassRunner(), module);
   }
 
   // Optimize using an analysis of which call targets are possible using the
