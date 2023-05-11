@@ -80,15 +80,15 @@ struct TableInfoMap : public std::unordered_map<Name, TableInfo> {
 
 // Optimize call_indirects using table index information: if we see a call to
 // index k, and we know what is present there, we can emit a direct call.
-struct TableIndexOptimizer
-  : public WalkerPass<PostWalker<TableIndexOptimizer>> {
+struct IndexedCallOptimizer
+  : public WalkerPass<PostWalker<IndexedCallOptimizer>> {
   bool isFunctionParallel() override { return true; }
 
   std::unique_ptr<Pass> create() override {
-    return std::make_unique<TableIndexOptimizer>(tables);
+    return std::make_unique<IndexedCallOptimizer>(tables);
   }
 
-  TableIndexOptimizer(const TableInfoMap& tables) : tables(tables) {}
+  IndexedCallOptimizer(const TableInfoMap& tables) : tables(tables) {}
 
   void visitCallIndirect(CallIndirect* curr) {
     auto& table = tables.at(curr->table);
@@ -120,7 +120,7 @@ struct TableIndexOptimizer
   }
 
   void doWalkFunction(Function* func) {
-    WalkerPass<PostWalker<TableIndexOptimizer>>::doWalkFunction(func);
+    WalkerPass<PostWalker<IndexedCallOptimizer>>::doWalkFunction(func);
     if (changedTypes) {
       ReFinalize().walkFunctionInModule(func, getModule());
     }
@@ -410,7 +410,7 @@ struct Directize : public Pass {
     TableInfoMap tables;
     buildTableInfo(module, tables);
 
-    optimizeTableIndexCalls(module, tables);
+    optimizeIndexedCalls(module, tables);
     optimizePossibleCalls(module, tables);
   }
 
@@ -472,12 +472,12 @@ struct Directize : public Pass {
   }
 
   // Optimize CallIndirects using index information about tables.
-  void optimizeTableIndexCalls(Module* module, const TableInfoMap& tables) {
+  void optimizeIndexedCalls(Module* module, const TableInfoMap& tables) {
     if (!tables.canOptimize()) {
       return;
     }
 
-    TableIndexOptimizer(tables).run(getPassRunner(), module);
+    IndexedCallOptimizer(tables).run(getPassRunner(), module);
   }
 
   // Optimize using an analysis of which call targets are possible using the
