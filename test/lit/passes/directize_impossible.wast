@@ -588,7 +588,9 @@
   ;; TNH__-NEXT:  )
   ;; TNH__-NEXT: )
   ;; CLOSD:      (func $caller (type $i32_ref|$t1|_=>_none) (param $x i32) (param $t1 (ref $t1))
-  ;; CLOSD-NEXT:  (call $t1-0)
+  ;; CLOSD-NEXT:  (call_indirect $one (type $t1)
+  ;; CLOSD-NEXT:   (local.get $x)
+  ;; CLOSD-NEXT:  )
   ;; CLOSD-NEXT:  (call_indirect $two (type $t1)
   ;; CLOSD-NEXT:   (local.get $x)
   ;; CLOSD-NEXT:  )
@@ -610,13 +612,14 @@
   ;; BOTH_-NEXT:  )
   ;; BOTH_-NEXT: )
   (func $caller (param $x i32) (param $t1 (ref $t1))
-    ;; Only one function is in that table, so we can call it directly (in
-    ;; closed world).
+    ;; Only one function is in that table, but call_indirect might also trap
+    ;; (on an index out of bounds) so we can optimize to a direct call only when
+    ;; TNH (and in closed world).
     (call_indirect $one (type $t1)
       (local.get $x)
     )
-    ;; Two functions, but with TNH we can rule out the second and optimize
-    ;; (in closed world).
+    ;; Two functions, but with TNH we can rule out the second (since it would
+    ;; trap) and optimize (in closed world).
     (call_indirect $two (type $t1)
       (local.get $x)
     )
@@ -624,7 +627,8 @@
     (call_indirect $three (type $t1)
       (local.get $x)
     )
-    ;; For comparison, call_ref only has the type, and cannot optimize.
+    ;; For comparison, call_ref only has the type, and cannot optimize in any
+    ;; mode.
     (call_ref $t1
       (local.get $t1)
     )
