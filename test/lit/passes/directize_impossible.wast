@@ -375,7 +375,7 @@
   ;; BOTH_-NEXT: )
   (func $caller (param $t1 (ref $t1))
     ;; One of the targets is unreachable, and one is an import. In TNH mode
-    ;; (with closed-world) we can infer that the import must be called.
+    ;; (and with closed-world) we can infer that the import must be called.
     (call_ref $t1
       (local.get $t1)
     )
@@ -447,8 +447,8 @@
 (module
   ;; As above, but with call_indirect rather than call_ref. With an imported
   ;; table as we have here, we optimize_call_indirect like call_ref basically
-  ;; since all we have is the type, but that is enough to optimize exactly like
-  ;; the last module above us.
+  ;; since all we have is the type, but that is enough to optimize in some
+  ;; cases.
 
   ;; CHECK:      (type $t1 (func))
   ;; TNH__:      (type $t1 (func))
@@ -511,6 +511,8 @@
   ;; BOTH_-NEXT:  (call $t1-0)
   ;; BOTH_-NEXT: )
   (func $caller (param $x i32)
+    ;; We need both closed world and TNH here. TNH is needed since a
+    ;; call_indirect might trap on an out of bounds index.
     (call_indirect $table (type $t1)
       (local.get $x)
     )
@@ -521,8 +523,8 @@
   ;; As above, but with call_indirect on a non-imported and non-modified table,
   ;; that lets us optimize using the table's contents. Now we can do better than
   ;; call_ref: there are three functions of type $t1, and even in TNH mode we
-  ;; can just eliminate one of them, but based on which are in the table being
-  ;; called we can optimize.
+  ;; can just eliminate one of them, but we can actually optimize based on which
+  ;; function are actually in the table being called.
 
   ;; CHECK:      (type $t1 (func))
   ;; TNH__:      (type $t1 (func))
