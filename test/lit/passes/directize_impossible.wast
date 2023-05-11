@@ -509,21 +509,21 @@
   ;; BOTH_:      (table $three 0 funcref)
 
   ;; BOTH_:      (elem $one (table $one) (i32.const 0) func $t1-0)
-  (elem $one (i32.const 0) $t1-0)
+  (elem $one (table $one) (i32.const 0) $t1-0)
 
   (table $two funcref 2)
-  ;; CHECK:      (elem $two (table $one) (i32.const 0) func $t1-0 $t1-1)
-  ;; TNH__:      (elem $two (table $one) (i32.const 0) func $t1-0 $t1-1)
-  ;; CLOSD:      (elem $two (table $one) (i32.const 0) func $t1-0 $t1-1)
-  ;; BOTH_:      (elem $two (table $one) (i32.const 0) func $t1-0 $t1-1)
-  (elem $two (i32.const 0) $t1-0 $t1-1)
+  ;; CHECK:      (elem $two (table $two) (i32.const 0) func $t1-0 $t1-1)
+  ;; TNH__:      (elem $two (table $two) (i32.const 0) func $t1-0 $t1-1)
+  ;; CLOSD:      (elem $two (table $two) (i32.const 0) func $t1-0 $t1-1)
+  ;; BOTH_:      (elem $two (table $two) (i32.const 0) func $t1-0 $t1-1)
+  (elem $two (table $two) (i32.const 0) $t1-0 $t1-1)
 
   (table $three funcref 3)
-  ;; CHECK:      (elem $three (table $one) (i32.const 0) func $t1-0 $t1-1 $t1-2)
-  ;; TNH__:      (elem $three (table $one) (i32.const 0) func $t1-0 $t1-1 $t1-2)
-  ;; CLOSD:      (elem $three (table $one) (i32.const 0) func $t1-0 $t1-1 $t1-2)
-  ;; BOTH_:      (elem $three (table $one) (i32.const 0) func $t1-0 $t1-1 $t1-2)
-  (elem $three (i32.const 0) $t1-0 $t1-1 $t1-2)
+  ;; CHECK:      (elem $three (table $three) (i32.const 0) func $t1-0 $t1-1 $t1-2)
+  ;; TNH__:      (elem $three (table $three) (i32.const 0) func $t1-0 $t1-1 $t1-2)
+  ;; CLOSD:      (elem $three (table $three) (i32.const 0) func $t1-0 $t1-1 $t1-2)
+  ;; BOTH_:      (elem $three (table $three) (i32.const 0) func $t1-0 $t1-1 $t1-2)
+  (elem $three (table $three) (i32.const 0) $t1-0 $t1-1 $t1-2)
 
   (import "a" "b" (func $t1-0 (type $t1)))
 
@@ -566,7 +566,7 @@
   ;; CHECK-NEXT:  (call_indirect $two (type $t1)
   ;; CHECK-NEXT:   (local.get $x)
   ;; CHECK-NEXT:  )
-  ;; CHECK-NEXT:  (call_indirect $two (type $t1)
+  ;; CHECK-NEXT:  (call_indirect $three (type $t1)
   ;; CHECK-NEXT:   (local.get $x)
   ;; CHECK-NEXT:  )
   ;; CHECK-NEXT:  (call_ref $t1
@@ -580,7 +580,7 @@
   ;; TNH__-NEXT:  (call_indirect $two (type $t1)
   ;; TNH__-NEXT:   (local.get $x)
   ;; TNH__-NEXT:  )
-  ;; TNH__-NEXT:  (call_indirect $two (type $t1)
+  ;; TNH__-NEXT:  (call_indirect $three (type $t1)
   ;; TNH__-NEXT:   (local.get $x)
   ;; TNH__-NEXT:  )
   ;; TNH__-NEXT:  (call_ref $t1
@@ -588,37 +588,40 @@
   ;; TNH__-NEXT:  )
   ;; TNH__-NEXT: )
   ;; CLOSD:      (func $caller (type $i32_ref|$t1|_=>_none) (param $x i32) (param $t1 (ref $t1))
-  ;; CLOSD-NEXT:  (call_indirect $one (type $t1)
+  ;; CLOSD-NEXT:  (call $t1-0)
+  ;; CLOSD-NEXT:  (call_indirect $two (type $t1)
   ;; CLOSD-NEXT:   (local.get $x)
   ;; CLOSD-NEXT:  )
-  ;; CLOSD-NEXT:  (unreachable)
-  ;; CLOSD-NEXT:  (unreachable)
+  ;; CLOSD-NEXT:  (call_indirect $three (type $t1)
+  ;; CLOSD-NEXT:   (local.get $x)
+  ;; CLOSD-NEXT:  )
   ;; CLOSD-NEXT:  (call_ref $t1
   ;; CLOSD-NEXT:   (local.get $t1)
   ;; CLOSD-NEXT:  )
   ;; CLOSD-NEXT: )
   ;; BOTH_:      (func $caller (type $i32_ref|$t1|_=>_none) (param $x i32) (param $t1 (ref $t1))
-  ;; BOTH_-NEXT:  (call_indirect $one (type $t1)
+  ;; BOTH_-NEXT:  (call $t1-0)
+  ;; BOTH_-NEXT:  (call $t1-0)
+  ;; BOTH_-NEXT:  (call_indirect $three (type $t1)
   ;; BOTH_-NEXT:   (local.get $x)
   ;; BOTH_-NEXT:  )
-  ;; BOTH_-NEXT:  (unreachable)
-  ;; BOTH_-NEXT:  (unreachable)
   ;; BOTH_-NEXT:  (call_ref $t1
   ;; BOTH_-NEXT:   (local.get $t1)
   ;; BOTH_-NEXT:  )
   ;; BOTH_-NEXT: )
   (func $caller (param $x i32) (param $t1 (ref $t1))
-    ;; XXX All the results here look wrongg
-    ;; Only one function is in that table, so we can call it directly.
+    ;; Only one function is in that table, so we can call it directly (in
+    ;; closed world).
     (call_indirect $one (type $t1)
       (local.get $x)
     )
-    ;; Two functions, but with TNH we can rule out the second and optimize.
+    ;; Two functions, but with TNH we can rule out the second and optimize
+    ;; (in closed world).
     (call_indirect $two (type $t1)
       (local.get $x)
     )
     ;; Three functions, and two of them are possible, so we cannot optimize.
-    (call_indirect $two (type $t1)
+    (call_indirect $three (type $t1)
       (local.get $x)
     )
     ;; For comparison, call_ref only has the type, and cannot optimize.
