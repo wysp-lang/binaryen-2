@@ -383,6 +383,68 @@
 )
 
 (module
+  ;; CHECK:      (type $t1 (func))
+  ;; TNH__:      (type $t1 (func))
+  ;; CLOSD:      (type $t1 (func))
+  ;; BOTH_:      (type $t1 (func))
+  (type $t1 (func))
+
+  ;; CHECK:      (type $ref?|$t1|_ref|$t1|_=>_none (func (param (ref null $t1) (ref $t1))))
+
+  ;; CHECK:      (import "a" "b" (func $t1-0))
+  ;; TNH__:      (type $ref?|$t1|_ref|$t1|_=>_none (func (param (ref null $t1) (ref $t1))))
+
+  ;; TNH__:      (import "a" "b" (func $t1-0))
+  ;; CLOSD:      (type $ref?|$t1|_ref|$t1|_=>_none (func (param (ref null $t1) (ref $t1))))
+
+  ;; CLOSD:      (import "a" "b" (func $t1-0))
+  ;; BOTH_:      (type $ref?|$t1|_ref|$t1|_=>_none (func (param (ref null $t1) (ref $t1))))
+
+  ;; BOTH_:      (import "a" "b" (func $t1-0))
+  (import "a" "b" (func $t1-0 (type $t1)))
+
+  ;; CHECK:      (func $caller (type $ref?|$t1|_ref|$t1|_=>_none) (param $nullable (ref null $t1)) (param $non-nullable (ref $t1))
+  ;; CHECK-NEXT:  (call_ref $t1
+  ;; CHECK-NEXT:   (local.get $nullable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT:  (call_ref $t1
+  ;; CHECK-NEXT:   (local.get $non-nullable)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; TNH__:      (func $caller (type $ref?|$t1|_ref|$t1|_=>_none) (param $nullable (ref null $t1)) (param $non-nullable (ref $t1))
+  ;; TNH__-NEXT:  (call_ref $t1
+  ;; TNH__-NEXT:   (local.get $nullable)
+  ;; TNH__-NEXT:  )
+  ;; TNH__-NEXT:  (call_ref $t1
+  ;; TNH__-NEXT:   (local.get $non-nullable)
+  ;; TNH__-NEXT:  )
+  ;; TNH__-NEXT: )
+  ;; CLOSD:      (func $caller (type $ref?|$t1|_ref|$t1|_=>_none) (param $nullable (ref null $t1)) (param $non-nullable (ref $t1))
+  ;; CLOSD-NEXT:  (call_ref $t1
+  ;; CLOSD-NEXT:   (local.get $nullable)
+  ;; CLOSD-NEXT:  )
+  ;; CLOSD-NEXT:  (call $t1-0)
+  ;; CLOSD-NEXT: )
+  ;; BOTH_:      (func $caller (type $ref?|$t1|_ref|$t1|_=>_none) (param $nullable (ref null $t1)) (param $non-nullable (ref $t1))
+  ;; BOTH_-NEXT:  (call $t1-0)
+  ;; BOTH_-NEXT:  (call $t1-0)
+  ;; BOTH_-NEXT: )
+  (func $caller (param $nullable (ref null $t1)) (param $non-nullable (ref $t1))
+    ;; Only one function exists. But if the reference is null then we might
+    ;; also trap. We can only optimize the nullable one in TNH mode, where we
+    ;; ignore such a trap (and we also require closed world).
+    (call_ref $t1
+      (local.get $nullable)
+    )
+    ;; The non-nullable reference can be optimized even without TNH (in closed
+    ;; world).
+    (call_ref $t1
+      (local.get $non-nullable)
+    )
+  )
+)
+
+(module
   ;; As above, but with call_indirect rather than call_ref. With an imported
   ;; table as we have here, we optimize_call_indirect like call_ref basically
   ;; since all we have is the type, but that is enough to optimize exactly like
