@@ -265,9 +265,9 @@ struct PossibleCallOptimizer
     // if between two calls. However, function references cannot be compared, so
     // we don't have a way to check which of the two functions to call, even
     // though we know it must be one of the two.
-    // TODO: For call_indirect at least we can optimize here. Also, if we had an
-    //       option to convert call_refs into call_indirects with separate
-    //       tables then those could be optimized.
+    // TODO: For call_indirect with a static table we can optimize here. Also,
+    // TODO  An option to convert call_refs into call_indirects with separate
+    //       tables could let us optimize.
     // TODO: A simpler case we can optimize is two targets where one is null,
     //       since ref.is_null is a check we can do, unlike normal function
     //       ref comparisons. (For call_ref this seems worthwhile; for
@@ -316,9 +316,8 @@ struct PossibleCallOptimizer
       targets.insert(name);
     }
 
-    // A null name represents the possibility of trapping, which as mentioned
-    // above can happen if the index is out of bounds.
-    targets.insert(Name());
+    // As mentioned above we can trap if the index is out of bounds.
+    addTrappingTarget(targets);
 
     filterImpossibleFunctions(targets);
 
@@ -338,8 +337,7 @@ struct PossibleCallOptimizer
     }
 
     if (type.isNullable()) {
-      // A null name represents the possibility of trapping.
-      targets.insert(Name());
+      addTrappingTarget(targets);
     }
 
     filterImpossibleFunctions(targets);
@@ -347,10 +345,20 @@ struct PossibleCallOptimizer
     return targets;
   }
 
+  void addTrappingTarget(Targets& targets) {
+    // Only add if a trap is in fact possible.
+    if (!getPassOptions().trapsNeverHappen) {
+      // A null name represents the possibility of trapping, which as mentioned
+      // above can happen if the index is out of bounds.
+      targets.insert(Name());
+    }
+  }
+
   // Filter out functions that cannot be a call target, from a list of possible
   // targets.
   void filterImpossibleFunctions(Targets& targets) {
-    // We can only optimize here if traps never happen.
+    // All the optimizations we have here involve finding traps and ignoring
+    // their possibility.
     if (!getPassOptions().trapsNeverHappen) {
       return;
     }
@@ -362,6 +370,7 @@ struct PossibleCallOptimizer
         toErase.push_back(target);
         continue;
       }
+
       // An unreachable body is also a trap (checking for that pattern is
       // enough as Vacuum will optimize into that form).
       auto* func = getModule()->getFunction(target);
