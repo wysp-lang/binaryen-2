@@ -553,36 +553,31 @@
 
   ;; BOTH_:      (table $one 0 funcref)
   (table $one funcref 1)
+
   ;; CHECK:      (table $two 0 funcref)
+  ;; TNH__:      (table $two 0 funcref)
+  ;; CLOSD:      (table $two 0 funcref)
+  ;; BOTH_:      (table $two 0 funcref)
+  (table $two funcref 2)
 
   ;; CHECK:      (table $three 0 funcref)
+  ;; TNH__:      (table $three 0 funcref)
+  ;; CLOSD:      (table $three 0 funcref)
+  ;; BOTH_:      (table $three 0 funcref)
+  (table $three funcref 3)
 
   ;; CHECK:      (elem $one (table $one) (i32.const 0) func $t1-0)
-  ;; TNH__:      (table $two 0 funcref)
-
-  ;; TNH__:      (table $three 0 funcref)
-
   ;; TNH__:      (elem $one (table $one) (i32.const 0) func $t1-0)
-  ;; CLOSD:      (table $two 0 funcref)
-
-  ;; CLOSD:      (table $three 0 funcref)
-
   ;; CLOSD:      (elem $one (table $one) (i32.const 0) func $t1-0)
-  ;; BOTH_:      (table $two 0 funcref)
-
-  ;; BOTH_:      (table $three 0 funcref)
-
   ;; BOTH_:      (elem $one (table $one) (i32.const 0) func $t1-0)
   (elem $one (table $one) (i32.const 0) $t1-0)
 
-  (table $two funcref 2)
   ;; CHECK:      (elem $two (table $two) (i32.const 0) func $t1-0 $t1-1)
   ;; TNH__:      (elem $two (table $two) (i32.const 0) func $t1-0 $t1-1)
   ;; CLOSD:      (elem $two (table $two) (i32.const 0) func $t1-0 $t1-1)
   ;; BOTH_:      (elem $two (table $two) (i32.const 0) func $t1-0 $t1-1)
   (elem $two (table $two) (i32.const 0) $t1-0 $t1-1)
 
-  (table $three funcref 3)
   ;; CHECK:      (elem $three (table $three) (i32.const 0) func $t1-0 $t1-1 $t1-2)
   ;; TNH__:      (elem $three (table $three) (i32.const 0) func $t1-0 $t1-1 $t1-2)
   ;; CLOSD:      (elem $three (table $three) (i32.const 0) func $t1-0 $t1-1 $t1-2)
