@@ -472,7 +472,7 @@ struct Directize : public Pass {
   }
 
   // Optimize CallIndirects using index information about tables.
-  void optimizeTableIndex(Module* module, const TableInfoMap& tables) {
+  void optimizeTableIndexCalls(Module* module, const TableInfoMap& tables) {
     if (!tables.canOptimize()) {
       return;
     }
