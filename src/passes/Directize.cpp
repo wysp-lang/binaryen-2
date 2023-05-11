@@ -37,6 +37,7 @@
 #include "ir/table-utils.h"
 #include "ir/utils.h"
 #include "pass.h"
+#include "support/small_set.h"
 #include "wasm-builder.h"
 #include "wasm-traversal.h"
 #include "wasm.h"
@@ -205,10 +206,9 @@ private:
 };
 
 // In some situations we can infer which indirect call targets are possible,
-// using the type or other information.
-//
-// To do so, we must have a closed world or else more targets are possible that
-// we do not see statically.
+// using the type or other information. For example, in a closed world if there
+// is only one function of a particular type, then it must be what we are
+// calling (assuming we do not trap).
 struct PossibleCallOptimizer
   : public WalkerPass<PostWalker<PossibleCallOptimizer>> {
   bool isFunctionParallel() override { return true; }
@@ -219,6 +219,10 @@ struct PossibleCallOptimizer
 
   PossibleCallOptimizer(const TableInfoMap& tables) : tables(tables) {}
 
+  // We focus on optimizing the case of a single target or at most two, and
+  // hopefully that is a common case.
+  using Targets = SmallUnorderedSet<Name, 2>;
+
   // A map of function types to the functions that can be called. If a type is
   // not in this map then we have not yet computed that type. We build this
   // lazily to avoid unnecessary computation.
@@ -226,20 +230,19 @@ struct PossibleCallOptimizer
   // A null Name() represents a possible trap. That is, if the targets are
   // { "foo", "bar", null } then we might call foo, bar, or we might trap.
   //
-  // TODO: Perhaps computing this once ahead of time could be faster than on-
-  //       demand in each thread.
-  std::unordered_map<Type, std::vector<Name>> typeTargets;
+  // TODO: Perhaps computing this once ahead of time for all functions could be
+  //       faster than on-demand in each thread.
+  std::unordered_map<Type, Targets> typeTargets;
 
   // Optimize a call given the set of targets it might reach.
-  template<typename T> void optimizeCall(T* curr, std::vector<Name>& targets) {
+  template<typename T> void optimizeCall(T* curr, Targets& targets) {
     // TODO: further filter using out arguments - if we see a cast will trap,
     //       the target is impossible in TNH
 
     Builder builder(*getModule());
 
-    // Check if nothing can be called, or if there is a single target that is
-    // just a null name (from an empty table slot) - either way, this will trap.
-    if (targets.empty() || (targets.size() == 1 && !targets[0].is())) {
+    // Check if nothing can be called, or if all that can happen is a trap.
+    if (targets.empty() || (targets.size() == 1 && !(*targets.begin()).is())) {
       // Replace the call with its children (if we need them) + a trap.
       replaceCurrent(
         getDroppedChildrenAndAppend(curr,
@@ -254,17 +257,21 @@ struct PossibleCallOptimizer
     if (targets.size() == 1) {
       // We can optimize to a direct call.
       replaceCurrent(builder.makeCall(
-        targets[0], curr->operands, curr->type, curr->isReturn));
+        *targets.begin(), curr->operands, curr->type, curr->isReturn));
+      return;
+    }
+
+    if (targets.size() == 2) {
+      // waka TODO
     }
 
     // We would like to optimize the case of targets.size() == 2 as well, to an
     // if between two calls. However, function references cannot be compared, so
     // we don't have a way to check which of the two functions to call, even
     // though we know it must be one of the two.
-    // TODO: Perhaps one thing we can do here is have an option to convert
-    //       call_refs into call_indirects with separate tables. Then the table
-    //       here could be of size targets.size(), and turn into an if when
-    //       size() is 2, etc.
+    // TODO: For call_indirect at least we can optimize here. Also, if we had an
+    //       option to convert call_refs into call_indirects with separate
+    //       tables then those could be optimized.
   }
 
   // Optimize a call given the type of the targets. This computes the targets
@@ -304,11 +311,14 @@ struct PossibleCallOptimizer
 
     // We can optimize using this table: it has a simple and static layout, and
     // so all possible targets are within the table.
-    auto targets = (*table.flatTable).names;
+    Targets targets;
+    for (auto name : table.flatTable->names) {
+      targets.insert(name);
+    }
 
     // A null name represents the possibility of trapping, which as mentioned
     // above can happen if the index is out of bounds.
-    targets.push_back(Name());
+    targets.insert(Name());
 
     filterImpossibleFunctions(targets);
 
@@ -316,20 +326,20 @@ struct PossibleCallOptimizer
   }
 
   // Given a function type, find all possible targets of that type.
-  std::vector<Name> findFunctionsOfType(Type type) {
-    std::vector<Name> targets;
+  Targets findFunctionsOfType(Type type) {
+    Targets targets;
 
     auto heapType = type.getHeapType();
 
     for (auto& func : getModule()->functions) {
       if (HeapType::isSubType(func->type, heapType)) {
-        targets.push_back(func->name);
+        targets.insert(func->name);
       }
     }
 
     if (type.isNullable()) {
       // A null name represents the possibility of trapping.
-      targets.push_back(Name());
+      targets.insert(Name());
     }
 
     filterImpossibleFunctions(targets);
@@ -339,31 +349,30 @@ struct PossibleCallOptimizer
 
   // Filter out functions that cannot be a call target, from a list of possible
   // targets.
-  void filterImpossibleFunctions(std::vector<Name>& targets) {
+  void filterImpossibleFunctions(Targets& targets) {
     // We can only optimize here if traps never happen.
     if (!getPassOptions().trapsNeverHappen) {
       return;
     }
 
-    targets.erase(std::remove_if(targets.begin(),
-                                 targets.end(),
-                                 [&](Name name) {
-                                   // If the function body definitely traps then
-                                   // it can be assumed not to be called in
-                                   // traps-never-happen mode.
-                                   if (!name.is()) {
-                                     // An empty name means a null in a table,
-                                     // which would traps, so erase it.
-                                     return true;
-                                   }
-                                   // Otherwise, check if the target function is
-                                   // just an unreachable (that check is enough,
-                                   // as Vacuum will optimize into that form.)
-                                   auto* func = getModule()->getFunction(name);
-                                   return !func->imported() &&
-                                          func->body->is<Unreachable>();
-                                 }),
-                  targets.end());
+    SmallVector<Name, 10> toErase;
+    for (auto target : targets) {
+      // A null target is a trap, which we can ignore.
+      if (!target.is()) {
+        toErase.push_back(target);
+        continue;
+      }
+      // An unreachable body is also a trap (checking for that pattern is
+      // enough as Vacuum will optimize into that form).
+      auto* func = getModule()->getFunction(target);
+      if (!func->imported() && func->body->is<Unreachable>()) {
+        toErase.push_back(target);
+      }
+    }
+
+    for (auto target : toErase) {
+      targets.erase(target);
+    }
   }
 
   void doWalkFunction(Function* func) {
