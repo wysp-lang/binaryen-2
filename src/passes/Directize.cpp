@@ -80,7 +80,8 @@ struct TableInfoMap : public std::unordered_map<Name, TableInfo> {
 
 // Optimize call_indirects using table index information: if we see a call to
 // index k, and we know what is present there, we can emit a direct call.
-struct TableIndexOptimizer : public WalkerPass<PostWalker<TableIndexOptimizer>> {
+struct TableIndexOptimizer
+  : public WalkerPass<PostWalker<TableIndexOptimizer>> {
   bool isFunctionParallel() override { return true; }
 
   std::unique_ptr<Pass> create() override {
