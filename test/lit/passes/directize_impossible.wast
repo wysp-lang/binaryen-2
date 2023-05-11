@@ -686,8 +686,7 @@
     (call_indirect $three (type $t1)
       (local.get $x)
     )
-    ;; For comparison, call_ref only has the type, and cannot optimize in any
-    ;; mode.
+    ;; For comparison, call_ref only has the type, and cannot optimize at all.
     (call_ref $t1
       (local.get $t1)
     )
