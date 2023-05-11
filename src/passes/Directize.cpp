@@ -212,15 +212,15 @@ private:
 // using the type or other information. For example, in a closed world if there
 // is only one function of a particular type, then it must be what we are
 // calling (assuming we do not trap).
-struct PossibleCallOptimizer
-  : public WalkerPass<PostWalker<PossibleCallOptimizer>> {
+struct PossibleTargetOptimizer
+  : public WalkerPass<PostWalker<PossibleTargetOptimizer>> {
   bool isFunctionParallel() override { return true; }
 
   std::unique_ptr<Pass> create() override {
-    return std::make_unique<PossibleCallOptimizer>(tables);
+    return std::make_unique<PossibleTargetOptimizer>(tables);
   }
 
-  PossibleCallOptimizer(const TableInfoMap& tables) : tables(tables) {}
+  PossibleTargetOptimizer(const TableInfoMap& tables) : tables(tables) {}
 
   // We focus on optimizing the case of a single target or at most two, and
   // hopefully that is a common case.
@@ -391,7 +391,7 @@ struct PossibleCallOptimizer
     // All optimizations in this class depend on closed world.
     assert(getPassOptions().closedWorld);
 
-    WalkerPass<PostWalker<PossibleCallOptimizer>>::doWalkFunction(func);
+    WalkerPass<PostWalker<PossibleTargetOptimizer>>::doWalkFunction(func);
 
     if (refinalize) {
       ReFinalize().walkFunctionInModule(func, getModule());
@@ -411,7 +411,7 @@ struct Directize : public Pass {
     buildTableInfo(module, tables);
 
     optimizeIndexedCalls(module, tables);
-    optimizePossibleCalls(module, tables);
+    optimizePossibleTargets(module, tables);
   }
 
   void buildTableInfo(Module* module, TableInfoMap& tables) {
@@ -482,7 +482,7 @@ struct Directize : public Pass {
 
   // Optimize using an analysis of which call targets are possible using the
   // type and other information.
-  void optimizePossibleCalls(Module* module, const TableInfoMap& tables) {
+  void optimizePossibleTargets(Module* module, const TableInfoMap& tables) {
     // We can only optimize call_indirect and call_ref, so exit early if those
     // instructions are not possible.
     if (module->tables.empty() && !module->features.hasGC()) {
@@ -494,7 +494,7 @@ struct Directize : public Pass {
       return;
     }
 
-    PossibleCallOptimizer(tables).run(getPassRunner(), module);
+    PossibleTargetOptimizer(tables).run(getPassRunner(), module);
   }
 };
 
