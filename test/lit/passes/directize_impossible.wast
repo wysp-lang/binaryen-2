@@ -696,3 +696,101 @@
     )
   )
 )
+
+(module
+  ;; Check that duplicate table entries do not confuse us.
+
+  ;; CHECK:      (type $t1 (func))
+  ;; TNH__:      (type $t1 (func))
+  ;; CLOSD:      (type $t1 (func))
+  ;; BOTH_:      (type $t1 (func))
+  (type $t1 (func))
+
+  ;; CHECK:      (type $i32_=>_none (func (param i32)))
+
+  ;; CHECK:      (import "a" "b" (func $t1-0))
+
+  ;; CHECK:      (table $table 0 funcref)
+  ;; TNH__:      (type $i32_=>_none (func (param i32)))
+
+  ;; TNH__:      (import "a" "b" (func $t1-0))
+
+  ;; TNH__:      (table $table 0 funcref)
+  ;; CLOSD:      (type $i32_=>_none (func (param i32)))
+
+  ;; CLOSD:      (import "a" "b" (func $t1-0))
+
+  ;; CLOSD:      (table $table 0 funcref)
+  ;; BOTH_:      (type $i32_=>_none (func (param i32)))
+
+  ;; BOTH_:      (import "a" "b" (func $t1-0))
+
+  ;; BOTH_:      (table $table 0 funcref)
+  (table $table funcref 1)
+
+  (elem (table $table) (i32.const 0) $t1-0 $t1-0 $t1-0)
+
+  (import "a" "b" (func $t1-0 (type $t1)))
+
+  ;; CHECK:      (elem $0 (i32.const 0) $t1-0 $t1-0 $t1-0)
+
+  ;; CHECK:      (func $t1-1 (type $t1)
+  ;; CHECK-NEXT:  (drop
+  ;; CHECK-NEXT:   (i32.const 42)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; TNH__:      (elem $0 (i32.const 0) $t1-0 $t1-0 $t1-0)
+
+  ;; TNH__:      (func $t1-1 (type $t1)
+  ;; TNH__-NEXT:  (drop
+  ;; TNH__-NEXT:   (i32.const 42)
+  ;; TNH__-NEXT:  )
+  ;; TNH__-NEXT: )
+  ;; CLOSD:      (elem $0 (i32.const 0) $t1-0 $t1-0 $t1-0)
+
+  ;; CLOSD:      (func $t1-1 (type $t1)
+  ;; CLOSD-NEXT:  (drop
+  ;; CLOSD-NEXT:   (i32.const 42)
+  ;; CLOSD-NEXT:  )
+  ;; CLOSD-NEXT: )
+  ;; BOTH_:      (elem $0 (i32.const 0) $t1-0 $t1-0 $t1-0)
+
+  ;; BOTH_:      (func $t1-1 (type $t1)
+  ;; BOTH_-NEXT:  (drop
+  ;; BOTH_-NEXT:   (i32.const 42)
+  ;; BOTH_-NEXT:  )
+  ;; BOTH_-NEXT: )
+  (func $t1-1 (type $t1)
+    ;; This function is not in the table, so it does not interfere.
+    (drop
+      (i32.const 42)
+    )
+  )
+
+  ;; CHECK:      (func $caller (type $i32_=>_none) (param $x i32)
+  ;; CHECK-NEXT:  (call_indirect $table (type $t1)
+  ;; CHECK-NEXT:   (local.get $x)
+  ;; CHECK-NEXT:  )
+  ;; CHECK-NEXT: )
+  ;; TNH__:      (func $caller (type $i32_=>_none) (param $x i32)
+  ;; TNH__-NEXT:  (call_indirect $table (type $t1)
+  ;; TNH__-NEXT:   (local.get $x)
+  ;; TNH__-NEXT:  )
+  ;; TNH__-NEXT: )
+  ;; CLOSD:      (func $caller (type $i32_=>_none) (param $x i32)
+  ;; CLOSD-NEXT:  (call_indirect $table (type $t1)
+  ;; CLOSD-NEXT:   (local.get $x)
+  ;; CLOSD-NEXT:  )
+  ;; CLOSD-NEXT: )
+  ;; BOTH_:      (func $caller (type $i32_=>_none) (param $x i32)
+  ;; BOTH_-NEXT:  (call $t1-0)
+  ;; BOTH_-NEXT: )
+  (func $caller (param $x i32)
+    ;; The table has several entries but all are identical, and so we can
+    ;; optimize in closed world + TNH (closed world to avoid the possibility of
+    ;; other functions; TNH to avoid the trap on an index out of bounds).
+    (call_indirect $table (type $t1)
+      (local.get $x)
+    )
+  )
+)
