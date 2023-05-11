@@ -261,10 +261,6 @@ struct PossibleCallOptimizer
       return;
     }
 
-    if (targets.size() == 2) {
-      // waka TODO
-    }
-
     // We would like to optimize the case of targets.size() == 2 as well, to an
     // if between two calls. However, function references cannot be compared, so
     // we don't have a way to check which of the two functions to call, even
@@ -272,6 +268,10 @@ struct PossibleCallOptimizer
     // TODO: For call_indirect at least we can optimize here. Also, if we had an
     //       option to convert call_refs into call_indirects with separate
     //       tables then those could be optimized.
+    // TODO: A simpler case we can optimize is two targets where one is null,
+    //       since ref.is_null is a check we can do, unlike normal function
+    //       ref comparisons. (For call_ref this seems worthwhile; for
+    //       call_indirect we'd need to do a table.get..?)
   }
 
   // Optimize a call given the type of the targets. This computes the targets
