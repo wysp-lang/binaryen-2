@@ -223,9 +223,12 @@ struct PossibleCallOptimizer
   // not in this map then we have not yet computed that type. We build this
   // lazily to avoid unnecessary computation.
   //
+  // A null Name() represents a possible trap. That is, if the targets are
+  // { "foo", "bar", null } then we might call foo, bar, or we might trap.
+  //
   // TODO: Perhaps computing this once ahead of time could be faster than on-
   //       demand in each thread.
-  std::unordered_map<HeapType, std::vector<Name>> typeTargets;
+  std::unordered_map<Type, std::vector<Name>> typeTargets;
 
   // Optimize a call given the set of targets it might reach.
   template<typename T> void optimizeCall(T* curr, std::vector<Name>& targets) {
@@ -264,8 +267,11 @@ struct PossibleCallOptimizer
     //       size() is 2, etc.
   }
 
-  // Optimize a call given the type of the targets.
-  template<typename T> void optimizeCall(T* curr, HeapType type) {
+  // Optimize a call given the type of the targets. This computes the targets
+  // for the type if that has not yet been computed.
+  //
+  // If the type is nullable then the call may trap.
+  template<typename T> void optimizeCall(T* curr, Type type) {
     auto iter = typeTargets.find(type);
     if (iter == typeTargets.end()) {
       iter = typeTargets.emplace(type, findFunctionsOfType(type)).first;
@@ -281,7 +287,7 @@ struct PossibleCallOptimizer
       return;
     }
 
-    optimizeCall(curr, type.getHeapType());
+    optimizeCall(curr, type);
   }
 
   void visitCallIndirect(CallIndirect* curr) {
@@ -289,7 +295,10 @@ struct PossibleCallOptimizer
     if (!table.canOptimize()) {
       // We cannot see the contents of the table well enough at compile time, so
       // all we can do is use the type, similar to CallRef.
-      optimizeCall(curr, curr->heapType);
+      //
+      // We use a nullable type here to represent the fact that we can trap if
+      // the index to call_indirect is out of bounds.
+      optimizeCall(curr, Type(curr->heapType, Nullable));
       return;
     }
 
@@ -297,19 +306,30 @@ struct PossibleCallOptimizer
     // so all possible targets are within the table.
     auto targets = (*table.flatTable).names;
 
+    // A null name represents the possibility of trapping, which as mentioned
+    // above can happen if the index is out of bounds.
+    targets.push_back(Name());
+
     filterImpossibleFunctions(targets);
 
     optimizeCall(curr, targets);
   }
 
   // Given a function type, find all possible targets of that type.
-  std::vector<Name> findFunctionsOfType(HeapType type) {
+  std::vector<Name> findFunctionsOfType(Type type) {
     std::vector<Name> targets;
 
+    auto heapType = type.getHeapType();
+
     for (auto& func : getModule()->functions) {
-      if (HeapType::isSubType(func->type, type)) {
+      if (HeapType::isSubType(func->type, heapType)) {
         targets.push_back(func->name);
       }
+    }
+
+    if (type.isNullable()) {
+      // A null name represents the possibility of trapping.
+      targets.push_back(Name());
     }
 
     filterImpossibleFunctions(targets);
