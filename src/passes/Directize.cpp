@@ -208,6 +208,10 @@ private:
   }
 };
 
+// XXX :merge the two optimizers. We can always benefit from the stuff in the
+// 2nd, even in the first. Need a class Target which has a func but also an
+// index if available etc.
+
 // In some situations we can infer which indirect call targets are possible,
 // using the type or other information. For example, in a closed world if there
 // is only one function of a particular type, then it must be what we are
