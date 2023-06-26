@@ -1710,6 +1710,8 @@ if __name__ == '__main__':
               'iters/sec, ', total_wasm_size / elapsed,
               'wasm_bytes/sec, ', ignored_vm_runs,
               'ignored\n')
+        with open('seed.txt', 'w') as f:
+          f.write(str(seed))
         make_random_input(input_size, raw_input_data)
         assert os.path.getsize(raw_input_data) == input_size
         # remove the generated wasm file, so that we can tell if the fuzzer
