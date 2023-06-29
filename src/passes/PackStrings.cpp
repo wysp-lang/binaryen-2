@@ -67,6 +67,7 @@
 #include "pass.h"
 #include "support/file.h"
 #include "support/json.h"
+#include "support/string.h"
 #include "wasm.h"
 
 namespace wasm {
@@ -79,37 +80,40 @@ struct PackStrings : public Pass {
       Fatal() << "Usage: --pack-strings=module,infile,outfile";
     }
 
-    Name module = args[0];
-    auto infile = args[1];
-    auto outfile = args[2];
+    Name moduleName = args[0];
+    auto inFile = args[1];
+    auto outFile = args[2];
 
     // Process the imports, finding which indexes are used, and using packed
     // (consecutive) indexes in the new mapping.
     std::set<Index> usedOldIndexes;
 
-    for (auto& import : module->imports) {
-      if (import->module != module) {
+    for (auto& import : module->globals) {
+      if (import->module != moduleName) {
         continue;
       }
 
-      auto oldIndex = std::stoi(import->base.str);
+      auto oldIndex = std::stoi(import->base.toString());
       usedOldIndexes.insert(oldIndex);
 
-      auto newIndex = usedIndexes.size();
+      auto newIndex = usedOldIndexes.size();
       import->base = std::to_string(newIndex);
     }
 
     // Read the input and parse it.
-    auto jsonText = read_file(infile);
+    auto jsonText = read_file<std::vector<char>>(inFile, Flags::Text);
     json::Value json;
-    json.parse(jsonText.c_str());
+    json.parse(jsonText.data());
 
     // Write the packed output.
     Output output(outFile, Flags::Text);
     auto& o = output.getStream();
     o << "[";
+    bool first = true;
     for (auto index : usedOldIndexes) {
-      if (index != usedOldIndexes.front()) {
+      if (first) {
+        first = false;
+      } else {
         o << ", ";
       }
       o << json[index];
