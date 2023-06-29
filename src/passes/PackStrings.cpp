@@ -95,7 +95,7 @@ struct PackStrings : public Pass {
 
       auto oldIndex = std::stoi(import->base.toString());
       auto newIndex = newToOldIndexes.size();
-      newToOldIndexes[oldIndex] = newIndex;
+      newToOldIndexes[newIndex] = oldIndex;
       import->base = std::to_string(newIndex);
     }
 
@@ -115,6 +115,7 @@ struct PackStrings : public Pass {
       if (newIndex > 0) {
         o << ", ";
       }
+      assert(newToOldIndexes.count(newIndex));
       auto oldIndex = newToOldIndexes[newIndex];
       if (oldIndex >= json.size()) {
         Fatal() << "Input JSON is not large enough";

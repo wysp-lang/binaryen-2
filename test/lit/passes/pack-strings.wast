@@ -23,4 +23,8 @@
 )
 
 ;; RUN: cat %t | filecheck %s --check-prefix=OUTPUT
-;; OUTPUT: ["hello", "world", "later", "bye"]
+
+;; Note how "bye" and "later" have flipped in order compared to the original
+;; JSON (because that is their order in the new packed indexing, which is
+;; determined by the order of imports).
+;; OUTPUT: ["hello", "world", "bye", "later"]
