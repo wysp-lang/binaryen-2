@@ -84,9 +84,9 @@ struct PackStrings : public Pass {
     auto inFile = args[1];
     auto outFile = args[2];
 
-    // Process the imports, finding which indexes are used, and using packed
-    // (consecutive) indexes in the new mapping.
-    std::set<Index> usedOldIndexes;
+    // Process the imports, finding which indexes are used, and generate a new
+    // indexing. We build of map of new to old indexes as we go.
+    std::unordered_map<Index, Index> newToOldIndexes;
 
     for (auto& import : module->globals) {
       if (import->module != moduleName) {
@@ -94,8 +94,8 @@ struct PackStrings : public Pass {
       }
 
       auto oldIndex = std::stoi(import->base.toString());
-      auto newIndex = usedOldIndexes.size();
-      usedOldIndexes.insert(oldIndex);
+      auto newIndex = newToOldIndexes.size();
+      newToOldIndexes[oldIndex] = newIndex;
       import->base = std::to_string(newIndex);
     }
 
@@ -111,20 +111,19 @@ struct PackStrings : public Pass {
     Output output(outFile, Flags::Text);
     auto& o = output.getStream();
     o << "[";
-    bool first = true;
-    for (auto index : usedOldIndexes) {
-      if (first) {
-        first = false;
-      } else {
+    for (Index newIndex = 0; newIndex < newToOldIndexes.size(); newIndex++) {
+      if (newIndex > 0) {
         o << ", ";
       }
-      if (index >= json.size()) {
+      auto oldIndex = newToOldIndexes[newIndex];
+      if (oldIndex >= json.size()) {
         Fatal() << "Input JSON is not large enough";
       }
-      if (!json[index]->isString()) {
+      auto str = json[oldIndex];
+      if (!str->isString()) {
         Fatal() << "Input JSON does not contain only strings";
       }
-      o << '"' << json[index]->getCString() << '"';
+      o << '"' << str->getCString() << '"';
     }
     o << "]";
   }
