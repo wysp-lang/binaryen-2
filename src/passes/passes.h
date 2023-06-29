@@ -101,6 +101,7 @@ Pass* createOptimizeStackIRPass();
 Pass* createPickLoadSignsPass();
 Pass* createModAsyncifyAlwaysOnlyUnwindPass();
 Pass* createModAsyncifyNeverUnwindPass();
+Pass* createPackStringsPass();
 Pass* createPoppifyPass();
 Pass* createPostEmscriptenPass();
 Pass* createPrecomputePass();
