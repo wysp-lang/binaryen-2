@@ -308,9 +308,8 @@ void PassRegistry::registerPasses() {
                createOptimizeInstructionsPass);
   registerPass(
     "optimize-stack-ir", "optimize Stack IR", createOptimizeStackIRPass);
-  registerPass("pack-strings",
-               "pack imported string constants",
-               createPackStringsPass);
+  registerPass(
+    "pack-strings", "pack imported string constants", createPackStringsPass);
   registerPass("pick-load-signs",
                "pick load signs based on their uses",
                createPickLoadSignsPass);
