@@ -335,8 +335,6 @@ struct Value {
     return curr;
   }
 
-  void stringify(std::ostream& os, bool pretty = false);
-
   // String operations
 
   // Number operations

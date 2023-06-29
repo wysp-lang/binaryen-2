@@ -104,6 +104,9 @@ struct PackStrings : public Pass {
     auto jsonText = read_file<std::vector<char>>(inFile, Flags::Text);
     json::Value json;
     json.parse(jsonText.data());
+    if (!json.isArray()) {
+      Fatal() << "Input file does not contain valid JSON";
+    }
 
     // Write the packed output.
     Output output(outFile, Flags::Text);
@@ -116,8 +119,15 @@ struct PackStrings : public Pass {
       } else {
         o << ", ";
       }
-      o << json[index];
+      if (index >= json.size()) {
+        Fatal() << "Input JSON is not large enough";
+      }
+      if (!json[index]->isString()) {
+        Fatal() << "Input JSON does not contain only strings";
+      }
+      o << json[index]->getCString();
     }
+    o << "]";
   }
 };
 

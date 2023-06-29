@@ -2,11 +2,11 @@
 
 ;; RUN: wasm-opt %s --pack-strings=str.const,%s.json,%t -all -S -o - | filecheck %s
 
-;; RUN: cat %t.wast | filecheck %s --check-prefix=CHECK-BINARY
+;; RUN: cat %t.wast | filecheck %s --check-prefix=OUTPUT
 
 (module
   (import "str.const" "0" (global $hello (ref extern)))
-  (import "str.const" "1" (global $hello (ref extern)))
+  (import "str.const" "1" (global $world (ref extern)))
   (import "str.const" "3" (global $later (ref extern)))
   (import "str.const" "5" (global $bye (ref extern)))
 
