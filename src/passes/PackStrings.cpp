@@ -78,7 +78,7 @@ struct PackStrings : public Pass {
     if (args.size() != 3) {
       Fatal() << "Usage: --pack-strings=module,infile,outfile";
     }
-    
+
     Name module = args[0];
     auto infile = args[1];
     auto outfile = args[2];
