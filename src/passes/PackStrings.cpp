@@ -94,9 +94,8 @@ struct PackStrings : public Pass {
       }
 
       auto oldIndex = std::stoi(import->base.toString());
-      usedOldIndexes.insert(oldIndex);
-
       auto newIndex = usedOldIndexes.size();
+      usedOldIndexes.insert(oldIndex);
       import->base = std::to_string(newIndex);
     }
 
@@ -125,7 +124,7 @@ struct PackStrings : public Pass {
       if (!json[index]->isString()) {
         Fatal() << "Input JSON does not contain only strings";
       }
-      o << json[index]->getCString();
+      o << '"' << json[index]->getCString() << '"';
     }
     o << "]";
   }
