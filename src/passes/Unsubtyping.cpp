@@ -64,14 +64,15 @@ struct Unsubtyping : public Pass {
 
     for (Index index = 0; index < graph.locations.size(); index++) {
       // Get the location for this index, and the targets it sends data to.
-      auto& source = graph.locations[index];
+      auto& sourceInfo = graph.locations[index];
+      auto& source = sourceInfo.location;
 
       auto sourceType = getLocationType(source);
       if (!sourceType.isRef()) {
         continue;
       }
 
-      auto& targets = graph.getTargets(index);
+      auto& targets = sourceInfo.targets;
 
       for (auto targetIndex : targets) {
         auto target = graph.getLocation(targetIndex);
@@ -96,7 +97,7 @@ struct Unsubtyping : public Pass {
 
   // Note that we write something of sourceType into a slot of type targetType. 
   void noteWrite(HeapType sourceType, HeapType targetType) {
-    if (locationType == targetType) {
+    if (sourceType == targetType) {
       // Writing the same type has no effect.
       return;
     }
@@ -108,7 +109,7 @@ struct Unsubtyping : public Pass {
   // not the content that might be present there (which could be more precise,
   // or could be nonexistent).
   // TODO: move to possible-contents.h?
-  Type getLocationType(Location loc) {
+  Type getLocationType(Location location) {
     if (auto* loc = std::get_if<ExpressionLocation>(&location)) {
       return *loc->expr->type;
     } else if (auto* loc = std::get_if<DataLocation>(&location)) {

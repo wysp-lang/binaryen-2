@@ -57,6 +57,8 @@ private:
 };
 
 // As above, but for heap types.
+//
+// This is only valid to use if a LUB in fact exists.
 struct HeapLUBFinder {
   HeapLUBFinder() {}
 
@@ -67,7 +69,9 @@ struct HeapLUBFinder {
       lub = type;
       hasNoted = true;
     } else {
-      lub = HeapType::getLeastUpperBound(lub, type);
+      auto maybeLUB = HeapType::getLeastUpperBound(lub, type);
+      assert(maybeLUB);
+      lub = *maybeLUB;
     }
   }
 
@@ -76,7 +80,7 @@ struct HeapLUBFinder {
   // Returns the lub.
   HeapType getLUB() { return lub; }
 
-  bool combine(const LUBFinder& other) {
+  bool combine(const HeapLUBFinder& other) {
     if (!other.hasNoted) {
       return false;
     }
