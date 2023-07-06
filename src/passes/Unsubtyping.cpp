@@ -17,6 +17,7 @@
 //
 //
 
+#include "ir/find_all.h"
 #include "ir/lubs.h"
 #include "ir/possible-contents.h"
 #include "pass.h"
@@ -127,13 +128,18 @@ struct Unsubtyping : public Pass {
     } else if (auto* loc = std::get_if<GlobalLocation>(&location)) {
       return module->getGlobal(loc->name)->type;
     } else if (auto* loc = std::get_if<BreakTargetLocation>(&location)) {
-
-
-
-      // XXX work hard
-
-
-
+      auto iter = functionBlockTypes.find(loc->func);
+      if (iter == functionBlockTypes.end()) {
+        iter = functionBlockTypes.insert(loc->func);
+        auto& map = iter->second;
+        for (auto* block : FindAll<Block>(func->body).list) {
+          if (block->name.is()) {
+            map[block->name] = block->type;
+          }
+        }
+      }
+      auto& map = iter->second;
+      return map[loc->target];
     } else if (std::get_if<SignatureParamLocation>(&location)) {
       return loc->type.getSignature().params[loc->index];
     } else if (std::get_if<SignatureResultLocation>(&location)) {
@@ -144,6 +150,10 @@ struct Unsubtyping : public Pass {
       WASM_UNREACHABLE("bad loc");
     }
   }
+
+  // Map functions to maps of their block names to block types.
+  using NameTypeMap = std::unordered_map<Name, Type>;
+  std::unordered_map<Function*, NameTypeMap> functionBlockTypes;
 };
 
 } // anonymous namespace
