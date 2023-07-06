@@ -154,6 +154,7 @@ Pass* createTrapModeJS();
 Pass* createTypeRefiningPass();
 Pass* createTypeMergingPass();
 Pass* createTypeSSAPass();
+Pass* createUnsubtypingPass();
 Pass* createUnteePass();
 Pass* createVacuumPass();
 

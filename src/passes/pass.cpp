@@ -480,6 +480,9 @@ void PassRegistry::registerPasses() {
   registerPass("type-ssa",
                "create new nominal types to help other optimizations",
                createTypeSSAPass);
+  registerPass("unsubtyping",
+               "removes subtyping connections where possible",
+               createUnsubtypingPass);
   registerPass("untee",
                "removes local.tees, replacing them with sets and gets",
                createUnteePass);

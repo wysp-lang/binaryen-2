@@ -690,12 +690,12 @@ struct PossibleContentsGraph {
     return locations[index].contents;
   }
 
-private:
   std::vector<LocationIndex>& getTargets(LocationIndex index) {
     assert(index < locations.size());
     return locations[index].targets;
   }
 
+private:
   // Convert the data into the efficient LocationIndex form we will use during
   // the flow analysis. This method returns the index of a location, allocating
   // one if this is the first time we see it.
