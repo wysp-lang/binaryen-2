@@ -495,16 +495,16 @@ struct ConeReadLocation {
 // A location is a variant over all the possible flavors of locations that we
 // have.
 using Location = std::variant<ExpressionLocation,
-                            ParamLocation,
-                            ResultLocation,
-                            BreakTargetLocation,
-                            GlobalLocation,
-                            SignatureParamLocation,
-                            SignatureResultLocation,
-                            DataLocation,
-                            TagLocation,
-                            NullLocation,
-                            ConeReadLocation>;
+                              ParamLocation,
+                              ResultLocation,
+                              BreakTargetLocation,
+                              GlobalLocation,
+                              SignatureParamLocation,
+                              SignatureResultLocation,
+                              DataLocation,
+                              TagLocation,
+                              NullLocation,
+                              ConeReadLocation>;
 
 // We are going to do a very large flow operation, potentially, as we create
 // a Location for every interesting part in the entire wasm, and some of those

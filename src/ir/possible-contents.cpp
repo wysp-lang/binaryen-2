@@ -1435,7 +1435,7 @@ void PossibleContentsGraph::flow() {
 }
 
 bool PossibleContentsGraph::updateContents(LocationIndex locationIndex,
-                            PossibleContents newContents) {
+                                           PossibleContents newContents) {
   auto& contents = getContents(locationIndex);
   auto oldContents = contents;
 
@@ -1616,8 +1616,8 @@ void PossibleContentsGraph::flowAfterUpdate(LocationIndex locationIndex) {
   }
 }
 
-void PossibleContentsGraph::flowToTargetsAfterUpdate(LocationIndex locationIndex,
-                                      const PossibleContents& contents) {
+void PossibleContentsGraph::flowToTargetsAfterUpdate(
+  LocationIndex locationIndex, const PossibleContents& contents) {
   // Send the new contents to all the targets of this location. As we do so,
   // prune any targets that we do not need to bother sending content to in the
   // future, to save space and work later.
@@ -1664,9 +1664,10 @@ void PossibleContentsGraph::connectDuringFlow(Location from, Location to) {
   }
 }
 
-void PossibleContentsGraph::filterExpressionContents(PossibleContents& contents,
-                                      const ExpressionLocation& exprLoc,
-                                      bool& worthSendingMore) {
+void PossibleContentsGraph::filterExpressionContents(
+  PossibleContents& contents,
+  const ExpressionLocation& exprLoc,
+  bool& worthSendingMore) {
   auto type = exprLoc.expr->type;
   if (!type.isRef()) {
     return;
@@ -1726,8 +1727,8 @@ void PossibleContentsGraph::filterExpressionContents(PossibleContents& contents,
   }
 }
 
-void PossibleContentsGraph::filterGlobalContents(PossibleContents& contents,
-                                  const GlobalLocation& globalLoc) {
+void PossibleContentsGraph::filterGlobalContents(
+  PossibleContents& contents, const GlobalLocation& globalLoc) {
   auto* global = wasm.getGlobal(globalLoc.name);
   if (global->mutable_ == Immutable) {
     // This is an immutable global. We never need to consider this value as
@@ -1755,7 +1756,7 @@ void PossibleContentsGraph::filterGlobalContents(PossibleContents& contents,
 }
 
 void PossibleContentsGraph::filterDataContents(PossibleContents& contents,
-                                const DataLocation& dataLoc) {
+                                               const DataLocation& dataLoc) {
   auto field = GCTypeUtils::getField(dataLoc.type, dataLoc.index);
   assert(field);
   if (field->isPacked()) {
@@ -1791,9 +1792,9 @@ void PossibleContentsGraph::filterDataContents(PossibleContents& contents,
 }
 
 void PossibleContentsGraph::readFromData(Type declaredType,
-                          Index fieldIndex,
-                          const PossibleContents& refContents,
-                          Expression* read) {
+                                         Index fieldIndex,
+                                         const PossibleContents& refContents,
+                                         Expression* read) {
 #ifndef NDEBUG
   // We must not have anything in the reference that is invalid for the wasm
   // type there.
@@ -1882,7 +1883,9 @@ void PossibleContentsGraph::readFromData(Type declaredType,
   connectDuringFlow(coneReadLocation, ExpressionLocation{read, 0});
 }
 
-void PossibleContentsGraph::writeToData(Expression* ref, Expression* value, Index fieldIndex) {
+void PossibleContentsGraph::writeToData(Expression* ref,
+                                        Expression* value,
+                                        Index fieldIndex) {
 #if defined(POSSIBLE_CONTENTS_DEBUG) && POSSIBLE_CONTENTS_DEBUG >= 2
   std::cout << "    add special writes\n";
 #endif
