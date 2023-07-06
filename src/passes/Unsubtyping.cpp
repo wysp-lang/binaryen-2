@@ -35,7 +35,11 @@ struct Unsubtyping : public Pass {
   // to.
   std::unordered_map<HeapType, HeapLUBFinder> typeLUBs;
 
-  void run(Module* module) override {
+  Module* module;
+
+  void run(Module* module_) override {
+    module = module_;
+
     if (!module->features.hasGC()) {
       return;
     }
@@ -113,34 +117,31 @@ struct Unsubtyping : public Pass {
     if (auto* loc = std::get_if<ExpressionLocation>(&location)) {
       return loc->expr->type;
     } else if (auto* loc = std::get_if<DataLocation>(&location)) {
-      std::cout << "  dataloc ";
-      if (wasm.typeNames.count(loc->type)) {
-        std::cout << '$' << wasm.typeNames[loc->type].name;
-      } else {
-        std::cout << loc->type << '\n';
-      }
-      std::cout << " : " << loc->index << '\n';
+      return GCTypeUtils::getField(loc->type, loc->index);
     } else if (auto* loc = std::get_if<TagLocation>(&location)) {
-      std::cout << "  tagloc " << loc->tag << '\n';
+      return module->getTag(loc->tag)->sig.params[loc->index];
     } else if (auto* loc = std::get_if<ParamLocation>(&location)) {
-      std::cout << "  paramloc " << loc->func->name << " : " << loc->index
-                << '\n';
+      return loc->func->type.getSignature().params[loc->index];
     } else if (auto* loc = std::get_if<ResultLocation>(&location)) {
-      std::cout << "  resultloc $" << loc->func->name << " : " << loc->index
-                << '\n';
+      return loc->func->type.getSignature().results[loc->index];
     } else if (auto* loc = std::get_if<GlobalLocation>(&location)) {
-      std::cout << "  globalloc " << loc->name << '\n';
+      return module->getGlobal(loc->name)->type;
     } else if (auto* loc = std::get_if<BreakTargetLocation>(&location)) {
-      std::cout << "  branchloc " << loc->func->name << " : " << loc->target
-                << " tupleIndex " << loc->tupleIndex << '\n';
+
+
+
+      // XXX work hard
+
+
+
     } else if (std::get_if<SignatureParamLocation>(&location)) {
-      std::cout << "  sigparamloc " << '\n';
+      return loc->type.getSignature().params[loc->index];
     } else if (std::get_if<SignatureResultLocation>(&location)) {
-      std::cout << "  sigresultloc " << '\n';
+      return loc->type.getSignature().results[loc->index];
     } else if (auto* loc = std::get_if<NullLocation>(&location)) {
-      std::cout << "  Nullloc " << loc->type << '\n';
+      return loc->type;
     } else {
-      std::cout << "  (other)\n";
+      WASM_UNREACHABLE("bad loc");
     }
   }
 };
