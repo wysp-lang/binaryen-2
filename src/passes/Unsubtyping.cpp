@@ -111,7 +111,7 @@ struct Unsubtyping : public Pass {
   // TODO: move to possible-contents.h?
   Type getLocationType(Location location) {
     if (auto* loc = std::get_if<ExpressionLocation>(&location)) {
-      return *loc->expr->type;
+      return loc->expr->type;
     } else if (auto* loc = std::get_if<DataLocation>(&location)) {
       std::cout << "  dataloc ";
       if (wasm.typeNames.count(loc->type)) {
