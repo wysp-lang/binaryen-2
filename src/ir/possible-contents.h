@@ -22,6 +22,7 @@
 #include "ir/possible-constant.h"
 #include "ir/subtypes.h"
 #include "support/hash.h"
+#include "support/insert_ordered.h"
 #include "support/small_vector.h"
 #include "wasm-builder.h"
 #include "wasm.h"
@@ -494,16 +495,46 @@ struct ConeReadLocation {
 // A location is a variant over all the possible flavors of locations that we
 // have.
 using Location = std::variant<ExpressionLocation,
-                              ParamLocation,
-                              ResultLocation,
-                              BreakTargetLocation,
-                              GlobalLocation,
-                              SignatureParamLocation,
-                              SignatureResultLocation,
-                              DataLocation,
-                              TagLocation,
-                              NullLocation,
-                              ConeReadLocation>;
+                            ParamLocation,
+                            ResultLocation,
+                            BreakTargetLocation,
+                            GlobalLocation,
+                            SignatureParamLocation,
+                            SignatureResultLocation,
+                            DataLocation,
+                            TagLocation,
+                            NullLocation,
+                            ConeReadLocation>;
+
+// We are going to do a very large flow operation, potentially, as we create
+// a Location for every interesting part in the entire wasm, and some of those
+// places will have lots of links (like a struct field may link out to every
+// single struct.get of that type), so we must make the data structures here
+// as efficient as possible. Towards that goal, we work with location
+// *indexes* where possible, which are small (32 bits) and do not require any
+// complex hashing when we use them in sets or maps.
+//
+// Note that we do not use indexes everywhere, since the initial analysis is
+// done in parallel, and we do not have a fixed indexing of locations yet. When
+// we merge the parallel data we create that indexing, and use indexes from then
+// on.
+using LocationIndex = uint32_t;
+
+// A link indicates a flow of content from one location to another. For
+// example, if we do a local.get and return that value from a function, then
+// we have a link from the ExpressionLocation of that local.get to a
+// ResultLocation.
+template<typename T> struct PossibleContentLink {
+  T from;
+  T to;
+
+  bool operator==(const PossibleContentLink<T>& other) const {
+    return from == other.from && to == other.to;
+  }
+};
+
+using LocationLink = PossibleContentLink<Location>;
+using IndexLink = PossibleContentLink<LocationIndex>;
 
 } // namespace wasm
 
@@ -596,9 +627,234 @@ template<> struct hash<wasm::ConeReadLocation> {
   }
 };
 
+template<> struct hash<wasm::LocationLink> {
+  size_t operator()(const wasm::LocationLink& loc) const {
+    return std::hash<std::pair<wasm::Location, wasm::Location>>{}(
+      {loc.from, loc.to});
+  }
+};
+
+template<> struct hash<wasm::IndexLink> {
+  size_t operator()(const wasm::IndexLink& loc) const {
+    return std::hash<std::pair<wasm::LocationIndex, wasm::LocationIndex>>{}(
+      {loc.from, loc.to});
+  }
+};
+
 } // namespace std
 
 namespace wasm {
+
+// Builds a graph that represents the flow of PossibleContent in an entire wasm
+// module. Optionally also flows the data through the graph.
+struct PossibleContentsGraph {
+  Module& wasm;
+
+  // The constructor builds the graph, filling in the public data below.
+  PossibleContentsGraph(Module& wasm);
+
+  // Flow content through the graph. This must be done before calling
+  // getContents().
+  void flow();
+
+  // Each LocationIndex will have one LocationInfo that contains the relevant
+  // information we need for each location.
+  struct LocationInfo {
+    // The location at this index.
+    Location location;
+
+    // The possible contents in that location.
+    PossibleContents contents;
+
+    // A list of the target locations to which this location sends content.
+    // TODO: benchmark SmallVector<1> here, as commonly there may be a single
+    //       target (an expression has one parent)
+    std::vector<LocationIndex> targets;
+
+    LocationInfo(Location location) : location(location) {}
+  };
+
+  // Maps location indexes to the info stored there, as just described above.
+  std::vector<LocationInfo> locations;
+
+  // Reverse mapping of locations to their indexes.
+  std::unordered_map<Location, LocationIndex> locationIndexes;
+
+  const Location& getLocation(LocationIndex index) {
+    assert(index < locations.size());
+    return locations[index].location;
+  }
+
+  PossibleContents& getContents(LocationIndex index) {
+    assert(index < locations.size());
+    return locations[index].contents;
+  }
+
+private:
+  std::vector<LocationIndex>& getTargets(LocationIndex index) {
+    assert(index < locations.size());
+    return locations[index].targets;
+  }
+
+  // Convert the data into the efficient LocationIndex form we will use during
+  // the flow analysis. This method returns the index of a location, allocating
+  // one if this is the first time we see it.
+  LocationIndex getIndex(const Location& location) {
+    auto iter = locationIndexes.find(location);
+    if (iter != locationIndexes.end()) {
+      return iter->second;
+    }
+
+    // Allocate a new index here.
+    size_t index = locations.size();
+#if defined(POSSIBLE_CONTENTS_DEBUG) && POSSIBLE_CONTENTS_DEBUG >= 2
+    std::cout << "  new index " << index << " for ";
+    dump(location);
+#endif
+    if (index >= std::numeric_limits<LocationIndex>::max()) {
+      // 32 bits should be enough since each location takes at least one byte
+      // in the binary, and we don't have 4GB wasm binaries yet... do we?
+      Fatal() << "Too many locations for 32 bits";
+    }
+    locations.emplace_back(location);
+    locationIndexes[location] = index;
+
+    return index;
+  }
+
+  bool hasIndex(const Location& location) {
+    return locationIndexes.find(location) != locationIndexes.end();
+  }
+
+  IndexLink getIndexes(const LocationLink& link) {
+    return {getIndex(link.from), getIndex(link.to)};
+  }
+
+  // See the comment on CollectedFuncInfo::childParents. This is the merged info
+  // from all the functions and the global scope.
+  std::unordered_map<LocationIndex, LocationIndex> childParents;
+
+  // The work remaining to do during the flow: locations that we need to flow
+  // content from, after new content reached them.
+  //
+  // Using a set here is efficient as multiple updates may arrive to a location
+  // before we get to processing it.
+  //
+  // The items here could be {location, newContents}, but it is more efficient
+  // to have already written the new contents to the main data structure. That
+  // avoids larger data here, and also, updating the contents as early as
+  // possible is helpful as anything reading them meanwhile (before we get to
+  // their work item in the queue) will see the newer value, possibly avoiding
+  // flowing an old value that would later be overwritten.
+  //
+  // This must be ordered to avoid nondeterminism. The problem is that our
+  // operations are imprecise and so the transitive property does not hold:
+  // (AvB)vC may differ from Av(BvC). Likewise (AvB)^C may differ from
+  // (A^C)v(B^C). An example of the latter is if a location is sent a null func
+  // and an i31, and the location can only contain funcref. If the null func
+  // arrives first, then later we'd merge null func + i31 which ends up as Many,
+  // and then we filter that to funcref and get funcref. But if the i31 arrived
+  // first, we'd filter it into nothing, and then the null func that arrives
+  // later would be the final result. This would not happen if our operations
+  // were precise, but we only make approximations here to avoid unacceptable
+  // overhead, such as cone types but not arbitrary unions, etc.
+  InsertOrderedSet<LocationIndex> workQueue;
+
+  // All existing links in the graph. We keep this to know when a link we want
+  // to add is new or not.
+  std::unordered_set<IndexLink> links;
+
+  // Update a location with new contents that are added to everything already
+  // present there. If the update changes the contents at that location (if
+  // there was anything new) then we also need to flow from there, which we will
+  // do by adding the location to the work queue, and eventually flowAfterUpdate
+  // will be called on this location.
+  //
+  // Returns whether it is worth sending new contents to this location in the
+  // future. If we return false, the sending location never needs to do that
+  // ever again.
+  bool updateContents(LocationIndex locationIndex,
+                      PossibleContents newContents);
+
+  // Slow helper that converts a Location to a LocationIndex. This should be
+  // avoided. TODO: remove the remaining uses of this.
+  bool updateContents(const Location& location,
+                      const PossibleContents& newContents) {
+    return updateContents(getIndex(location), newContents);
+  }
+
+  // Flow contents from a location where a change occurred. This sends the new
+  // contents to all the normal targets of this location (using
+  // flowToTargetsAfterUpdate), and also handles special cases of flow after.
+  void flowAfterUpdate(LocationIndex locationIndex);
+
+  // Internal part of flowAfterUpdate that handles sending new values to the
+  // given location index's normal targets (that is, the ones listed in the
+  // |targets| vector).
+  void flowToTargetsAfterUpdate(LocationIndex locationIndex,
+                                const PossibleContents& contents);
+
+  // Add a new connection while the flow is happening. If the link already
+  // exists it is not added.
+  void connectDuringFlow(Location from, Location to);
+
+  // Contents sent to certain locations can be filtered in a special way during
+  // the flow, which is handled in these helpers. These may update
+  // |worthSendingMore| which is whether it is worth sending any more content to
+  // this location in the future.
+  void filterExpressionContents(PossibleContents& contents,
+                                const ExpressionLocation& exprLoc,
+                                bool& worthSendingMore);
+  void filterGlobalContents(PossibleContents& contents,
+                            const GlobalLocation& globalLoc);
+  void filterDataContents(PossibleContents& contents,
+                          const DataLocation& dataLoc);
+
+  // Reads from GC data: a struct.get or array.get. This is given the type of
+  // the read operation, the field that is read on that type, the known contents
+  // in the reference the read receives, and the read instruction itself. We
+  // compute where we need to read from based on the type and the ref contents
+  // and get that data, adding new links in the graph as needed.
+  void readFromData(Type declaredType,
+                    Index fieldIndex,
+                    const PossibleContents& refContents,
+                    Expression* read);
+
+  // Similar to readFromData, but does a write for a struct.set or array.set.
+  void writeToData(Expression* ref, Expression* value, Index fieldIndex);
+
+  // We will need subtypes during the flow, so compute them once ahead of time.
+  std::unique_ptr<SubTypes> subTypes;
+
+  // The depth of children for each type. This is 0 if the type has no
+  // subtypes, 1 if it has subtypes but none of those have subtypes themselves,
+  // and so forth.
+  std::unordered_map<HeapType, Index> maxDepths;
+
+  // Given a ConeType, return the normalized depth, that is, the canonical depth
+  // given the actual children it has. If this is a full cone, then we can
+  // always pick the actual maximal depth and use that instead of FullDepth==-1.
+  // For a non-full cone, we also reduce the depth as much as possible, so it is
+  // equal to the maximum depth of an existing subtype.
+  Index getNormalizedConeDepth(Type type, Index depth) {
+    return std::min(depth, maxDepths[type.getHeapType()]);
+  }
+
+  void normalizeConeType(PossibleContents& cone) {
+    assert(cone.isConeType());
+    auto type = cone.getType();
+    auto before = cone.getCone().depth;
+    auto normalized = getNormalizedConeDepth(type, before);
+    if (normalized != before) {
+      cone = PossibleContents::coneType(type, normalized);
+    }
+  }
+
+#if defined(POSSIBLE_CONTENTS_DEBUG) && POSSIBLE_CONTENTS_DEBUG >= 2
+  // Dump out a location for debug purposes.
+  void dump(Location location);
+#endif
+};
 
 // Analyze the entire wasm file to find which contents are possible in which
 // locations. This assumes a closed world and starts from roots - newly created
