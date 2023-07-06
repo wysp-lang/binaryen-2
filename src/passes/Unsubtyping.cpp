@@ -18,6 +18,7 @@
 //
 
 #include "ir/find_all.h"
+#include "ir/gc-type-utils.h"
 #include "ir/lubs.h"
 #include "ir/possible-contents.h"
 #include "pass.h"
@@ -100,7 +101,7 @@ struct Unsubtyping : public Pass {
     }
   }
 
-  // Note that we write something of sourceType into a slot of type targetType. 
+  // Note that we write something of sourceType into a slot of type targetType.
   void noteWrite(HeapType sourceType, HeapType targetType) {
     if (sourceType == targetType) {
       // Writing the same type has no effect.
@@ -118,9 +119,9 @@ struct Unsubtyping : public Pass {
     if (auto* loc = std::get_if<ExpressionLocation>(&location)) {
       return loc->expr->type;
     } else if (auto* loc = std::get_if<DataLocation>(&location)) {
-      return GCTypeUtils::getField(loc->type, loc->index);
+      return GCTypeUtils::getField(loc->type, loc->index)->type;
     } else if (auto* loc = std::get_if<TagLocation>(&location)) {
-      return module->getTag(loc->tag)->sig.params[loc->index];
+      return module->getTag(loc->tag)->sig.params[loc->tupleIndex];
     } else if (auto* loc = std::get_if<ParamLocation>(&location)) {
       return loc->func->type.getSignature().params[loc->index];
     } else if (auto* loc = std::get_if<ResultLocation>(&location)) {
@@ -130,9 +131,9 @@ struct Unsubtyping : public Pass {
     } else if (auto* loc = std::get_if<BreakTargetLocation>(&location)) {
       auto iter = functionBlockTypes.find(loc->func);
       if (iter == functionBlockTypes.end()) {
-        iter = functionBlockTypes.insert(loc->func);
+        iter = functionBlockTypes.emplace(loc->func, NameTypeMap()).first;
         auto& map = iter->second;
-        for (auto* block : FindAll<Block>(func->body).list) {
+        for (auto* block : FindAll<Block>(loc->func->body).list) {
           if (block->name.is()) {
             map[block->name] = block->type;
           }
@@ -140,9 +141,9 @@ struct Unsubtyping : public Pass {
       }
       auto& map = iter->second;
       return map[loc->target];
-    } else if (std::get_if<SignatureParamLocation>(&location)) {
+    } else if (auto* loc = std::get_if<SignatureParamLocation>(&location)) {
       return loc->type.getSignature().params[loc->index];
-    } else if (std::get_if<SignatureResultLocation>(&location)) {
+    } else if (auto* loc = std::get_if<SignatureResultLocation>(&location)) {
       return loc->type.getSignature().results[loc->index];
     } else if (auto* loc = std::get_if<NullLocation>(&location)) {
       return loc->type;
