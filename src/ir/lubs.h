@@ -74,7 +74,7 @@ struct HeapLUBFinder {
   bool noted() { return hasNoted; }
 
   // Returns the lub.
-  Type getLUB() { return lub; }
+  HeapType getLUB() { return lub; }
 
   bool combine(const LUBFinder& other) {
     if (!other.hasNoted) {

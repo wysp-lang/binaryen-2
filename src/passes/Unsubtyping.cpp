@@ -88,6 +88,10 @@ struct Unsubtyping : public Pass {
 
       // TODO: childParent stuff
     }
+
+    for (auto& [k, v] : typeLUBs) {
+      std::cout << k << " has lub " << v.getLUB() << '\n';
+    }
   }
 
   // Note that we write something of sourceType into a slot of type targetType. 
