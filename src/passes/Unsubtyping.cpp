@@ -17,6 +17,7 @@
 //
 //
 
+#include "ir/lubs.h"
 #include "ir/possible-contents.h"
 #include "pass.h"
 #include "wasm-type.h"
@@ -29,6 +30,10 @@ namespace {
 struct Unsubtyping : public Pass {
   // Only modifies types.
   bool requiresNonNullableLocalFixups() override { return false; }
+
+  // Maps each heap type to the LUB of the subtypes of the places it is written
+  // to.
+  std::unordered_map<HeapType, HeapLUBFinder> typeLUBs;
 
   void run(Module* module) override {
     if (!module->features.hasGC()) {
@@ -57,7 +62,81 @@ struct Unsubtyping : public Pass {
     // and B.
     PossibleContentsGraph graph(*module);
 
-    
+    for (Index index = 0; index < graph.locations.size(); index++) {
+      // Get the location for this index, and the targets it sends data to.
+      auto& source = graph.locations[index];
+
+      auto sourceType = getLocationType(source);
+      if (!sourceType.isRef()) {
+        continue;
+      }
+
+      auto& targets = graph.getTargets(index);
+
+      for (auto targetIndex : targets) {
+        auto target = graph.getLocation(targetIndex);
+        auto targetType = getLocationType(target);
+        if (!targetType.isRef()) {
+          continue;
+        }
+
+        // We have a connection where data goes from source => target, which
+        // means we are writing something of type sourceType into a slot of
+        // type targetType.
+        noteWrite(sourceType.getHeapType(), targetType.getHeapType());
+      }
+
+      // TODO: childParent stuff
+    }
+  }
+
+  // Note that we write something of sourceType into a slot of type targetType. 
+  void noteWrite(HeapType sourceType, HeapType targetType) {
+    if (locationType == targetType) {
+      // Writing the same type has no effect.
+      return;
+    }
+
+    typeLUBs[sourceType].note(targetType);
+  }
+
+  // Get the type of a location. This is the type of the location itself, and
+  // not the content that might be present there (which could be more precise,
+  // or could be nonexistent).
+  // TODO: move to possible-contents.h?
+  Type getLocationType(Location loc) {
+    if (auto* loc = std::get_if<ExpressionLocation>(&location)) {
+      return *loc->expr->type;
+    } else if (auto* loc = std::get_if<DataLocation>(&location)) {
+      std::cout << "  dataloc ";
+      if (wasm.typeNames.count(loc->type)) {
+        std::cout << '$' << wasm.typeNames[loc->type].name;
+      } else {
+        std::cout << loc->type << '\n';
+      }
+      std::cout << " : " << loc->index << '\n';
+    } else if (auto* loc = std::get_if<TagLocation>(&location)) {
+      std::cout << "  tagloc " << loc->tag << '\n';
+    } else if (auto* loc = std::get_if<ParamLocation>(&location)) {
+      std::cout << "  paramloc " << loc->func->name << " : " << loc->index
+                << '\n';
+    } else if (auto* loc = std::get_if<ResultLocation>(&location)) {
+      std::cout << "  resultloc $" << loc->func->name << " : " << loc->index
+                << '\n';
+    } else if (auto* loc = std::get_if<GlobalLocation>(&location)) {
+      std::cout << "  globalloc " << loc->name << '\n';
+    } else if (auto* loc = std::get_if<BreakTargetLocation>(&location)) {
+      std::cout << "  branchloc " << loc->func->name << " : " << loc->target
+                << " tupleIndex " << loc->tupleIndex << '\n';
+    } else if (std::get_if<SignatureParamLocation>(&location)) {
+      std::cout << "  sigparamloc " << '\n';
+    } else if (std::get_if<SignatureResultLocation>(&location)) {
+      std::cout << "  sigresultloc " << '\n';
+    } else if (auto* loc = std::get_if<NullLocation>(&location)) {
+      std::cout << "  Nullloc " << loc->type << '\n';
+    } else {
+      std::cout << "  (other)\n";
+    }
   }
 };
 

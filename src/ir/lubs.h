@@ -56,6 +56,41 @@ private:
   Type lub = Type::unreachable;
 };
 
+// As above, but for heap types.
+struct HeapLUBFinder {
+  HeapLUBFinder() {}
+
+  HeapLUBFinder(HeapType initialType) { note(initialType); }
+
+  void note(HeapType type) {
+    if (!hasNoted) {
+      lub = type;
+      hasNoted = true;
+    } else {
+      lub = HeapType::getLeastUpperBound(lub, type);
+    }
+  }
+
+  bool noted() { return hasNoted; }
+
+  // Returns the lub.
+  Type getLUB() { return lub; }
+
+  bool combine(const LUBFinder& other) {
+    if (!other.hasNoted) {
+      return false;
+    }
+    auto old = lub;
+    note(other.lub);
+    return old != lub;
+  }
+
+private:
+  HeapType lub;
+
+  bool hasNoted = false;
+};
+
 namespace LUB {
 
 // Given a function, computes a LUB for its results. The caller can then decide
