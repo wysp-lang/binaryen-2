@@ -45,7 +45,7 @@ struct Unsubtyping : public Pass {
     if (!module->features.hasGC()) {
       return;
     }
-
+std::cout << "wark1\n";
     // Build the graph of all places where content can flow. Using this graph we
     // can optimize according to the simple rule of modifying the parent of a
     // type to be the least-refined type that the type can be written to. That
@@ -69,6 +69,7 @@ struct Unsubtyping : public Pass {
     PossibleContentsGraph graph(*module);
 
     for (Index index = 0; index < graph.locations.size(); index++) {
+std::cout << " wark2\n";
       // Get the location for this index, and the targets it sends data to.
       auto& sourceInfo = graph.locations[index];
       auto& source = sourceInfo.location;
@@ -86,6 +87,7 @@ struct Unsubtyping : public Pass {
         if (!targetType.isRef()) {
           continue;
         }
+std::cout << "  wark3\n";
 
         // We have a connection where data goes from source => target, which
         // means we are writing something of type sourceType into a slot of
@@ -103,6 +105,7 @@ struct Unsubtyping : public Pass {
 
   // Note that we write something of sourceType into a slot of type targetType.
   void noteWrite(HeapType sourceType, HeapType targetType) {
+std::cout << "note source " << sourceType << " into " << targetType << '\n';
     if (sourceType == targetType) {
       // Writing the same type has no effect.
       return;

@@ -5,14 +5,11 @@
   (type $A (struct))
   (type $B (sub $A (struct (field i32))))
 
-  (func $func
-    (local $a (ref null $A))
-    (local $b (ref null $B))
-    (local.set $a
-      (struct.new $A)
-    )
-    (local.set $b
-      (struct.new $B)
-    )
+  (func $A (result (ref $A))
+    (struct.new $A)
+  )
+
+  (func $B-A (result (ref $A))
+    (struct.new $B)
   )
 )
