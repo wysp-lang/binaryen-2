@@ -3603,9 +3603,9 @@ BINARYEN_API void BinaryenModuleSetFieldName(BinaryenModuleRef module,
 
 // CUSTOM
 // todo: figure out how to do this without editing this file
-const char* BinaryenTypeToString(BinaryenType type);
+char* BinaryenTypeToString(BinaryenType type);
 
-void BinaryenStringFree(const char*);
+void BinaryenStringFree(char*);
 
 //
 // ========= Utilities =========

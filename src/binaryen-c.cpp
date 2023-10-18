@@ -6464,14 +6464,15 @@ void BinaryenSetColorsEnabled(bool enabled) { Colors::setEnabled(enabled); }
 
 bool BinaryenAreColorsEnabled() { return Colors::isEnabled(); }
 
-const char* BinaryenTypeToString(BinaryenType type) {
+char* BinaryenTypeToString(BinaryenType type) {
   std::string str = Type(type).toString();
-  const char* s = malloc(str.length() + 1);
+  char* s = static_cast<char*>(malloc(str.length() + 1));
   strcpy(s, str.c_str());
   s[str.length()] = '\0';
+  return s;
 }
 
-void BinaryenStringFree(const char* s) { free(s); }
+void BinaryenStringFree(char* s) { free(static_cast<void*>(s)); }
 
 #ifdef __EMSCRIPTEN__
 // Internal binaryen.js APIs
