@@ -18,6 +18,8 @@
 // Binaryen C API implementation
 //===============================
 
+#include <cstdlib>
+#include <cstring>
 #include <mutex>
 
 #include "binaryen-c.h"
@@ -31,6 +33,7 @@
 #include "wasm-interpreter.h"
 #include "wasm-s-parser.h"
 #include "wasm-stack.h"
+#include "wasm-type.h"
 #include "wasm-validator.h"
 #include "wasm.h"
 #include "wasm2js.h"
@@ -6460,6 +6463,15 @@ void BinaryenModuleSetFieldName(BinaryenModuleRef module,
 void BinaryenSetColorsEnabled(bool enabled) { Colors::setEnabled(enabled); }
 
 bool BinaryenAreColorsEnabled() { return Colors::isEnabled(); }
+
+const char* BinaryenTypeToString(BinaryenType type) {
+  std::string str = Type(type).toString();
+  const char* s = malloc(str.length() + 1);
+  strcpy(s, str.c_str());
+  s[str.length()] = '\0';
+}
+
+void BinaryenStringFree(const char* s) { free(s); }
 
 #ifdef __EMSCRIPTEN__
 // Internal binaryen.js APIs
