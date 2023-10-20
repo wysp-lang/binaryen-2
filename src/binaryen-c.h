@@ -3604,6 +3604,7 @@ BINARYEN_API void BinaryenModuleSetFieldName(BinaryenModuleRef module,
 // CUSTOM
 // todo: figure out how to do this without editing this file
 char* BinaryenTypeToString(BinaryenType type);
+char* BinaryenHeapTypeToString(BinaryenHeapType type);
 
 void BinaryenStringFree(char*);
 

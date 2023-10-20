@@ -6472,6 +6472,14 @@ char* BinaryenTypeToString(BinaryenType type) {
   return s;
 }
 
+char* BinaryenHeapTypeToString(BinaryenType type) {
+  std::string str = HeapType(type).toString();
+  char* s = static_cast<char*>(malloc(str.length() + 1));
+  strcpy(s, str.c_str());
+  s[str.length()] = '\0';
+  return s;
+}
+
 void BinaryenStringFree(char* s) { free(static_cast<void*>(s)); }
 
 #ifdef __EMSCRIPTEN__
