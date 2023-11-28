@@ -6464,6 +6464,9 @@ void BinaryenSetColorsEnabled(bool enabled) { Colors::setEnabled(enabled); }
 
 bool BinaryenAreColorsEnabled() { return Colors::isEnabled(); }
 
+#include <sstream>
+
+// CUSTOM
 char* BinaryenTypeToString(BinaryenType type) {
   std::string str = Type(type).toString();
   char* s = static_cast<char*>(malloc(str.length() + 1));
@@ -6474,6 +6477,26 @@ char* BinaryenTypeToString(BinaryenType type) {
 
 char* BinaryenHeapTypeToString(BinaryenType type) {
   std::string str = HeapType(type).toString();
+  char* s = static_cast<char*>(malloc(str.length() + 1));
+  strcpy(s, str.c_str());
+  s[str.length()] = '\0';
+  return s;
+}
+
+char* BinaryenExpressionToString(BinaryenExpressionRef expr) {
+  std::stringstream ss;
+  ss << (*expr);
+  std::string str = ss.str();
+  char* s = static_cast<char*>(malloc(str.length() + 1));
+  strcpy(s, str.c_str());
+  s[str.length()] = '\0';
+  return s;
+}
+
+char* BinaryenModuleToString(BinaryenModuleRef module) {
+  std::stringstream ss;
+  ss << (*module);
+  std::string str = ss.str();
   char* s = static_cast<char*>(malloc(str.length() + 1));
   strcpy(s, str.c_str());
   s[str.length()] = '\0';
